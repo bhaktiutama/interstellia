@@ -1,6 +1,6 @@
 # Rencana Tahap 12b: Kota hidup dan suasana (Cooper Station)
 
-Status: 12b-1 dan 12b-2 selesai (lihat "Hasil 12b-1" dan "Hasil 12b-2"). 12b-3 sampai 12b-5 belum dikerjakan. Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
+Status: 12b-1, 12b-2, 12b-3 selesai (lihat bagian "Hasil" masing-masing). 12b-4 dan 12b-5 belum dikerjakan. Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
 
 ## Catatan pemilik (sebelum dikerjakan)
 
@@ -102,6 +102,21 @@ Uji: `tools/uji_pohon.py` (7 cek lolos). Waktu muat di sandbox tanpa GPU naik da
 | B1e | Kepadatan | Mengikuti kelas kota (pusat paling ramai) dan jam: pagi dan sore ramai, tengah malam sangat sepi. Anak-anak dan orang di taman hanya siang | Rendah |
 | B1f | LOD dan preset | Satu InstancedMesh (1 draw call + 1 bayangan). Hanya orang dalam radius dari pemain yang digambar: Ultra 300 m, Tinggi 250 m, Sedang 180 m, Rendah 120 m. Total instance direncanakan sekitar 12.000 (perkiraan, disesuaikan setelah uji FPS) | Sedang |
 | B1g | Batasan | Pejalan kaki tidak menghindari pemain (pemain bisa menembus). Pejalan kaki di dalam trem dan di lift belum ada | - |
+
+### Hasil 12b-3 (selesai)
+
+| No | Status | Yang dikerjakan |
+| --- | --- | --- |
+| B1a | Selesai | Orang low-poly dari 14 kotak (sekitar 170 segitiga): kepala, rambut, badan, pinggul, lengan, tangan, paha, betis, sepatu, tas (25% orang dewasa). Tinggi 0,9-1,07 x 1,76 m. Palet: 14 warna baju, 8 celana, 6 kulit/rambut. Anak-anak (skala 0,55-0,65) hanya di taman |
+| B1b | Selesai | Animasi di vertex shader: paha dan lengan berayun berlawanan, lutut menekuk saat kaki di belakang, badan naik-turun. Pose duduk (paha ke depan, betis ke bawah) dan berdiri (lengan bergerak sedikit) |
+| B1c | Selesai, beda cara | Rencana awal: gerak di GPU. Diganti simulasi CPU seperti mobil 12b-1, karena orang harus bisa menunggu di zebra. Jalur: trotoar arteri keliling dan melingkar (bolak-balik 1-3 blok), keliling taman dan plaza kota, ruas acak di taman besar, aula terminal. Menyeberang hanya di 12 s pertama fase hijau jalan yang sejajar, dengan kecepatan minimal 1,5 m/s supaya selesai sebelum lalu lintas silang hijau. Orang di trotoar tidak menyeberang boulevard trem dan Skyway |
+| B1d | Selesai | Duduk di bangku kota, taman, tepi sungai dan danau (22-30% bangku terisi, sebagian berdua), 25% kursi ruang tunggu terminal. Menunggu di peron halte menghadap rel. Kelompok 2-3 orang mengobrol di plaza kota |
+| B1e | Selesai | Kepadatan per jam: kota 8% (tengah malam) sampai 100% (puncak pagi dan sore), taman hanya siang, terminal 30-100% |
+| B1f | Selesai | Total 11.822 orang (trotoar keliling 5.641, trotoar melingkar 3.487, taman besar 1.030, taman kota 869, duduk 739, berdiri 56). Radius tampil: Ultra 300 m, Tinggi 250, Sedang 180, Rendah 120, Hemat 80; kepadatan Hemat 30%. Satu draw call. Orang tidak memberi bayangan (hemat GPU) |
+| M2 | Selesai | Saklar "Pejalan kaki: nyala / sedikit / mati" di panel Grafik, tersimpan di browser |
+| B1g | Batasan | Pejalan kaki menembus pemain, tidak ada di dalam trem dan lift |
+
+Uji: `tools/uji_pejalan_kaki.py`. Simulasi 10 menit: 0 sampel orang di jalan saat lampu mobil yang melintas hijau (dari 138.834 sampel orang menyeberang). Biaya CPU di sandbox tanpa GPU: 0,44 ms langkah + 0,02 ms pilih instance per frame (orang dekat tiap frame, orang jauh bergiliran 1 dari 10). Waktu muat naik dari 6,3 s ke 6,5 s. FPS belum diukur di GTX 1060 dan M1.
 
 ## 12b-4. Burung
 

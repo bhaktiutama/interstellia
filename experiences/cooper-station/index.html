@@ -161,6 +161,7 @@
         <button id="labRays" type="button">Sunrays: nyala</button>
         <button id="labLeaf" type="button">Suasana daun: Campur</button>
         <button id="labFall" type="button">Daun jatuh: nyala</button>
+        <button id="labPeds" type="button">Pejalan kaki: nyala</button>
         <label class="chk"><input id="inShadow" type="checkbox" checked> Bayangan</label>
       </div>
     </details>
@@ -178,7 +179,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 12b-2 · 8 jenis pohon, suasana daun (hijau/campur/gugur), daun jatuh tertiup angin · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 12b-3 · pejalan kaki (menyeberang saat lampu hijau, duduk di bangku, menunggu di halte) · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -3480,6 +3481,7 @@ on('labWeather', () => cycleWeather());
 on('labRays', () => toggleRays());
 on('labLeaf', () => cycleLeafMode());
 on('labFall', () => toggleLeafFall());
+on('labPeds', () => cyclePeds());
 function updateTimeLabels() {
   const tr = TIME_RATES.find((x) => x[0] === clock.hourRate); const b = document.getElementById('labTime'); if (b && tr) b.innerHTML = `<kbd>Z</kbd>Waktu: ${tr[1]}`;
   const o = document.getElementById('labOrbit'); if (o) o.innerHTML = `<kbd>T</kbd>Orbit Saturnus: ${clock.orbitScale.toLocaleString('id-ID')}x`;
@@ -5196,6 +5198,10 @@ const LAMP = { spacing: 45, off: ROAD.art / 2 + 1.5, z0: 150, z1: 2600 };
 // Siklus 60 s: hijau arteri keliling 26 s, kuning 3 s, merah semua 1 s, hijau arteri melingkar 26 s, kuning 3 s, merah semua 1 s.
 // Fase digeser 18,5 s per simpang sepanjang za dan 17,9 s sepanjang s: gelombang hijau untuk mobil sekitar 13,5 m/s di satu arah.
 const SIG = { C: 60, green: 26, yellow: 3, stopD: 18.5 };             // stopD: jarak pusat mobil yang berhenti ke pusat simpang (m)
+function sigQ(k, m, axis, t) {                                       // posisi dalam siklus relatif awal hijau sumbu itu (s)
+  const p = (((t - m * 18.5 - k * 17.9) % SIG.C) + SIG.C) % SIG.C;
+  return axis ? (p + SIG.C / 2) % SIG.C : p;
+}
 function sigState(k, m, axis, t) {                                    // 0 hijau, 1 kuning, 2 merah; axis 0 = arteri keliling, 1 = arteri melingkar
   const p = (((t - m * 18.5 - k * 17.9) % SIG.C) + SIG.C) % SIG.C, q = axis ? (p + SIG.C / 2) % SIG.C : p;
   return q < SIG.green ? 0 : q < SIG.green + SIG.yellow ? 1 : 2;
@@ -5951,6 +5957,7 @@ const PRESETS = [
   { name: 'Hemat', dpr: 0.85, veg: 2, post: 2, shadow: false, traffic: 0.25 },   // 12b: untuk laptop tanpa GPU terpisah (MacBook M1), dipakai fitur 12b berikutnya
 ];
 const PRESET = { idx: 0, auto: true, low: 0 };
+const PRESET_HOOKS = [];
 function applyPreset(i) {
   PRESET.idx = i; const P = PRESETS[i];
   CONFIG.dprMax = P.dpr; applyPixelRatio();
@@ -5959,6 +5966,7 @@ function applyPreset(i) {
   SHADOW.enabled = P.shadow; const cb = document.getElementById('inShadow'); if (cb) cb.checked = P.shadow;
   TRAFFIC.U.uTraffic.value = P.traffic;
   LEAF.presetN = [2000, 1500, 1000, 600, 0][i]; applyFall();                  // 12b-2: daun jatuh per preset (Hemat: mati)
+  for (const f of PRESET_HOOKS) f(i);                                            // 12b-3: fitur yang didefinisikan belakangan (pejalan kaki)
   RAYS.n = [16, 10, 0, 0, 0][i]; toggleRays(); toggleRays();
   const b = document.getElementById('labPreset'); if (b) b.textContent = `Preset: ${P.name}${PRESET.auto ? ' (otomatis)' : ''} (Q)`;
   try { localStorage.setItem('cooperStation.preset', JSON.stringify({ idx: i, auto: PRESET.auto })); } catch (e) { /* penyimpanan tidak tersedia */ }
@@ -6201,7 +6209,7 @@ const FURN = { kinds: {}, lastS: 1e9, lastZ: 1e9, total: 0, sigMeta: [], glow: {
     FURN.kinds[kind] = { mesh, mats, ps, pz, n, range: RANGE[kind], idx: kind === 'signalLamp' ? new Int32Array(n) : null };
     FURN.total += n;
   }
-  FURN.signalLampMat = signalLampMat; FURN.GEO = GEO;
+  FURN.signalLampMat = signalLampMat; FURN.GEO = GEO; FURN.benchList = list.bench;   // 12b-3: bangku untuk orang duduk
 }
 // 12b-1: perlintasan trem. Tiap perlintasan: 4 tiang (tanda silang + lampu merah kedip ganda menghadap jalan),
 // palang merah-putih di 2 tiang sisi masuk (menutup lajur yang menuju rel), garis henti putih di depan palang.
@@ -6639,6 +6647,7 @@ placeShip(SHIPS.cargo, BERTH_P[2].p, BERTH_P[2].q);
   for (let z = -24; z <= -12; z += 3) for (let x = -40; x <= 40; x += 2.1) if (Math.abs(x) > 4) seats.push([x, z]);
   const bm = new THREE.InstancedMesh(FURN.GEO.bench, new THREE.MeshBasicMaterial({ vertexColors: true }), seats.length), mm = new THREE.Matrix4();
   seats.forEach(([x, z], i) => bm.setMatrixAt(i, mm.makeRotationY(Math.PI).setPosition(x, 0.05, z)));
+  TERM.seats = seats;                                                // 12b-3: kursi ruang tunggu untuk orang duduk
   G.add(bm);
   surfaceMatrix(m4, TERM.s / R, TERM.za, 0); G.matrixAutoUpdate = false; G.matrix.copy(m4);
   scene.add(G);
@@ -6854,6 +6863,249 @@ function portPrompt() {
 }
 SPOTS.spaceport = { s: TERM.s, za: TERM.za + 22, heading: 180, pitch: 4, name: 'Terminal spaceport' };
 
+/* =====================================================================
+   TAHAP 12b-3: PEJALAN KAKI
+   - Model orang low-poly (14 bagian kotak, sekitar 170 segitiga), satu InstancedMesh (1 draw call).
+     Animasi langkah dan pose duduk di vertex shader (paha, betis, lengan diputar di sendi), warna dari palet.
+   - Gerak di CPU (1 dimensi per jalur, murah): trotoar arteri (bolak-balik 1-3 blok), menyeberang di zebra hanya saat
+     lampu pejalan kaki "jalan" (12 s pertama fase hijau jalan yang sejajar; menyeberang lebih cepat 1,5 m/s), keliling
+     taman kota, jalan-jalan di taman besar, di dalam terminal. Orang diam: duduk di bangku kota dan terminal, menunggu di
+     halte, mengobrol berkelompok di plaza.
+   - Tiap frame hanya orang dalam radius preset yang dikirim ke GPU. Kepadatan mengikuti jam (pagi dan sore ramai,
+     malam sepi) dan preset. Pejalan kaki tidak menghindari pemain.
+   ===================================================================== */
+const PEDS = { list: [], walk: [], near: [], nearAt: 0, nearS: 1e9, nearZ: 1e9, frame: 0, max: 4000, n: 0, radius: 300, dens: 1, user: 1, users: [1, 0.4, 0], names: ['nyala', 'sedikit', 'mati'] };
+try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'); if (sv && [1, 0.4, 0].includes(sv.user)) PEDS.user = sv.user; } catch (e) { /* abaikan */ }
+{
+  let sd = 424243; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const ok = (s, za) => !inWater(s, za, 2) && !inRiver(s, za, 3);
+  const look = (kid) => ({ shirt: Math.floor(r() * 14), pants: Math.floor(r() * 8), skin: Math.floor(r() * 6), scale: kid ? 0.55 + 0.1 * r() : 0.9 + 0.17 * r(), bag: !kid && r() < 0.25 ? 1 : 0, thr: r() });
+  const walker = (o) => { const p = Object.assign({ dir: r() < 0.5 ? 1 : -1, v0: 1.1 + 0.5 * r(), ph: r() * TAU, wait: false, elev: 0, zone: 0 }, look(o.kid), o); PEDS.list.push(p); PEDS.walk.push(p); return p; };
+  const still = (o) => { const p = Object.assign({ elev: 0, zone: 0, ph: r() * TAU }, look(o.kid), o); PEDS.list.push(p); return p; };
+  const LAT = ROAD.art / 2 + 2.6;                                   // jalur trotoar: 14,6 m dari as jalan (+ 0-1,2 m)
+  const ringM = []; for (let m = 1; m <= 10; m++) if (!nearRing(m * ART_Z, 1)) ringM.push(m);
+  // 1) trotoar arteri keliling (berjalan sepanjang za), menyeberangi arteri melingkar
+  for (let k = 1; k < 26; k++) {
+    if (k === 13) continue;
+    for (const side of [-1, 1]) for (let z0 = CITY.za0; z0 < CITY.za1; z0 += ART_Z) {
+      const s = k * ART + side * (LAT + r() * 1.2), n = Math.round(cityDensity(s, z0 + 125) * 40 * (0.6 + 0.8 * r()));
+      for (let q = 0; q < n; q++) {
+        const nb = 1 + Math.floor(r() * 3), a = z0 + 16, b = Math.min(CITY.za1 - 16, z0 + nb * ART_Z - 16);
+        let good = true; for (let z = a; z <= b; z += 20) if (!ok(s, z)) { good = false; break; }
+        if (!good) continue;
+        const cross = ringM.filter((m) => m * ART_Z > a && m * ART_Z < b).map((m) => ({ c: m * ART_Z, k, m, axis: 0 }));
+        walker({ kind: 'z', fix: s, a, b, u: a + r() * (b - a), cross });
+      }
+    }
+  }
+  // 2) trotoar arteri melingkar (berjalan sepanjang s), menyeberangi arteri keliling; tidak melewati boulevard trem atau Skyway
+  for (const m of ringM) for (const side of [-1, 1]) for (let k = 1; k < 25; k++) {
+    if (k === 12 || k === 13) continue;
+    const za = m * ART_Z + side * (LAT + r() * 1.2), n = Math.round(cityDensity(k * ART + 120, za) * 32 * (0.6 + 0.8 * r()));
+    for (let q = 0; q < n; q++) {
+      const kEnd = Math.min(k + 1 + Math.floor(r() * 3), k < 13 ? 12 : 25), a = k * ART + 16, b = kEnd * ART - 16;
+      let good = b > a + 20; for (let x = a; good && x <= b; x += 20) if (!ok(x, za)) good = false;
+      if (!good) continue;
+      const cross = []; for (let kk = k + 1; kk < kEnd; kk++) cross.push({ c: kk * ART, k: kk, m, axis: 1 });
+      walker({ kind: 's', fix: za, a, b, u: a + r() * (b - a), cross });
+    }
+  }
+  // 3) taman dan plaza kota: keliling tepi dalam (4 m dari tepi), kelompok mengobrol di plaza
+  for (const [s0, z0, s1, z1, plaza] of parkBlocks) {
+    if (inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) continue;
+    const w = s1 - s0 - 8, d = z1 - z0 - 8, n = Math.min(24, Math.round(w * d / (plaza ? 220 : 350)));
+    for (let q = 0; q < n; q++) walker({ kind: 'loop', rect: [s0 + 4, z0 + 4, w, d], u: r() * 2 * (w + d), zone: plaza ? 0 : 1, kid: !plaza && r() < 0.12 });
+    if (plaza) for (let g = 0; g < 2; g++) {
+      const cs = (s0 + s1) / 2 + (r() - 0.5) * w * 0.5, cz = (z0 + z1) / 2 + (r() - 0.5) * d * 0.5, nn = 2 + Math.floor(r() * 2);
+      for (let q = 0; q < nn; q++) { const a = q / nn * TAU + r() * 0.3; still({ pose: 1, s: cs + Math.sin(a) * 0.75, za: cz + Math.cos(a) * 0.75, hd: a + Math.PI }); }
+    }
+  }
+  // 4) taman besar (za 2.600-3.200): jalan-jalan bolak-balik di ruas acak yang tidak melewati air atau lapangan baseball
+  for (let q = 0, tries = 0; q < 1000 && tries < 12000; tries++) {
+    const s0 = r() * CIRC, z0 = PARKZ.za0 + 20 + r() * (PARKZ.za1 - PARKZ.za0 - 40), ang = r() * TAU, L = 40 + r() * 90;
+    const s1 = s0 + Math.sin(ang) * L, z1 = Math.max(PARKZ.za0 + 10, Math.min(PARKZ.za1 - 10, z0 + Math.cos(ang) * L));
+    if (Math.abs(wrapS(s0 - SKY_S)) < 30 || Math.abs(wrapS(s0)) < 25) continue;
+    let good = true; for (let t = 0; t <= 1; t += 0.1) { const x = s0 + (s1 - s0) * t, z = z0 + (z1 - z0) * t; if (!ok(x, z) || inBallpark(x, z, 4)) { good = false; break; } }
+    if (!good) continue;
+    walker({ kind: 'seg', p0: [s0, z0], p1: [s1, z1], L: Math.hypot(s1 - s0, z1 - z0), u: r(), zone: 1, kid: r() < 0.2 }); q++;
+  }
+  // 5) duduk di bangku kota, taman, tepi sungai dan danau, promenade
+  for (const [s0, za, ang] of FURN.benchList) {
+    const cls = za < CITY.za1 + 100 ? 0 : 1, pr = r();
+    if (pr > (cls ? 0.22 : 0.3)) continue;
+    const two = pr < 0.08, fs = Math.sin(ang), fz = Math.cos(ang);
+    for (const off of two ? [-0.45, 0.45] : [(r() - 0.5) * 0.8]) still({ pose: 2, s: s0 + fz * off + fs * 0.05, za: za - fs * off + fz * 0.05, hd: ang, zone: cls });
+  }
+  // 6) terminal: duduk di kursi ruang tunggu, berjalan di aula
+  for (const [x, z] of TERM.seats) if (r() < 0.25) still({ pose: 2, s: TERM.s + x, za: TERM.za + z, hd: Math.PI, elev: 0.05, zone: 2 });
+  for (const z of [-6, -3, 4, 8, 24, 27]) for (let q = 0; q < 5; q++) {
+    const x0 = -52 + r() * 30, x1 = 22 + r() * 30;
+    walker({ kind: 'seg', p0: [TERM.s + x0, TERM.za + z + (r() - 0.5) * 2], p1: [TERM.s + x1, TERM.za + z + (r() - 0.5) * 2], L: x1 - x0, u: r(), elev: 0.08, zone: 2 });
+  }
+  // 7) menunggu di halte trem (menghadap rel)
+  for (const st of TRAM.stops) { const n = 1 + Math.floor(r() * 4); for (let q = 0; q < n; q++) still({ pose: 1, s: TRAM.s + 3.2 + r() * 2.2, za: st.za + (r() - 0.5) * 20, hd: -Math.PI / 2 + (r() - 0.5) * 0.6, elev: 0.35, zone: 0 }); }
+  for (const p of PEDS.list) { p.lt = -20; p.isNear = false; if (p.kind === 'z') p.s = p.fix; if (p.kind === 's') p.za = p.fix; p.s = p.s ?? 0; p.za = p.za ?? 0; p.hd = p.hd ?? 0; p.pose = p.pose ?? 0; }
+}
+// --- model orang: kotak-kotak dengan id bagian (aPart) untuk animasi dan warna ---
+{
+  const parts = [];                                                   // [sx, sy, sz, x, y, z, bagian]
+  for (const [side, L] of [[-1, 0], [1, 1]]) {
+    parts.push([0.15, 0.42, 0.17, side * 0.1, 0.69, 0, 3 + L]);      // paha
+    parts.push([0.13, 0.44, 0.15, side * 0.1, 0.26, 0, 5 + L]);      // betis
+    parts.push([0.12, 0.08, 0.25, side * 0.1, 0.04, 0.05, 5 + L]);   // sepatu (ikut betis, diwarnai gelap)
+    parts.push([0.1, 0.58, 0.12, side * 0.25, 1.16, 0, 7 + L]);      // lengan
+    parts.push([0.09, 0.1, 0.1, side * 0.25, 0.83, 0, 12 + L]);      // tangan
+  }
+  parts.push([0.38, 0.56, 0.22, 0, 1.2, 0, 0], [0.36, 0.14, 0.2, 0, 0.93, 0, 10], [0.1, 0.07, 0.1, 0, 1.51, 0, 11],
+    [0.19, 0.23, 0.21, 0, 1.64, 0, 1], [0.21, 0.08, 0.23, 0, 1.76, -0.01, 2], [0.21, 0.14, 0.06, 0, 1.68, -0.09, 2], [0.07, 0.3, 0.26, 0.29, 1.02, 0, 9]);
+  const pos = [], nrm = [], part = [], idx = [];
+  for (const [sx, sy, sz, x, y, z, id] of parts) {
+    const g = new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z), v0 = pos.length / 3;
+    pos.push(...g.attributes.position.array); nrm.push(...g.attributes.normal.array);
+    for (let i = 0; i < g.attributes.position.count; i++) part.push(id);
+    for (const q of g.index.array) idx.push(v0 + q);
+  }
+  const g = new THREE.InstancedBufferGeometry();
+  g.setIndex(idx); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('aPart', new THREE.Float32BufferAttribute(part, 1));
+  for (const nm of ['aP', 'aI', 'aJ']) g.setAttribute(nm, new THREE.InstancedBufferAttribute(new Float32Array(PEDS.max * 4), 4).setUsage(THREE.DynamicDrawUsage));
+  g.instanceCount = 0;
+  const pal = (arr) => arr.map((h) => new THREE.Color(h));
+  const U = {
+    uShirt: { value: pal(['#c8413b', '#2f5f9e', '#e8e4d8', '#3d7a4a', '#d9a43a', '#6b4a8a', '#1f2328', '#e07a4f', '#4a90a8', '#b8b2a6', '#8a2d4a', '#f2f0ea', '#556b2f', '#d86f9b']) },
+    uPants: { value: pal(['#1f2a44', '#2b2b2e', '#5a4a3a', '#6d737a', '#2e4a6b', '#8c7a5c', '#3a3f2e', '#15171a']) },
+    uSkin: { value: pal(['#f1c9a5', '#e0ac85', '#c68863', '#9c6644', '#6e452c', '#f6d8bd']) },
+    uHair: { value: pal(['#2a1d15', '#4a3020', '#1a1a1a', '#8a6a3a', '#c9a15a', '#6a6a6a']) },
+  };
+  const VS = /* glsl */`
+    attribute float aPart;
+    attribute vec4 aP, aI, aJ;                                      // aP: s, za, arah hadap, fase langkah; aI: baju, celana, kulit/rambut, pose; aJ: skala, tinggi lantai, tas
+    uniform vec3 uShirt[14], uPants[8], uSkin[6], uHair[6];
+    varying vec3 vCol;
+    vec3 rotX(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(v.x, v.y * c - v.z * s, v.y * s + v.z * c); }
+    void main() {
+      float id = aPart, pose = aI.w, ph = aP.w;
+      if (id > 8.5 && id < 9.5 && aJ.z < 0.5) { ${CLIP_AWAY} }     // tas hanya untuk sebagian orang
+      vec3 p = position, n = normal;
+      float sideL = (id == 3.0 || id == 5.0 || id == 7.0 || id == 12.0) ? 1.0 : 0.0;
+      float sw = pose < 0.5 ? sin(ph) : 0.0;
+      float hip = 0.0, knee = 0.0, arm = 0.0, yOff = 0.0;
+      if (pose < 0.5) {
+        hip = (sideL > 0.5 ? 1.0 : -1.0) * 0.42 * sw;
+        knee = max(0.0, hip) * 1.3;
+        arm = -hip * 0.8;
+        yOff = 0.03 * abs(cos(ph));
+      } else if (pose > 1.5) { hip = -1.5; knee = 1.5; arm = -0.35; yOff = -0.38; }
+      else { arm = 0.05 * sin(uTime * 0.7 + aP.x); }
+      if (id > 4.5 && id < 6.5) { p.y -= 0.48; p = rotX(p, knee); n = rotX(n, knee); p.y += 0.48; }
+      if (id > 2.5 && id < 6.5) { p.y -= 0.9; p = rotX(p, hip); n = rotX(n, hip); p.y += 0.9; }
+      if ((id > 6.5 && id < 8.5) || id > 11.5) { p.y -= 1.44; p = rotX(p, arm); n = rotX(n, arm); p.y += 1.44; }
+      p.y += yOff;
+      p *= aJ.x;
+      vec3 up, tS; vec3 base = groundFrame(aP.xy, aJ.y, up, tS);
+      vec3 F = tS * sin(aP.z) + vec3(0.0, 0.0, 1.0) * cos(aP.z), Rt = cross(up, F);
+      vec3 p3 = base + Rt * p.x + up * p.y + F * p.z;
+      #ifndef DEPTH_ONLY
+      int sh = int(aI.x), pa = int(aI.y), sk = int(aI.z);
+      vec3 c = id < 0.5 || (id > 6.5 && id < 8.5) ? uShirt[sh] : (id > 2.5 && id < 6.5) || id > 9.5 && id < 10.5 ? uPants[pa] : id > 1.5 && id < 2.5 ? uHair[sk] : id > 8.5 && id < 9.5 ? vec3(0.25, 0.16, 0.1) : uSkin[sk];
+      if (id > 4.5 && id < 6.5 && position.y < 0.09) c = vec3(0.08, 0.07, 0.07);   // sepatu
+      vec3 nw = normalize(Rt * n.x + up * n.y + F * n.z);
+      vCol = c * vegLight(p3, nw, aP.xy, 1.0);
+      #endif
+      vec4 mvPosition = viewMatrix * vec4(p3, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #ifndef DEPTH_ONLY
+      #include <fog_vertex>
+      #endif
+    }`;
+  const FS = /* glsl */`
+    varying vec3 vCol;
+    void main() { gl_FragColor = vec4(vCol, 1.0);
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`;
+  PEDS.mesh = new THREE.Mesh(g, vegMaterial({ vertex: VS, fragment: FS, uniforms: U, side: THREE.FrontSide }));
+  PEDS.mesh.frustumCulled = false; PEDS.mesh.userData.noLight = true;
+  realGroup.add(PEDS.mesh);
+}
+function pedAct(h, zone) {                                             // kepadatan menurut jam: 0 kota, 1 taman, 2 terminal
+  const day = sstep(5.5, 8, h) * (1 - sstep(19, 22.5, h)), peak = Math.exp(-(((h - 8) / 1.2) ** 2)) + Math.exp(-(((h - 17.5) / 1.5) ** 2));
+  if (zone === 1) return 0.03 + 0.97 * sstep(7, 9, h) * (1 - sstep(18, 20.5, h));
+  if (zone === 2) return 0.3 + 0.7 * day;
+  return 0.08 + 0.62 * day + 0.3 * Math.min(1, peak);
+}
+// orang dekat (PEDS.near, radius + 60 m) dilangkahkan tiap frame; orang jauh bergiliran 1 dari 10 per frame dengan dt terkumpul
+function stepPeds(dt, t = clock.sim) {
+  if (dt <= 0) return;
+  const fr = ++PEDS.frame % 10;
+  for (let i = 0; i < PEDS.walk.length; i++) {
+    const p = PEDS.walk[i];
+    if (!p.isNear && i % 10 !== fr) continue;
+    dt = Math.min(3, t - p.lt); p.lt = t; if (dt <= 0) continue;
+    let v = p.v0;
+    if (p.kind === 'z' || p.kind === 's') {
+      const onRoad = p.cross.some((c) => Math.abs(p.u - c.c) < 12.6);
+      if (onRoad) v = Math.max(p.v0, 1.5);                             // menyeberang lebih cepat
+      else for (const c of p.cross) {                                  // di tepi zebra: tunggu lampu "jalan"
+        const d = (c.c - p.u) * p.dir;
+        if (d > 12.6 && d < 13.2 + v * dt) { if (sigQ(c.k, c.m, c.axis, t) >= 12) { p.u = c.c - p.dir * 13.1; v = 0; } break; }
+      }
+      p.u += p.dir * v * dt;
+      if (p.u > p.b) { p.u = p.b; p.dir = -1; } else if (p.u < p.a) { p.u = p.a; p.dir = 1; }
+      if (p.kind === 'z') { p.za = p.u; p.hd = p.dir > 0 ? 0 : Math.PI; } else { p.s = p.u; p.hd = p.dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
+    } else if (p.kind === 'seg') {
+      p.u += p.dir * v * dt / p.L;
+      if (p.u > 1) { p.u = 1; p.dir = -1; } else if (p.u < 0) { p.u = 0; p.dir = 1; }
+      const [s0, z0] = p.p0, [s1, z1] = p.p1;
+      p.s = s0 + (s1 - s0) * p.u; p.za = z0 + (z1 - z0) * p.u; p.hd = Math.atan2((s1 - s0) * p.dir, (z1 - z0) * p.dir);
+    } else if (p.kind === 'loop') {
+      const [s0, z0, w, d] = p.rect, P = 2 * (w + d);
+      p.u = ((p.u + p.dir * v * dt) % P + P) % P;
+      let u = p.u, ds = 0, dz = 0;
+      if (u < w) { p.s = s0 + u; p.za = z0; ds = 1; } else if ((u -= w) < d) { p.s = s0 + w; p.za = z0 + u; dz = 1; }
+      else if ((u -= d) < w) { p.s = s0 + w - u; p.za = z0 + d; ds = -1; } else { u -= w; p.s = s0; p.za = z0 + d - u; dz = -1; }
+      p.hd = Math.atan2(ds * p.dir, dz * p.dir);
+    }
+    p.pose = v > 0 ? 0 : 1;
+    if (v > 0) p.ph += v / 1.45 * TAU * dt;
+  }
+}
+function updatePeds() {                                                 // pilih orang dalam radius, tulis atribut instance
+  const g = PEDS.mesh.geometry;
+  if (ext.active || !PEDS.user || !PEDS.dens) { g.instanceCount = PEDS.n = 0; return; }
+  const eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, R2 = PEDS.radius * PEDS.radius, h = clock.hour, f = PEDS.dens * PEDS.user;
+  const now = performance.now();
+  if (now > PEDS.nearAt || Math.hypot(wrapS(eS - PEDS.nearS), eZ - PEDS.nearZ) > 30) {   // daftar orang dekat, tiap 0,5 s
+    PEDS.nearAt = now + 500; PEDS.nearS = eS; PEDS.nearZ = eZ; PEDS.near.length = 0;
+    const RN = PEDS.radius + 60;
+    for (const p of PEDS.list) { p.isNear = Math.abs(wrapS(p.s - eS)) < RN && Math.abs(p.za - eZ) < RN; if (p.isNear) PEDS.near.push(p); }
+  }
+  const act = [pedAct(h, 0) * f, pedAct(h, 1) * f, pedAct(h, 2) * f];
+  const P = g.attributes.aP.array, I = g.attributes.aI.array, J = g.attributes.aJ.array; let n = 0;
+  for (const p of PEDS.near) {
+    if (p.thr >= act[p.zone]) continue;
+    const ds = wrapS(p.s - eS), dz = p.za - eZ;
+    if (ds * ds + dz * dz > R2) continue;
+    const o = n * 4;
+    P[o] = eS + ds; P[o + 1] = p.za; P[o + 2] = p.hd; P[o + 3] = p.ph;
+    I[o] = p.shirt; I[o + 1] = p.pants; I[o + 2] = p.skin; I[o + 3] = p.pose;
+    J[o] = p.scale; J[o + 1] = p.elev; J[o + 2] = p.bag; J[o + 3] = 0;
+    if (++n >= PEDS.max) break;
+  }
+  for (const nm of ['aP', 'aI', 'aJ']) { const a = g.attributes[nm]; a.clearUpdateRanges(); a.addUpdateRange(0, n * 4); a.needsUpdate = true; }
+  g.instanceCount = PEDS.n = n;
+}
+function applyPedsPreset(i) {
+  PEDS.radius = [300, 250, 180, 120, 80][i]; PEDS.dens = [1, 1, 0.85, 0.6, 0.3][i];
+  const b = document.getElementById('labPeds'); if (b) b.textContent = `Pejalan kaki: ${PEDS.names[PEDS.users.indexOf(PEDS.user)]}`;
+}
+function cyclePeds() {
+  PEDS.user = PEDS.users[(PEDS.users.indexOf(PEDS.user) + 1) % 3]; applyPedsPreset(PRESET.idx);
+  try { localStorage.setItem('cooperStation.peds', JSON.stringify({ user: PEDS.user })); } catch (e) { /* abaikan */ }
+}
+PRESET_HOOKS.push(applyPedsPreset); applyPedsPreset(PRESET.idx);
+for (let k = 0; k < 100; k++) stepPeds(0.2, -20 + k * 0.2);          // awal muat: orang sudah tersebar dan menunggu lampu dengan wajar
+
 // --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
 hub.userData.noLight = true;
 ballMesh.userData.noShadow = true; markMesh.userData.noShadow = true;
@@ -6876,10 +7128,12 @@ function frame(now) {
   let n = 0;
   while (acc >= STEP && n < CONFIG.maxSubSteps) { physicsStep(STEP); acc -= STEP; n++; }
   if (n === CONFIG.maxSubSteps) acc = 0;           // cegah spiral lambat
+  stepPeds(Math.min(0.25, clock.sim - TRAFFIC.lastT));                                    // 12b-3
   stepTraffic(Math.min(0.25, clock.sim - TRAFFIC.lastT)); TRAFFIC.lastT = clock.sim;   // 12b-1
   updateCamera();
   updatePortVisual();
   updateReal();
+  updatePeds();                                    // 12b-3
   updateFar();
   updateClouds(dt);
   updateWind(dt);                                  // 12b-2
@@ -6908,7 +7162,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
