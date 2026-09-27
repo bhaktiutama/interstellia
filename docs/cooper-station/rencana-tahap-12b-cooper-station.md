@@ -1,6 +1,6 @@
 # Rencana Tahap 12b: Kota hidup dan suasana (Cooper Station)
 
-Status: rencana detail, belum dikerjakan. Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
+Status: 12b-1 selesai (lihat "Hasil 12b-1"). 12b-2 sampai 12b-5 belum dikerjakan. Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
 
 ## Catatan pemilik (sebelum dikerjakan)
 
@@ -20,7 +20,7 @@ Status: rencana detail, belum dikerjakan. Titik awal = tahap 12a (commit `6db47e
 | Area | Kondisi di kode | Dampak |
 | --- | --- | --- |
 | Mobil | 3.301 mobil GPU (`TRAFFIC`). Posisi dihitung di shader dari waktu: `p = mod(awal + v x t, panjang)`, kecepatan tetap 11-16 m/s, tidak pernah berhenti | Tidak ada antrean, mobil menembus simpang dan rel |
-| Lampu lalu lintas | 216 simpang arteri (24 arteri keliling x 9 arteri melingkar), 4 tiang per simpang (`FURN.signal`). Satu material untuk semua lampu, kuning berkedip (`updateFurniture`) | Tidak ada merah/hijau |
+| Lampu lalu lintas | 192 simpang arteri (24 arteri keliling x 8 arteri melingkar; angka 216 di versi awal rencana ini salah), 4 tiang per simpang (`FURN.signal`). Satu material untuk semua lampu, kuning berkedip (`updateFurniture`) | Tidak ada merah/hijau |
 | Trem vs mobil | Rel trem di s = 0 (boulevard 40 m). Arteri melingkar di za 250, 500, 750, 1.250, 1.500, 1.750, 2.250, 2.500 memotong rel (za 1.000 dan 2.000 adalah cincin struktur, tanpa mobil). Tidak ada lampu atau palang | Mobil melintas menembus trem |
 | Halte trem | Peron 26 m (za halte +- 13 m). Halte Pusat kota (za 500) dan Kota (za 1.250) tepat di arteri melingkar selebar 24 m (za +- 12 m), jadi jalur mobil memotong peron dan halte. Halte Permukiman (za 2.000) berdiri di atas cincin struktur | Mobil menembus peron (catatan N1) |
 | Pohon | 3 jenis (oak, elm, poplar), 6 template, 1 atlas daun 2 kolom, warna hijau dengan variasi kecil per pohon (`vTint`). Goyang daun kecil (5 cm), bergantung `windAt()` | Kota dan taman terlihat seragam |
@@ -42,6 +42,26 @@ Status: rencana detail, belum dikerjakan. Titik awal = tahap 12a (commit `6db47e
 | T4 | Uji tabrakan | Skrip uji: simulasikan 30 menit waktu trem (percepat `uTime`), hitung setiap mobil yang posisinya berada di kotak perlintasan saat trem ada di kotak yang sama. Target: 0 kejadian | Rendah |
 
 Catatan: pemain yang berdiri di jalan tetap tidak ditabrak mobil (mobil GPU tidak tahu posisi pemain). Ini batasan yang sudah ada sejak tahap 10.
+
+### Hasil 12b-1 (selesai)
+
+| No | Status | Yang dikerjakan |
+| --- | --- | --- |
+| T0 | Selesai | Halte Pusat kota 500 ke 625, Kota 1.250 ke 1.125, Permukiman 2.000 ke 2.125. Titik awal pemain dan label peta ikut pindah. Semua peron minimal 29 m dari tepi jalan (Taman 29 m, lainnya 100 m atau lebih) |
+| A4a | Selesai | Siklus 60 s per simpang seperti rencana, gelombang hijau 18,5 s per simpang sepanjang za dan 17,9 s sepanjang s (`SIG`, `sigState()`) |
+| A4b | Selesai | Kepala lampu kini 3 muka (merah, kuning, hijau) di dua sisi. Lampu yang menyala dipilih di shader dari atribut `aState` per tiang, lebih terang malam hari |
+| A4c | Selesai, beda cara | Rencana awal: posisi mobil tetap dihitung di GPU. Ternyata rumus posisi dari waktu tidak bisa membuat antrean yang benar (mobil tumpang tindih atau meloncat). Diganti: simulasi 1 dimensi per lajur di CPU dengan model pengemudi IDM (`stepTraffic()`): mobil mengerem ke garis henti, antre di belakang mobil lain, berangkat berurutan saat hijau. Kuning: mobil yang tidak bisa berhenti nyaman (perlambatan di atas 3,5 m/s2) tetap jalan. Posisi dikirim ke GPU tiap frame (atribut `aSim`), gambar tetap di GPU. Biaya terukur 0,78 ms per 0,1 s simulasi di sandbox tanpa GPU (sekitar 0,4 ms per frame pada 60 FPS); belum diukur di GTX 1060 dan M1 |
+| A4d | Selesai | Lampu rem menyala saat mobil melambat atau berhenti |
+| T1 | Selesai | 8 perlintasan (za 250, 500, 750, 1.250, 1.500, 1.750, 2.250, 2.500). Tertutup bila trem dalam 30 m atau tiba dalam 10 s (`XING`, `updateCrossings()`). Mobil berhenti dengan pusat 25,5 m dari as rel |
+| T2 | Selesai | Per perlintasan: 4 tiang dengan tanda silang dan lampu merah kedip ganda, 2 palang merah-putih di sisi masuk (turun/naik 5 s), garis henti putih. Tulisan "AWAS TREM" di aspal belum dibuat |
+| T3 | Selesai | Bel perlintasan (dalam 150 m dari perlintasan tertutup) dan bel dua kali saat trem berangkat dari halte (dalam 250 m) |
+| T4 | Selesai | `tools/uji_lalu_lintas.py`, simulasi 30 menit: tabrakan mobil-trem 0, mobil tumpang tindih 0, mobil dari dua arah di dalam satu simpang 0, perlintasan tertutup 22 kali. Saat halaman dimuat, lalu lintas dijalankan dulu 30 s supaya mobil tidak mulai di tengah simpang |
+| M1 | Selesai sebagian | Preset Hemat: DPR 0,85, bayangan, efek layar, dan sunrays mati, vegetasi Rendah, mobil 25%. Pengaturan fitur 12b-2 sampai 12b-4 untuk Hemat ditambahkan di sub-tahap masing-masing |
+| M2 | Belum | Saklar per fitur dibuat bersama fiturnya (12b-2 sampai 12b-4) |
+| M3 | Selesai | Preset tersimpan di browser. `index.html?preset=hemat` (juga ultra, tinggi, sedang, rendah) memaksa preset |
+| M4 | Selesai | Turun otomatis kini bisa sampai Hemat |
+
+Catatan: di 10 dari 192 simpang tidak ada tiang lampu (tiang dilewati di dekat sungai, aturan lama tahap 11c), tapi mobil tetap mengikuti fase lampunya.
 
 ## 12b-2. Pohon lebih bervariasi, daun kuning, angin
 

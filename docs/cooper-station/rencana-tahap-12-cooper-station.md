@@ -1,6 +1,6 @@
 # Rencana Tahap 12: Cooper Station
 
-Status: 12a selesai (lihat bagian 12a). 12b sampai 12d belum dikerjakan. Titik awal = tahap 11d (artifact versi 24). Semua yang sudah ada tetap dipertahankan.
+Status: 12a selesai (lihat bagian 12a). 12b-1 selesai (lihat `rencana-tahap-12b-cooper-station.md`). Sisa 12b, 12c, 12d belum dikerjakan. Titik awal = tahap 11d (artifact versi 24). Semua yang sudah ada tetap dipertahankan.
 
 ## Ringkasan
 

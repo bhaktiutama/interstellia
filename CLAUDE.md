@@ -14,6 +14,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `docs/<id>/` | Konsep dan rencana per experience |
 | `tools/qc_load.py` | Cek halaman termuat tanpa error |
 | `tools/uji_spaceport.py` | Uji Cooper Station 12a: pintu terminal, gerbang B1 ke kokpit, sandar otomatis |
+| `tools/uji_lalu_lintas.py` | Uji Cooper Station 12b-1: peron trem, lalu lintas 30 menit tanpa tabrakan |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
 ## Aturan aplikasi
@@ -67,8 +68,8 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Spaceport rapi (12a) | `TERM.gate`, `portStartTrip()`, `PORT.trip` (perjalanan otomatis 5x dari gerbang B1), `DGUIDE` + `updateDockGuide()` (kotak target, garis arah), `dockData()`, `drawCockpitScreen()`, `portClank()`, `AUDIO.shipBus` (eng, engTone, rcs, cab, cabHum), `PORT.thr` / `PORT.rcs` / `PORT.turn` |
 | Post | `POST`, `postBegin()`, `postEnd()`: HDR, SSAO, bloom 6 tingkat, ACES, FXAA |
 | Audio | `AUDIO`, `startAudio()`, `updateAudio(dt)` (semua disintesis) |
-| Preset | `PRESETS` (Ultra/Tinggi/Sedang/Rendah), `applyPreset(i)`, turun otomatis bila FPS < 30 selama 4 s |
-| Lalu lintas | `TRAFFIC` (mobil GPU), `LAMP` |
+| Preset | `PRESETS` (Ultra/Tinggi/Sedang/Rendah/Hemat; Hemat untuk MacBook M1), `applyPreset(i)`, turun otomatis bila FPS < 30 selama 4 s, tersimpan di localStorage, `?preset=hemat` |
+| Lalu lintas | `TRAFFIC` (gambar di GPU, posisi dari simulasi CPU `stepTraffic()` model IDM, atribut `aSim`), `SIG` + `sigState(k, m, axis, t)` (lampu lalu lintas), `XING` + `updateCrossings()` + `XVIS` (perlintasan trem, palang, bel), `LAMP` |
 | Trem | `TRAM`, `TRAM_CAR`, `TRAM_SEATS`, `tram` |
 | Lift/hub | `LIFT`, `HUB`, `CABIN`, `enterLift()`, `stepFloat()` |
 | Lokasi | `SPOTS` + `teleport(key)`: cooper, hill, corn, wheat, skyway, baseball, spaceport |
@@ -95,5 +96,6 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 10-10f | Trem berinterior, mobil, lampu jalan, preset, kamera luar, lift dan hub, baseball |
 | 11a-11d | Cuaca dinamis, sunrays, perabot kota, spaceport dan shuttle |
 | 12a | Gerbang B1 terminal ke kokpit, pintu terminal bisa dilewati (hanggar lama di dalam terminal dihapus), suara shuttle, panduan sandar |
+| 12b-1 | Halte trem pindah dari simpang, lampu lalu lintas merah-kuning-hijau, mobil antre (simulasi CPU), perlintasan trem berpalang dan bel, preset Hemat |
 
-Rencana berikutnya: `docs/cooper-station/rencana-tahap-12-cooper-station.md`.
+Rencana berikutnya: `docs/cooper-station/rencana-tahap-12b-cooper-station.md` (12b-2 sampai 12b-5), lalu `rencana-tahap-12-cooper-station.md` (12c, 12d).
