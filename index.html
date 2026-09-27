@@ -174,7 +174,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 11b · cuaca dinamis + sunrays: berkas cahaya sunline lewat celah awan dan sinar Matahari lewat kaca end cap · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 11c · perabot kota: bangku, tempat sampah, hidran, pot tanaman, lampu lalu lintas, zebra cross · cuaca dinamis + sunrays · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -5157,7 +5157,7 @@ const upMat = fsMat(/* glsl */`
 // Sunline: cahaya jatuh radial dari sumbu. Titik udara di bawah lapisan awan terhalang bila tekstur bayangan awan
 // di (theta, za) gelap, jadi kabut di kolom itu lebih gelap dan celah awan menjadi tirai cahaya.
 // Matahari lewat kaca end cap: kolom miring yang ikut berputar tiap 63,4 s, dihamburkan ke depan (Henyey-Greenstein).
-const RAYS = { on: true, n: 16, str: 0, haze: 0.25 / 1000, beam: 1.1e-3 / 1000, dark: 0.85, streak: 0.35 };
+const RAYS = { on: true, n: 16, str: 0, haze: 0.7 / 1000, beam: 2.5e-3 / 1000, dark: 1.6, streak: 1.4 };
 const rayMat = fsMat(/* glsl */`
   uniform sampler2D tDepth, uCloudTex, tBright; uniform mat4 uProjInv, uCamWorld, uViewProj; uniform vec3 uCamPos, uFogCol, uLineCol, uSunCol, uSunDir;
   uniform float uFogD, uStr, uHaze, uBeam, uDark, uR, uHalfL, uL, uN, uStreak, uAspect;
@@ -5554,6 +5554,232 @@ function autoPreset(dt) {
   if (PRESET.low > 4 && PRESET.idx < PRESETS.length - 1) { applyPreset(PRESET.idx + 1); PRESET.low = -6; setLabText(`FPS rendah: preset diturunkan ke ${PRESETS[PRESET.idx].name}.`); }
 }
 
+/* =====================================================================
+   TAHAP 11c: PERABOT KOTA
+   Bangku, tempat sampah, hidran, pot tanaman, lampu lalu lintas (kuning berkedip), papan nama jalan,
+   kotak panel utilitas, kotak surat, zebra cross. Semua InstancedMesh (1 draw call per jenis) dengan LOD:
+   hanya instance dalam radius tertentu dari pemain yang dikirim ke GPU (diperbarui tiap 20 m berpindah).
+   Posisi dipilih dengan aturan tetap (tanpa rnd() kota, supaya urutan acak lama tidak berubah).
+   ===================================================================== */
+const FURN = { kinds: {}, lastS: 1e9, lastZ: 1e9, total: 0 };
+{
+  const g = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
+  const cyl = (r0, r1, h, y, seg = 10) => new THREE.CylinderGeometry(r0, r1, h, seg).translate(0, y, 0);
+  const WOOD = [0.55, 0.38, 0.22], IRON = [0.2, 0.22, 0.24], CONC = [0.62, 0.61, 0.58];
+  const GEO = {
+    bench: mergeSimple([                                          // bangku kayu 1,8 m berangka besi, menghadap +z
+      ...[-0.16, 0, 0.16].map((z) => ({ geo: g(1.8, 0.05, 0.13, 0, 0.45, z), color: WOOD })),
+      ...[0.62, 0.78].map((y) => ({ geo: g(1.8, 0.12, 0.04, 0, y, -0.27), color: WOOD })),
+      ...[-0.8, 0.8].flatMap((x) => [
+        { geo: g(0.06, 0.43, 0.06, x, 0.215, 0.18), color: IRON }, { geo: g(0.06, 0.85, 0.06, x, 0.425, -0.24), color: IRON },
+        { geo: g(0.06, 0.05, 0.5, x, 0.41, -0.02), color: IRON }, { geo: g(0.06, 0.05, 0.42, x, 0.64, 0.0), color: IRON }]),
+    ]),
+    bin: mergeSimple([                                            // tempat sampah logam dengan tutup
+      { geo: cyl(0.27, 0.24, 0.85, 0.425, 12), color: [0.18, 0.3, 0.24] },
+      { geo: cyl(0.3, 0.3, 0.1, 0.9, 12), color: [0.25, 0.27, 0.29] },
+      { geo: cyl(0.12, 0.3, 0.08, 0.99, 12), color: [0.25, 0.27, 0.29] },
+    ]),
+    hydrant: mergeSimple([
+      { geo: cyl(0.16, 0.16, 0.08, 0.04), color: [0.62, 0.12, 0.1] },
+      { geo: cyl(0.11, 0.12, 0.55, 0.33), color: [0.7, 0.14, 0.11] },
+      { geo: new THREE.SphereGeometry(0.12, 10, 6, 0, TAU, 0, Math.PI / 2).translate(0, 0.6, 0), color: [0.7, 0.14, 0.11] },
+      { geo: g(0.42, 0.08, 0.08, 0, 0.42, 0), color: [0.75, 0.7, 0.62] },
+      { geo: g(0.08, 0.08, 0.2, 0, 0.42, 0.1), color: [0.75, 0.7, 0.62] },
+    ]),
+    planter: mergeSimple([                                        // pot beton dengan semak dan bunga
+      { geo: g(1.3, 0.55, 1.3, 0, 0.275, 0), color: CONC },
+      { geo: g(1.12, 0.45, 1.12, 0, 0.72, 0), color: [0.26, 0.45, 0.2] },
+      { geo: g(0.8, 0.2, 0.8, 0, 0.98, 0), color: [0.3, 0.52, 0.22] },
+      ...[[-0.35, -0.3], [0.3, 0.35], [0.1, -0.4], [-0.4, 0.3]].map(([x, z]) => ({ geo: g(0.18, 0.12, 0.18, x, 0.98, z), color: [0.85, 0.35, 0.45] })),
+    ]),
+    signal: mergeSimple([                                         // tiang lampu lalu lintas: lengan ke +z (atas jalan)
+      { geo: cyl(0.1, 0.12, 6.0, 3.0, 8), color: [0.3, 0.32, 0.34] },
+      { geo: g(0.09, 0.09, 5.2, 0, 5.8, 2.6), color: [0.3, 0.32, 0.34] },
+      { geo: g(0.36, 1.0, 0.3, 0, 5.2, 4.9), color: [0.12, 0.13, 0.14] },
+      { geo: g(0.3, 0.8, 0.26, 0.25, 2.6, 0.0), color: [0.12, 0.13, 0.14] },           // lampu pejalan kaki
+      { geo: g(1.3, 0.26, 0.03, 0, 3.6, 0.13), color: [0.1, 0.42, 0.24] },            // papan nama jalan
+      { geo: g(0.03, 0.26, 1.3, 0.13, 3.95, 0.0), color: [0.1, 0.42, 0.24] },
+    ]),
+    signalLamp: mergeSimple([                                     // muka lampu (menyala kuning berkedip)
+      { geo: g(0.2, 0.2, 0.05, 0, 5.2, 4.74), color: [1, 1, 1] },
+      { geo: g(0.2, 0.2, 0.05, 0, 5.2, 5.06), color: [1, 1, 1] },
+    ]),
+    cabinet: mergeSimple([                                        // kotak panel listrik / telekomunikasi
+      { geo: g(0.9, 1.25, 0.45, 0, 0.66, 0), color: [0.42, 0.5, 0.45] },
+      { geo: g(0.95, 0.06, 0.5, 0, 1.31, 0), color: [0.36, 0.42, 0.38] },
+      { geo: g(1.0, 0.08, 0.55, 0, 0.04, 0), color: CONC },
+    ]),
+    mailbox: mergeSimple([
+      { geo: g(0.5, 0.75, 0.45, 0, 0.72, 0), color: [0.16, 0.3, 0.55] },
+      { geo: new THREE.CylinderGeometry(0.225, 0.225, 0.5, 10, 1, false, 0, Math.PI).rotateZ(Math.PI / 2).rotateY(Math.PI / 2).translate(0, 1.1, 0), color: [0.16, 0.3, 0.55] },
+      ...[-0.2, 0.2].flatMap((x) => [-0.17, 0.17].map((z) => ({ geo: g(0.05, 0.36, 0.05, x, 0.18, z), color: IRON }))),
+    ]),
+    zebra: g(0.55, 0.02, 3.0, 0, 0.025, 0),
+  };
+  const RANGE = { bench: 320, bin: 280, hydrant: 260, planter: 320, signal: 700, signalLamp: 700, cabinet: 260, mailbox: 240, zebra: 260 };
+  const COLL = { bench: [0.9, 0.3], bin: [0.3, 0.3], hydrant: [0.2, 0.2], planter: [0.65, 0.65], signal: [0.14, 0.14], cabinet: [0.45, 0.25], mailbox: [0.28, 0.25] };
+  const list = {}; for (const k of Object.keys(GEO)) list[k] = [];
+  // bebas tabrakan dengan kolider yang sudah ada (bangunan, pohon, perabot lain)
+  const blocked = (s, za, r) => {
+    const cs = ((Math.floor(s / COL.cell) % 1000) + 1000) % 1000, cz = Math.floor(za / COL.cell);
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      const arr = COL.grid.get((((cs + a) % 1000) + 1000) % 1000 * 1000 + cz + b); if (!arr) continue;
+      for (const i of arr) { const [cS, cZ, hs, hz] = COL.items[i]; if (Math.abs(wrapS(s - cS)) < hs + r && Math.abs(za - cZ) < hz + r) return true; }
+    }
+    return false;
+  };
+  const bad = (s, za, m = 3) => inWater(s, za, m) || inRiver(s, za, m) || nearRing(za, 14) || inBallpark(s, za, 4)
+    || Math.abs(wrapS(s - TRAM.s)) < ROAD.boulevard / 2 + 1 && za > 150;
+  // tambah satu instance: arah hadap (fs, fz) di bidang (s, za)
+  const add = (kind, s, za, fs, fz, opt = {}) => {
+    s = modS(s);
+    if (!opt.force && bad(s, za, opt.m ?? 2)) return false;
+    const c = COLL[kind];
+    const along = Math.abs(fz) > Math.abs(fs);                       // bila menghadap za, sumbu panjang ada di s
+    const hs = c ? (along ? c[0] : c[1]) : 0, hz = c ? (along ? c[1] : c[0]) : 0;
+    if (c && !opt.noCheck && blocked(s, za, Math.max(hs, hz) * 0.6 + 0.2)) return false;
+    list[kind].push([s, za, Math.atan2(fs, fz)]);
+    if (c) addCollider(s, za, hs, hz);
+    return true;
+  };
+  const clsAt = (s, za) => cityClass(cityDensity(s, za));
+  const inCity = (za) => za > CITY.za0 && za < CITY.za1;
+  // 1) trotoar jalan arteri sepanjang za (s = k * ART): bangku + tempat sampah di antara lampu, pot di pusat kota, hidran dekat simpang
+  const SW = ROAD.art / 2 + 1.0;                                     // 1 m ke dalam trotoar (lampu ada di 1,5 m)
+  for (let k = 1; k < 26; k++) {
+    if (k === 13) continue;
+    for (const side of [-1, 1]) {
+      const s = k * ART + side * SW;
+      for (let z = LAMP.z0 + (side > 0 ? LAMP.spacing / 2 : 0), q = 0; z < LAMP.z1; z += LAMP.spacing, q++) {
+        if (!inCity(z)) continue;
+        const dz = Math.abs(z - Math.round(z / ART_Z) * ART_Z), cls = clsAt(s, z);
+        if (dz < 20) continue;
+        if (cls === 'pusat' || cls === 'menengah') {
+          if (q % 2 === 0) { if (add('bench', s, z, -side, 0)) add('bin', s, z + 1.6, -side, 0); }
+          else if (cls === 'pusat') add('planter', s - side * 0.1, z, -side, 0);
+          else if (q % 4 === 1) add('cabinet', s + side * 0.4, z, -side, 0);
+        } else if (q % 4 === 0) add('bin', s, z, -side, 0);
+      }
+    }
+  }
+  // 2) trotoar arteri melingkar (za = k * 250)
+  for (let k = 1; k <= 10; k++) {
+    const zr = k * ART_Z; if (nearRing(zr, 1)) continue;
+    for (const side of [-1, 1]) {
+      const za = zr + side * SW;
+      for (let s = (side > 0 ? LAMP.spacing / 2 : 0), q = 0; s < CIRC; s += LAMP.spacing, q++) {
+        const ds = Math.abs(wrapS(s - Math.round(s / ART) * ART)), cls = clsAt(s, za);
+        if (ds < 20 || Math.abs(wrapS(s - SKY_S)) < 50) continue;
+        if (cls === 'pusat' || cls === 'menengah') {
+          if (q % 2 === 0) { if (add('bench', s, za, 0, -side)) add('bin', s + 1.6, za, 0, -side); }
+          else if (cls === 'pusat') add('planter', s, za - side * 0.1, 0, -side);
+          else if (q % 4 === 1) add('cabinet', s, za + side * 0.4, 0, -side);
+        } else if (q % 4 === 0) add('bin', s, za, 0, -side);
+      }
+    }
+  }
+  // 3) simpang arteri: lampu lalu lintas di 2 sudut berseberangan, hidran, zebra cross di 4 kaki simpang
+  for (let k = 1; k < 26; k++) {
+    if (k === 13) continue;
+    for (let m = 1; m <= 10; m++) {
+      const s = k * ART, za = m * ART_Z;
+      if (nearRing(za, 1) || bad(s, za, 6)) continue;
+      const cS = ROAD.art / 2 + 0.8, cZ = ROAD.art / 2 + 0.8;
+      add('signal', s + cS, za + cZ, 0, -1, { noCheck: true });       // lengan di atas jalan arteri keliling
+      add('signal', s - cS, za - cZ, 0, 1, { noCheck: true });
+      add('signal', s - cS, za + cZ, 1, 0, { noCheck: true });        // lengan di atas jalan arteri melingkar
+      add('signal', s + cS, za - cZ, -1, 0, { noCheck: true });
+      list.signalLamp.push(...list.signal.slice(-4));
+      add('hydrant', s + cS + 0.2, za - cZ - 3, 1, 0);
+      const cls = clsAt(s, za);
+      if (cls === 'permukiman' || cls === 'tepi') add('mailbox', s - cS - 0.3, za + cZ + 3, 1, 0);
+      for (const sg of [-1, 1]) {                                        // zebra: menyeberangi jalan sepanjang za (garis sejajar za)
+        const zz = za + sg * (ROAD.art / 2 + 2.2);
+        for (let x = -ROAD.art / 2 + 1; x <= ROAD.art / 2 - 1; x += 1.1) list.zebra.push([s + x, zz, 0]);
+        const ss = s + sg * (ROAD.art / 2 + 2.2);                       // menyeberangi jalan melingkar
+        for (let x = -ROAD.art / 2 + 1; x <= ROAD.art / 2 - 1; x += 1.1) list.zebra.push([ss, za + x, Math.PI / 2]);
+      }
+    }
+  }
+  // 4) hidran di jalan lokal permukiman (tiap simpang lokal, satu sudut)
+  for (const c of cityCells) {
+    const { sCuts, zCuts } = c.grid;
+    for (let a = 1; a < sCuts.length - 1; a++) for (let b = 1; b < zCuts.length - 1; b++)
+      add('hydrant', sCuts[a] + ROAD.local / 2 + 0.8, zCuts[b] + ROAD.local / 2 + 0.8, -1, 0);
+  }
+  // 5) taman kota: bangku di tepi dalam menghadap tengah, tempat sampah di sebelahnya
+  for (const [s0, z0, s1, z1] of parkBlocks) {
+    if (inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) continue;
+    for (let s = s0 + 8; s < s1 - 6; s += 18) for (const [z, fz] of [[z0 + 2.2, 1], [z1 - 2.2, -1]]) if (add('bench', s, z, 0, fz)) add('bin', s + 1.7, z, 0, fz);
+    for (let z = z0 + 10; z < z1 - 8; z += 20) for (const [s, fs] of [[s0 + 2.2, 1], [s1 - 2.2, -1]]) add('bench', s, z, fs, 0);
+  }
+  // 6) tepi sungai (taman sungai): bangku menghadap air tiap 30 m di kedua tepi
+  for (let s = 0, q = 0; s < CIRC; s += 30, q++) {
+    if (Math.abs(wrapS(s - Math.round(s / ART) * ART)) < 25 || Math.abs(wrapS(s - SKY_S)) < 50) continue;
+    const zr = riverZ(s);
+    for (const side of [-1, 1]) {
+      const z = zr + side * (RIVER.width / 2 + 10);
+      if (add('bench', s, z, 0, -side, { m: 1 }) && q % 3 === 0) add('bin', s + 1.7, z, 0, -side, { m: 1 });
+    }
+  }
+  // 7) tepi danau: bangku menghadap pusat danau
+  for (const L of LAKES) {
+    const n = Math.round(TAU * Math.sqrt((L.rs * L.rs + L.rz * L.rz) / 2) / 28);
+    for (let i = 0; i < n; i++) {
+      const a = i / n * TAU, s = L.s + Math.cos(a) * (L.rs + 11), z = L.za + Math.sin(a) * (L.rz + 11);
+      const fs = -Math.cos(a) / L.rs, fz = -Math.sin(a) / L.rz, h = Math.hypot(fs, fz);
+      if (add('bench', s, z, fs / h, fz / h, { m: 1 }) && i % 3 === 0) add('bin', s + fz / h * 1.8, z - fs / h * 1.8, fs / h, fz / h, { m: 1 });
+    }
+  }
+  // 8) promenade Skyway: bangku di tepi jalan setapak menghadap jendela, tempat sampah tiap 100 m
+  for (let z = 170, q = 0; z < 7830; z += 50, q++) for (const side of [-1, 1]) {
+    const s = SKY_S + side * 21.3;
+    if (add('bench', s, z, -side, 0, { m: 1 }) && q % 2 === 0) add('bin', s, z + 1.7, -side, 0, { m: 1 });
+  }
+  // 9) halte trem: tempat sampah di ujung peron, kotak panel di belakang halte
+  for (const st of TRAM.stops) { add('bin', TRAM.s + 5.6, st.za + 5.2, -1, 0, { force: true, noCheck: true }); }
+
+  // --- mesh + LOD ---
+  const signalLampMat = new THREE.MeshBasicMaterial({ color: 0xffb000 });
+  for (const [kind, geo] of Object.entries(GEO)) {
+    const items = list[kind], n = items.length; if (!n) continue;
+    const mat = kind === 'signalLamp' ? signalLampMat : kind === 'zebra'
+      ? new THREE.MeshBasicMaterial({ color: 0xd9d9d4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 })
+      : new THREE.MeshBasicMaterial({ vertexColors: true });
+    const mesh = new THREE.InstancedMesh(geo, mat, n);
+    const mats = new Float32Array(n * 16), m4 = new THREE.Matrix4(), rot = new THREE.Matrix4();
+    const ps = new Float32Array(n), pz = new Float32Array(n);
+    items.forEach(([s, za, a], i) => {
+      surfaceMatrix(m4, s / R, za, groundH(s, za));
+      m4.multiply(rot.makeRotationY(a)); m4.toArray(mats, i * 16); ps[i] = s; pz[i] = za;
+    });
+    mesh.count = 0; mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (kind === 'signalLamp') { mesh.userData.noLight = true; mesh.userData.noShadow = true; }
+    if (kind === 'zebra') mesh.userData.noShadow = true;
+    scene.add(mesh);
+    FURN.kinds[kind] = { mesh, mats, ps, pz, n, range: RANGE[kind] };
+    FURN.total += n;
+  }
+  FURN.signalLampMat = signalLampMat;
+}
+function updateFurniture() {
+  const s = player.theta * R, za = player.za, T = clock.sim;
+  // lampu lalu lintas: kuning berkedip (mobil di simulasi ini tidak berhenti, jadi simpang diatur sebagai "hati-hati")
+  const on = (T % 1.2) < 0.6, nt = BUILD_U.uNight.value;
+  FURN.signalLampMat.color.setRGB(on ? 1.6 + 2.5 * nt : 0.08, on ? 0.9 + 1.4 * nt : 0.05, on ? 0.05 : 0.02);
+  if (Math.abs(wrapS(s - FURN.lastS)) < 20 && Math.abs(za - FURN.lastZ) < 20) return;
+  FURN.lastS = s; FURN.lastZ = za;
+  for (const K of Object.values(FURN.kinds)) {
+    const arr = K.mesh.instanceMatrix.array, r2 = K.range * K.range; let c = 0;
+    for (let i = 0; i < K.n; i++) {
+      const ds = wrapS(K.ps[i] - s), dz = K.pz[i] - za;
+      if (ds * ds + dz * dz > r2) continue;
+      arr.set(K.mats.subarray(i * 16, i * 16 + 16), c * 16); c++;
+    }
+    K.mesh.count = c; K.mesh.instanceMatrix.needsUpdate = true;
+  }
+}
+
 // --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
 hub.userData.noLight = true;
 ballMesh.userData.noShadow = true; markMesh.userData.noShadow = true;
@@ -5592,6 +5818,7 @@ function frame(now) {
   if (post) postEnd();
   updateAudio(dt);
   updateTraffic();
+  updateFurniture();
   autoPreset(dt);
   if (window.__captureCb) { const cb = window.__captureCb; window.__captureCb = null; cb(canvas.toDataURL('image/png')); }   // hook uji
   updateStats(dt);
@@ -5604,7 +5831,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
