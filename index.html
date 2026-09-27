@@ -122,7 +122,8 @@
       <button id="labLift" type="button"><kbd>L</kbd>Lift ke sumbu</button>
       <button id="labTest" type="button">Self-test</button>
       <button id="labOrbit" type="button"><kbd>T</kbd>Percepat orbit</button>
-      <button id="labWin" type="button">Ke Skyway</button>
+      <button id="labWin" type="button"><kbd>5</kbd>Ke Skyway</button>
+      <button id="labBall" type="button"><kbd>6</kbd>Lapangan baseball</button>
       <button id="labExt" type="button"><kbd>V</kbd>Kamera luar</button>
       <button id="labTime" type="button">Kecepatan waktu</button>
       <button id="labCooper" type="button"><kbd>1</kbd>Rumah Cooper</button>
@@ -154,12 +155,12 @@
       <tr class="desk-only"><td>Shift</td><td>Lari 5 m/s</td></tr>
       <tr class="desk-only"><td>Space</td><td>Lompat (di hub: naik)</td></tr>
       <tr class="desk-only"><td>B · G</td><td>Lempar bola · jatuhkan bola dari ketinggian</td></tr>
-      <tr class="desk-only"><td>L</td><td>Lift ke sumbu (0 g) / turun lagi; Shift = 5x cepat</td></tr>
+      <tr class="desk-only"><td>L</td><td>Lift ke sumbu (0 g) / turun lagi; Shift = 5x cepat. Di lift dan hub: B lempar bola, G lepas bola</td></tr>
       <tr class="desk-only"><td>E · M</td><td>Aksi (naik trem dan duduk di kursi jendela, turun di halte, baca plakat, lift) · peta</td></tr>
       <tr class="desk-only"><td>V</td><td>Kamera luar: seret / WASD putar, scroll / + - zoom, C orbit otomatis, 1-4 fokus</td></tr>
       <tr class="desk-only"><td>[ · ]</td><td>Jam stasiun mundur / maju 1 jam (siklus siang-malam)</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
-      <tr class="desk-only"><td>1 · 2 · 3 · 4</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum dekat bukit</td></tr>
+      <tr class="desk-only"><td>1 - 6</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum · Skyway · lapangan baseball</td></tr>
       <tr class="desk-only"><td>Q</td><td>Preset kualitas: Ultra, Tinggi, Sedang, Rendah (awal: Ultra, turun otomatis bila FPS di bawah 30)</td></tr>
       <tr class="desk-only"><td>K · P</td><td>Kualitas vegetasi · efek layar (bloom, SSAO, tone mapping): Tinggi, Sedang, Rendah/Mati</td></tr>
       <tr class="desk-only"><td>U · J</td><td>Suara nyala/mati · musik: generatif, file sendiri (pilih di panel Uji), mati</td></tr>
@@ -1228,20 +1229,109 @@ function surfaceMatrix(m, theta, za, h) {
   return m;
 }
 
-// Rel lift dari tanah sampai sumbu (1 mesh), kabin (garis tepi), hub (wireframe)
-const liftRail = new THREE.Mesh(bakeShade(new THREE.BoxGeometry(2, R, 1).translate(0, R / 2, 0)),
-  new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x9aa3ad }));
-surfaceMatrix(liftRail.matrix, LIFT.theta - 3 / R, 1.2, 0);
-liftRail.matrixAutoUpdate = false;
-scene.add(liftRail);
-const cabin = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(3, 3, 3).translate(0, 1.5, 0)),
-  new THREE.LineBasicMaterial({ color: 0xe8b765 }));
-cabin.matrixAutoUpdate = false;
+// =====================================================================
+// LIFT KE SUMBU + HUB NOL-G (tahap 10c)
+// Menara rangka baja 994 m menempel di dinding end cap A (4 m dari kaca), rel pemandu, lampu penanda tiap 50 m,
+// lobi berkaca di bawah, kabin kapsul kaca yang bergerak, dan hub nol-g berupa sangkar terbuka di sumbu
+// (udara stasiun ada di mana-mana, jadi hub tidak perlu dinding; bola bisa dilempar keluar lewat celah rangka).
+// Lokal menara: x = tangen, y = atas (menuju sumbu), z = sepanjang sumbu (+ menjauhi end cap A).
+// =====================================================================
+const LIFT_H = R - LIFT.topR;
+const LATE_COLLIDERS = [];                                      // 994 m
+const liftTower = new THREE.Group(); liftTower.matrixAutoUpdate = false;
+surfaceMatrix(liftTower.matrix, LIFT.theta, LIFT.za, 0);
+{
+  const parts = [], lamps = [];
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), zA = new THREE.Vector3(0, 0, 1), xA = new THREE.Vector3(1, 0, 0);
+  const add = (x, y, z, sx, sy, sz, rotAxis = null, ang = 0) => { q.setFromAxisAngle(rotAxis || zA, rotAxis ? ang : 0); parts.push(m.compose(p.set(x, y, z), q, s.set(sx, sy, sz)).clone()); };
+  const c = 2.4, H = LIFT_H;
+  for (const x of [-c, c]) for (const z of [-c, c]) add(x, H / 2, z, 0.35, H, 0.35);           // tiang sudut
+  for (const x of [-1.75, 1.75]) add(x, H / 2, -1.9, 0.2, H, 0.25);                               // rel pemandu
+  const diag = Math.hypot(10, 2 * c), ang = Math.atan2(2 * c, 10);
+  for (let y = 10, k = 0; y < H; y += 10, k++) {
+    add(0, y, -c, 2 * c, 0.2, 0.2); add(0, y, c, 2 * c, 0.2, 0.2); add(-c, y, 0, 0.2, 0.2, 2 * c); add(c, y, 0, 0.2, 0.2, 2 * c);   // cincin horizontal
+    const sg = k % 2 ? 1 : -1;
+    add(0, y - 5, -c, 0.12, diag, 0.12, zA, sg * ang);                                             // silang belakang
+    for (const x of [-c, c]) add(x, y - 5, 0, 0.12, diag, 0.12, xA, sg * ang);                      // silang samping (depan terbuka untuk pemandangan)
+    if (y % 50 === 0) for (const x of [-c, c]) lamps.push([x, y, c]);
+  }
+  const trussMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x7d858e });
+  const truss = new THREE.InstancedMesh(bakeShadeBox(), trussMat, parts.length);
+  parts.forEach((mm, i) => truss.setMatrixAt(i, mm)); truss.instanceMatrix.needsUpdate = true; truss.frustumCulled = false;
+  truss.userData.noShadow = true; liftTower.add(truss);
+  const lampMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.35, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3a2a }), lamps.length);
+  lamps.forEach(([x, y, z], i) => lampMesh.setMatrixAt(i, m.makeTranslation(x, y, z + 0.2))); lampMesh.instanceMatrix.needsUpdate = true;
+  lampMesh.frustumCulled = false; lampMesh.userData.noLight = true; lampMesh.userData.noShadow = true; liftTower.add(lampMesh);
+  liftTower.userData.lamps = lampMesh;
+  // lobi berkaca di kaki menara (pintu di sisi +z), papan nama
+  const frame = new THREE.MeshBasicMaterial({ color: 0x3b4148 }), roofM = new THREE.MeshBasicMaterial({ color: 0x5b626b });
+  const glassM = new THREE.MeshBasicMaterial({ color: 0x9fb6c4, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+  const lb = (sx, sy, sz, x, y, z, mat) => { const mm = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); mm.position.set(x, y, z); if (mat === glassM) mm.userData.noShadow = true; liftTower.add(mm); return mm; };
+  const LX0 = -6, LX1 = 6, LZ0 = -3.5, LZ1 = 7, LH = 4.2;
+  lb(0.05, LH, LZ1 - LZ0, LX0, LH / 2, (LZ0 + LZ1) / 2, glassM); lb(0.05, LH, LZ1 - LZ0, LX1, LH / 2, (LZ0 + LZ1) / 2, glassM);
+  lb(12, LH, 0.05, 0, LH / 2, LZ0, glassM);
+  lb(5, LH, 0.05, -3.5, LH / 2, LZ1, glassM); lb(5, LH, 0.05, 3.5, LH / 2, LZ1, glassM); lb(2, LH - 2.4, 0.05, 0, 2.4 + (LH - 2.4) / 2, LZ1, glassM);
+  for (const x of [LX0, -1, 1, LX1]) for (const z of [LZ0, LZ1]) lb(0.18, LH, 0.18, x, LH / 2, z, frame);
+  lb(12.4, 0.3, LZ1 - 2.6, 0, LH, (2.6 + LZ1) / 2, roofM); lb(3.5, 0.3, 6.1, -4.25, LH, -0.45, roofM); lb(3.5, 0.3, 6.1, 4.25, LH, -0.45, roofM);
+  lb(12, 0.08, LZ1 - LZ0, 0, 0.04, (LZ0 + LZ1) / 2, roofM);
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 96; const g = cv.getContext('2d');
+  g.fillStyle = '#15181c'; g.fillRect(0, 0, 512, 96); g.fillStyle = '#e8b765'; g.font = 'bold 40px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('LIFT KE SUMBU · 994 m · 0 g', 256, 50);
+  const st = new THREE.CanvasTexture(cv); st.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(5, 0.95), new THREE.MeshBasicMaterial({ map: st })); sign.position.set(0, LH + 0.7, LZ1 + 0.05);
+  sign.userData.noLight = true; liftTower.add(sign);
+  // kolisi lobi (kotak s, za), celah pintu di depan
+  const S0 = LIFT.theta * R, Z0 = LIFT.za;
+  LATE_COLLIDERS.push([S0 + LX0, Z0 + (LZ0 + LZ1) / 2, 0.1, (LZ1 - LZ0) / 2], [S0 + LX1, Z0 + (LZ0 + LZ1) / 2, 0.1, (LZ1 - LZ0) / 2],
+    [S0 - 3.5, Z0 + LZ1, 2.5, 0.1], [S0 + 3.5, Z0 + LZ1, 2.5, 0.1]);   // dipasang setelah sistem kolisi dibuat
+}
+liftTower.traverse((o) => { o.frustumCulled = false; });
+scene.add(liftTower);
+// kabin kapsul kaca: lantai, atap, tiang sudut, kaca 4 sisi, pegangan, bangku, panel kontrol, lampu plafon
+const cabin = new THREE.Group(); cabin.matrixAutoUpdate = false;
+{
+  const metal = new THREE.MeshBasicMaterial({ color: 0x8a9199 }), dark = new THREE.MeshBasicMaterial({ color: 0x2a2f35 }), rail = new THREE.MeshBasicMaterial({ color: 0xc9ced4 });
+  const seat = new THREE.MeshBasicMaterial({ color: 0x26466e }), lamp = new THREE.MeshBasicMaterial({ color: 0xfff1d8 }), screen = new THREE.MeshBasicMaterial({ color: 0x4fd1a5 });
+  const glassM = new THREE.MeshBasicMaterial({ color: 0xa9c0cc, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide });
+  const cb = (sx, sy, sz, x, y, z, mat, flag) => { const mm = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); mm.position.set(x, y, z); if (flag) mm.userData[flag] = true; if (mat === glassM) mm.userData.noShadow = true; cabin.add(mm); };
+  cb(3.1, 0.15, 3.1, 0, -0.075, 0, dark); cb(3.1, 0.18, 3.1, 0, 2.6, 0, metal);
+  for (const x of [-1.5, 1.5]) for (const z of [-1.5, 1.5]) cb(0.12, 2.6, 0.12, x, 1.3, z, metal);
+  cb(0.03, 2.5, 3.0, -1.5, 1.3, 0, glassM); cb(0.03, 2.5, 3.0, 1.5, 1.3, 0, glassM); cb(3.0, 2.5, 0.03, 0, 1.3, 1.5, glassM); cb(3.0, 2.5, 0.03, 0, 1.3, -1.5, glassM);
+  cb(0.05, 0.05, 2.8, -1.38, 1.0, 0, rail); cb(0.05, 0.05, 2.8, 1.38, 1.0, 0, rail); cb(2.8, 0.05, 0.05, 0, 1.0, -1.38, rail);
+  cb(2.2, 0.1, 0.45, 0, 0.45, -1.15, seat); cb(2.2, 0.55, 0.08, 0, 0.8, -1.4, seat);
+  cb(0.5, 1.1, 0.2, 1.2, 0.55, 1.3, dark); cb(0.36, 0.26, 0.02, 1.2, 1.0, 1.19, screen, 'noLight');
+  cb(1.6, 0.04, 0.3, 0, 2.5, 0, lamp, 'noLight');
+}
+cabin.traverse((o) => { o.frustumCulled = false; });
 scene.add(cabin);
-const hub = new THREE.Mesh(new THREE.CylinderGeometry(HUB.r, HUB.r, HUB.zaMax - HUB.zaMin, 24, 4, true).rotateX(Math.PI / 2),
-  new THREE.MeshBasicMaterial({ color: 0x8fb3d9, wireframe: true, fog: false }));
-hub.position.z = -HALF_L + (HUB.zaMin + HUB.zaMax) / 2;
+// hub nol-g: sangkar terbuka dari cincin dan batang memanjang, kabel pegangan, cincin lampu, dinding dermaga dengan pintu
+const hub = new THREE.Group();
+{
+  const zc = (za) => za - HALF_L, len = HUB.zaMax - HUB.zaMin;
+  const ringM = new THREE.MeshBasicMaterial({ color: 0x7a828c }), cableM = new THREE.MeshBasicMaterial({ color: 0xe0b020 }), lampM = new THREE.MeshBasicMaterial({ color: 0xcfe6ff });
+  for (const za of [HUB.zaMin, 12, 22, 32, 42, 52, HUB.zaMax]) { const t = new THREE.Mesh(new THREE.TorusGeometry(HUB.r, 0.35, 8, 72), ringM); t.position.z = zc(za); hub.add(t); }
+  for (let i = 0; i < 16; i++) {
+    const a = i / 16 * TAU, bx = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, len), ringM);
+    bx.position.set(Math.cos(a) * HUB.r, Math.sin(a) * HUB.r, zc((HUB.zaMin + HUB.zaMax) / 2)); bx.rotation.z = a; hub.add(bx);
+  }
+  for (let i = 0; i < 6; i++) {                                     // kabel pegangan untuk bergerak di nol-g
+    const a = i / 6 * TAU + 0.2, c = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, len, 6).rotateX(Math.PI / 2), cableM);
+    c.position.set(Math.cos(a) * 12, Math.sin(a) * 12, zc((HUB.zaMin + HUB.zaMax) / 2)); hub.add(c);
+  }
+  const lr = new THREE.Mesh(new THREE.TorusGeometry(HUB.r - 0.8, 0.12, 6, 96), lampM); lr.position.z = zc(31); lr.userData.noLight = true; hub.add(lr);
+  const wall = new THREE.Mesh(new THREE.RingGeometry(3.2, HUB.r, 64), new THREE.MeshBasicMaterial({ color: 0x4c535b, side: THREE.DoubleSide })); wall.position.z = zc(HUB.zaMin); hub.add(wall);
+  const hatch = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.2, 8, 48), lampM); hatch.position.z = zc(HUB.zaMin) + 0.1; hatch.userData.noLight = true; hub.add(hatch);
+  hub.traverse((o) => { o.frustumCulled = false; if (o.isMesh) o.userData.noShadow = true; });
+}
 scene.add(hub);
+function liftETA(rem, v, fast) {                                   // sisa waktu tempuh lift (s) dengan profil 1 m/s^2, maks 20 m/s
+  const a = LIFT.accel, vm = LIFT.maxSpeed, v0 = Math.min(v / fast, vm);
+  const dAcc = (vm * vm - v0 * v0) / (2 * a), dDec = vm * vm / (2 * a);
+  let t;
+  if (dAcc + dDec <= rem) t = (vm - v0) / a + (rem - dAcc - dDec) / vm + vm / a;
+  else { const vp = Math.sqrt(Math.max(v0 * v0, (2 * a * rem + v0 * v0) / 2)); t = (vp - v0) / a + vp / a; }
+  return t / fast;
+}
 
 
 // Rangka jendela: 2 rel tepi + balok melintang tiap 50 m, 1 InstancedMesh dari kotak satuan
@@ -1553,6 +1643,8 @@ function collide(radius) {
   if (hit) { player.theta = ((s / R) % TAU + TAU) % TAU; player.za = za; }
   return hit;
 }
+
+for (const c of LATE_COLLIDERS) addCollider(...c);
 
 // --- geometri gabungan sederhana (tanpa addon) -------------------------
 function mergeSimple(parts) {
@@ -2778,8 +2870,21 @@ function describe(kind, info) {
   return `${kind}: terbang ${info.time.toFixed(2)} s · mendarat ${Math.abs(info.arc).toFixed(2)} m ${dir}` +
     (Math.abs(info.axial) > 0.05 ? ` · ${info.axial.toFixed(1)} m sepanjang sumbu` : '') + (info.wall ? ' · kena dinding end cap' : '');
 }
+function ballFromAxis(kind) {                                       // bola dari hub nol-g atau dari kabin lift
+  const b = newBall(), F = player.float, L = player.lift;
+  if (player.state === 'float') { _v1.copy(F.pos).addScaledVector(_fwd, 0.8); _v2.copy(F.vel); }
+  else { groundPoint(LIFT.theta, LIFT.za + 1.0, R - L.r + PHYS.handH, _v1); upAt(LIFT.theta, _up); _v2.copy(_up).multiplyScalar(L.v * L.dir); }
+  if (kind === 'throw') _v2.addScaledVector(_fwd, lab.speed);
+  const r0 = Math.hypot(_v1.x, _v1.y), g0 = OMEGA * OMEGA * r0 / CONFIG.g;
+  launchBody(b, _v1, _v2);
+  lastBall = b; trailReset(); trailPush(_v1);
+  addMark(Math.atan2(_v1.y, _v1.x), _v1.z + HALF_L, COL_LAUNCH);
+  const where = player.state === 'float' ? 'hub nol-g' : 'kabin lift';
+  lab.last = describe(`${kind === 'throw' ? `Lempar ${lab.speed} m/s` : 'Lepas bola'} dari ${where} (r ${r0.toFixed(1)} m, ${g0.toFixed(4)} g)`, landingOf(b));
+  setLabText(lab.last);
+}
 function throwBall() {
-  if (player.state === 'float' || player.state === 'lift') { setLabText('Lempar hanya bisa dari tanah atau saat melompat.'); return; }
+  if (player.state === 'float' || player.state === 'lift') { ballFromAxis('throw'); return; }
   const b = newBall();
   const el = lab.elev * DEG;
   groundPoint(player.theta, player.za, player.h + PHYS.handH, _v1);
@@ -2794,7 +2899,7 @@ function throwBall() {
   setLabText(lab.last);
 }
 function dropBall() {
-  if (player.state === 'float' || player.state === 'lift') { setLabText('Jatuhkan bola dari tanah.'); return; }
+  if (player.state === 'float' || player.state === 'lift') { ballFromAxis('drop'); return; }
   const b = newBall();
   // 5 m di depan pemain, setinggi lab.drop
   const ch = Math.cos(player.heading), sh = Math.sin(player.heading);
@@ -2950,7 +3055,7 @@ function updateCamera() {
   }
   // kabin lift mengikuti lantai kabin
   surfaceMatrix(cabin.matrix, LIFT.theta, LIFT.za, R - player.lift.r);
-  cabin.visible = player.state === 'lift' || player.state === 'float';
+  cabin.visible = true;
   surfaceMatrix(tramMesh.matrix, TRAM.s / R, tram.za, 0);
   updateTramVisual();
   // bola
@@ -3027,6 +3132,8 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit2') teleport('hill');
   if (e.code === 'Digit3') teleport('corn');
   if (e.code === 'Digit4') teleport('wheat');
+  if (e.code === 'Digit5') teleport('skyway');
+  if (e.code === 'Digit6') teleport('baseball');
   if (e.code === 'KeyQ') cyclePreset();
   if (e.code === 'KeyK') cycleVegQuality();
   if (e.code === 'KeyP') cyclePost();
@@ -3119,6 +3226,7 @@ on('labCooper', () => teleport('cooper'));
 on('labHill', () => teleport('hill'));
 on('labCorn', () => teleport('corn'));
 on('labWheat', () => teleport('wheat'));
+on('labBall', () => teleport('baseball'));
 on('labVeg', () => cycleVegQuality());
 on('labPost', () => cyclePost());
 on('labPreset', () => cyclePreset());
@@ -3130,7 +3238,7 @@ const inHour = document.getElementById('inHour'), inHourV = document.getElementB
 inHour.addEventListener('input', () => { clock.hour = +inHour.value; inHourV.textContent = fmtHour(clock.hour); });
 inHour.addEventListener('change', () => inHour.blur());
 document.getElementById('inShadow').addEventListener('change', (e) => { SHADOW.enabled = e.target.checked; e.target.blur(); });
-on('labWin', () => { if (player.state !== 'ground') return; player.theta = WIN.theta; player.pitch = -70 * DEG; });
+on('labWin', () => teleport('skyway'));
 on('labTest', () => {
   const rows = runSelfTest();
   const pass = rows.filter((r) => r.ok).length;
@@ -3197,6 +3305,13 @@ let lastPrompt = '';
 function updatePrompt() {
   const a = availableAction();
   let t = a ? (a.key ? `E · ${a.label}` : a.label) : '';
+  if (player.state === 'lift') {
+    const L = player.lift, fast = keys.has('ShiftLeft') || keys.has('ShiftRight') || input.run ? 5 : 1;
+    const rem = L.dir > 0 ? L.r - LIFT.topR : R - L.r, g = OMEGA * OMEGA * L.r / CONFIG.g;
+    t = `Lift ${L.dir > 0 ? 'naik' : 'turun'} · tinggi ${(R - L.r).toFixed(0)} m · gravitasi ${g.toFixed(3)} g · ${L.v.toFixed(1)} m/s · tiba sekitar ${liftETA(rem, L.v, fast).toFixed(0)} s (Shift = 5x)`;
+  } else if (player.state === 'float') {
+    t = `Hub nol-g · ${localG().toFixed(4)} g · WASD, Space naik, C turun · B lempar bola, G lepas bola · L turun dengan lift`;
+  }
   if (ext.active) t = `Kamera luar · seret / WASD putar · scroll / + - zoom · C orbit otomatis (${ext.auto ? 'nyala' : 'mati'}) · 1 2 3 4 fokus · V kembali`;
   if (t !== lastPrompt) { promptEl.textContent = t; promptEl.hidden = !t; lastPrompt = t; }
 }
@@ -4441,6 +4556,8 @@ const SPOTS = {
   hill: { s: HILLS[0].s, za: HILLS[0].za, heading: Math.atan2(COOPER.s - HILLS[0].s, COOPER.za - HILLS[0].za) / DEG, pitch: -4, name: 'Puncak bukit' },
   corn: { s: CORN_SPOT.s, za: CORN_SPOT.za, heading: 0, pitch: 2, name: 'Tengah ladang jagung' },
   wheat: { s: WHEAT_SPOT.s, za: WHEAT_SPOT.za, heading: WHEAT_SPOT.heading, pitch: 3, name: 'Ladang gandum dekat bukit' },
+  skyway: { s: SKY_S + WIN.width / 2 + 3, za: 1400, heading: -90, pitch: -40, name: 'Skyway (jendela ke angkasa)' },
+  baseball: { s: FIELD.s, za: FIELD.za - 8, heading: 0, pitch: 2, name: 'Lapangan baseball' },
 };
 function teleport(key) {
   const T = SPOTS[key];
@@ -4933,7 +5050,7 @@ function updateAudio(dt) {
     if (day < 0.4 && t > AUDIO.nextCricket) { cricket(t + 0.02, Math.random() * 1.6 - 0.8, 1 - day); AUDIO.nextCricket = t + 0.25 + Math.random() * 0.6; }
   }
   // langkah kaki
-  if (player.state === 'ground' && inside) {
+  if (player.state === 'ground' && inside && !input.turbo) {
     const dd = player.distance - AUDIO.lastDist;
     if (dd > 0 && dd < 5) {
       AUDIO.stepAcc += dd;
@@ -5033,7 +5150,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
