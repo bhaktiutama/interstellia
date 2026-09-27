@@ -121,6 +121,7 @@
       <button id="labTest" type="button">Self-test</button>
       <button id="labOrbit" type="button"><kbd>T</kbd>Percepat orbit</button>
       <button id="labWin" type="button">Ke Skyway</button>
+      <button id="labExt" type="button"><kbd>V</kbd>Kamera luar</button>
     </div>
     <div id="labResult">Lempar ke arah hadap, dengan sudut elevasi dari slider. Tiang biru = titik lepas, tiang merah = titik mendarat.</div>
     <table id="labTable"></table>
@@ -131,7 +132,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 4 gray-box · kota, museum Cooper, baseball, trem, peta · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 4b gray-box · end cap kaca, kamera luar · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -140,6 +141,7 @@
       <tr class="desk-only"><td>B · G</td><td>Lempar bola · jatuhkan bola dari ketinggian</td></tr>
       <tr class="desk-only"><td>L</td><td>Lift ke sumbu (0 g) / turun lagi; Shift = 5x cepat</td></tr>
       <tr class="desk-only"><td>E · M</td><td>Aksi (naik/turun trem, baca plakat, lift) · peta</td></tr>
+      <tr class="desk-only"><td>V</td><td>Kamera luar: lihat stasiun dari angkasa (drag = putar, scroll = zoom)</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
       <tr class="desk-only"><td>O</td><td>Jalan otomatis ke depan</td></tr>
       <tr class="desk-only"><td>X</td><td>Turbo 50 m/s (debug)</td></tr>
@@ -183,7 +185,7 @@ const CONFIG = {
   fov: 70,
   dprMax: 1.5,           // batas device pixel ratio
   dynRes: { min: 0.5, lowFps: 50, highFps: 57, window: 2.0 },
-  fogDensity: 0.00030,   // FogExp2: faktor = 1 - exp(-(d*density)^2)
+  fogDensity: 0.00015,   // FogExp2: faktor = 1 - exp(-(d*density)^2); cukup tipis agar end cap seberang (8 km) samar terlihat
   fogColor: 0xa9b6c4,
   checkerAround: 24,     // jumlah petak kotak di keliling (261,8 m)
   checkerAlong: 250,     // panjang petak kotak sepanjang sumbu (m)
@@ -237,7 +239,9 @@ const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / windo
    Kamera jauh selalu di titik asal, hanya rotasi: q_far = rotZ(omega*t) * q_kamera_stasiun.
    ===================================================================== */
 const SATURN = { GM: 3.7931e16, rEq: 60.268, rPole: 54.364 };   // m^3/s^2 dan 1.000 km (NASA NSSDCA)
-const ORBIT = { r: 260, tiltDeg: 15, phi0: 0 };                 // radius orbit 260.000 km, cincin miring 15 derajat
+const ORBIT = { r: 260, tiltDeg: 15, phi0: 0, axisTiltDeg: 40 };  // radius orbit 260.000 km, cincin miring 15 derajat
+// axisTiltDeg: sumbu stasiun (tetap di ruang inersia, efek giroskop) miring 40 derajat dari normal orbit,
+// sehingga Saturnus berpindah antara 50 dan 130 derajat dari sumbu selama satu orbit dan bisa terlihat lewat end cap.
 const T_ORB = 2 * Math.PI * Math.sqrt(Math.pow(ORBIT.r * 1e6, 3) / SATURN.GM);   // s, sekitar 37,57 jam
 const RINGS = [   // radius dalam dan luar (1.000 km), warna, alpha (NASA Saturnian Rings Fact Sheet)
   { r0: 66.900, r1: 74.510, c: [0.55, 0.52, 0.48], a: 0.06 },   // D
@@ -257,7 +261,8 @@ const SUN_DIR = new THREE.Vector3(0.75, 0.45, 0.35).normalize();   // Matahari d
 }
 const saturn = new THREE.Group();
 // kutub: +Y lokal -> sumbu z, lalu dimiringkan 15 derajat ke arah x. Di fase orbit 0 cincin terlihat terbuka 15 derajat.
-saturn.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), ORBIT.tiltDeg * DEG)
+const Q_ORBIT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), ORBIT.axisTiltDeg * DEG);   // bidang orbit relatif sumbu stasiun
+saturn.quaternion.copy(Q_ORBIT).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), ORBIT.tiltDeg * DEG))
   .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
 farScene.add(saturn);
 {
@@ -314,18 +319,41 @@ farScene.add(saturn);
 const clock = { sim: 0, orbit: 0, orbitScale: 1 };               // sim = waktu fisika (s); orbit = waktu orbit (s, bisa dipercepat)
 const _qSt = new THREE.Quaternion(), _zAxis = new THREE.Vector3(0, 0, 1);
 function orbitPhase() { return ORBIT.phi0 + TAU * clock.orbit / T_ORB; }
-function updateFar() {
+function saturnDirInertial(out) {
   const phi = orbitPhase();
-  saturn.position.set(-ORBIT.r * Math.cos(phi), -ORBIT.r * Math.sin(phi), 0);
+  return out.set(-Math.cos(phi), -Math.sin(phi), 0).applyQuaternion(Q_ORBIT);
+}
+function updateFar() {
+  saturnDirInertial(saturn.position).multiplyScalar(ORBIT.r);
+  if (ext.active) { farCam.quaternion.copy(camera.quaternion); return; }   // kamera luar sudah di kerangka inersia
   _qSt.setFromAxisAngle(_zAxis, OMEGA * clock.sim);
   farCam.quaternion.copy(_qSt).multiply(camera.quaternion);
 }
 // Arah Saturnus di kerangka stasiun (untuk HUD dan uji)
 function saturnDirStation(out) {
-  const phi = orbitPhase();
-  out.set(-Math.cos(phi), -Math.sin(phi), 0);
+  saturnDirInertial(out);
   const c = Math.cos(OMEGA * clock.sim), s = Math.sin(OMEGA * clock.sim);
-  return out.set(out.x * c + out.y * s, -out.x * s + out.y * c, 0);   // rotasi -omega*t
+  return out.set(out.x * c + out.y * s, -out.x * s + out.y * c, out.z);   // rotasi -omega*t
+}
+// Kamera luar (tombol V): mengorbit stasiun di kerangka inersia; stasiun terlihat berputar
+const ext = { active: false, yaw: 212 * Math.PI / 180, pitch: 12 * Math.PI / 180, dist: 7500, target: new THREE.Vector3(0, 0, -2200) };
+function toggleExterior() {
+  ext.active = !ext.active;
+  if (ext.active) {
+    if (document.pointerLockElement) document.exitPointerLock();
+    camera.near = 5; camera.far = 120000; scene.fog.density = 0;
+  } else {
+    camera.near = 0.25; camera.far = 12000; scene.fog.density = CONFIG.fogDensity;
+    scene.rotation.z = 0;
+  }
+  camera.updateProjectionMatrix();
+}
+function updateExteriorCamera() {
+  scene.rotation.z = OMEGA * clock.sim;                                     // stasiun berputar di ruang inersia
+  const cp = Math.cos(ext.pitch);
+  camera.position.set(ext.dist * cp * Math.sin(ext.yaw), ext.dist * Math.sin(ext.pitch), ext.dist * cp * Math.cos(ext.yaw)).add(ext.target);
+  camera.up.set(0, 1, 0);
+  camera.lookAt(ext.target);
 }
 
 
@@ -444,45 +472,97 @@ glass.frustumCulled = false;
 glass.renderOrder = 10;
 scene.add(glass);
 
-// End cap: cincin konsentris tiap 100 m, 8 jari-jari
-const capMat = new THREE.ShaderMaterial({
-  fog: true,
-  side: THREE.DoubleSide,
-  uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uColor: { value: new THREE.Color('#7b828d') } }]),
+// End cap kaca (seperti desain O'Neill dengan tutup transparan): kaca + 12 jari-jari + hub + cincin tepi.
+// Dari dalam: melihat ke sepanjang sumbu menembus kaca ke luar angkasa. Dari luar (kamera V): isi stasiun terlihat.
+const CAP = { spokes: 12, spokeW: 10, spokeT: 6, hubR: 45, hubLen: 40, rimT: 14, dockLen: 700, dockR: 16 };
+{
+  const capGlassGeo = new THREE.CircleGeometry(CONFIG.R, 128);
+  for (const sgn of [-1, 1]) {
+    const g = new THREE.Mesh(capGlassGeo, glassMat);
+    g.position.z = sgn * HALF_L;
+    g.renderOrder = 10;
+    scene.add(g);
+  }
+  // struktur: 1 InstancedMesh dari kotak satuan (jari-jari, segmen cincin tepi, hub, dermaga)
+  const parts = [];
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pz = new THREE.Vector3(), sc = new THREE.Vector3();
+  const box = (x, y, z, sx, sy, sz, rotZ) => {
+    q.setFromAxisAngle(new THREE.Vector3(0, 0, 1), rotZ);
+    parts.push(m.compose(pz.set(x, y, z), q, sc.set(sx, sy, sz)).clone());
+  };
+  for (const sgn of [-1, 1]) {
+    const z = sgn * (HALF_L + CAP.spokeT / 2 + 0.5);           // sedikit di luar kaca
+    for (let i = 0; i < CAP.spokes; i++) {
+      const a = (i / CAP.spokes) * TAU, len = CONFIG.R - CAP.hubR, rm = CAP.hubR + len / 2;
+      box(rm * Math.cos(a), rm * Math.sin(a), z, len, CAP.spokeW, CAP.spokeT, a);
+    }
+    const nRim = 96;
+    for (let i = 0; i < nRim; i++) {                              // cincin tepi dari 96 segmen
+      const a = ((i + 0.5) / nRim) * TAU, rr = CONFIG.R + CAP.rimT / 2 - 2;
+      box(rr * Math.cos(a), rr * Math.sin(a), z, CAP.rimT, TAU * rr / nRim + 1, CAP.spokeT + 4, a);
+    }
+  }
+  const structGeo = bakeShadeBox();
+  const capStruct = new THREE.InstancedMesh(structGeo, new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x2a2e35 }), parts.length);
+  parts.forEach((mm, i) => capStruct.setMatrixAt(i, mm));
+  capStruct.instanceMatrix.needsUpdate = true; capStruct.frustumCulled = false;
+  scene.add(capStruct);
+  // hub di kedua ujung + batang dermaga di end cap A (spaceport)
+  const hubMat = new THREE.MeshBasicMaterial({ color: 0x3a3f47 });
+  for (const sgn of [-1, 1]) {
+    const hubM = new THREE.Mesh(new THREE.CylinderGeometry(CAP.hubR, CAP.hubR, CAP.hubLen, 24).rotateX(Math.PI / 2), hubMat);
+    hubM.position.z = sgn * (HALF_L + CAP.hubLen / 2);
+    scene.add(hubM);
+  }
+  const dock = new THREE.Mesh(new THREE.CylinderGeometry(CAP.dockR, CAP.dockR, CAP.dockLen, 16).rotateX(Math.PI / 2),
+    new THREE.MeshBasicMaterial({ color: 0x4a5059 }));
+  dock.position.z = -HALF_L - CAP.hubLen - CAP.dockLen / 2;
+  scene.add(dock);
+}
+function bakeShadeBox() {
+  const g = new THREE.BoxGeometry(1, 1, 1);
+  const shade = [0.85, 0.85, 1.0, 0.55, 0.7, 0.7];
+  const cols = [];
+  for (let f = 0; f < 6; f++) for (let v = 0; v < 4; v++) cols.push(shade[f], shade[f], shade[f]);
+  g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  return g;
+}
+
+// Lambung luar (hanya terlihat dari kamera luar): panel gelap dengan garis sambungan dan jendela menyala
+const hullMat = new THREE.ShaderMaterial({
+  uniforms: { uR: { value: CONFIG.R }, uHalfL: { value: HALF_L } },
   vertexShader: /* glsl */`
-    #include <fog_pars_vertex>
-    varying vec2 vXY;
-    void main() {
-      vXY = position.xy;
-      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-      gl_Position = projectionMatrix * mvPosition;
-      #include <fog_vertex>
-    }`,
+    varying vec3 vPos;
+    void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
   fragmentShader: /* glsl */`
-    #include <fog_pars_fragment>
-    uniform vec3 uColor;
-    varying vec2 vXY;
+    uniform float uR, uHalfL;
+    varying vec3 vPos;
+    float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
     void main() {
-      float r = length(vXY);
-      float fp = fwidth(r);
-      float d = abs(fract(r / 100.0 + 0.5) - 0.5) * 100.0;
-      float ring = (1.0 - smoothstep(0.6 - fp, 0.6 + fp, d)) * clamp(1.2 / max(fp, 1e-4), 0.0, 1.0);
-      float a = atan(vXY.y, vXY.x);
-      float sd = abs(fract(a / (3.14159265 / 4.0) + 0.5) - 0.5) * (3.14159265 / 4.0) * r;   // arc distance to spoke
-      float spoke = 1.0 - smoothstep(1.0, 1.0 + fwidth(sd) * 1.5, sd);
-      vec3 col = uColor * mix(1.0, 0.55, max(ring, spoke) * 0.85);
-      col *= mix(0.8, 1.0, smoothstep(0.0, 1000.0, r));     // darker toward the hub
+      float th = atan(vPos.y, vPos.x) + 3.14159265;
+      vec2 uv = vec2(th * uR, vPos.z + uHalfL);                 // meter di permukaan lambung
+      vec2 cell = floor(uv / vec2(40.0, 60.0));
+      vec2 f = fract(uv / vec2(40.0, 60.0));
+      vec2 fw = fwidth(uv / vec2(40.0, 60.0));
+      float seamFade = clamp(1.0 - max(fw.x, fw.y) * 8.0, 0.0, 1.0);    // garis sambungan memudar dari jauh (anti moire)
+      float seam = (1.0 - smoothstep(0.0, 0.02 + fw.x, f.x)) + (1.0 - smoothstep(0.0, 0.015 + fw.y, f.y));
+      vec3 col = vec3(0.030, 0.032, 0.037) * (0.8 + 0.4 * h21(cell));
+      col = mix(col, vec3(0.008), clamp(seam, 0.0, 1.0) * seamFade);
+      float lit = step(0.985, h21(cell + 7.0)) * step(0.2, f.x) * step(f.x, 0.8) * step(0.3, f.y) * step(f.y, 0.7);
+      col += lit * vec3(0.85, 0.82, 0.7);
       gl_FragColor = vec4(col, 1.0);
       #include <colorspace_fragment>
-      #include <fog_fragment>
     }`,
 });
-const capGeo = new THREE.CircleGeometry(CONFIG.R, 256);
-for (const sgn of [-1, 1]) {
-  const cap = new THREE.Mesh(capGeo, capMat);
-  cap.position.z = sgn * HALF_L;
-  scene.add(cap);
+{
+  const hullGeo = new THREE.CylinderGeometry(CONFIG.R + 8, CONFIG.R + 8, CONFIG.L, 256, 1, true,
+    WIN.theta + Math.PI / 2 + (WIN_GAP * 1.02) / 2, TAU - WIN_GAP * 1.02);
+  hullGeo.rotateX(Math.PI / 2);
+  const hull = new THREE.Mesh(hullGeo, hullMat);   // FrontSide: dari dalam stasiun tidak terlihat
+  hull.frustumCulled = false;
+  scene.add(hull);
 }
+
 
 // Tiang penanda: 1 InstancedMesh. Pencahayaan palsu di-bake ke vertex color (tanpa light, tanpa shadow).
 const markerGeo = new THREE.BoxGeometry(3, 20, 3);
@@ -1226,7 +1306,8 @@ function toggleMap() { mapEl.hidden = !mapEl.hidden; if (!mapEl.hidden) { sizeMa
    ===================================================================== */
 const _m = new THREE.Matrix4(), _eye = new THREE.Vector3();
 function updateCamera() {
-  if (player.state === 'float') {
+  if (ext.active) updateExteriorCamera();
+  else if (player.state === 'float') {
     const F = player.float;
     lookBasis(F.up, F.tan);
     _eye.copy(F.pos);
@@ -1235,10 +1316,12 @@ function updateCamera() {
     lookBasis(_up, _t);
     groundPoint(player.theta, player.za, player.h + CONFIG.eye, _eye);
   }
-  _v3.copy(_fwd).negate();
-  _m.makeBasis(_right, _camUp, _v3);                       // kamera melihat ke -Z lokal
-  camera.quaternion.setFromRotationMatrix(_m);
-  camera.position.copy(_eye);
+  if (!ext.active) {
+    _v3.copy(_fwd).negate();
+    _m.makeBasis(_right, _camUp, _v3);                     // kamera melihat ke -Z lokal
+    camera.quaternion.setFromRotationMatrix(_m);
+    camera.position.copy(_eye);
+  }
   // kabin lift mengikuti lantai kabin
   surfaceMatrix(cabin.matrix, LIFT.theta, LIFT.za, R - player.lift.r);
   cabin.visible = player.state === 'lift' || player.state === 'float';
@@ -1262,7 +1345,7 @@ function look(dx, dy, sens) {
   player.pitch = Math.max(-89 * DEG, Math.min(89 * DEG, player.pitch - dy * sens));
 }
 function lockPointer() {
-  if (isTouch || document.pointerLockElement || !canvas.requestPointerLock) return;
+  if (ext.active || isTouch || document.pointerLockElement || !canvas.requestPointerLock) return;
   try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* drag-to-look tetap jalan */ }
 }
 document.getElementById('go').addEventListener('click', () => { startEl.hidden = true; lockPointer(); });
@@ -1276,8 +1359,17 @@ window.addEventListener('mousemove', (e) => {
     // Chrome kadang mengirim lonjakan movementX/Y besar tepat setelah pointer lock; abaikan
     if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
     look(e.movementX, e.movementY, CONFIG.lookSens);
+  } else if (dragging && ext.active) {
+    ext.yaw -= (e.clientX - lastX) * 0.005;
+    ext.pitch = Math.max(-1.45, Math.min(1.45, ext.pitch + (e.clientY - lastY) * 0.005));
+    lastX = e.clientX; lastY = e.clientY;
   } else if (dragging) { look(e.clientX - lastX, e.clientY - lastY, CONFIG.lookSens); lastX = e.clientX; lastY = e.clientY; }
 });
+canvas.addEventListener('wheel', (e) => {
+  if (!ext.active) return;
+  e.preventDefault();
+  ext.dist = Math.max(1500, Math.min(60000, ext.dist * Math.exp(e.deltaY * 0.001)));
+}, { passive: false });
 
 window.addEventListener('keydown', (e) => {
   if (e.target && (e.target.tagName === 'INPUT')) return;
@@ -1294,6 +1386,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyT') cycleOrbitSpeed();
   if (e.code === 'KeyE') doAction();
   if (e.code === 'KeyM') toggleMap();
+  if (e.code === 'KeyV') toggleExterior();
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -1372,6 +1465,7 @@ on('labThrow', () => throwBall());
 on('labDrop', () => dropBall());
 on('labLift', () => enterLift());
 on('labOrbit', () => cycleOrbitSpeed());
+on('labExt', () => toggleExterior());
 on('labWin', () => { if (player.state !== 'ground') return; player.theta = WIN.theta; player.pitch = -70 * DEG; });
 on('labTest', () => {
   const rows = runSelfTest();
@@ -1398,7 +1492,7 @@ window.addEventListener('resize', () => {
    ===================================================================== */
 const hud = document.getElementById('hud');
 hud.innerHTML = `
-  <div class="title">Tahap 4 · konten gray-box</div>
+  <div class="title">Tahap 4b · end cap kaca</div>
   <span class="k">FPS</span><span class="v" id="hFps">-</span>
   <span class="k wide">Frame</span><span class="v wide" id="hMs">-</span>
   <span class="k">Draw call</span><span class="v" id="hCalls">-</span>
@@ -1469,7 +1563,7 @@ function updateStats(dt) {
   hEl.dist.textContent = player.distance >= 1000 ? (player.distance / 1000).toFixed(2) + ' km' : player.distance.toFixed(0) + ' m';
   const st = player.state === 'ground' ? player.mode + (input.auto ? ' · otomatis' : '') : player.state === 'air' ? 'di udara' : player.mode;
   hEl.tram.textContent = tram.dwell > 0 ? `berhenti di ${tramStopName()}` : `${tram.v.toFixed(0)} m/s ke ${TRAM.stops[tram.target].name}`;
-  hEl.mode.textContent = st;
+  hEl.mode.textContent = ext.active ? 'kamera luar' : st;
   // sudut antara arah Saturnus dan "atas" pemain (0 derajat = tepat di atas kepala, 180 = tepat di bawah kaki)
   saturnDirStation(_satDir);
   const upNow = player.state === 'float' ? player.float.up : upAt(player.theta, _up);
@@ -1509,7 +1603,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial };
 requestAnimationFrame(frame);
 </script>
 </body>
