@@ -1,6 +1,6 @@
 # Rencana: tata letak menu, layar mulai, dan pilihan bahasa
 
-Status: rencana, belum dikerjakan. Berlaku untuk seluruh aplikasi, contoh utama Copper Corn Station.
+Status: M1 selesai (lihat Hasil M1). M2 sampai M4 belum. Keputusan: Mandarin aksara sederhana, preset dipilih di layar mulai. Berlaku untuk seluruh aplikasi, contoh utama Copper Corn Station.
 
 ## Ringkasan
 
@@ -89,6 +89,19 @@ Cakupan teks (perkiraan, jumlah pasti dihitung saat ekstraksi):
 Yang tidak diterjemahkan: komentar kode dan dokumen (tetap bahasa Indonesia sesuai aturan kerja), nama tempat orisinal (Copper Corn Station, Kestrel KS-07), tulisan di dalam dunia 3D seperti papan nama halte dan plakat gedung (tekstur kanvas; bisa menyusul sebagai tahap terpisah).
 
 Kualitas terjemahan: teks Inggris, Jepang, dan Mandarin dibuat oleh Claude. Keterangan fisika (tur, plakat air mancur) sebaiknya dibaca ulang oleh penutur asli; daftar teks per bahasa akan disiapkan dalam satu tabel agar mudah diperiksa.
+
+## Hasil M1 (selesai)
+
+| Item | Hasil |
+| --- | --- |
+| Layar muat | Garis progres + nama bagian yang sedang dimuat. 26 titik jeda (`await bootStep()` di tingkat atas modul), peta tinggi tanah dicicil per 200 baris. Bobot progres dari waktu terukur (sandbox: muat sekitar 6,5-6,9 s, peta tinggi tanah sekitar 60% waktu) |
+| Shader | Dikompilasi sebelum tombol Mulai: `compileAsync` bila GPU mendukung kompilasi paralel, selain itu `compile` biasa |
+| Layar siap | Pilihan preset (Ultra, Tinggi, Sedang, Rendah, Hemat) dengan pilihan terakhir tersorot, centang "Turunkan otomatis bila FPS di bawah 30", tombol Mulai, tautan bantuan dan menu utama |
+| Setelah Mulai | Petunjuk satu baris selama 6 s (versi desktop dan sentuh). Bantuan tidak tampil otomatis |
+| Bantuan (? atau F1, Esc menutup) | Jendela bertab: Dasar, Transportasi, Kamera dan foto, Waktu dan cuaca, Grafik dan suara, Pesawat, Tentang. Semua 25 baris bantuan lama tetap ada, dipindah ke tab. Riwayat tahap dipindah ke tab Tentang. Tab terakhir diingat |
+| Pengaman | Tombol keyboard diabaikan selama muat. Pesan "three.js belum termuat" kini hanya muncul bila modul benar-benar gagal dimuat, bukan saat muat lambat |
+
+Belum di M1: pilihan bahasa di layar mulai (M3).
 
 ## Urutan kerja
 
