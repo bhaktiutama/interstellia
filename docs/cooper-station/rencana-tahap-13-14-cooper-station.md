@@ -1,6 +1,6 @@
 # Rencana Tahap 13-14 Copper Corn Station
 
-Status: disetujui pemilik. Tahap 13 selesai (13a-13d), 14a dan 14b selesai. Berikutnya 14c. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
+Status: disetujui pemilik. Tahap 13 selesai (13a-13d), tahap 14 selesai (14a, 14b, 14c), menunggu uji visual pemilik untuk 14c. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
 
 ## Ringkasan
 
@@ -107,6 +107,24 @@ Uji `tools/uji_rumput_bukit.py`.
 | Dari dekat rumput kadang bergoyang kiri-kanan cepat dan serempak | Fase gelombang dihitung dari waktu x kecepatan angin dan posisi x arah angin. Waktu sampai 3.600 s dan posisi sampai ribuan meter, jadi perubahan kecil angin (kecepatan acak sedikit tiap frame, arah bergeser) melompatkan fase di seluruh padang sekaligus | Angin khusus rumput dihaluskan (10 s) dan geseran hembusan diintegrasikan tiap frame dalam meter, jadi tidak pernah melompat. Terukur: bercak hembusan bergeser paling cepat 1,7 m/s, arah angin rumput berubah paling cepat 0,05 derajat per detik. Getar per rumpun pelan (sekitar 0,2 Hz) dengan fase acak, jadi tidak serempak |
 | Dari jauh ada pola garis diagonal gelap-terang yang bergerak | Pita gelombang berupa sinus teratur (panjang gelombang sekitar 57 m) | Diganti bercak hembusan tak beraturan 20-60 m dari noise yang hanya bergeser searah angin. Di tanah jauh kontrasnya kecil dan memudar di 250-700 m |
 | Padang bukit tampak pucat dari jauh | Warna tanah padang dikali terlalu terang | Warna dibuat dekat dengan tanah sekitar |
+
+### Hasil 14c (selesai, menunggu uji pemilik)
+
+Murni shader bangunan (`BUILD_VS`, `BUILD_FS`): tidak ada geometri baru, jumlah segitiga dan draw call sama.
+
+| Bagian | Isi |
+| --- | --- |
+| Ruangan | Satu ruangan = satu bay x satu lantai, dalam 2,5-5,5 m (45% kedalaman gedung). Sinar dari titik kaca searah pandang dipotong dengan dinding samping, lantai, plafon, dan dinding belakang, jadi ruangan ikut bergeser saat kamera bergerak |
+| Isi ruangan | Dinding 6 warna pastel (dinding samping sedikit lebih gelap), lantai kayu berbilah atau karpet, plafon terang, perabot gelap di bawah dinding belakang, bingkai gambar. Gedung kaca (kantor): dinding netral, meja, layar |
+| Tirai | Sekitar 42% jendela: tirai di kedua sisi (30%) atau kerai di bagian atas (12%) |
+| Cahaya | Siang: ruangan lebih gelap dari luar dan meredup ke belakang. Malam: ruangan yang menyala (sama dengan pola lampu jendela lama) diterangi lampu plafon hangat, ruangan lain gelap. Pantulan langit tetap di atasnya |
+| Jarak | Hanya jendela yang cukup besar di layar (sama dengan LOD jendela yang ada); jauh tetap kaca lama, peralihan halus. Etalase lantai dasar, gudang, dan lantai tinggi di atas 4,7 m tidak diberi ruangan |
+| Preset | `uInterior`: Ultra, Tinggi, Sedang nyala; Rendah dan Hemat mati (`applyInteriorPreset` di `PRESET_HOOKS`) |
+| Aturan M1 | Tanpa `normalize()`, tanpa `pow()`, semua pembagi dijaga (sinar tidak masuk gedung = kaca lama) |
+
+Uji `tools/uji_interior.py` (render gedung saja 1280 x 800, target float): siang dan malam tanpa nilai tidak valid, hasil deterministik, ruangan mengubah sekitar 65% piksel jendela dekat. Uji lama (`uji_suasana`, `uji_bahasa`, `uji_spaceport`, `uji_ladang_foto_tur`, `uji_rumput_bukit`) tetap lulus.
+
+Yang perlu dicek pemilik: jendela gedung kota dari dekat siang dan malam (titik awal kota, tombol 7 terminal), FPS di GTX 1060 (Ultra) dan M1 (Hemat = mati, jadi tidak berubah).
 
 ## Urutan kerja
 

@@ -2599,12 +2599,13 @@ building('gambrel', COOPER.s - 32, COOPER.za + 24, 16, 12, 9, '#8e3b2f', 0, true
 // Detail digambar di shader dari koordinat dinding (meter): lantai, jendela, kusen, pintu, etalase, balkon,
 // papan kayu / seng / bata, genteng / seng atap, kerikil atap datar. Detail memudar otomatis ke warna rata-rata
 // saat pola lebih kecil dari beberapa piksel (LOD di shader, tanpa geometri tambahan). Malam: sebagian jendela menyala.
-const BUILD_U = { uNight: { value: 0 } };
+const BUILD_U = { uNight: { value: 0 }, uInterior: { value: 1 } };   // 14c: 1 = ruangan maya di balik jendela
 const BUILD_VS = /* glsl */`
   #include <fog_pars_vertex>
   attribute float aPart;
   attribute vec2 aStyle;
   varying vec3 vO, vNo, vW, vNw;
+  varying vec3 vDirO;                                                // 14c: arah kamera -> titik, ruang objek berskala (tidak dinormalisasi)
   flat varying vec3 vCol, vScale;
   flat varying float vPart, vSeed;
   flat varying vec2 vStyle;
@@ -2613,6 +2614,8 @@ const BUILD_VS = /* glsl */`
     vO = position * sc; vNo = normal; vScale = sc; vPart = aPart; vStyle = aStyle;
     vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
     vW = wp.xyz;
+    { mat3 M = mat3(modelMatrix) * mat3(instanceMatrix); vec3 dW = wp.xyz - cameraPosition;   // kolom M = sumbu objek x skala
+      vDirO = vec3(dot(M[0], dW) / max(sc.x, 1e-4), dot(M[1], dW) / max(sc.y, 1e-4), dot(M[2], dW) / max(sc.z, 1e-4)); }
     vNw = normalize(mat3(modelMatrix) * (mat3(instanceMatrix) * (normal / (sc * sc))));
     vec3 ip = instanceMatrix[3].xyz;
     vSeed = fract(sin(dot(floor(ip * 4.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
@@ -2627,8 +2630,9 @@ const BUILD_VS = /* glsl */`
   }`;
 const BUILD_FS = /* glsl */`
   #include <fog_pars_fragment>
-  uniform float uNight;
+  uniform float uNight, uInterior;
   varying vec3 vO, vNo, vW, vNw;
+  varying vec3 vDirO;
   flat varying vec3 vCol, vScale;
   flat varying float vPart, vSeed;
   flat varying vec2 vStyle;
@@ -2786,10 +2790,61 @@ const BUILD_FS = /* glsl */`
       float on = mix(step(wid, litP), litP, max(ax, ay)) * uNight;     // jauh: rata-rata jendela menyala
       float far = max(ax, ay);
       vec3 warm = mix(vec3(1.0, 0.72, 0.42), vec3(0.85, 0.9, 1.0), mix(step(0.8, hash1(vec2(wid, 5.0))), 0.2, far)) * (0.8 + 0.6 * mix(hash1(vec2(fi, bi)), 0.5, far));
+
+      // 14c: ruangan maya di balik jendela (interior mapping). Satu ruangan = satu bay x satu lantai, dalam D. Sinar dari titik
+      // kaca searah pandang dipotong dengan dinding samping, lantai/plafon, dan dinding belakang. Tanpa normalize, pembagi dijaga.
+      float kI = 0.0;
+      if (uInterior > 0.5 && winM > 0.01 && detail > 0.05 && fh < 4.7 && code != 4.0 && code != 10.0) {
+        float sn = fz ? sign(n.z) : sign(n.x);
+        float da = fz ? vDirO.x : vDirO.z, dv = vDirO.y, dd = -(fz ? vDirO.z : vDirO.x) * sn;   // sepanjang muka, tegak, masuk gedung
+        if (dd > 1e-4) {
+          float bw = W / nB, lu = u - (bi / nB - 0.5) * W, ly = yy - fi * fh;
+          float D = clamp(0.45 * (fz ? vScale.z : vScale.x), 2.5, 5.5);
+          float tx = da > 1e-5 ? (bw - lu) / da : (da < -1e-5 ? -lu / da : 1e9);
+          float ty = dv > 1e-5 ? (fh - ly) / dv : (dv < -1e-5 ? -ly / dv : 1e9);
+          float tz = D / dd, tt = min(tx, min(ty, tz));
+          vec3 h = vec3(lu + da * tt, ly + dv * tt, dd * tt);            // titik kena di ruangan (x sepanjang, y tegak, z dalam)
+          float rh = hash1(vec2(wid * 13.1, fi + 3.0)), office = code == 1.0 ? 1.0 : 0.0;
+          float pi6 = floor(rh * 6.0);
+          vec3 wallC = pi6 < 1.0 ? vec3(0.85, 0.8, 0.7) : pi6 < 2.0 ? vec3(0.62, 0.7, 0.78) : pi6 < 3.0 ? vec3(0.66, 0.72, 0.6)
+            : pi6 < 4.0 ? vec3(0.86, 0.7, 0.6) : pi6 < 5.0 ? vec3(0.72, 0.72, 0.72) : vec3(0.85, 0.78, 0.55);
+          wallC = mix(wallC, vec3(0.76, 0.77, 0.79), office);
+          vec3 c;
+          float fx2 = h.x / max(bw, 1e-3), fy2 = h.y / max(fh, 1e-3), fz2 = h.z / D;
+          if (tt == tz) {                                                // dinding belakang: perabot dan bingkai gambar
+            c = wallC;
+            float furn = step(fy2, office > 0.5 ? 0.27 : 0.3) * step(abs(fx2 - 0.5), 0.32);
+            vec3 furnC = office > 0.5 ? vec3(0.35, 0.33, 0.3) : mix(vec3(0.3, 0.2, 0.14), vec3(0.28, 0.33, 0.45), step(0.5, hash1(vec2(wid, 9.0))));
+            c = mix(c, furnC, furn);
+            float pic = step(abs(fx2 - 0.5), 0.14) * step(abs(fy2 - 0.62), 0.1) * (1.0 - office);
+            c = mix(c, mix(vec3(0.2, 0.18, 0.15), vec3(0.4, 0.55, 0.65) * (0.7 + 0.5 * hash1(vec2(wid, 4.0))), step(abs(fx2 - 0.5), 0.12) * step(abs(fy2 - 0.62), 0.08)), pic);
+            if (office > 0.5) c = mix(c, vec3(0.08, 0.1, 0.12), step(abs(fx2 - 0.5), 0.1) * step(abs(fy2 - 0.36), 0.06));   // layar
+          } else if (tt == ty) {
+            if (dv < 0.0) {                                              // lantai kayu berbilah atau karpet
+              float wood = step(0.4, hash1(vec2(wid, 7.0))) * (1.0 - office);
+              c = mix(vec3(0.36, 0.36, 0.4), vec3(0.46, 0.31, 0.19) * (0.85 + 0.15 * step(0.5, fract(h.x * 5.0))), wood);
+            } else c = vec3(0.86, 0.86, 0.84);                           // plafon
+          } else c = wallC * 0.82;                                       // dinding samping
+          float onR = step(wid, litP) * uNight;
+          float amb = dot(light, vec3(0.333)) * 0.45 * mix(1.0, 0.45, fz2);   // siang: terang dekat jendela, redup ke belakang
+          vec3 lamp = warm * onR * (0.55 + 0.6 * max(0.0, 1.0 - length(vec2(fx2 - 0.5, fz2 - 0.5)) * 1.4));
+          vec3 room = c * (amb + lamp);
+          if (tt == ty && dv > 0.0) room += warm * onR * 2.2 * step(length(vec2((fx2 - 0.5) * bw, (fz2 - 0.5) * D)), 0.28);   // lampu plafon
+          // tirai (sisi) atau kerai (atas) di sebagian jendela, di bidang kaca
+          float ch = hash1(vec2(wid * 7.3, 2.0)), wf = (fx - wx0) / max(wx1 - wx0, 1e-3), wv = (fy - wy0) / max(wy1 - wy0, 1e-3);
+          float pw = 0.18 + 0.2 * hash1(vec2(wid, 11.0));
+          float curtain = ch < 0.3 ? max(step(wf, pw), step(1.0 - pw, wf)) : (ch < 0.42 ? step(0.62, wv) : 0.0);
+          vec3 cloth = mix(vec3(0.82, 0.78, 0.7), vec3(0.55, 0.3, 0.28), step(0.5, hash1(vec2(wid, 13.0)))) * (ch < 0.3 ? 0.85 + 0.15 * sin(wf * 70.0) : 0.8 + 0.2 * step(0.5, fract(wv * 18.0)));
+          room = mix(room, cloth * (dot(light, vec3(0.333)) * 0.45 + warm * onR * 0.7), curtain);
+          kI = detail;
+          glass = mix(glass, room + sky * (0.12 + 0.55 * F) * (code == 1.0 ? 1.0 : 0.7), kI);
+        }
+      }
       vec3 frameC = code == 3.0 || code == 7.0 ? vec3(0.88, 0.87, 0.84) : code == 1.0 ? vec3(0.2, 0.22, 0.24) : vec3(0.55, 0.55, 0.53);
       vec3 wallLit = wall * light;
       col = mix(mix(wallLit, frameC * light, frameM), glass, max(winM, shopM));
-      emit = (warm * on * max(winM, shopM * 0.8) * 1.6 + vec3(1.0, 0.8, 0.55) * shopM * uNight * 0.5) * mix(1.0, 0.55, ax * ay);
+      emit = (warm * on * max(winM * (1.0 - kI), shopM * 0.8) * 1.6 +   // 14c: jendela dekat menyala lewat ruangannya
+         vec3(1.0, 0.8, 0.55) * shopM * uNight * 0.5) * mix(1.0, 0.55, ax * ay);
       col *= mix(0.65, 1.0, smoothstep(0.0, 1.2, y));             // AO dekat tanah
       col += emit;
     }
@@ -8996,6 +9051,8 @@ Object.assign(FOREST, { k: 0, fernR: 60, list: null, lastS: 1e9, lastZ: 1e9, las
   FOREST.mesh.frustumCulled = false; FOREST.mesh.userData.noLight = true;
   realGroup.add(FOREST.mesh);
 }
+function applyInteriorPreset(i) { BUILD_U.uInterior.value = i <= 2 ? 1 : 0; }   // 14c: Rendah dan Hemat tanpa ruangan maya
+PRESET_HOOKS.push(applyInteriorPreset); applyInteriorPreset(PRESET.idx);
 function applyForestPreset(i) { TREES.forestLod = [70, 60, 45, 35, 25][i]; FOREST.fernR = [60, 50, 40, 28, 0][i]; FOREST.lastS = 1e9;
   MEADOW.nearR = [18, 15, 12, 9, 7][i]; MEADOW.midR = [60, 50, 38, 26, 0][i]; applyMeadowRadii(); }   // 14b: rumput tinggi bukit
 PRESET_HOOKS.push(applyForestPreset); applyForestPreset(PRESET.idx);
@@ -9289,7 +9346,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
