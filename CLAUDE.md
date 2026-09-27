@@ -85,6 +85,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Trem | `TRAM`, `TRAM_CAR`, `TRAM_SEATS`, `tram` |
 | Lift/hub | `LIFT`, `HUB`, `CABIN`, `enterLift()`, `stepFloat()` |
 | Lokasi | `SPOTS` + `teleport(key)`: cooper, hill, corn, wheat, skyway, baseball, spaceport, fountain |
+| Panel dan HUD (M2) | `labEl`, `toggleLab()`, `labTab(id)` (data-ltab / data-lpane), `LABUI`, `setLabText()` (juga notifikasi `#toast`), `setHudMode(compact)` (kelas `x` = baris HUD lengkap) |
 | Layar muat dan bantuan (M1) | `BOOT`, `BOOT_W` (bobot progres terukur), `bootStep(frac, label)`, `startEl`, `helpEl` + `toggleHelp()` / `helpTab()`, `showHint()`, pilihan preset `#presetPick` |
 | Uji | `window.__station` mengekspor objek penting untuk skrip uji |
 
@@ -94,7 +95,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 
 ## Tombol
 
-W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 1-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis), K, Q, P, U, J, F (mode foto, Enter simpan PNG), Y (tur sinematik), / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
+W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 1-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis), K, Q, P, U, J, F (mode foto, Enter simpan PNG), Y (tur sinematik), ` (panel kontrol), / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
 
 ## Riwayat tahap
 

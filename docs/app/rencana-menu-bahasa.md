@@ -1,6 +1,6 @@
 # Rencana: tata letak menu, layar mulai, dan pilihan bahasa
 
-Status: M1 selesai (lihat Hasil M1). M2 sampai M4 belum. Keputusan: Mandarin aksara sederhana, preset dipilih di layar mulai. Berlaku untuk seluruh aplikasi, contoh utama Copper Corn Station.
+Status: M1 dan M2 selesai (lihat Hasil M1, Hasil M2). M3 dan M4 belum. Keputusan: Mandarin aksara sederhana, preset dipilih di layar mulai. Berlaku untuk seluruh aplikasi, contoh utama Copper Corn Station.
 
 ## Ringkasan
 
@@ -102,6 +102,17 @@ Kualitas terjemahan: teks Inggris, Jepang, dan Mandarin dibuat oleh Claude. Kete
 | Pengaman | Tombol keyboard diabaikan selama muat. Pesan "three.js belum termuat" kini hanya muncul bila modul benar-benar gagal dimuat, bukan saat muat lambat |
 
 Belum di M1: pilihan bahasa di layar mulai (M3).
+
+## Hasil M2 (selesai)
+
+| Item | Hasil |
+| --- | --- |
+| Panel kontrol | 7 tab: Lokasi, Waktu, Fisika, Foto, Grafik, Suara, Lainnya. Satu tab tampil sekaligus, tinggi panel maks 70% layar. Semua 36 tombol, slider, dan kotak centang lama tetap ada dengan fungsi sama. Tab terakhir diingat |
+| Buka/tutup | Klik judul panel (seperti dulu) atau tombol ` (backtick). Di ponsel tombol "Uji" berganti nama menjadi "Panel" |
+| Ponsel (lebar < 640 px) | Lembar bawah setinggi maks 55% layar, baris tab di bawah; joystick dan tombol sentuh disembunyikan selama panel terbuka |
+| Tab Lainnya | HUD ringkas/lengkap, sembunyikan UI (H), bantuan (?), peta (M) |
+| Notifikasi | Pesan panel (hasil lempar, cuaca, preset turun otomatis, pindah lokasi) juga tampil 4 s di atas tengah layar bila tab Fisika tidak terlihat. Teks dan tabel hasil tetap di tab Fisika |
+| HUD | Mode ringkas (FPS, status, zona, g lokal, jam stasiun) dan lengkap (semua baris lama). Awal: ringkas. Klik judul HUD untuk berganti; pilihan diingat. Judul HUD kini "Copper Corn Station" (sebelumnya "Tahap 5 · cahaya") |
 
 ## Urutan kerja
 
