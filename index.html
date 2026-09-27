@@ -141,7 +141,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 7 · Saturnus dan cincin versi shader (data NASA), tepi end cap bercahaya · tahap 6b: bukit, ladang, pohon di seluruh stasiun · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 8 · detail fasad semua bangunan (jendela, pintu, balkon, atap, lampu malam) dan rumah Cooper lengkap · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -1525,26 +1525,92 @@ function placeAt(mesh, i, s, za, sx, sy, sz, h = 0, color = null) {
 }
 const _c = new THREE.Color();
 
-// --- tipe bangunan: 4 InstancedMesh (pelana, perisai, atap datar, silo) --
-const GEO = {
-  gable: mergeSimple([
-    { geo: bakeShade(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)), color: [1, 1, 1] },
-    { geo: shadeFaces(new THREE.CylinderGeometry(0.72, 0.72, 1.02, 3, 1).rotateX(Math.PI / 2).rotateZ(Math.PI / 2).scale(0.72, 0.38, 1).translate(0, 1.18, 0)), color: [0.62, 0.36, 0.30] },
-  ]),
-  hip: mergeSimple([
-    { geo: bakeShade(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)), color: [1, 1, 1] },
-    { geo: shadeFaces(new THREE.ConeGeometry(0.78, 0.45, 4, 1, true).rotateY(Math.PI / 4).translate(0, 1.225, 0)), color: [0.42, 0.37, 0.34] },
-  ]),
-  flat: mergeSimple([{ geo: bakeShade(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)), color: [1, 1, 1] }]),
-  silo: mergeSimple([
-    { geo: new THREE.CylinderGeometry(0.5, 0.5, 1, 12, 1, true).translate(0, 0.5, 0), color: [0.92, 0.92, 0.9] },
-    { geo: new THREE.ConeGeometry(0.52, 0.35, 12, 1, true).translate(0, 1.175, 0), color: [0.8, 0.8, 0.8] },
-  ]),
+// --- tipe bangunan (tahap 8): geometri satuan dengan atap sungguhan + atribut aPart (0 dinding, 1 atap) ---
+// satuan: x, z di [-0.5, 0.5], dinding y di [0, 1]; diskalakan (w, h, d) per instance.
+function partsGeo(build) {
+  const pos = [], nrm = [], part = [];
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const tri = (a, b, c, p, inside = V(0, 0.55, 0)) => {
+    const n = V().subVectors(b, a).cross(V().subVectors(c, a)).normalize();
+    const cen = V().add(a).add(b).add(c).multiplyScalar(1 / 3);
+    if (n.dot(V().subVectors(cen, inside)) < 0) { n.negate(); [b, c] = [c, b]; }
+    for (const v of [a, b, c]) { pos.push(v.x, v.y, v.z); nrm.push(n.x, n.y, n.z); part.push(p); }
+  };
+  const quad = (a, b, c, d, p, inside) => { tri(a, b, c, p, inside); tri(a, c, d, p, inside); };
+  build({ V, tri, quad });
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('aPart', new THREE.Float32BufferAttribute(part, 1));
+  return g;
+}
+const walls = ({ V, quad }) => {                                   // 4 dinding + alas atap datar tidak perlu
+  const c = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
+  for (let i = 0; i < 4; i++) { const [x0, z0] = c[i], [x1, z1] = c[(i + 1) % 4]; quad(V(x0, 0, z0), V(x1, 0, z1), V(x1, 1, z1), V(x0, 1, z0), 0); }
 };
-const BUILD = { gable: [], hip: [], flat: [], silo: [] };       // [s, za, w, d, h, elev, colorHex]
+const GEO = {
+  gable: partsGeo((k) => {                                        // pelana, bubungan sejajar x (menghadap jalan)
+    const { V, tri, quad } = k, r = 0.34, o = 0.06, ye = 1 - r * o / 0.5;
+    walls(k);
+    for (const sx of [-0.5, 0.5]) tri(V(sx, 1, -0.5), V(sx, 1, 0.5), V(sx, 1 + r, 0), 0);
+    quad(V(-0.53, ye, -0.5 - o), V(0.53, ye, -0.5 - o), V(0.53, 1 + r, 0), V(-0.53, 1 + r, 0), 1, V(0, 0.9, 0));
+    quad(V(-0.53, ye, 0.5 + o), V(0.53, ye, 0.5 + o), V(0.53, 1 + r, 0), V(-0.53, 1 + r, 0), 1, V(0, 0.9, 0));
+  }),
+  gablez: partsGeo((k) => {                                       // pelana, bubungan sejajar z (gereja)
+    const { V, tri, quad } = k, r = 0.3, o = 0.05, ye = 1 - r * o / 0.5;
+    walls(k);
+    for (const sz of [-0.5, 0.5]) tri(V(-0.5, 1, sz), V(0.5, 1, sz), V(0, 1 + r, sz), 0);
+    quad(V(-0.5 - o, ye, -0.52), V(-0.5 - o, ye, 0.52), V(0, 1 + r, 0.52), V(0, 1 + r, -0.52), 1, V(0, 0.9, 0));
+    quad(V(0.5 + o, ye, -0.52), V(0.5 + o, ye, 0.52), V(0, 1 + r, 0.52), V(0, 1 + r, -0.52), 1, V(0, 0.9, 0));
+  }),
+  gambrel: partsGeo((k) => {                                      // atap lumbung (gambrel), bubungan sejajar z
+    const { V, tri, quad } = k;
+    walls(k);
+    const P = [[-0.55, 0.97], [-0.4, 1.32], [0, 1.47], [0.4, 1.32], [0.55, 0.97]];
+    for (let i = 0; i < 4; i++) quad(V(P[i][0], P[i][1], -0.53), V(P[i + 1][0], P[i + 1][1], -0.53), V(P[i + 1][0], P[i + 1][1], 0.53), V(P[i][0], P[i][1], 0.53), 1, V(0, 1.0, 0));
+    for (const sz of [-0.5, 0.5]) {                               // dinding ujung bersegi lima
+      const Q = [[-0.5, 1], [-0.37, 1.3], [0, 1.45], [0.37, 1.3], [0.5, 1]];
+      for (let i = 1; i < 4; i++) tri(V(Q[0][0], Q[0][1], sz), V(Q[i][0], Q[i][1], sz), V(Q[i + 1][0], Q[i + 1][1], sz), 0, V(0, 1.1, 0));
+    }
+  }),
+  hip: partsGeo((k) => {                                          // perisai
+    const { V, tri, quad } = k, r = 0.3, e = 0.53, ye = 0.985, rx = 0.18;
+    walls(k);
+    const A = V(-e, ye, -e), B = V(e, ye, -e), C = V(e, ye, e), D = V(-e, ye, e), R1 = V(-rx, 1 + r, 0), R2 = V(rx, 1 + r, 0);
+    quad(A, B, R2, R1, 1, V(0, 0.9, 0)); quad(D, C, R2, R1, 1, V(0, 0.9, 0));
+    tri(A, D, R1, 1, V(0, 0.9, 0)); tri(B, C, R2, 1, V(0, 0.9, 0));
+  }),
+  flat: partsGeo((k) => {
+    const { V, quad } = k;
+    walls(k);
+    quad(V(-0.5, 1, -0.5), V(0.5, 1, -0.5), V(0.5, 1, 0.5), V(-0.5, 1, 0.5), 1, V(0, 0.5, 0));
+  }),
+  silo: partsGeo(({ V, tri, quad }) => {
+    const n = 16;
+    for (let i = 0; i < n; i++) {
+      const a0 = i / n * TAU, a1 = (i + 1) / n * TAU, c0 = Math.cos(a0) * 0.5, s0 = Math.sin(a0) * 0.5, c1 = Math.cos(a1) * 0.5, s1 = Math.sin(a1) * 0.5;
+      quad(V(c0, 0, s0), V(c1, 0, s1), V(c1, 1, s1), V(c0, 1, s0), 0, V(0, 0.5, 0));
+      tri(V(c0 * 1.04, 0.99, s0 * 1.04), V(c1 * 1.04, 0.99, s1 * 1.04), V(0, 1.3, 0), 1, V(0, 0.8, 0));
+    }
+  }),
+};
+const BUILD = { gable: [], gablez: [], gambrel: [], hip: [], flat: [], silo: [] };   // [s, za, w, d, h, elev, colorHex, gaya, depan]
 const houseList = [];                                            // semua bangunan untuk peta dan uji
-function building(type, s, za, w, d, h, color, elev = 0, collider = true) {
-  BUILD[type].push([s, za, w, d, h, elev, color]);
+// gaya fasad: 0 kantor/plester, 1 menara kaca, 2 apartemen berbalkon, 3 rumah, 4 gudang/industri, 5 lumbung, 6 silo/tangki,
+// 7 gereja, 8 sekolah/pasar, 9 garasi, 10 hanggar/terminal, 11 podium toko. depan: 0 tidak ada, 1 sisi -za, 2 sisi +za
+function building(type, s, za, w, d, h, color, elev = 0, collider = true, style = -1, front = 0) {
+  if (style < 0) {
+    if (type === 'silo') style = 6;
+    else if (type === 'gambrel') style = 5;
+    else if (color === '#e9e4da') style = 7;
+    else if (type !== 'flat') style = 3;
+    else if (COLS.tower.includes(color)) style = 1;
+    else if (COLS.ind.includes(color)) style = za < 260 ? 10 : 4;
+    else if (color === '#d9c9a8') style = 8;
+    else if (COLS.house.includes(color)) style = 9;
+    else style = 0;
+  }
+  BUILD[type].push([s, za, w, d, h, elev, color, style, front]);
   if (elev === 0) houseList.push([s, za, w, d, h, type]);
   if (collider && elev === 0) addCollider(s, za, w / 2, d / 2);
 }
@@ -1581,7 +1647,7 @@ for (const c of cityCells) {
         const w = bw * U(0.7, 0.9), dd = bd * U(0.7, 0.9);
         if (!clearOf(bs, bz, w, dd)) continue;
         const col = pick(COLS.tower);
-        building('flat', bs, bz, w, dd, U(7, 10), pick(COLS.mid));
+        building('flat', bs, bz, w, dd, U(7, 10), pick(COLS.mid), 0, true, 11);
         building('flat', bs + U(-3, 3), bz + U(-3, 3), w * U(0.45, 0.65), dd * U(0.45, 0.65), U(22, 40) + 38 * t * U(0.5, 1), col, 8);
       } else {                                                    // 2-3 gedung berjajar
         const k = rnd() < 0.5 ? 2 : 3, piece = bd / k;
@@ -1596,7 +1662,7 @@ for (const c of cityCells) {
         while (s < s1 - 10) {
           const w = Math.min(s1 - s, U(14, 26)), dd = U(12, 18);
           const cs = s + w / 2, cz = zz + dir * dd / 2;
-          if (w > 8 && clearOf(cs, cz, w, dd)) building('flat', cs, cz, w, dd, U(8, 22), pick(COLS.mid));
+          if (w > 8 && clearOf(cs, cz, w, dd)) building('flat', cs, cz, w, dd, U(8, 22), pick(COLS.mid), 0, true, 2, dir === 1 ? 1 : 2);
           s += w + U(2, 6);
         }
       }
@@ -1604,7 +1670,7 @@ for (const c of cityCells) {
     } else {                                                      // permukiman dan tepi: rumah menghadap jalan
       const sparse = cls === 'tepi';
       if (!sparse && rnd() < 0.03 && bw > 60 && bd > 50) {        // gereja: badan + menara
-        if (clearOf(bs, bz, 16, 30)) { building('gable', bs, bz, 16, 30, 11, '#e9e4da'); building('hip', bs, bz - 17, 6, 6, 26, '#e9e4da'); }
+        if (clearOf(bs, bz, 16, 30)) { building('gablez', bs, bz, 16, 30, 11, '#e9e4da', 0, true, 7, 1); building('hip', bs, bz - 17, 6, 6, 26, '#e9e4da'); }
         continue;
       }
       for (const [zz, dir] of [[z0, 1], [z1, -1]]) {
@@ -1617,9 +1683,9 @@ for (const c of cityCells) {
           if (cs + w / 2 < s1 && clearOf(cs, cz, w, dd)) {
             const two = rnd() < 0.4, h = two ? U(7.5, 9) : U(5, 6.5), col = pick(COLS.house), tr = rnd();
             const type = tr < 0.5 ? 'gable' : 'hip';
-            building(type, cs, cz, w, dd, h, col);
+            building(type, cs, cz, w, dd, h, col, 0, true, 3, dir === 1 ? 1 : 2);
             if (tr > 0.85 && clearOf(cs + w / 2 + 3, cz + dir * 3, 6, 8)) building(type, cs + w / 2 + 2.5, cz + dir * 3, 6, 8, h * 0.8, col);   // sayap rumah L
-            else if (rnd() < 0.3 && clearOf(cs - w / 2 - 3.5, cz, 5.5, 6)) building('flat', cs - w / 2 - 3.5, cz, 5.5, 6, 3, pick(COLS.house));  // garasi
+            else if (rnd() < 0.3 && clearOf(cs - w / 2 - 3.5, cz, 5.5, 6)) building('flat', cs - w / 2 - 3.5, cz, 5.5, 6, 3, pick(COLS.house), 0, true, 9, dir === 1 ? 1 : 2);  // garasi
           }
           s += lot;
         }
@@ -1647,26 +1713,257 @@ for (const f of fieldList) {
   if (f.meadow || inReal(f.s0 + 20, f.z0 + 20, 40)) continue;
   const s = f.s0 + 20, z = f.z0 + 20;
   if (!clearOf(s, z, 30, 30)) continue;
-  building('gable', s, z, 12, 9, 7.5, pick(COLS.house));
-  building('gable', s + 22, z + 4, 14, 20, 10, pick(COLS.barn));
+  building('gable', s, z, 12, 9, 7.5, pick(COLS.house), 0, true, 3, 1);
+  building('gambrel', s + 22, z + 4, 14, 20, 10, pick(COLS.barn), 0, true, 5, 1);
   building('silo', s + 34, z - 6, 6, 6, 14, '#e8e8e4'); building('silo', s + 34, z + 2, 6, 6, 14, '#e8e8e4');
 }
 
 // --- museum Cooper Farm: rumah, silo berderet, lumbung, truk ------------
 for (let q = 0; q < 5; q++) building('silo', COOPER.s + 34 + q * 8, COOPER.za + 26, 6.5, 6.5, 16, '#eeeeea');
-building('gable', COOPER.s - 32, COOPER.za + 24, 16, 12, 9, '#8e3b2f');
+building('gambrel', COOPER.s - 32, COOPER.za + 24, 16, 12, 9, '#8e3b2f', 0, true, 5, 1);
 
-// --- InstancedMesh per tipe ---------------------------------------------
+// --- InstancedMesh per tipe dengan shader fasad (tahap 8) ----------------
+// Detail digambar di shader dari koordinat dinding (meter): lantai, jendela, kusen, pintu, etalase, balkon,
+// papan kayu / seng / bata, genteng / seng atap, kerikil atap datar. Detail memudar otomatis ke warna rata-rata
+// saat pola lebih kecil dari beberapa piksel (LOD di shader, tanpa geometri tambahan). Malam: sebagian jendela menyala.
+const BUILD_U = { uNight: { value: 0 } };
+const BUILD_VS = /* glsl */`
+  #include <fog_pars_vertex>
+  attribute float aPart;
+  attribute vec2 aStyle;
+  varying vec3 vO, vNo, vW, vNw, vCol, vScale;
+  varying float vPart, vSeed;
+  varying vec2 vStyle;
+  void main() {
+    vec3 sc = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+    vO = position * sc; vNo = normal; vScale = sc; vPart = aPart; vStyle = aStyle;
+    vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+    vW = wp.xyz;
+    vNw = normalize(mat3(modelMatrix) * (mat3(instanceMatrix) * (normal / (sc * sc))));
+    vec3 ip = instanceMatrix[3].xyz;
+    vSeed = fract(sin(dot(floor(ip * 4.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+    #ifdef USE_INSTANCING_COLOR
+    vCol = instanceColor;
+    #else
+    vCol = vec3(1.0);
+    #endif
+    vec4 mvPosition = viewMatrix * wp;
+    gl_Position = projectionMatrix * mvPosition;
+    #include <fog_vertex>
+  }`;
+const BUILD_FS = /* glsl */`
+  #include <fog_pars_fragment>
+  uniform float uNight;
+  varying vec3 vO, vNo, vW, vNw, vCol, vScale;
+  varying float vPart, vSeed;
+  varying vec2 vStyle;
+  ${LIGHT_GLSL}
+  float hash1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float vn(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash1(i), hash1(i + vec2(1, 0)), u.x), mix(hash1(i + vec2(0, 1)), hash1(i + vec2(1, 1)), u.x), u.y); }
+  // kotak lembut: 1 di dalam [a, b], dengan anti-alias selebar fw
+  float band(float x, float a, float b, float fw) { return clamp(min(x - a, b - x) / max(fw, 1e-4) + 0.5, 0.0, 1.0); }
+  float lines(float x, float period, float w, float fw) {          // garis tipis periodik (AA), pudar bila terlalu rapat
+    float d = abs(fract(x / period + 0.5) - 0.5) * period;
+    return (1.0 - smoothstep(w - fw, w + fw, d)) * (1.0 - smoothstep(period * 0.25, period * 0.6, fw));
+  }
+  void main() {
+    float code = vStyle.x, front = vStyle.y;
+    vec3 n = normalize(vNo);
+    vec3 N = normalize(vNw);
+    vec3 V = normalize(cameraPosition - vW);
+    float F = pow(1.0 - clamp(abs(dot(N, V)), 0.0, 1.0), 4.0);
+    vec3 light = stationLight(vW, N);
+    vec3 sky = fogColor;
+    vec3 col; vec3 emit = vec3(0.0);
+    bool roof = vPart > 0.5;
+    if (n.y < -0.9) { gl_FragColor = vec4(vec3(0.05), 1.0); return; }
+    if (roof) {
+      // ---- atap ----
+      vec3 rc;
+      float kind = code == 5.0 ? 1.0 : code == 6.0 ? 2.0 : 0.0;
+      if (n.y > 0.97 && code != 6.0) {                           // atap datar: kerikil + dinding pembatas + noda
+        float e = min(vScale.x * 0.5 - abs(vO.x), vScale.z * 0.5 - abs(vO.z));
+        float g = 0.8 + 0.25 * vn(vO.xz * 3.0) + 0.12 * vn(vO.xz * 0.3);
+        rc = vec3(0.44, 0.44, 0.43) * g;
+        rc = mix(rc, vec3(0.62, 0.61, 0.58), band(e, -1.0, 0.45, fwidth(e)));
+        if (code == 1.0) rc *= 0.8;
+      } else {
+        float sel = floor(vSeed * 5.0);
+        rc = sel < 1.0 ? vec3(0.42, 0.14, 0.08) : sel < 2.0 ? vec3(0.13, 0.14, 0.16) : sel < 3.0 ? vec3(0.28, 0.18, 0.12) : sel < 4.0 ? vec3(0.36, 0.08, 0.05) : vec3(0.25, 0.27, 0.28);
+        if (code == 5.0) rc = vec3(0.33, 0.07, 0.05);           // lumbung: seng merah
+        if (code == 7.0) rc = vec3(0.12, 0.13, 0.15);           // gereja: batu tulis
+        if (code == 6.0) rc = vec3(0.55, 0.56, 0.57);           // silo: seng
+        float along = abs(n.z) > abs(n.x) ? vO.x : vO.z;
+        float fw = length(fwidth(vec2(along, vO.y)));
+        if (code == 5.0 || code == 6.0 || sel >= 3.0) {          // seng bergelombang: alur searah kemiringan
+          float a = code == 6.0 ? atan(vO.z, vO.x) * 3.0 : along;
+          rc *= 1.0 - 0.28 * lines(a, 0.45, 0.05, fwidth(a));
+        } else {                                                  // genteng: baris + sambungan berselang
+          float row = vO.y / 0.2;
+          float rid = floor(row);
+          rc *= 1.0 - 0.35 * lines(vO.y, 0.2, 0.02, fwidth(vO.y));
+          rc *= 1.0 - 0.2 * lines(along + rid * 0.15, 0.3, 0.015, fw);
+          rc *= 0.9 + 0.2 * hash1(vec2(floor(along / 0.3 + rid * 0.5), rid));
+        }
+        rc *= 0.85 + 0.3 * vn(vO.xz * 0.7 + vO.y);             // lumut / pudar
+      }
+      col = rc * light;
+    } else {
+      // ---- dinding ----
+      bool fz = abs(n.z) > abs(n.x);
+      float u = fz ? vO.x : vO.z, W = fz ? vScale.x : vScale.z;
+      if (code == 6.0) { u = atan(vO.z, vO.x) * 0.5 * vScale.x; W = 3.14159 * vScale.x; }
+      float y = vO.y, H = vScale.y;
+      bool isFront = (front == 1.0 && n.z < -0.5) || (front == 2.0 && n.z > 0.5);
+      bool gableEnd = y > H + 0.01;
+      vec3 base = vCol;
+      float fwU = fwidth(u), fwY = fwidth(y);
+      // parameter gaya
+      float fh = 3.2, bay = 3.0, wx0 = 0.2, wx1 = 0.8, wy0 = 0.3, wy1 = 0.82, groundH = 0.0, litP = 0.4;
+      float mat = 0.0;                                            // 0 plester, 1 papan horizontal, 2 seng vertikal, 3 papan vertikal, 4 bata, 5 kaca
+      if (code == 1.0) { fh = 3.8; bay = 1.5; wx0 = 0.04; wx1 = 0.96; wy0 = 0.1; wy1 = 0.9; mat = 5.0; litP = 0.35; }
+      else if (code == 2.0) { fh = 3.0; bay = 3.4; wx0 = 0.2; wx1 = 0.8; wy0 = 0.28; wy1 = 0.86; litP = 0.5; groundH = 3.6; }
+      else if (code == 3.0) { fh = 2.9; bay = 3.4; wx0 = 0.3; wx1 = 0.7; wy0 = 0.32; wy1 = 0.8; mat = 1.0; litP = 0.45; }
+      else if (code == 4.0 || code == 10.0) { fh = H; bay = 6.0; mat = 2.0; litP = 0.2; }
+      else if (code == 5.0) { fh = H; bay = W; mat = 3.0; }
+      else if (code == 6.0) { mat = 2.0; }
+      else if (code == 7.0) { fh = H; bay = 4.0; wx0 = 0.36; wx1 = 0.64; wy0 = 0.22; wy1 = 0.85; litP = 0.7; }
+      else if (code == 8.0) { fh = 3.8; bay = 3.2; wx0 = 0.1; wx1 = 0.9; wy0 = 0.3; wy1 = 0.85; mat = 4.0; litP = 0.3; }
+      else if (code == 9.0) { fh = H; bay = W; mat = 1.0; }
+      else if (code == 11.0) { fh = 3.6; bay = 2.8; groundH = 4.6; litP = 0.4; }
+      else { groundH = H > 12.0 ? 4.4 : 0.0; }
+      // bahan dinding
+      vec3 wall = base;
+      float grain = 0.93 + 0.1 * vn(vec2(u, y) * 1.3) + 0.04 * vn(vec2(u, y) * 9.0);
+      if (mat == 1.0) wall *= 1.0 - 0.22 * lines(y, 0.2, 0.012, fwY);
+      else if (mat == 2.0) wall *= 1.0 - 0.25 * lines(u, 0.25, 0.04, fwU) - 0.1 * lines(u + 0.125, 0.25, 0.03, fwU);
+      else if (mat == 3.0) wall *= (1.0 - 0.3 * lines(u, 0.3, 0.012, fwU)) * (0.9 + 0.2 * hash1(vec2(floor(u / 0.3), 3.0)));
+      else if (mat == 4.0) { float r = floor(y / 0.075); wall *= (1.0 - 0.3 * lines(y, 0.075, 0.006, fwY)) * (1.0 - 0.3 * lines(u + mod(r, 2.0) * 0.11, 0.22, 0.006, fwU)); }
+      else if (mat == 5.0) wall = mix(vec3(0.05, 0.07, 0.09), base * 0.35, 0.5);
+      wall *= grain;
+      if (code == 6.0) wall *= 1.0 - 0.3 * lines(y, 0.8, 0.05, fwY);   // cincin silo
+      // grid jendela
+      float nB = max(1.0, floor(W / bay + 0.5)), bx = (u / W + 0.5) * nB, fx = fract(bx), bi = floor(bx);
+      float yy = y - groundH, fy = fract(yy / fh), fi = floor(yy / fh);
+      float fwx = fwU * nB / W, fwy = fwY / fh;
+      float detail = 1.0 - smoothstep(0.12, 0.35, max(fwx, fwy));  // LOD: pola jendela memudar saat < ~3 px per bay
+      float winM = 0.0, frameM = 0.0;
+      bool hasWin = code != 5.0 && code != 6.0 && code != 9.0 && !gableEnd && yy > 0.0 && y < H - 0.5;
+      if (code == 4.0 || code == 10.0) {                          // gudang: jendela pita tinggi
+        hasWin = y > H - 2.6 && y < H - 1.0;
+        fy = (y - (H - 2.6)) / 1.6; wy0 = 0.0; wy1 = 1.0; wx0 = 0.08; wx1 = 0.92; fwy = fwY / 1.6;
+      }
+      if (hasWin) {
+        winM = band(fx, wx0, wx1, fwx) * band(fy, wy0, wy1, fwy);
+        frameM = band(fx, wx0 - 0.04, wx1 + 0.04, fwx) * band(fy, wy0 - 0.04, wy1 + 0.04, fwy) - winM;
+        if (code == 3.0 || code == 7.0) winM *= 1.0 - 0.8 * max(lines(fx, 0.5, 0.006, fwx), lines(fy, 0.5, 0.006, fwy));   // kisi jendela
+        if (code == 1.0) winM *= 1.0 - 0.7 * lines(fx, 1.0, 0.02, fwx);                    // mullion
+      }
+      float avgWin = hasWin ? (wx1 - wx0) * (wy1 - wy0) : 0.0;
+      // lantai dasar: etalase kaca / pintu masuk
+      float shopM = 0.0;
+      if (groundH > 0.0 && y < groundH) {
+        float sfx = fract(u / 2.6 + 0.5);
+        shopM = band(y, 0.15, groundH - 0.9, fwY) * band(sfx, 0.06, 0.94, fwU / 2.6);
+        wall = mix(wall, vec3(0.16, 0.16, 0.17), band(y, groundH - 0.8, groundH - 0.3, fwY));   // pita kanopi / papan nama
+      }
+      // pintu
+      float doorM = 0.0;
+      if (isFront && (code == 3.0 || code == 9.0 || code == 5.0 || code == 7.0 || code == 10.0)) {
+        float dw = code == 9.0 ? min(W - 1.0, 3.0) : code == 5.0 ? W * 0.4 : code == 10.0 ? W * 0.6 : code == 7.0 ? 2.2 : 1.0;
+        float dh = code == 9.0 ? 2.3 : code == 5.0 ? H * 0.62 : code == 10.0 ? H * 0.8 : code == 7.0 ? 3.4 : 2.1;
+        float du = code == 3.0 ? (bi + 0.5) / nB * W - W * 0.5 : 0.0;
+        if (code == 3.0) du = (floor(nB * 0.5) + 0.5) / nB * W - W * 0.5;
+        doorM = band(u, du - dw * 0.5, du + dw * 0.5, fwU) * band(y, 0.0, dh, fwY);
+        if (code == 3.0 && abs(u - du) < dw) { winM *= step(1.0, fi + 0.5); frameM *= step(1.0, fi + 0.5); }
+        vec3 doorC = code == 9.0 || code == 10.0 ? vec3(0.55, 0.56, 0.57) * (1.0 - 0.25 * lines(y, 0.3, 0.02, fwY))
+          : code == 5.0 ? vec3(0.32, 0.06, 0.05) : vec3(0.28, 0.17, 0.1);
+        if (code == 5.0) {                                        // pintu lumbung: rangka X putih
+          float ux = (u - du) / dw + 0.5, vy = y / dh;
+          float xb = max(lines(ux - vy, 2.0, 0.02, fwidth(ux - vy)), lines(ux + vy - 1.0, 2.0, 0.02, fwidth(ux + vy)));
+          float fr = 1.0 - band(ux, 0.04, 0.96, fwidth(ux)) * band(vy, 0.04, 0.96, fwidth(vy));
+          doorC = mix(doorC, vec3(0.85), max(xb, fr));
+        }
+        wall = mix(wall, doorC, doorM);
+      }
+      // lis putih rumah, lumbung, gereja: sudut dan tepi atas
+      if (code == 3.0 || code == 5.0 || code == 7.0) {
+        float edge = min(W * 0.5 - abs(u), abs(y - H));
+        wall = mix(wall, vec3(0.86, 0.85, 0.82), band(edge, -1.0, 0.14, fwidth(edge)) * (code == 3.0 ? 0.6 : 1.0));
+      }
+      // balkon apartemen: pelat lantai + pagar di sisi depan pada bay berselang
+      if (code == 2.0 && isFront && yy > fh * 0.9 && mod(bi, 2.0) < 1.0) {
+        float slab = band(fy, 0.0, 0.05, fwy), rail = band(fy, 0.05, 0.36, fwy) * band(fx, 0.08, 0.92, fwx);
+        wall = mix(wall, vec3(0.75, 0.75, 0.73), slab * detail);
+        winM *= 1.0 - rail * 0.6 * detail; frameM *= 1.0 - rail;
+        wall = mix(wall, vec3(0.25, 0.27, 0.29), rail * 0.7 * detail);
+      }
+      // kaca: interior gelap + pantulan langit (Fresnel); malam: sebagian menyala
+      float wid = hash1(vec2(bi + vSeed * 97.0, fi + (fz ? 13.0 : 71.0)));
+      vec3 inner = vec3(0.06, 0.06, 0.065) * (0.6 + 0.9 * wid);
+      if (code == 1.0) inner = mix(inner, base * 0.25, 0.5);
+      vec3 glass = inner * light + sky * (0.18 + 0.7 * F) * (code == 1.0 ? 1.2 : 0.8);
+      float on = step(wid, litP) * uNight;
+      vec3 warm = mix(vec3(1.0, 0.72, 0.42), vec3(0.85, 0.9, 1.0), step(0.8, hash1(vec2(wid, 5.0)))) * (0.8 + 0.6 * hash1(vec2(fi, bi)));
+      vec3 frameC = code == 3.0 || code == 7.0 ? vec3(0.88, 0.87, 0.84) : code == 1.0 ? vec3(0.2, 0.22, 0.24) : vec3(0.55, 0.55, 0.53);
+      vec3 wallLit = wall * light;
+      vec3 detailed = mix(mix(wallLit, frameC * light, frameM), glass, max(winM, shopM));
+      emit = warm * on * max(winM, shopM * 0.8) * 1.6 + vec3(1.0, 0.8, 0.55) * shopM * uNight * 0.5;
+      vec3 avgGlass = glass;
+      vec3 flatC = mix(wallLit, avgGlass, avgWin + (groundH > 0.0 && y < groundH ? 0.6 : 0.0));
+      vec3 flatEmit = warm * uNight * litP * avgWin * 1.3;
+      col = mix(flatC, detailed, detail);
+      emit = mix(flatEmit, emit, detail);
+      col *= mix(0.65, 1.0, smoothstep(0.0, 1.2, y));             // AO dekat tanah
+      col += emit;
+    }
+    gl_FragColor = vec4(col, 1.0);
+    #include <colorspace_fragment>
+    #include <fog_fragment>
+  }`;
+const buildMat = new THREE.ShaderMaterial({ fog: true, side: THREE.DoubleSide,
+  uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), LIGHT.uniforms, BUILD_U),
+  vertexShader: BUILD_VS, fragmentShader: BUILD_FS });
 const cityMeshes = {};
 for (const type of Object.keys(BUILD)) {
   const list = BUILD[type];
-  const mesh = new THREE.InstancedMesh(GEO[type], new THREE.MeshBasicMaterial({ vertexColors: true }), Math.max(1, list.length));
+  const geo = GEO[type].clone();
+  const st = new Float32Array(Math.max(1, list.length) * 2);
+  list.forEach((b, i) => { st[i * 2] = b[7]; st[i * 2 + 1] = b[8]; });
+  geo.setAttribute('aStyle', new THREE.InstancedBufferAttribute(st, 2));
+  const mesh = new THREE.InstancedMesh(geo, buildMat, Math.max(1, list.length));
   list.forEach(([s, za, w, d, h, elev, col], i) => placeAt(mesh, i, s, za, w, h, d, elev, _c.set(col)));
   mesh.count = list.length;
   mesh.instanceMatrix.needsUpdate = true; if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  mesh.frustumCulled = false;
+  mesh.frustumCulled = false; mesh.userData.noLight = true; mesh.layers.enable(1);
   scene.add(mesh);
   cityMeshes[type] = mesh;
+}
+// peralatan atap (AC, ruang mesin lift, tangki air) dan cerobong rumah: 1 InstancedMesh kotak
+{
+  let sd = 13579; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const eq = [];                                                  // [s, za, sx, sy, sz, h, hex]
+  for (const [s, za, w, d, h, elev, col, style] of BUILD.flat) {
+    if (style === 9 || style === 11 || w * d < 120) continue;
+    const top = elev + h;
+    if (style === 1 && w * d > 250) eq.push([s, za, w * 0.35, 3.5, d * 0.35, top, '#8d949b']);   // ruang mesin menara
+    const k = 1 + Math.floor(r() * 3);
+    for (let q = 0; q < k; q++) {
+      const sx = 1.5 + 2.5 * r(), sz = 1.5 + 2.5 * r();
+      eq.push([s + (r() - 0.5) * Math.max(0, w - sx - 3), za + (r() - 0.5) * Math.max(0, d - sz - 3), sx, 1 + 1.2 * r(), sz, top, r() < 0.5 ? '#b9bdc0' : '#9da3a8']);
+    }
+    if (style === 2 && r() < 0.25) eq.push([s + w * 0.25, za, 2.6, 3.2, 2.6, top, '#6d5a47']);     // tangki air kayu
+  }
+  for (const type of ['gable', 'hip']) for (const [s, za, w, d, h, elev, col, style] of BUILD[type]) {
+    if (style !== 3 || r() < 0.4) continue;
+    eq.push([s + (r() < 0.5 ? -1 : 1) * w * 0.28, za + (r() - 0.5) * d * 0.3, 0.7, h * 0.55, 0.7, elev + h * 0.85, r() < 0.6 ? '#8a4a3a' : '#9a9186']);   // cerobong bata
+  }
+  const eqMesh = new THREE.InstancedMesh(bakeShade(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)), new THREE.MeshBasicMaterial({ vertexColors: true }), eq.length);
+  eq.forEach(([s, za, sx, sy, sz, h, hex], i) => placeAt(eqMesh, i, s, za, sx, sy, sz, h, _c.set(hex)));
+  eqMesh.instanceMatrix.needsUpdate = true; eqMesh.instanceColor.needsUpdate = true; eqMesh.frustumCulled = false;
+  scene.add(eqMesh);
+  cityMeshes.equipment = eqMesh;
 }
 
 // --- pohon ---------------------------------------------------------------
@@ -1720,20 +2017,11 @@ const propList = [];   // [s, za, sx, sy, sz, h, hex, collide]
 const prop = (s, za, sx, sy, sz, h, hex, col = false) => propList.push([s, za, sx, sy, sz, h, hex, col]);
 prop(TRAM.s, CONFIG.L / 2, 2.6, 0.25, CONFIG.L - 60, 0, '#4d545d');                 // rel trem
 for (const st of TRAM.stops) prop(TRAM.s + 4.2, st.za, 4, 0.45, 26, 0, '#9aa1aa');  // peron
-{ // rumah Cooper: dinding dengan pintu di sisi -za, atap datar, rak buku, meja
-  const { s, za, w, d, hWall } = COOPER, t = 0.3, wall = '#e6e0d2';
-  prop(s, za + d / 2, w, hWall, t, 0, wall, true);
-  prop(s - w / 2, za, t, hWall, d, 0, wall, true);
-  prop(s + w / 2, za, t, hWall, d, 0, wall, true);
-  prop(s - (w / 2 + 0.8) / 2, za - d / 2, w / 2 - 0.8, hWall, t, 0, wall, true);
-  prop(s + (w / 2 + 0.8) / 2, za - d / 2, w / 2 - 0.8, hWall, t, 0, wall, true);
-  prop(s, za - d / 2, 1.6, hWall - 2.2, t, 2.2, wall);
-  prop(s, za, w + 1.2, 0.3, d + 1.2, hWall, '#8e3b2f');                             // atap seng merah (sementara datar)
-  prop(s, za - d / 2 - 1.5, w, 0.2, 3, 0, '#b7a78a');                               // beranda
+{ // rumah Cooper: bangunan detail di modul tahap 8; di sini isi interior dan plakat
+  const { s, za, d } = COOPER;
   prop(s - 3, za + d / 2 - 0.6, 3.5, 2.2, 0.6, 0, '#6b4a33', true);                 // rak buku Murph
   prop(s + 2, za + 1, 2, 0.8, 1.2, 0, '#8a6a4a', true);                             // meja
   prop(s + 3, za - d / 2 - 4, 1.2, 1.4, 0.2, 0, '#2f3640');                         // plakat
-  prop(s - 15, za - 12, 2.1, 1.8, 5.2, 0, '#3f5f7a', true);                         // truk pickup
 }
 { // lapangan baseball: base, gundukan pitcher
   const b = 27.43 / Math.SQRT2;
@@ -1752,6 +2040,216 @@ propList.forEach(([s, za, sx, sy, sz, h, hex, col], i) => {
 });
 props.instanceMatrix.needsUpdate = true; props.instanceColor.needsUpdate = true; props.frustumCulled = false;
 scene.add(props);
+
+// =====================================================================
+// TAHAP 8: MUSEUM COOPER FARM, model detail
+// Rumah kayu putih 2 lantai (lantai bawah bisa dimasuki), papan kayu horizontal, jendela berkisi dengan kusen putih,
+// atap pelana seng merah, cerobong bata, beranda keliling (depan + sisi timur) dengan tiang, pagar, dan atap beranda,
+// anak tangga, interior (lantai papan, plafon, dinding plester), truk pickup. Koordinat lokal: x = +s, y = atas, z = +za.
+// =====================================================================
+const COOPER_HOUSE = new THREE.Group();
+{
+  const { s: S0, za: Z0, w, d, hWall } = COOPER, t = 0.3, H2 = 5.8;
+  const tex = (wd, ht, draw, alpha = false, rep = true) => {
+    const cv = document.createElement('canvas'); cv.width = wd; cv.height = ht;
+    const g = cv.getContext('2d'); draw(g, wd, ht);
+    const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace; tx.anisotropy = 8;
+    if (rep) tx.wrapS = tx.wrapT = THREE.RepeatWrapping;
+    return tx;
+  };
+  let sd = 8642; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const T = {
+    siding: tex(256, 256, (g, W, H) => {                          // papan kayu putih, 1 m = 1 petak, 5 papan
+      for (let i = 0; i < 5; i++) {
+        const y0 = i * H / 5, v = 232 + r() * 10;
+        const gr = g.createLinearGradient(0, y0, 0, y0 + H / 5); gr.addColorStop(0, `rgb(${v - 30},${v - 32},${v - 36})`); gr.addColorStop(0.18, `rgb(${v},${v - 2},${v - 8})`); gr.addColorStop(1, `rgb(${v - 6},${v - 8},${v - 14})`);
+        g.fillStyle = gr; g.fillRect(0, y0, W, H / 5);
+      }
+      for (let k = 0; k < 400; k++) { g.fillStyle = `rgba(120,110,95,${0.04 + r() * 0.05})`; g.fillRect(r() * W, r() * H, 2 + r() * 20, 1); }   // cat mengelupas halus
+    }),
+    metal: tex(128, 128, (g, W, H) => {                           // seng merah bergelombang, alur tiap 0,25 m
+      g.fillStyle = '#8a2a1e'; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 4; i++) { const x = i * W / 4; const gr = g.createLinearGradient(x, 0, x + W / 4, 0);
+        gr.addColorStop(0, '#5e1a12'); gr.addColorStop(0.3, '#a13a2a'); gr.addColorStop(0.6, '#8a2a1e'); gr.addColorStop(1, '#5e1a12'); g.fillStyle = gr; g.fillRect(x, 0, W / 4, H); }
+      for (let k = 0; k < 60; k++) { g.fillStyle = `rgba(70,40,25,${0.1 + r() * 0.15})`; g.fillRect(r() * W, r() * H, 1 + r() * 3, 4 + r() * 30); }   // karat
+    }),
+    brick: tex(128, 128, (g, W, H) => {
+      g.fillStyle = '#b8aa98'; g.fillRect(0, 0, W, H);
+      for (let row = 0; row < 16; row++) for (let c = 0; c < 5; c++) {
+        const x = c * 28 + (row % 2) * 14 - 14, v = 110 + r() * 40;
+        g.fillStyle = `rgb(${v + 40},${v * 0.55},${v * 0.42})`; g.fillRect(x + 1, row * 8 + 1, 26, 6);
+      }
+    }),
+    deck: tex(256, 256, (g, W, H) => {                            // papan beranda cat abu-abu
+      for (let i = 0; i < 7; i++) { const v = 150 + r() * 20; g.fillStyle = `rgb(${v},${v},${v - 6})`; g.fillRect(0, i * H / 7, W, H / 7 - 3); g.fillStyle = '#50504c'; g.fillRect(0, (i + 1) * H / 7 - 3, W, 3); }
+    }),
+    floor: tex(256, 256, (g, W, H) => {                           // lantai kayu interior
+      for (let i = 0; i < 8; i++) { const v = 120 + r() * 30; g.fillStyle = `rgb(${v},${v * 0.72},${v * 0.48})`; g.fillRect(0, i * H / 8, W, H / 8 - 2);
+        g.fillStyle = 'rgba(40,25,10,0.5)'; g.fillRect(r() * W, i * H / 8, 2, H / 8); }
+    }),
+    plaster: tex(64, 64, (g, W, H) => { g.fillStyle = '#e4d8bc'; g.fillRect(0, 0, W, H); for (let k = 0; k < 200; k++) { g.fillStyle = `rgba(160,140,110,${r() * 0.08})`; g.fillRect(r() * W, r() * H, 3, 3); } }),
+    glass: tex(128, 128, (g, W, H) => {                           // kaca 2x2 kisi putih, sedikit pantulan
+      const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#5d6d78'); gr.addColorStop(0.5, '#2a3238'); gr.addColorStop(1, '#3c464d');
+      g.fillStyle = gr; g.fillRect(0, 0, W, H); g.fillStyle = '#f2f0ea'; g.fillRect(W / 2 - 3, 0, 6, H); g.fillRect(0, H / 2 - 3, W, 6);
+    }, false, false),
+    rail: tex(128, 64, (g, W, H) => {                             // jeruji pagar beranda (alfa)
+      g.clearRect(0, 0, W, H); g.fillStyle = '#f0eee8'; for (let x = 4; x < W; x += 16) g.fillRect(x, 0, 6, H);
+    }, true),
+  };
+  const M = {
+    siding: new THREE.MeshBasicMaterial({ map: T.siding }), metal: new THREE.MeshBasicMaterial({ map: T.metal, side: THREE.DoubleSide }),
+    brick: new THREE.MeshBasicMaterial({ map: T.brick }), deck: new THREE.MeshBasicMaterial({ map: T.deck }),
+    floor: new THREE.MeshBasicMaterial({ map: T.floor }), plaster: new THREE.MeshBasicMaterial({ map: T.plaster }),
+    trim: new THREE.MeshBasicMaterial({ color: 0xf2f0ea }), glass: new THREE.MeshBasicMaterial({ map: T.glass }),
+    rail: new THREE.MeshBasicMaterial({ map: T.rail, alphaTest: 0.5, side: THREE.DoubleSide }),
+    stone: new THREE.MeshBasicMaterial({ color: 0x8c877d }), door: new THREE.MeshBasicMaterial({ color: 0x6a4a32 }),
+    truck: new THREE.MeshBasicMaterial({ color: 0x46677f }), tire: new THREE.MeshBasicMaterial({ color: 0x1c1c1c }),
+    chrome: new THREE.MeshBasicMaterial({ color: 0xb8bcc0 }), dark: new THREE.MeshBasicMaterial({ color: 0x20262b }),
+  };
+  // kotak dengan UV sesuai ukuran (1 petak tekstur = tile meter)
+  const box = (sx, sy, sz, mat, x, y, z, tile = 1, rotX = 0, rotY = 0) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz), uv = g.attributes.uv;
+    if (tile > 0) for (let f = 0; f < 6; f++) {
+      const [du, dv] = f < 2 ? [sz, sy] : f < 4 ? [sx, sz] : [sx, sy];
+      for (let v = 0; v < 4; v++) { const k = f * 4 + v; uv.setXY(k, uv.getX(k) * du / tile, uv.getY(k) * dv / tile); }
+    }
+    const m = new THREE.Mesh(g, mat); m.position.set(x, y, z); m.rotation.set(rotX, rotY, 0);
+    COOPER_HOUSE.add(m); return m;
+  };
+  // --- dinding luar (tebal 0,3 m), lantai 1 tinggi 3 m dengan lubang pintu 1,6 m di depan, lantai 2 sampai 5,8 m ---
+  box(w, H2, t, M.siding, 0, H2 / 2, d / 2);                                           // belakang
+  for (const sx of [-1, 1]) box(t, H2, d + t, M.siding, sx * w / 2, H2 / 2, 0);        // samping
+  box(w / 2 - 0.8, hWall, t, M.siding, -(w / 2 + 0.8) / 2, hWall / 2, -d / 2);        // depan kiri
+  box(w / 2 - 0.8, hWall, t, M.siding, (w / 2 + 0.8) / 2, hWall / 2, -d / 2);         // depan kanan
+  box(1.6, hWall - 2.2, t, M.siding, 0, 2.2 + (hWall - 2.2) / 2, -d / 2);             // di atas pintu
+  box(w, H2 - hWall, t, M.siding, 0, hWall + (H2 - hWall) / 2, -d / 2);               // depan lantai 2
+  box(w + 0.7, 0.4, 0.18, M.stone, 0, 0.12, d / 2 + 0.24); box(w + 0.7, 0.4, 0.18, M.stone, 0, 0.12, -d / 2 - 0.24);   // fondasi batu
+  for (const sx of [-1, 1]) box(0.18, 0.4, d + 0.7, M.stone, sx * (w / 2 + 0.24), 0.12, 0);
+  // interior: lantai papan, plafon, lapisan plester
+  box(w - 0.6, 0.05, d - 0.6, M.floor, 0, 0.025, 0, 2);
+  box(w - 0.6, 0.25, d - 0.6, M.plaster, 0, hWall + 0.12, 0, 2);
+  box(w - 0.62, hWall - 0.3, 0.02, M.plaster, 0, hWall / 2, d / 2 - 0.16, 2);
+  for (const sx of [-1, 1]) box(0.02, hWall - 0.3, d - 0.62, M.plaster, sx * (w / 2 - 0.16), hWall / 2, 0, 2);
+  for (const sx of [-1, 1]) box(w / 2 - 1.1, hWall - 0.3, 0.02, M.plaster, sx * (w / 2 + 0.8) / 2, hWall / 2, -d / 2 + 0.16, 2);
+  // --- jendela: kusen putih + kaca berkisi, sisi luar dan dalam ---
+  const win = (x, y, z, ww, hh, axis) => {                       // axis 'z': dinding depan/belakang, 'x': samping
+    const out = axis === 'z' ? Math.sign(z) : Math.sign(x), off = t / 2 + 0.035;
+    for (const side of [1, -1]) {
+      const px = axis === 'x' ? x + out * off * side : x, pz = axis === 'z' ? z + out * off * side : z;
+      if (axis === 'z') { box(ww + 0.22, hh + 0.22, 0.06, M.trim, px, y, pz); box(ww, hh, 0.08, M.glass, px, y, pz + out * side * 0.005, 0); }
+      else { box(0.06, hh + 0.22, ww + 0.22, M.trim, px, y, pz); box(0.08, hh, ww, M.glass, px + out * side * 0.005, y, pz, 0); }
+    }
+    if (axis === 'z') box(ww + 0.4, 0.08, 0.2, M.trim, x, y - hh / 2 - 0.14, z + out * (t / 2 + 0.08));   // ambang
+    else box(0.2, 0.08, ww + 0.4, M.trim, x + out * (t / 2 + 0.08), y - hh / 2 - 0.14, z);
+  };
+  for (const x of [-4.8, -2.6, 2.6, 4.8]) win(x, 1.75, -d / 2, 1.0, 1.5, 'z');         // depan lantai 1
+  for (const x of [-4.5, 0, 4.5]) win(x, 4.45, -d / 2, 0.9, 1.3, 'z');                 // depan lantai 2
+  for (const x of [2.4, 5.0]) win(x, 1.75, d / 2, 1.0, 1.5, 'z');                      // belakang lantai 1 (rak buku di kiri)
+  for (const x of [-4.5, 0, 4.5]) win(x, 4.45, d / 2, 0.9, 1.3, 'z');
+  for (const sx of [-1, 1]) for (const z of [-2.2, 2.2]) { win(sx * w / 2, 1.75, z, 1.0, 1.5, 'x'); win(sx * w / 2, 4.45, z, 0.9, 1.3, 'x'); }
+  // kusen pintu + lis sudut + lis lantai
+  box(0.12, 2.3, 0.4, M.trim, -0.86, 1.15, -d / 2); box(0.12, 2.3, 0.4, M.trim, 0.86, 1.15, -d / 2); box(1.84, 0.12, 0.4, M.trim, 0, 2.26, -d / 2);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(0.2, H2, 0.2, M.trim, sx * (w / 2 + 0.06), H2 / 2, sz * (d / 2 + 0.06));
+  box(w + 0.4, 0.14, d + 0.4, M.trim, 0, hWall + 0.05, 0);                             // lis antar lantai (luar)
+  // --- atap pelana seng merah (bubungan sejajar x, kemiringan 35 derajat), dinding segitiga, lisplang ---
+  const pitch = 35 * DEG, span = d / 2 + 0.55, rise = (d / 2) * Math.tan(pitch), L = span / Math.cos(pitch);
+  for (const sz of [-1, 1]) {
+    box(w + 1.0, 0.1, L, M.metal, 0, H2 + (rise - 0.55 * Math.tan(pitch)) / 2, sz * (span / 2), 0.25, sz * pitch, 0);
+    box(w + 1.0, 0.18, 0.06, M.trim, 0, H2 - 0.55 * Math.tan(pitch) - 0.05, sz * (d / 2 + 0.55));   // lisplang
+  }
+  box(w + 1.05, 0.14, 0.3, M.metal, 0, H2 + rise + 0.05, 0, 0.25);                   // tutup bubungan
+  const triG = new THREE.ShapeGeometry(new THREE.Shape([new THREE.Vector2(-d / 2, 0), new THREE.Vector2(d / 2, 0), new THREE.Vector2(0, rise)]));
+  for (const sx of [-1, 1]) {
+    const m = new THREE.Mesh(triG, M.siding); m.rotation.y = sx * Math.PI / 2; m.position.set(sx * (w / 2 + t / 2 + 0.001), H2, 0); COOPER_HOUSE.add(m);
+    const m2 = m.clone(); m2.rotation.y = -sx * Math.PI / 2; m2.position.x = sx * (w / 2 - t / 2); COOPER_HOUSE.add(m2);
+    win(sx * w / 2, H2 + 1.1, 0, 0.7, 0.9, 'x');                                        // jendela loteng
+  }
+  box(0.9, 5.2, 0.9, M.brick, 4.5, H2 + 1.6, 1.4, 0.5);                                // cerobong
+  box(1.1, 0.15, 1.1, M.stone, 4.5, H2 + 4.25, 1.4);
+  // --- beranda keliling: depan (-z) dan sisi timur (+x) ---
+  const pd = 2.45, pz0 = -d / 2 - t / 2, pzf = pz0 - pd, px0 = w / 2 + t / 2, pxf = px0 + pd, deckY = 0.25, postH = 2.75;
+  box(w + t + pd + 0.2, deckY, pd, M.deck, pd / 2, deckY / 2, (pz0 + pzf) / 2, 1.2);
+  const sz0 = pzf, sz1 = d / 2 - 1.6;                                                 // beranda samping: dari depan sampai 1,6 m sebelum belakang
+  box(pd, deckY, sz1 - sz0, M.deck, (px0 + pxf) / 2, deckY / 2, (sz0 + sz1) / 2, 1.2);
+  for (let k = 0; k < 2; k++) { const hk = 0.17 - k * 0.085; box(2.2, hk, 0.32, M.deck, 0, hk / 2, pzf - 0.16 - k * 0.32, 1.2); }   // anak tangga
+  const posts = [];
+  for (const x of [-w / 2 - 0.05, -3.9, -1.3, 1.3, 3.9]) posts.push([x, pzf + 0.1]);
+  posts.push([pxf - 0.1, pzf + 0.1]);
+  for (const z of [-2.2, 0.6, d / 2 - 1.6]) posts.push([pxf - 0.1, z]);
+  for (const [x, z] of posts) {
+    box(0.16, postH, 0.16, M.trim, x, deckY + postH / 2, z);
+    addCollider(S0 + x, Z0 + z, 0.1, 0.1);
+  }
+  // pagar: rel atas + bawah + jeruji (alfa), celah di depan tangga
+  const railSeg = (x0, z0, x1, z1) => {
+    const len = Math.hypot(x1 - x0, z1 - z0), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, alongX = Math.abs(x1 - x0) > Math.abs(z1 - z0);
+    const sx = alongX ? len : 0.07, sz = alongX ? 0.07 : len;
+    box(sx, 0.07, sz, M.trim, cx, deckY + 0.92, cz); box(sx, 0.06, sz, M.trim, cx, deckY + 0.12, cz);
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(len, 0.76), M.rail);
+    p.geometry.attributes.uv.array.forEach((v, i, a) => { if (i % 2 === 0) a[i] = v * len / 1.0; });
+    p.position.set(cx, deckY + 0.52, cz); if (!alongX) p.rotation.y = Math.PI / 2; p.userData.noShadow = true; COOPER_HOUSE.add(p);
+    addCollider(S0 + cx, Z0 + cz, alongX ? len / 2 : 0.05, alongX ? 0.05 : len / 2);
+  };
+  railSeg(-w / 2 - 0.05, pzf + 0.1, -1.3, pzf + 0.1); railSeg(1.3, pzf + 0.1, pxf - 0.1, pzf + 0.1);
+  railSeg(pxf - 0.1, pzf + 0.1, pxf - 0.1, d / 2 - 1.6);
+  railSeg(-w / 2 - 0.05, pzf + 0.1, -w / 2 - 0.05, pz0);
+  // atap beranda: seng landai dari dinding (y 3,2) ke tiang (y 2,95)
+  const prY = deckY + postH + 0.1;
+  box(w + t + pd + 0.5, 0.08, pd + 0.4, M.metal, pd / 2, prY + 0.12, (pz0 + pzf) / 2 - 0.15, 0.25, -0.06, 0);
+  box(pd + 0.4, 0.08, sz1 - sz0 + 0.4, M.metal, (px0 + pxf) / 2 + 0.15, prY + 0.12, (sz0 + sz1) / 2, 0.25, 0, 0).rotation.z = -0.06;
+  box(w + t + pd + 0.3, 0.2, 0.12, M.trim, pd / 2, prY - 0.05, pzf + 0.1);             // balok beranda
+  box(0.12, 0.2, sz1 - sz0, M.trim, pxf - 0.1, prY - 0.05, (sz0 + sz1) / 2);
+  // --- pintu kasa terbuka (daun pintu menempel di dalam) ---
+  box(0.05, 2.15, 0.9, M.door, 0.78, 1.1, -d / 2 + 0.6);
+  // --- truk pickup (sekitar 5,2 m) di halaman ---
+  {
+    const tx = -15, tz = -12;
+    box(2.0, 0.55, 5.2, M.truck, tx, 0.85, tz); box(1.9, 0.85, 1.9, M.truck, tx, 1.55, tz - 0.55);
+    box(1.8, 0.55, 0.05, M.dark, tx, 1.62, tz - 1.52); box(1.8, 0.5, 0.05, M.dark, tx, 1.62, tz + 0.42);   // kaca depan/belakang
+    for (const sx of [-1, 1]) { box(0.06, 0.45, 1.3, M.dark, tx + sx * 0.96, 1.65, tz - 0.55); box(0.08, 0.45, 2.3, M.truck, tx + sx * 0.96, 1.35, tz + 1.4); }
+    box(2.0, 0.45, 0.08, M.truck, tx, 1.35, tz + 2.56);                                 // pintu bak
+    box(2.02, 0.28, 0.12, M.chrome, tx, 0.72, tz - 2.62); box(1.7, 0.3, 0.06, M.dark, tx, 1.0, tz - 2.6);   // bumper, gril
+    const wheelG = new THREE.CylinderGeometry(0.4, 0.4, 0.3, 16).rotateZ(Math.PI / 2);
+    for (const sx of [-1, 1]) for (const wz of [-1.7, 1.6]) { const wm = new THREE.Mesh(wheelG, M.tire); wm.position.set(tx + sx * 0.9, 0.4, tz + wz); COOPER_HOUSE.add(wm); }
+  }
+  // kolisi dinding (sama dengan versi sebelumnya) + truk
+  addCollider(S0, Z0 + d / 2, w / 2, t / 2);
+  addCollider(S0 - w / 2, Z0, t / 2, d / 2); addCollider(S0 + w / 2, Z0, t / 2, d / 2);
+  addCollider(S0 - (w / 2 + 0.8) / 2, Z0 - d / 2, (w / 2 - 0.8) / 2, t / 2); addCollider(S0 + (w / 2 + 0.8) / 2, Z0 - d / 2, (w / 2 - 0.8) / 2, t / 2);
+  addCollider(S0 - 15, Z0 - 12, 1.05, 2.6);
+  // gabungkan semua potongan per material (sekitar 190 mesh jadi 1 mesh per material) supaya draw call tetap sedikit
+  {
+    const byMat = new Map();
+    COOPER_HOUSE.updateMatrixWorld(true);
+    for (const o of [...COOPER_HOUSE.children]) {
+      if (!o.isMesh) continue;
+      o.updateMatrix();
+      const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrix);
+      if (!byMat.has(o.material)) byMat.set(o.material, { geos: [], noShadow: !!o.userData.noShadow });
+      byMat.get(o.material).geos.push(g);
+      COOPER_HOUSE.remove(o);
+    }
+    for (const [mat, { geos, noShadow }] of byMat) {
+      const n = geos.reduce((a, g) => a + g.attributes.position.count, 0);
+      const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+      let k = 0;
+      for (const g of geos) {
+        pos.set(g.attributes.position.array, k * 3); nrm.set(g.attributes.normal.array, k * 3);
+        if (g.attributes.uv) uv.set(g.attributes.uv.array, k * 2);
+        k += g.attributes.position.count;
+      }
+      const mg = new THREE.BufferGeometry();
+      mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); mg.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      const m = new THREE.Mesh(mg, mat); m.userData.noShadow = noShadow;
+      COOPER_HOUSE.add(m);
+    }
+  }
+  COOPER_HOUSE.matrixAutoUpdate = false;
+  surfaceMatrix(COOPER_HOUSE.matrix, S0 / R, Z0, 0);
+  COOPER_HOUSE.traverse((o) => { o.frustumCulled = false; });
+  scene.add(COOPER_HOUSE);
+}
+
 
 // --- garis lapangan baseball -------------------------------------------
 {
@@ -2726,6 +3224,7 @@ function updateLighting() {
   glowMat.uniforms.uI.value = 0.15 + 1.1 * I;
   capRingMat.color.setRGB(0.3 + 1.6 * U.uL_CapI.value, 0.2 + 1.0 * U.uL_CapI.value, 0.08 + 0.45 * U.uL_CapI.value);
   capGlowMat.uniforms.uI.value = 0.15 + 0.85 * U.uL_CapI.value;
+  BUILD_U.uNight.value = 1 - sstep(5.8, 7.2, h) * (1 - sstep(17.8, 19.4, h));   // lampu jendela menyala saat senja sampai subuh
   const cc = U.uL_SunlineCol.value;
   cloudMat.uniforms.uCol.value.set(cc.x * (0.25 + 0.9 * I) + amb[0] + 0.25 * golden, cc.y * (0.25 + 0.9 * I) + amb[1] + 0.12 * golden, cc.z * (0.25 + 0.9 * I) + amb[2]);
   cloudMat.uniforms.uFogCol.value.set(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b);
@@ -3760,7 +4259,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
