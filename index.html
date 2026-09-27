@@ -1560,6 +1560,16 @@ for (let i = 0; i < 26; i++) for (let zc = CITY.za0; zc < CITY.za1; zc += ART_Z)
 lrect(0, 150, CIRC, 250, PAL.plaza);                             // plaza spaceport
 lrect(0, CITY.za1, CIRC, PARKZ.za0, PAL.tepi);
 lrect(0, PARKZ.za0, CIRC, PARKZ.za1, PAL.park);
+// lapangan baseball: satu sel permukiman pinggir kota (za 1.500-1.750 atau 1.750-2.000), jauh dari boulevard, Skyway, dan lift.
+// Bangunan di sel ini tidak dibuat (urutan acak kota tetap sama), rumah suburban di sel sekitarnya tetap.
+const BALLPARK = (() => {
+  const cand = cityCells.filter((c) => (c.z0 === 1500 || c.z0 === 1750) && (c.cls === 'permukiman' || c.cls === 'tepi') && c.i > 1 && c.i < 24 && Math.abs(c.i - 12.5) > 2)
+    .sort((a, b) => (a.z0 === 1500 ? 0 : 1) - (b.z0 === 1500 ? 0 : 1) || a.d - b.d);
+  const c = cand[0] || cityCells.find((q) => q.z0 === 1500 && q.i === 6);
+  return { s0: c.s0, z0: c.z0, s1: c.s0 + ART, z1: c.z0 + ART_Z };
+})();
+FIELD.s = BALLPARK.s0 + 40; FIELD.za = BALLPARK.z0 + ART_Z / 2;           // home plate, lapangan menghadap +s
+const inBallpark = (s, za, m = 0) => { const d = wrapS(s - BALLPARK.s0); return d > -m && d < ART + m && za > BALLPARK.z0 - m && za < BALLPARK.z1 + m; };
 
 // 4) jalan lokal (digambar sebelum air: jalan lokal berhenti di tepi sungai)
 const localRoads = [];                                           // [s0, z0, s1, z1] persegi jalan lokal
@@ -1612,10 +1622,17 @@ const RINGS_Z = [1000, 2000, 3000, 4000, 5000, 6000, 7000];
 const nearRing = (za, m = 14) => RINGS_Z.some((z) => Math.abs(za - z) < m);   // pita struktur: bebas tanaman, pohon, dan lalu lintas
 for (const z of RINGS_Z) { lband(z, ROAD.ring + 4, PAL.ringEdge); lband(z, ROAD.ring, PAL.ring); }
 
-// 8) lapangan baseball: infield tanah
+// 8) lapangan baseball (versi kasar untuk dilihat dari jauh; dari dekat ditutup decal detail)
 {
-  lg.fillStyle = PAL.infield; lg.save(); lg.translate(LX(FIELD.s), LY(FIELD.za + 19.4)); lg.rotate(Math.PI / 4);
-  const b = 29 * LK; lg.fillRect(-b / 2, -b / 2, b, b); lg.restore();
+  const B = BALLPARK; lrect(B.s0 + ROAD.art / 2, B.z0 + ROAD.art / 2, B.s1 - ROAD.art / 2, B.z1 - ROAD.art / 2, '#6fa64c');
+  const W = (u, v) => [LX(FIELD.s + u), LY(FIELD.za + v)];
+  lg.fillStyle = '#a57b52'; lg.beginPath(); lg.moveTo(...W(0, 0));
+  for (let i = 0; i <= 30; i++) { const th = -Math.PI / 4 + i / 30 * Math.PI / 2, r = 91 + 16 * Math.cos(2 * th); lg.lineTo(...W(r * Math.cos(th), r * Math.sin(th))); }
+  lg.closePath(); lg.fill();
+  lg.fillStyle = '#4f8c39'; lg.beginPath(); lg.moveTo(...W(4, 0));
+  for (let i = 0; i <= 30; i++) { const th = -Math.PI / 4 + i / 30 * Math.PI / 2, r = 86 + 16 * Math.cos(2 * th); lg.lineTo(...W(r * Math.cos(th), r * Math.sin(th))); }
+  lg.closePath(); lg.fill();
+  lg.fillStyle = '#b0845a'; lg.beginPath(); lg.arc(...W(18.44, 0), 29 * LK, 0, TAU); lg.fill();
 }
 const landTex = new THREE.CanvasTexture(landCanvas);
 landTex.colorSpace = THREE.SRGBColorSpace;
@@ -1797,6 +1814,7 @@ const houseList = [];                                            // semua bangun
 // gaya fasad: 0 kantor/plester, 1 menara kaca, 2 apartemen berbalkon, 3 rumah, 4 gudang/industri, 5 lumbung, 6 silo/tangki,
 // 7 gereja, 8 sekolah/pasar, 9 garasi, 10 hanggar/terminal, 11 podium toko. depan: 0 tidak ada, 1 sisi -za, 2 sisi +za
 function building(type, s, za, w, d, h, color, elev = 0, collider = true, style = -1, front = 0) {
+  if (inBallpark(s, za, 2)) return;                                  // sel lapangan baseball dikosongkan
   if (style < 0) {
     if (type === 'silo') style = 6;
     else if (type === 'gambrel') style = 5;
@@ -2179,6 +2197,7 @@ const treeList = [];
 function tree(s, za, k) {
   if (inWater(s, za, 3) || inRiver(s, za, 3)) return;
   if (inReal(s, za, 3)) return;                                   // area uji memakai pohon prosedural sendiri
+  if (inBallpark(s, za, 1)) return;
   treeList.push([modS(s), za, k]);
 }
 // pohon jalan di arteri kota (tidak di persimpangan)
@@ -2192,14 +2211,14 @@ for (let i = 0; i < 26; i++) {
   }
 }
 for (const [s0, z0, s1, z1, plaza] of parkBlocks) {              // taman dan plaza kota
-  lrect(s0, z0, s1, z1, plaza ? PAL.plaza : PAL.park);
+  if (!inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) lrect(s0, z0, s1, z1, plaza ? PAL.plaza : PAL.park);
   const n = Math.round((s1 - s0) * (z1 - z0) / (plaza ? 900 : 350));
   for (let q = 0; q < n; q++) tree(U(s0 + 3, s1 - 3), U(z0 + 3, z1 - 3), U(0.8, 1.2));
 }
 for (let q = 0; q < 2600; q++) {                                 // taman & sungai: kelompok pohon dari noise
   const s = U(0, CIRC), za = U(PARKZ.za0 - 90, PARKZ.za1 - 10);
   if (vnoise(s / 120, za / 120) < 0.55) continue;
-  if (Math.hypot(wrapS(s - FIELD.s), za - FIELD.za - 50) < 130) continue;
+  if (Math.hypot(wrapS(s - 520), za - 2990 - 50) < 130) continue;   // (lokasi lama; dipertahankan agar urutan acak sama)
   if (Math.abs(wrapS(s - SKY_S)) < 50 || Math.abs(wrapS(s - TRAM.s)) < 25) continue;
   tree(s, za, U(0.8, 1.3));
 }
@@ -2229,11 +2248,6 @@ for (const st of TRAM.stops) {                                  // peron setingg
   prop(s - 3, za + d / 2 - 0.6, 3.5, 2.2, 0.6, 0, '#6b4a33', true);                 // rak buku Murph
   prop(s + 2, za + 1, 2, 0.8, 1.2, 0, '#8a6a4a', true);                             // meja
   prop(s + 3, za - d / 2 - 4, 1.2, 1.4, 0.2, 0, '#2f3640');                         // plakat
-}
-{ // lapangan baseball: base, gundukan pitcher
-  const b = 27.43 / Math.SQRT2;
-  for (const [ds, dz] of [[0, 0], [b, b], [0, 2 * b], [-b, b]]) prop(FIELD.s + ds, FIELD.za + dz, 0.45, 0.08, 0.45, 0, '#f2f2f2');
-  prop(FIELD.s, FIELD.za + 18.4, 5.5, 0.25, 5.5, 0, '#b08a5a');
 }
 for (const z of RINGS_Z) for (let s = 0; s < CIRC - 20; s += 40) {                  // tiang lampu di tepi cincin
   if (Math.abs(wrapS(s - SKY_S)) < 20) continue;
@@ -2457,21 +2471,145 @@ const COOPER_HOUSE = new THREE.Group();
   scene.add(COOPER_HOUSE);
 }
 
-
-// --- garis lapangan baseball -------------------------------------------
-{
-  const pts = [], P = (s, za) => pts.push(groundPoint(s / R, za, -0.03, new THREE.Vector3()));
-  const seg = (s0, z0, s1, z1, n) => { for (let i = 0; i < n; i++) { const a = i / n, b2 = (i + 1) / n;
-    P(s0 + (s1 - s0) * a, z0 + (z1 - z0) * a); P(s0 + (s1 - s0) * b2, z0 + (z1 - z0) * b2); } };
-  const L = 100 / Math.SQRT2;
-  seg(FIELD.s, FIELD.za, FIELD.s + L, FIELD.za + L, 10);
-  seg(FIELD.s, FIELD.za, FIELD.s - L, FIELD.za + L, 10);
-  for (let i = 0; i < 24; i++) {
-    const a0 = -Math.PI / 4 + (i / 24) * Math.PI / 2, a1 = -Math.PI / 4 + ((i + 1) / 24) * Math.PI / 2;
-    P(FIELD.s + 100 * Math.sin(a0), FIELD.za + 100 * Math.cos(a0)); P(FIELD.s + 100 * Math.sin(a1), FIELD.za + 100 * Math.cos(a1));
+// =====================================================================
+// LAPANGAN BASEBALL (seperti di film): di sel permukiman pinggir kota, dikelilingi rumah suburban.
+// Home plate di sisi -s sel, lapangan menghadap +s (keliling), jadi dari home plate tanah di depan
+// tampak naik melengkung ke atas. Base 27,43 m (90 kaki), pitcher 18,44 m, pagar 91 m di garis foul, 107 m di tengah.
+// Lokal: u = +s dari home plate, v = +za. Semua ukuran dalam meter.
+// =====================================================================
+const BP = { base: 27.43, mound: 18.44, skinR: 28.96, homeR: 3.96, backR: 17 };
+const bpFence = (th) => 91 + 16 * Math.cos(2 * th);                  // jarak pagar luar pada sudut th dari garis tengah (|th| <= 45 derajat)
+function ballparkModel() {
+  const G = new THREE.Group(); G.matrixAutoUpdate = false;
+  surfaceMatrix(G.matrix, FIELD.s / R, FIELD.za, 0);
+  const tex = (w, h, draw, rep = true) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
+  // --- decal lapangan (0,14 m per piksel): rumput bergaris potong, tanah infield, lintasan base, garis kapur, warning track ---
+  const U0 = -25, U1 = 125, V0 = -90, V1 = 90, K = 7;
+  const decal = tex((U1 - U0) * K, (V1 - V0) * K, (g) => {
+    g.scale(K, K); g.translate(-U0, -V0);
+    const fair = () => { g.beginPath(); g.moveTo(0, 0); g.lineTo(140, -140); g.lineTo(140, 140); g.closePath(); };
+    const fenceArc = (inset) => { g.beginPath(); g.moveTo(0, 0); for (let i = 0; i <= 60; i++) { const th = -Math.PI / 4 + i / 60 * Math.PI / 2, r = bpFence(th) - inset; g.lineTo(r * Math.cos(th), r * Math.sin(th)); } g.closePath(); };
+    g.fillStyle = '#4a8436'; g.fillRect(U0, V0, U1 - U0, V1 - V0);
+    g.save(); g.rotate(Math.PI / 4);                                   // pola potong rumput kotak-kotak diagonal
+    for (let a = -200; a < 200; a += 6) for (let b = -200; b < 200; b += 6) if (((a + b) / 6) % 2 === 0) { g.fillStyle = 'rgba(120,180,80,0.22)'; g.fillRect(a, b, 6, 6); }
+    g.restore();
+    g.save(); fenceArc(0); g.clip(); g.fillStyle = '#a57b52'; g.fillRect(0, -150, 150, 300); g.restore();   // warning track
+    g.save(); fenceArc(4.5); g.clip(); g.fillStyle = '#4f8c39'; g.fillRect(0, -150, 150, 300);
+    g.rotate(Math.PI / 4); for (let a = -200; a < 200; a += 6) for (let b = -200; b < 200; b += 6) if (((a + b) / 6) % 2 === 0) { g.fillStyle = 'rgba(130,190,90,0.25)'; g.fillRect(a, b, 6, 6); }
+    g.restore();
+    g.save(); fair(); g.clip(); g.fillStyle = '#b0845a'; g.beginPath(); g.arc(BP.mound, 0, BP.skinR, 0, TAU); g.fill(); g.restore();   // infield tanah
+    const b2 = BP.base / Math.SQRT2;
+    g.fillStyle = '#b0845a'; for (const sg of [-1, 1]) { g.save(); g.rotate(sg * Math.PI / 4); g.fillRect(0, -0.92, BP.base + 1, 1.84); g.restore(); }   // lintasan home-1B, home-3B
+    g.beginPath(); g.arc(0, 0, BP.homeR, 0, TAU); g.fill();
+    g.fillStyle = '#56953f'; g.beginPath(); g.moveTo(3.8, 0); g.lineTo(b2, -b2 + 2.2); g.lineTo(2 * b2 - 3.2, 0); g.lineTo(b2, b2 - 2.2); g.closePath(); g.fill();   // rumput infield
+    g.fillStyle = '#b0845a'; g.beginPath(); g.arc(BP.mound, 0, 2.74, 0, TAU); g.fill();
+    for (const [x, y] of [[b2, -b2], [2 * b2, 0], [b2, b2]]) { g.beginPath(); g.arc(x, y, 1.3, 0, TAU); g.fill(); }
+    g.strokeStyle = '#f4f2ea'; g.lineWidth = 0.1;                       // garis kapur
+    for (const sg of [-1, 1]) { g.beginPath(); g.moveTo(0, 0); const th = sg * Math.PI / 4, r = bpFence(th); g.lineTo(r * Math.cos(th), r * Math.sin(th)); g.stroke(); }
+    for (const sg of [-1, 1]) g.strokeRect(-0.9, sg > 0 ? 0.25 : -1.47, 1.83, 1.22);   // kotak pemukul
+    g.strokeRect(-3.2, -0.55, 1.8, 1.1);                                               // kotak catcher
+    g.beginPath(); g.arc(-10, 0, 2.2, 0, TAU); g.fillStyle = '#a57b52'; g.fill();      // lingkaran on-deck belakang
+    for (let k = 0; k < 900; k++) { g.fillStyle = `rgba(60,40,20,${Math.random() * 0.12})`; g.fillRect(-20 + Math.random() * 90, -40 + Math.random() * 80, 0.3, 0.3); }   // tekstur tanah
+  }, false);
+  const decalMat = new THREE.MeshBasicMaterial({ map: decal, polygonOffset: true, polygonOffsetFactor: -2 });
+  const dm = new THREE.Mesh(new THREE.PlaneGeometry(U1 - U0, V1 - V0).rotateX(-Math.PI / 2).translate((U0 + U1) / 2, 0.03, (V0 + V1) / 2), decalMat);
+  dm.userData.noShadow = true; G.add(dm);
+  G.userData.decalMat = decalMat;
+  // --- material ---
+  const M = {
+    white: new THREE.MeshBasicMaterial({ color: 0xf4f2ea }), dirt: new THREE.MeshBasicMaterial({ color: 0xa57b52 }),
+    wood: new THREE.MeshBasicMaterial({ map: tex(128, 128, (g, w, h) => { for (let i = 0; i < 8; i++) { const v = 95 + Math.random() * 30; g.fillStyle = `rgb(${v},${v * 0.72},${v * 0.48})`; g.fillRect(i * 16, 0, 15, h); g.fillStyle = 'rgba(30,20,10,0.6)'; g.fillRect(i * 16 + 15, 0, 1, h); } }) }),
+    chain: new THREE.MeshBasicMaterial({ map: tex(64, 64, (g, w, h) => { g.clearRect(0, 0, w, h); g.strokeStyle = '#c8ccd0'; g.lineWidth = 2; for (let k = -64; k < 128; k += 16) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + 64, 64); g.stroke(); g.beginPath(); g.moveTo(k + 64, 0); g.lineTo(k, 64); g.stroke(); } }), alphaTest: 0.4, side: THREE.DoubleSide, transparent: false }),
+    steel: new THREE.MeshBasicMaterial({ color: 0x9aa0a6 }), dark: new THREE.MeshBasicMaterial({ color: 0x2c3136 }),
+    yellow: new THREE.MeshBasicMaterial({ color: 0xe0c030 }), green: new THREE.MeshBasicMaterial({ color: 0x1f4a2e }), bench: new THREE.MeshBasicMaterial({ color: 0x6b4a33 }),
+    alu: new THREE.MeshBasicMaterial({ color: 0xc5cacf }), lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+  };
+  const box = (sx, sy, sz, mat, x, y, z, rotY = 0, tile = 0, flag) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz);
+    if (tile) { const uv = g.attributes.uv; for (let f = 0; f < 6; f++) { const [du, dv] = f < 2 ? [sz, sy] : f < 4 ? [sx, sz] : [sx, sy]; for (let q = 0; q < 4; q++) { const k = f * 4 + q; uv.setXY(k, uv.getX(k) * du / tile, uv.getY(k) * dv / tile); } } }
+    const m = new THREE.Mesh(g, mat); m.position.set(x, y, z); m.rotation.y = rotY; if (flag) m.userData[flag] = true; G.add(m); return m;
+  };
+  const col = (u, v, hu, hv) => addCollider(FIELD.s + u, FIELD.za + v, hu, hv);
+  const wall = (u0, v0, u1, v1, h, mat, tile, collide = true, y0 = 0) => {   // panel tegak dari (u0,v0) ke (u1,v1)
+    const len = Math.hypot(u1 - u0, v1 - v0), ang = Math.atan2(-(v1 - v0), u1 - u0);
+    const m = box(len, h, mat === M.chain ? 0.02 : 0.12, mat, (u0 + u1) / 2, y0 + h / 2, (v0 + v1) / 2, ang, tile, mat === M.chain ? 'noShadow' : null);
+    if (collide) col((u0 + u1) / 2, (v0 + v1) / 2, Math.abs(u1 - u0) / 2 + 0.1, Math.abs(v1 - v0) / 2 + 0.1);
+    return m;
+  };
+  // gundukan pitcher, base, home plate
+  const mound = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 2.74, 0.25, 32), M.dirt); mound.position.set(BP.mound, 0.125, 0); G.add(mound);
+  box(0.15, 0.05, 0.61, M.white, BP.mound, 0.27, 0);
+  const b2 = BP.base / Math.SQRT2;
+  for (const [x, z] of [[b2, -b2], [2 * b2, 0], [b2, b2]]) box(0.38, 0.08, 0.38, M.white, x, 0.04, z, Math.PI / 4);
+  box(0.43, 0.02, 0.43, M.white, 0.1, 0.03, 0, Math.PI / 4);
+  // pagar luar kayu 2,4 m + tiang foul kuning
+  const N = 36;
+  for (let i = 0; i < N; i++) {
+    const t0 = -Math.PI / 4 + i / N * Math.PI / 2, t1 = -Math.PI / 4 + (i + 1) / N * Math.PI / 2, r0 = bpFence(t0), r1 = bpFence(t1);
+    wall(r0 * Math.cos(t0), r0 * Math.sin(t0), r1 * Math.cos(t1), r1 * Math.sin(t1), 2.4, M.wood, 1.0);
+    box(0.14, 2.7, 0.14, M.dark, r0 * Math.cos(t0), 1.35, r0 * Math.sin(t0));
   }
-  scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffffff })));
+  for (const sg of [-1, 1]) { const r = bpFence(sg * Math.PI / 4), p = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 12, 8), M.yellow); p.position.set(r * Math.cos(sg * Math.PI / 4), 6, r * Math.sin(sg * Math.PI / 4)); G.add(p); }
+  // backstop jaring kawat 6 m di belakang home plate, tiang dan rel atas
+  const NB = 12, bA0 = Math.PI * 0.72, bA1 = Math.PI * 1.28;
+  for (let i = 0; i < NB; i++) {
+    const a0 = bA0 + i / NB * (bA1 - bA0), a1 = bA0 + (i + 1) / NB * (bA1 - bA0);
+    const u0 = BP.backR * Math.cos(a0), v0 = BP.backR * Math.sin(a0), u1 = BP.backR * Math.cos(a1), v1 = BP.backR * Math.sin(a1);
+    wall(u0, v0, u1, v1, 6, M.chain, 1.5);
+    box(0.1, 6.2, 0.1, M.steel, u0, 3.1, v0);
+  }
+  // pagar samping 1,2 m sejajar garis foul (10 m ke luar), dugout, tribun
+  for (const sg of [-1, 1]) {
+    const d = [Math.SQRT1_2, sg * Math.SQRT1_2], n = [-Math.SQRT1_2, sg * Math.SQRT1_2];
+    const P = (t, o) => [t * d[0] + o * n[0], t * d[1] + o * n[1]];
+    const endA = [BP.backR * Math.cos(sg > 0 ? bA0 : bA1), BP.backR * Math.sin(sg > 0 ? bA0 : bA1)];
+    const s0 = P(4, 10), s1 = P(86, 10);
+    wall(endA[0], endA[1], s0[0], s0[1], 1.2, M.chain, 1.5);
+    for (let k = 0; k < 8; k++) { const a = P(4 + k * 10.25, 10), b = P(4 + (k + 1) * 10.25, 10); wall(a[0], a[1], b[0], b[1], 1.2, M.chain, 1.5); box(0.08, 1.3, 0.08, M.steel, a[0], 0.65, a[1]); }
+    // dugout: dinding belakang, atap, bangku (terbuka ke arah lapangan)
+    const ang = Math.atan2(-d[1], d[0]), c = P(14, 8.2), bk = P(14, 9.4);
+    box(11, 2.4, 0.2, M.dark, bk[0], 1.2, bk[1], ang); box(11.4, 0.15, 2.6, M.green, c[0], 2.45, c[1], ang);
+    const bn = P(14, 8.8); box(10, 0.45, 0.5, M.bench, bn[0], 0.225, bn[1], ang);
+    for (const e of [-1, 1]) { const w0 = P(14 + e * 5.5, 7.1), w1 = P(14 + e * 5.5, 9.4); wall(w0[0], w0[1], w1[0], w1[1], 2.4, M.dark, 0); }
+    // tribun aluminium 5 anak tangga di luar pagar samping
+    for (let st = 0; st < 5; st++) { const p = P(28, 12 + st * 0.75); box(14, 0.45 * (st + 1), 0.75, M.alu, p[0], 0.225 * (st + 1), p[1], ang); }
+    col(P(28, 13.9)[0], P(28, 13.9)[1], 5.5, 5.5);
+  }
+  // tiang lampu stadion (kepala lampu menyala malam) + papan skor klasik di luar pagar tengah
+  const heads = [];
+  for (const [u, v] of [[-16, 26], [-16, -26], [46, 64], [46, -64], [100, 44], [100, -44]]) {
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.4, 22, 10), M.steel); p.position.set(u, 11, v); G.add(p); col(u, v, 0.4, 0.4);
+    const h = box(3.2, 1.6, 0.4, M.lamp, u, 22.2, v, Math.atan2(40 - u, -v), 0, 'noLight'); h.userData.noShadow = true; heads.push(h);
+  }
+  G.userData.heads = M.lamp;
+  const sb = tex(512, 220, (g, w, h) => {
+    g.fillStyle = '#1f4a2e'; g.fillRect(0, 0, w, h); g.strokeStyle = '#e8e2d0'; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12);
+    g.fillStyle = '#f2ecd8'; g.font = 'bold 36px serif'; g.textAlign = 'center'; g.fillText('COOPER STATION', w / 2, 52);
+    g.font = 'bold 22px sans-serif'; g.textAlign = 'left'; g.fillText('GUEST', 24, 110); g.fillText('HOME', 24, 160);
+    for (let i = 0; i < 9; i++) { g.textAlign = 'center'; g.fillText(String(i + 1), 150 + i * 34, 82); g.fillText(i < 5 ? String((i * 7) % 3) : '', 150 + i * 34, 110); g.fillText(i < 4 ? String((i * 5 + 1) % 3) : '', 150 + i * 34, 160); }
+    g.font = 'bold 26px sans-serif'; g.fillText('R', 470, 82); g.fillText('5', 470, 110); g.fillText('4', 470, 160);
+  }, false);
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(12, 5.2), new THREE.MeshBasicMaterial({ map: sb })); board.rotation.y = -Math.PI / 2; board.position.set(114, 6.2, 0); G.add(board);
+  box(0.3, 12, 12.4, M.dark, 114.2, 4.4, 0); col(114.2, 0, 0.3, 6.2);
+  G.traverse((o) => { o.frustumCulled = false; });
+  scene.add(G);
+  return G;
 }
+const BALLPARK_G = ballparkModel();
+// pohon di sudut sel di luar pagar (dikonversi jadi pohon prosedural di modul realisme)
+{
+  let sd = 1357; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const { s0, z0 } = BALLPARK;
+  for (let k = 0; k < 400 && k < 1e9; k++) {
+    const s = s0 + 16 + r() * (ART - 32), za = z0 + 16 + r() * (ART_Z - 32), u = wrapS(s - FIELD.s), v = za - FIELD.za;
+    const d = Math.hypot(u, v), th = Math.atan2(v, u);
+    const inField = Math.abs(th) <= Math.PI / 4 + 0.25 ? d < (Math.abs(th) <= Math.PI / 4 ? bpFence(th) : 95) + 8 : d < 30;
+    if (inField || Math.abs(u - 114) < 10 && Math.abs(v) < 12) continue;
+    if (r() < 0.12) treeList.push([modS(s), za, 0.9 + 0.4 * r()]);
+  }
+}
+
 
 // --- trem (tahap 10): kereta lantai rendah 18 m, jendela kaca, pintu geser, kursi, tiang, lampu, papan tujuan ---
 // Lokal: x = +s (lateral, sisi +x menghadap peron), y = atas, z = +za (sepanjang rel). Lantai di y 0,35 m.
@@ -3888,6 +4026,7 @@ const VU = {
   uEye: { value: new THREE.Vector3() }, uEyeSZ: { value: new THREE.Vector2() },
   uYard: { value: new THREE.Vector4(COOPER.s - 70, COOPER.za - 45, COOPER.s + 90, COOPER.za + 60) },
   uHouse: { value: new THREE.Vector4(...YARD_OBST[0]) },
+  uFieldRect: { value: new THREE.Vector4(BALLPARK.s0, BALLPARK.z0, BALLPARK.s1, BALLPARK.z1) }, uHome: { value: new THREE.Vector2(FIELD.s, FIELD.za) },
   uLodD: { value: 130 },
 };
 const VEG_COMMON = /* glsl */`
@@ -3897,7 +4036,8 @@ const VEG_COMMON = /* glsl */`
   uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex, uHeightTex;
   uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uLodD;
   uniform vec2 uFieldZ, uEyeSZ;
-  uniform vec4 uHM, uYard, uHouse;
+  uniform vec4 uHM, uYard, uHouse, uFieldRect;
+  uniform vec2 uHome;
   uniform vec3 uEye;
   const float PI = 3.141592653589793;
   float hash2(vec2 p) {
@@ -4037,6 +4177,13 @@ const GRASS_VS = /* glsl */`
       if (veg < 0.5) { ${CLIP_AWAY} }
     }
     bool yard = kind == 0 && inRect(P, uYard);
+    if (kind == 0 && inRect(P, uFieldRect)) {                        // lapangan baseball: rumput pendek, tanah infield dan warning track kosong
+      vec2 q = P - uHome; float dq = length(q), th = atan(q.y, q.x);
+      bool fairT = abs(th) <= 0.7854;
+      float rf = 91.0 + 16.0 * cos(2.0 * th);
+      if ((fairT && distance(q, vec2(18.44, 0.0)) < 29.6) || dq < 4.6 || (fairT && dq > rf - 4.9 && dq < rf + 0.5) || (abs(q.x - 18.44) < 3.0 && abs(q.y) < 3.0)) { ${CLIP_AWAY} }
+      yard = true;
+    }
     float hgt = kind == 1 ? mix(0.8, 1.0, h3) : kind == 2 ? mix(0.42, 0.56, h3) : kind == 3 ? mix(1.2, 1.5, h3)
       : yard ? mix(0.07, 0.16, h3) : mix(uHmin, uHmax, 0.7 * vnoise(P / 5.0) + 0.3 * h3);
     hgt *= k;
@@ -4646,7 +4793,7 @@ const SPOTS = {
   corn: { s: CORN_SPOT.s, za: CORN_SPOT.za, heading: 0, pitch: 2, name: 'Tengah ladang jagung' },
   wheat: { s: WHEAT_SPOT.s, za: WHEAT_SPOT.za, heading: WHEAT_SPOT.heading, pitch: 3, name: 'Ladang gandum dekat bukit' },
   skyway: { s: SKY_S + WIN.width / 2 + 3, za: 1400, heading: -90, pitch: -40, name: 'Skyway (jendela ke angkasa)' },
-  baseball: { s: FIELD.s, za: FIELD.za - 8, heading: 0, pitch: 2, name: 'Lapangan baseball' },
+  baseball: { s: FIELD.s - 7, za: FIELD.za, heading: 90, pitch: 1, name: 'Lapangan baseball' },
 };
 function teleport(key) {
   const T = SPOTS[key];
@@ -4795,6 +4942,8 @@ const TRAFFIC = {};
 function updateTraffic() {
   const nt = BUILD_U.uNight.value;
   TRAFFIC.heads.material.color.setRGB(0.35 + 3.2 * nt, 0.33 + 2.5 * nt, 0.3 + 1.6 * nt);
+  BALLPARK_G.userData.heads.color.setRGB(0.4 + 4 * nt, 0.4 + 3.9 * nt, 0.38 + 3.6 * nt);      // lampu stadion
+  BALLPARK_G.userData.decalMat.color.setScalar(1 + 8 * nt);                                   // lapangan terang saat lampu stadion menyala
   groundMat.uniforms.uNight.value = nt;
 }
 
@@ -5239,7 +5388,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
