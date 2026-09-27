@@ -99,6 +99,15 @@ Uji `tools/uji_hutan.py`. Uji lama tetap lulus (suasana, rel, bahasa, peta 11 pe
 
 Uji `tools/uji_rumput_bukit.py`.
 
+
+### Revisi 14b (setelah uji pemilik)
+
+| Masalah | Penyebab | Perbaikan |
+| --- | --- | --- |
+| Dari dekat rumput kadang bergoyang kiri-kanan cepat dan serempak | Fase gelombang dihitung dari waktu x kecepatan angin dan posisi x arah angin. Waktu sampai 3.600 s dan posisi sampai ribuan meter, jadi perubahan kecil angin (kecepatan acak sedikit tiap frame, arah bergeser) melompatkan fase di seluruh padang sekaligus | Angin khusus rumput dihaluskan (10 s) dan geseran hembusan diintegrasikan tiap frame dalam meter, jadi tidak pernah melompat. Terukur: bercak hembusan bergeser paling cepat 1,7 m/s, arah angin rumput berubah paling cepat 0,05 derajat per detik. Getar per rumpun pelan (sekitar 0,2 Hz) dengan fase acak, jadi tidak serempak |
+| Dari jauh ada pola garis diagonal gelap-terang yang bergerak | Pita gelombang berupa sinus teratur (panjang gelombang sekitar 57 m) | Diganti bercak hembusan tak beraturan 20-60 m dari noise yang hanya bergeser searah angin. Di tanah jauh kontrasnya kecil dan memudar di 250-700 m |
+| Padang bukit tampak pucat dari jauh | Warna tanah padang dikali terlalu terang | Warna dibuat dekat dengan tanah sekitar |
+
 ## Urutan kerja
 
 | Urutan | Sub-tahap | Alasan |
