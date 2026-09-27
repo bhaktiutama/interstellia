@@ -41,6 +41,20 @@ UJI = r"""
     out[`${nm}: gedung ${(bld / n * 100).toFixed(1)}% layar, berubah oleh ruangan ${(chg / n * 100).toFixed(2)}% layar`] = bld / n > 0.05 && chg / n > 0.005;
     out[`${nm}: tanpa nilai tidak valid (${bad}), deterministik (${same} piksel beda)`] = bad === 0 && same === 0;
   }
+  // revisi 14c: kuat pantulan kaca (refK) rata-rata di piksel ruangan, dekat (15 m) lawan jauh (60 m); shader dipinjam sementara
+  const mat = Object.values(S.cityMeshes)[0].material, fs0 = mat.fragmentShader;
+  mat.fragmentShader = fs0.replace('kI = detail;', 'kI = detail; gl_FragColor = vec4(refK, 100.0, 0.0, 1.0); return;'); mat.needsUpdate = true;
+  S.clock.hour = 11; const ref = {};
+  for (const d of [15, 60]) {
+    const za = g[1] - g[3] / 2 - d;
+    Object.assign(S.player, { theta: g[0] / S.R, za, h: S.groundH(g[0], za), heading: Math.PI, pitch: 0.3 });
+    await wait(1500);
+    const px = shoot(); let n = 0, sum = 0;
+    for (let i = 0; i < px.length; i += 4) if (px[i + 1] === 100) { n++; sum += px[i]; }
+    ref[d] = n ? sum / n : 0;
+  }
+  mat.fragmentShader = fs0; mat.needsUpdate = true;
+  out[`pantulan kaca makin kuat dengan jarak: 15 m ${ref[15].toFixed(2)}, 60 m ${ref[60].toFixed(2)}`] = ref[15] > 0 && ref[60] > ref[15] + 0.1;   // di 15 m rata-rata juga mencakup gedung lain yang lebih jauh
   rt.dispose();
   return out;
 })()

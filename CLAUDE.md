@@ -136,7 +136,7 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 13a-13d | Rel trem bersih, jembatan jalan dan akuaduk di Skyway (mobil satu keliling penuh), tombol 5 di atas lantai kaca, peta besar M dengan penanda dan klik = pindah |
 | 14a | Hutan lebat 5.222 pohon 22-35 m dengan jalan setapak, semak dan pakis, kabut hutan, tombol 0, penanda peta, titik tur |
 | 14b | Rumput tinggi di bukit dengan pita gelombang angin (dekat 3D, jauh di shader tanah), merunduk di sekitar pemain |
-| 14c | Interior jendela: ruangan berkedalaman di balik jendela gedung dekat (perabot, tirai, lampu malam), mati di Rendah dan Hemat |
+| 14c | Interior jendela: ruangan berkedalaman di balik jendela gedung dekat (perabot, tirai, lampu malam), kaca memantulkan langit dan gedung seberang makin kuat dengan jarak, mati di Rendah dan Hemat |
 
 Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Cadangan lain di rencana tahap 12.
 

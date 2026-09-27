@@ -126,6 +126,17 @@ Uji `tools/uji_interior.py` (render gedung saja 1280 x 800, target float): siang
 
 Yang perlu dicek pemilik: jendela gedung kota dari dekat siang dan malam (titik awal kota, tombol 7 terminal), FPS di GTX 1060 (Ultra) dan M1 (Hemat = mati, jadi tidak berubah).
 
+### Revisi 14c (setelah uji pemilik)
+
+| Masalah | Penyebab | Perbaikan |
+| --- | --- | --- |
+| Kedalaman ruangan sudah terlihat, tapi jendela seperti lubang tanpa kaca | Pantulan hanya warna kabut rata yang ditambahkan tipis (sudut pandang biasa: sekitar 5%) | Kaca dicampur dengan benar: ruangan x (1 - pantulan) + lingkungan x pantulan, dengan tint kaca tipis |
+| | | Kuat pantulan naik dengan jarak (12-70 m) dan sudut: dekat sekitar 10-15%, jauh 55-95%. Gedung kaca (kantor) lebih memantul |
+| | | Lingkungan pantulan: langit bergradien dan siluet gedung seberang yang ikut bergeser saat kamera bergerak; malam ada jendela seberang menyala di pantulan |
+| | | Tiap panel sedikit beda kemiringan; dari dekat ada kilap diagonal samar (siang). Lampu ruangan malam tetap tembus |
+
+Uji `tools/uji_interior.py` ditambah cek pantulan: rata-rata di piksel ruangan 0,41 (kamera 15 m) dan 0,56 (60 m).
+
 ## Urutan kerja
 
 | Urutan | Sub-tahap | Alasan |
