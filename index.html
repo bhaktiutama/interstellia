@@ -127,6 +127,8 @@
         <button id="labWheat" type="button"><kbd>4</kbd>Ladang gandum</button>
         <button id="labWin" type="button"><kbd>5</kbd>Skyway</button>
         <button id="labBall" type="button"><kbd>6</kbd>Lapangan baseball</button>
+        <button id="labPort" type="button"><kbd>7</kbd>Terminal spaceport</button>
+        <button id="labShip" type="button"><kbd>8</kbd>Kokpit shuttle</button>
         <button id="labLift" type="button"><kbd>L</kbd>Lift ke sumbu</button>
         <button id="labExt" type="button"><kbd>V</kbd>Kamera luar</button>
       </div>
@@ -174,7 +176,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 11c · perabot kota: bangku, tempat sampah, hidran, pot tanaman, lampu lalu lintas, zebra cross · cuaca dinamis + sunrays · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 11d · spaceport: dermaga despun, terminal, shuttle orisinal yang bisa diterbangkan ke angkasa · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -187,7 +189,9 @@
       <tr class="desk-only"><td>[ · ] · Z</td><td>Jam stasiun mundur / maju 1 jam · kecepatan waktu (1 menit = 1 jam, 10 s, 1 s, berhenti)</td></tr>
       <tr class="desk-only"><td>N</td><td>Cuaca: otomatis (berganti cerah, berawan, mendung), atau tetap cerah / berawan / mendung</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
-      <tr class="desk-only"><td>1 - 6</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum · Skyway · lapangan baseball</td></tr>
+      <tr class="desk-only"><td>1 - 8</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum · Skyway · lapangan baseball · terminal spaceport · kokpit shuttle</td></tr>
+      <tr class="desk-only"><td>Spaceport</td><td>Lift (L) ke hub nol-g, E di pintu ujung hub = kapsul terowongan ke dermaga, lalu naik shuttle</td></tr>
+      <tr class="desk-only"><td>Shuttle</td><td>E lepas sandar / sandar otomatis · W/S dorong · A/D geser · R/F naik-turun · Z/C guling · mouse arah · Shift boost 10x · X rem · V kokpit/kamera belakang · L keluar (saat sandar)</td></tr>
       <tr class="desk-only"><td>Q</td><td>Preset kualitas: Ultra, Tinggi, Sedang, Rendah (awal: Ultra, turun otomatis bila FPS di bawah 30)</td></tr>
       <tr class="desk-only"><td>K · P</td><td>Kualitas vegetasi · efek layar (bloom, SSAO, tone mapping): Tinggi, Sedang, Rendah/Mati</td></tr>
       <tr class="desk-only"><td>U · J</td><td>Suara nyala/mati · musik: generatif, file sendiri (pilih di panel Uji), mati</td></tr>
@@ -631,8 +635,9 @@ const ext = { active: false, yaw: 212 * Math.PI / 180, pitch: 12 * Math.PI / 180
 function toggleExterior() {
   ext.active = !ext.active;
   exteriorGroup.visible = ext.active;
+  if (!ext.active && ext.flight) { ext.flight = false; PORT.mode = 'idle'; berthPose(0, PORT.p, PORT.q); PORT.v.set(0, 0, 0); }   // keluar pesawat lewat pindah lokasi
   if (ext.active) {
-    if (document.pointerLockElement) document.exitPointerLock();
+    if (document.pointerLockElement && !ext.flight) document.exitPointerLock();
     camera.near = 5; camera.far = 120000; scene.fog.density = 0;
   } else {
     camera.near = 0.25; camera.far = 12000; scene.fog.density = CONFIG.fogDensity;
@@ -641,11 +646,11 @@ function toggleExterior() {
   camera.updateProjectionMatrix();
 }
 // tahap 10: kamera luar dengan inersia, zoom halus, orbit sinematik (C), fokus 1/2/3, WASD/panah untuk memutar, +/- zoom
-const EXT_FOCUS = [[new THREE.Vector3(0, 0, -2400), 6500], [new THREE.Vector3(0, 0, -HALF_L), 2600], [new THREE.Vector3(0, 0, HALF_L), 2600], [new THREE.Vector3(0, 0, 0), 14000]];
+const EXT_FOCUS = [[new THREE.Vector3(0, 0, -2400), 6500], [new THREE.Vector3(0, 0, -HALF_L), 2600], [new THREE.Vector3(0, 0, HALF_L), 2600], [new THREE.Vector3(0, 0, 0), 14000], [new THREE.Vector3(0, 0, -HALF_L - 780), 700]];
 Object.assign(ext, { vyaw: 0, vpitch: 0, auto: true, distT: ext.dist, targetT: ext.target.clone() });
 function extKey(code) {
   if (code === 'KeyC') { ext.auto = !ext.auto; return true; }
-  const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(code);
+  const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5'].indexOf(code);
   if (i >= 0) { ext.targetT.copy(EXT_FOCUS[i][0]); ext.distT = EXT_FOCUS[i][1]; return true; }
   return false;
 }
@@ -1227,23 +1232,11 @@ function updateCrawlers(dt) {
   crawlerMesh.instanceMatrix.needsUpdate = true;
 }
 updateCrawlers(0);
-// dermaga di ujung batang spaceport: cincin sandar + 4 kapal
+// cincin di tengah batang dermaga (dermaga despun dan kapal: modul tahap 11d)
 {
   const zDock = -HALF_L - CAP.hubLen - CAP.dockLen + 60;
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(90, 9, 10, 48), new THREE.MeshBasicMaterial({ color: 0x5a616b }));
-  ring.position.z = zDock; exteriorGroup.add(ring);
   const mid = new THREE.Mesh(new THREE.TorusGeometry(55, 6, 8, 40), new THREE.MeshBasicMaterial({ color: 0x4a515a }));
   mid.position.z = -HALF_L - CAP.hubLen - CAP.dockLen * 0.45; exteriorGroup.add(mid);
-  const ships = new THREE.InstancedMesh(bakeShadeBox(), new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xb9c0c8 }), 4);
-  const m = new THREE.Matrix4();
-  for (let i = 0; i < 4; i++) {
-    const a = i * TAU / 4 + 0.4;
-    m.makeRotationZ(a).setPosition(130 * Math.cos(a), 130 * Math.sin(a), zDock - 10);
-    m.scale(_isc2.set(40, 16, 70));
-    ships.setMatrixAt(i, m);
-  }
-  ships.instanceMatrix.needsUpdate = true;
-  exteriorGroup.add(ships);
 }
 
 
@@ -2959,6 +2952,7 @@ function stepAir(dt) {
 }
 
 function enterLift() {
+  if (player.state === 'pod' || player.state === 'ship') return;
   if (player.state === 'float') { player.lift.r = LIFT.topR; player.lift.dir = -1; player.lift.v = 0; player.state = 'lift'; return; }
   if (player.state === 'lift') return;
   player.theta = LIFT.theta; player.za = LIFT.za; player.h = 0;
@@ -3045,6 +3039,7 @@ function physicsStep(dt) {
   }
   stepTram(dt);
   if (player.state === 'tram') stepTramRider();
+  stepPort(dt);
   const cabinStill = player.state !== 'lift';
   if (cabinStill) cabinFrame();
   for (const b of balls) if (!b.done) {
@@ -3185,6 +3180,7 @@ const PLAQUE_POS = { s: COOPER.s + 3, za: COOPER.za - COOPER.d / 2 - 4 };
 function nearDist(s, za) { return Math.hypot(wrapS(player.theta * R - s), player.za - za); }
 function availableAction() {
   if (player.state === 'tram') return tram.dwell > 0 ? { key: 'alight', label: `Turun di ${tramStopName()}` } : { key: null, label: 'Di dalam trem · tunggu halte berikutnya' };
+  if (player.state === 'float' && player.float.pos.z < -HALF_L + HUB.zaMin + 5 && Math.hypot(player.float.pos.x, player.float.pos.y) < 5.5) return { key: 'port', label: 'Masuk terowongan ke dermaga despun' };
   if (player.state !== 'ground') return null;
   if (tram.dwell > 0 && nearDist(TRAM.s, tram.za) < 14) return { key: 'board', label: `Naik trem (berikutnya: ${TRAM.stops[tram.target].name})` };
   if (nearDist(PLAQUE_POS.s, PLAQUE_POS.za) < 4) return { key: 'plaque', label: 'Baca plakat' };
@@ -3207,6 +3203,7 @@ function doAction() {
   else if (a.key === 'alight') { const z = TRAM_SEATS[player.seat || 0][1]; player.state = 'ground'; player.theta = ((TRAM.s + 3.6) / R) % TAU; player.za = tram.za + Math.max(-11, Math.min(11, z)); player.h = 0; }
   else if (a.key === 'plaque') { plaqueEl.querySelector('p').textContent = PLAQUE_TEXT; plaqueEl.hidden = false; }
   else if (a.key === 'lift') enterLift();
+  else if (a.key === 'port') portEnterPod(-1);
 }
 function stepTramRider() {
   const [x, z] = TRAM_SEATS[player.seat || 0];
@@ -3259,7 +3256,12 @@ function toggleMap() { mapEl.hidden = !mapEl.hidden; if (!mapEl.hidden) { sizeMa
    ===================================================================== */
 const _m = new THREE.Matrix4(), _eye = new THREE.Vector3();
 function updateCamera() {
-  if (ext.active) updateExteriorCamera();
+  if (ext.active) { if (ext.flight) updateFlightCamera(); else updateExteriorCamera(); }
+  else if (player.state === 'pod') {
+    const F = player.float;
+    lookBasis(F.up, F.tan);
+    _eye.set(0, 0, PORT.pod.z);
+  }
   else if (player.state === 'float') {
     const F = player.float;
     lookBasis(F.up, F.tan);
@@ -3299,7 +3301,7 @@ function look(dx, dy, sens) {
   player.pitch = Math.max(-89 * DEG, Math.min(89 * DEG, player.pitch - dy * sens));
 }
 function lockPointer() {
-  if (ext.active || isTouch || document.pointerLockElement || !canvas.requestPointerLock) return;
+  if ((ext.active && !ext.flight) || isTouch || document.pointerLockElement || !canvas.requestPointerLock) return;
   try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* drag-to-look tetap jalan */ }
 }
 document.getElementById('go').addEventListener('click', () => { startEl.hidden = true; startAudio(); lockPointer(); });
@@ -3315,6 +3317,11 @@ let dragging = false, lastX = 0, lastY = 0;
 canvas.addEventListener('mousedown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
 window.addEventListener('mouseup', () => { dragging = false; });
 window.addEventListener('mousemove', (e) => {
+  if (ext.flight) {                                                  // pesawat: mouse = arah hidung (atau melihat saat sandar)
+    if (document.pointerLockElement === canvas) { if (Math.abs(e.movementX) < 250 && Math.abs(e.movementY) < 250) portMouse(e.movementX, e.movementY); }
+    else if (dragging) { portMouse(e.clientX - lastX, e.clientY - lastY); lastX = e.clientX; lastY = e.clientY; }
+    return;
+  }
   if (document.pointerLockElement === canvas) {
     // Chrome kadang mengirim lonjakan movementX/Y besar tepat setelah pointer lock; abaikan
     if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
@@ -3327,7 +3334,7 @@ window.addEventListener('mousemove', (e) => {
   } else if (dragging) { look(e.clientX - lastX, e.clientY - lastY, CONFIG.lookSens); lastX = e.clientX; lastY = e.clientY; }
 });
 canvas.addEventListener('wheel', (e) => {
-  if (!ext.active) return;
+  if (!ext.active || ext.flight) return;
   e.preventDefault();
   ext.distT = Math.max(1500, Math.min(60000, ext.distT * Math.exp(e.deltaY * 0.001)));
 }, { passive: false });
@@ -3337,6 +3344,7 @@ window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (!AUDIO.started) startAudio();                                  // audio butuh interaksi pengguna
   if (e.repeat) return;
+  if (ext.flight && portKey(e.code)) { e.preventDefault(); return; }   // tombol pesawat
   if (e.code === 'KeyO') input.auto = !input.auto;
   if (e.code === 'KeyX') input.turbo = !input.turbo;
   if (e.code === 'KeyR') respawn();
@@ -3349,13 +3357,15 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyE') doAction();
   if (e.code === 'KeyM') toggleMap();
   if (e.code === 'KeyV') toggleExterior();
-  if (ext.active && extKey(e.code)) return;                          // kamera luar: tombol sendiri
+  if (ext.active && !ext.flight && extKey(e.code)) return;                          // kamera luar: tombol sendiri
   if (e.code === 'Digit1') teleport('cooper');
   if (e.code === 'Digit2') teleport('hill');
   if (e.code === 'Digit3') teleport('corn');
   if (e.code === 'Digit4') teleport('wheat');
   if (e.code === 'Digit5') teleport('skyway');
   if (e.code === 'Digit6') teleport('baseball');
+  if (e.code === 'Digit7') teleport('spaceport');
+  if (e.code === 'Digit8') portBoard();
   if (e.code === 'KeyQ') cyclePreset();
   if (e.code === 'KeyZ') cycleTimeRate();
   if (e.code === 'KeyN') cycleWeather();
@@ -3457,6 +3467,8 @@ on('labHill', () => teleport('hill'));
 on('labCorn', () => teleport('corn'));
 on('labWheat', () => teleport('wheat'));
 on('labBall', () => teleport('baseball'));
+on('labPort', () => teleport('spaceport'));
+on('labShip', () => portBoard());
 on('labVeg', () => cycleVegQuality());
 on('labPost', () => cyclePost());
 on('labPreset', () => cyclePreset());
@@ -3528,9 +3540,10 @@ function updatePrompt() {
     const rem = L.dir > 0 ? L.r - LIFT.topR : R - L.r, g = OMEGA * OMEGA * L.r / CONFIG.g;
     t = `Lift ${L.dir > 0 ? 'naik' : 'turun'} · tinggi ${(R - L.r).toFixed(0)} m · gravitasi ${g.toFixed(3)} g · ${L.v.toFixed(1)} m/s · tiba sekitar ${liftETA(rem, L.v, fast).toFixed(0)} s (Shift = 5x)`;
   } else if (player.state === 'float') {
-    t = `Hub nol-g · ${localG().toFixed(4)} g · WASD, Space naik, C turun · B lempar bola, G lepas bola · L turun dengan lift`;
+    t = `Hub nol-g · ${localG().toFixed(4)} g · WASD, Space naik, C turun · B lempar bola, G lepas bola · L turun dengan lift${a && a.key === 'port' ? ' · E terowongan ke dermaga' : ' · pintu dermaga di ujung hub (sumbu)'}`;
   }
-  if (ext.active) t = `Kamera luar · seret / WASD putar · scroll / + - zoom · C orbit otomatis (${ext.auto ? 'nyala' : 'mati'}) · 1 2 3 4 fokus · V kembali`;
+  if (ext.flight || player.state === 'pod') t = portPrompt();
+  else if (ext.active) t = `Kamera luar · seret / WASD putar · scroll / + - zoom · C orbit otomatis (${ext.auto ? 'nyala' : 'mati'}) · 1 2 3 4 5 fokus (5 = dermaga) · V kembali`;
   if (t !== lastPrompt) { promptEl.textContent = t; promptEl.hidden = !t; lastPrompt = t; }
 }
 const STATE_NAME = { ground: 'di tanah', air: 'di udara', lift: '', float: '' };
@@ -3562,7 +3575,7 @@ function updateStats(dt) {
   hEl.dist.textContent = player.distance >= 1000 ? (player.distance / 1000).toFixed(2) + ' km' : player.distance.toFixed(0) + ' m';
   const st = player.state === 'ground' ? player.mode + (input.auto ? ' · otomatis' : '') : player.state === 'air' ? 'di udara' : player.mode;
   hEl.tram.textContent = tram.dwell > 0 ? `berhenti di ${tramStopName()}` : `${tram.v.toFixed(0)} m/s ke ${TRAM.stops[tram.target].name}`;
-  hEl.mode.textContent = ext.active ? 'kamera luar' : st;
+  hEl.mode.textContent = ext.flight ? 'pesawat' : ext.active ? 'kamera luar' : st;
   // sudut antara arah Saturnus dan "atas" pemain (0 derajat = tepat di atas kepala, 180 = tepat di bawah kaki)
   saturnDirStation(_satDir);
   const upNow = player.state === 'float' ? player.float.up : upAt(player.theta, _up);
@@ -5485,7 +5498,7 @@ function updateAudio(dt) {
   if (!AUDIO.started || !AUDIO.ctx || AUDIO.ctx.state !== 'running') return;
   const ctx = AUDIO.ctx, t = ctx.currentTime, h = clock.hour;
   const day = sstep(5.5, 7.5, h) * (1 - sstep(17.5, 19.5, h));
-  const inside = !ext.active && player.state !== 'float';
+  const inside = !ext.active && player.state !== 'float' && player.state !== 'pod';
   const s = player.theta * R, za = player.za;
   const city = za > 150 && za < 2700 ? Math.min(1, cityDensity(s, Math.min(za, 2500)) * 1.3) * (1 - sstep(2400, 2650, za)) : 0;
   const nature = za > 2550 && !(za > UTIL.za0 && za < UTIL.za1) ? 1 : 0.25;
@@ -5760,7 +5773,7 @@ const FURN = { kinds: {}, lastS: 1e9, lastZ: 1e9, total: 0 };
     FURN.kinds[kind] = { mesh, mats, ps, pz, n, range: RANGE[kind] };
     FURN.total += n;
   }
-  FURN.signalLampMat = signalLampMat;
+  FURN.signalLampMat = signalLampMat; FURN.GEO = GEO;
 }
 function updateFurniture() {
   const s = player.theta * R, za = player.za, T = clock.sim;
@@ -5779,6 +5792,465 @@ function updateFurniture() {
     K.mesh.count = c; K.mesh.instanceMatrix.needsUpdate = true;
   }
 }
+
+/* =====================================================================
+   TAHAP 11d: SPACEPORT + SHUTTLE ORISINAL
+   - Dermaga despun di ujung batang end cap A (tidak ikut berputar): modul pusat, cincin sandar 4 berth,
+     tabung sambung, lampu pemandu. Di kerangka stasiun grup ini berputar -omega t, jadi di ruang inersia diam.
+   - Terowongan: dari pintu hub nol-g, kapsul meluncur 766 m di sepanjang sumbu ke modul dermaga.
+   - Shuttle "Kestrel" (desain orisinal, badan pengangkat 24 m): bisa dinaiki, lepas sandar, diterbangkan ke angkasa,
+     dan sandar otomatis. Pesawat lain: shuttle terjadwal (datang/berangkat), kapal kargo, kapal tunda.
+   - Terminal kaca di plaza spaceport dengan papan keberangkatan.
+   ===================================================================== */
+const PORT = {
+  zArm: -HALF_L - CAP.hubLen - CAP.dockLen,                        // ujung batang dermaga (-4.740 m)
+  ringR: 70, ringZ: -HALF_L - CAP.hubLen - CAP.dockLen - 40,
+  berthR: 84.2, berthAng: [0.25, 0.75, 1.25, 1.75].map((k) => k * Math.PI),
+  mode: 'idle', view: 'cockpit', p: new THREE.Vector3(), v: new THREE.Vector3(), q: new THREE.Quaternion(),
+  look: { yaw: 0, pitch: 0 }, brake: false, boost: false, t: 0, from: null, pod: { z: 0, dir: -1, v: 0 },
+  eye: new THREE.Vector3(0, 1.15, -7.3), A_MAIN: 8, A_RCS: 3, board: 0,
+};
+PORT.zHubPod = -HALF_L + HUB.zaMin - 1; PORT.zDockPod = PORT.ringZ + 15;
+const DOCK = new THREE.Group(); scene.add(DOCK);                   // kerangka inersia (despun)
+{
+  const sun = new THREE.DirectionalLight(0xfff4e6, 2.2), tgt = new THREE.Object3D();
+  sun.position.copy(SUN_DIR).multiplyScalar(1000); sun.target = tgt; DOCK.add(sun, tgt, new THREE.AmbientLight(0x8090a8, 0.35));
+}
+// --- penggabung geometri berwarna (normal dijaga per bagian) ---
+function mergeColored(parts) {
+  const P = [], N = [], C = [];
+  for (const { geo, color } of parts) {
+    let g = geo.index ? geo.toNonIndexed() : geo;
+    if (!g.attributes.normal) g.computeVertexNormals();
+    const p = g.attributes.position.array, n = g.attributes.normal.array, c = g.attributes.color ? g.attributes.color.array : null;
+    for (let i = 0; i < p.length; i += 3) {
+      P.push(p[i], p[i + 1], p[i + 2]); N.push(n[i], n[i + 1], n[i + 2]);
+      if (color) C.push(color[0], color[1], color[2]); else C.push(c[i], c[i + 1], c[i + 2]);
+    }
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
+  out.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
+  return out;
+}
+const bx = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
+const cylZ = (r0, r1, len, z, seg = 16, open = false) => new THREE.CylinderGeometry(r1, r0, len, seg, 1, open).rotateX(Math.PI / 2).translate(0, 0, z);   // r0 di -z, r1 di +z
+const litMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+const litMat2 = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+const NAV = { red: new THREE.MeshBasicMaterial({ color: 0xff2a20 }), green: new THREE.MeshBasicMaterial({ color: 0x20ff50 }),
+  strobe: new THREE.MeshBasicMaterial({ color: 0xffffff }), beacon: new THREE.MeshBasicMaterial({ color: 0xffa020 }), guide: new THREE.MeshBasicMaterial({ color: 0x40c0ff }) };
+
+// --- shuttle "Kestrel": badan pengangkat (lofted superellipse), sirip miring ganda, 3 mesin ---
+const SHUTTLE = (() => {
+  const NS = 44, NR = 36, L = 24;
+  const W = (t) => 0.35 + 7.1 * Math.pow(Math.sin(Math.min(t / 0.8, 1) * Math.PI / 2), 0.75);
+  const HT = (t) => t < 0.32 ? 0.35 + 2.05 * Math.sin(t / 0.32 * Math.PI / 2) : 2.4 - 1.3 * Math.pow((t - 0.32) / 0.68, 1.4);
+  const HB = (t) => 0.3 + 1.25 * Math.pow(Math.sin(Math.min(t / 0.35, 1) * Math.PI / 2), 0.6);
+  const pos = [], col = [], idx = [];
+  for (let i = 0; i <= NS; i++) {
+    const t = i / NS, z = -L / 2 + t * L, w = W(t), ht = HT(t), hb = HB(t);
+    for (let j = 0; j < NR; j++) {
+      const a = j / NR * TAU, c = Math.cos(a), s = Math.sin(a), n = s >= 0 ? 2.4 : 5;
+      const x = w * Math.sign(c) * Math.pow(Math.abs(c), 2 / n), y = (s >= 0 ? ht : hb) * Math.sign(s) * Math.pow(Math.abs(s), 2 / n);
+      pos.push(x, y, z);
+      let C = [0.88, 0.89, 0.9];
+      if (y < -hb * 0.5) C = [0.13, 0.13, 0.14];                                            // perisai panas di perut
+      else if (y < 0.1 && y > -0.5 && t > 0.12) C = [0.86, 0.42, 0.1];                      // garis aksen jingga
+      else if (t > 0.6 && y > ht * 0.7 && Math.abs(x) < w * 0.25) C = [0.55, 0.58, 0.62];  // panel radiator punggung
+      if (t > 0.13 && t < 0.27 && y > ht * 0.5 && Math.abs(x) < w * 0.82 && Math.abs(x) > 0.12) C = [0.04, 0.06, 0.09];   // jendela kokpit
+      col.push(...C);
+    }
+  }
+  for (let i = 0; i < NS; i++) for (let j = 0; j < NR; j++) {
+    const a = i * NR + j, b = i * NR + (j + 1) % NR, c = (i + 1) * NR + j, d = (i + 1) * NR + (j + 1) % NR;
+    idx.push(a, b, c, b, d, c);
+  }
+  const nose = pos.length / 3; pos.push(0, 0, -L / 2 - 0.35); col.push(0.88, 0.89, 0.9);
+  const tail = pos.length / 3; pos.push(0, 0.3, L / 2); col.push(0.2, 0.21, 0.23);
+  for (let j = 0; j < NR; j++) { idx.push(nose, (j + 1) % NR, j); idx.push(tail, NS * NR + j, NS * NR + (j + 1) % NR); }
+  const hullG = new THREE.BufferGeometry();
+  hullG.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); hullG.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  hullG.setIndex(idx); hullG.computeVertexNormals();
+  // sayap pendek (strake) dan sirip
+  const wingShape = new THREE.Shape([new THREE.Vector2(0, -2), new THREE.Vector2(3.2, 6), new THREE.Vector2(3.2, 9), new THREE.Vector2(0, 10.5)]);
+  const wing = new THREE.ExtrudeGeometry(wingShape, { depth: 0.28, bevelEnabled: false }).rotateX(Math.PI / 2);
+  const finShape = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(5, 0), new THREE.Vector2(5.8, 3.8), new THREE.Vector2(3.6, 3.8)]);
+  const fin = () => new THREE.ExtrudeGeometry(finShape, { depth: 0.24, bevelEnabled: false }).rotateY(-Math.PI / 2);
+  const WHITE = [0.88, 0.89, 0.9], DARK = [0.2, 0.21, 0.23], ORANGE = [0.86, 0.42, 0.1];
+  const parts = [
+    { geo: wing.clone().translate(6.9, -0.75, 1.5), color: WHITE },
+    { geo: wing.clone().scale(-1, 1, 1).translate(-6.9, -0.75, 1.5), color: WHITE },
+    { geo: fin().rotateZ(-0.38).translate(4.3, 1.0, 6.2), color: WHITE },
+    { geo: fin().rotateZ(0.38).translate(-4.05, 1.0, 6.2), color: WHITE },
+    { geo: bx(0.3, 0.9, 1.2, 5.3, 3.3, 10.6), color: ORANGE }, { geo: bx(0.3, 0.9, 1.2, -5.3, 3.3, 10.6), color: ORANGE },
+    ...[[-2.3, -0.2], [2.3, -0.2], [0, 0.75]].map(([x, y]) => ({ geo: cylZ(0.8, 1.22, 1.9, 12.9, 18, true).translate(x, y, 0), color: [0.3, 0.3, 0.32] })),
+    { geo: new THREE.TorusGeometry(0.95, 0.14, 6, 24).rotateX(Math.PI / 2).translate(0, 2.16, 1), color: DARK },
+    { geo: bx(1.5, 0.05, 1.5, 0, 2.14, 1), color: [0.35, 0.37, 0.4] },
+    ...[-1, 1].flatMap((sx) => [{ geo: bx(0.35, 0.3, 0.6, sx * 2.6, 0.7, -8.6), color: DARK }, { geo: bx(0.35, 0.3, 0.6, sx * 6.2, 0.4, 7.5), color: DARK }]),
+  ];
+  const partsG = mergeColored(parts);
+  const navG = { red: bx(0.3, 0.2, 0.3, -10.1, -0.9, 9.8), green: bx(0.3, 0.2, 0.3, 10.1, -0.9, 9.8), strobe: bx(0.25, 0.25, 0.25, 0, 2.0, 11.2) };
+  const glowG = mergeColored([[-2.3, -0.2], [2.3, -0.2], [0, 0.75]].map(([x, y]) => ({ geo: new THREE.CircleGeometry(0.8, 18).translate(x, y, 12.05), color: [1, 1, 1] })));
+  return { hullG, partsG, navG, glowG, HT, W };
+})();
+function makeShuttle() {
+  const g = new THREE.Group();
+  const hull = new THREE.Mesh(SHUTTLE.hullG, litMat), parts = new THREE.Mesh(SHUTTLE.partsG, litMat2);
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+  const glow = new THREE.Mesh(SHUTTLE.glowG, glowMat);
+  g.add(hull, parts, glow, new THREE.Mesh(SHUTTLE.navG.red, NAV.red), new THREE.Mesh(SHUTTLE.navG.green, NAV.green), new THREE.Mesh(SHUTTLE.navG.strobe, NAV.strobe));
+  g.userData = { hull, parts, glowMat };
+  return g;
+}
+// --- kapal kargo 72 m: modul awak, tulang punggung dengan kontainer, radiator, mesin ---
+function makeCargo() {
+  const P = [], CONT = [[0.75, 0.3, 0.15], [0.2, 0.35, 0.55], [0.85, 0.7, 0.2], [0.55, 0.57, 0.6], [0.3, 0.5, 0.3]];
+  P.push({ geo: cylZ(4.2, 4.2, 12, -30, 20), color: [0.88, 0.88, 0.86] }, { geo: new THREE.SphereGeometry(4.2, 20, 10).translate(0, 0, -36), color: [0.88, 0.88, 0.86] });
+  P.push({ geo: bx(4, 0.8, 1.5, 0, 2.2, -39), color: [0.05, 0.07, 0.1] });
+  P.push({ geo: bx(2.2, 2.2, 48, 0, 0, 0), color: [0.4, 0.42, 0.45] });
+  for (let k = 0; k < 6; k++) for (const [x, y] of [[-2.6, 2.6], [2.6, 2.6], [-2.6, -2.6], [2.6, -2.6]]) P.push({ geo: bx(2.5, 2.5, 6.1, x, y, -17 + k * 6.6), color: CONT[(k * 3 + (x > 0 ? 1 : 0) + (y > 0 ? 2 : 0)) % 5] });
+  P.push({ geo: bx(0.2, 14, 9, 0, 9, 17), color: [0.82, 0.84, 0.86] }, { geo: bx(0.2, 14, 9, 0, -9, 17), color: [0.82, 0.84, 0.86] });
+  P.push({ geo: cylZ(3.2, 3.2, 10, 29, 16), color: [0.5, 0.52, 0.55] });
+  for (const [x, y] of [[-1.6, 0], [1.6, 0]]) P.push({ geo: cylZ(1.1, 2.0, 3.5, 35.5, 16, true).translate(x, y, 0), color: [0.28, 0.28, 0.3] });
+  P.push({ geo: cylZ(1.3, 1.3, 3.5, -32, 12).rotateX(Math.PI / 2).translate(0, 4.2, -30.5), color: [0.5, 0.52, 0.55] });   // tabung sandar ke atas
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(mergeColored(P), litMat));
+  g.add(new THREE.Mesh(bx(0.4, 0.4, 0.4, -4.3, 0, -30), NAV.red), new THREE.Mesh(bx(0.4, 0.4, 0.4, 4.3, 0, -30), NAV.green), new THREE.Mesh(bx(0.4, 0.4, 0.4, 0, 16.2, 17), NAV.strobe));
+  return g;
+}
+// --- kapal tunda 12 m: kotak bertenaga dengan 4 lengan penjepit ---
+function makeTug() {
+  const P = [{ geo: bx(5, 4, 8, 0, 0, 0), color: [0.9, 0.72, 0.15] }, { geo: bx(3.2, 1.2, 1.5, 0, 1.2, -4.3), color: [0.05, 0.07, 0.1] }];
+  for (const [x, y] of [[-2.2, 1.6], [2.2, 1.6], [-2.2, -1.6], [2.2, -1.6]]) P.push({ geo: bx(0.5, 0.5, 5, x * 1.2, y * 1.2, -5.5), color: [0.35, 0.37, 0.4] });
+  P.push({ geo: cylZ(0.7, 1.1, 1.4, 4.7, 12, true), color: [0.3, 0.3, 0.32] });
+  const g = new THREE.Group(); g.add(new THREE.Mesh(mergeColored(P), litMat));
+  g.add(new THREE.Mesh(bx(0.4, 0.4, 0.4, 0, 2.2, 3), NAV.strobe), new THREE.Mesh(bx(0.3, 0.3, 0.3, -2.6, 0, 0), NAV.red), new THREE.Mesh(bx(0.3, 0.3, 0.3, 2.6, 0, 0), NAV.green));
+  return g;
+}
+// --- dermaga despun ---
+{
+  const P = [], z0 = PORT.zArm, zr = PORT.ringZ, METAL = [0.55, 0.58, 0.62], DARKM = [0.3, 0.32, 0.35], WHITE = [0.82, 0.84, 0.86];
+  P.push({ geo: new THREE.TorusGeometry(18, 2.5, 10, 40).translate(0, 0, z0 - 1), color: DARKM });           // bantalan putar (bearing)
+  P.push({ geo: cylZ(14, 14, 62, z0 - 32, 32), color: WHITE });                                              // modul pusat
+  P.push({ geo: new THREE.CircleGeometry(14, 32).rotateY(Math.PI).translate(0, 0, z0 - 63), color: METAL });
+  P.push({ geo: cylZ(5, 5, 8, z0 - 67, 20), color: METAL });                                                  // port sumbu
+  P.push({ geo: new THREE.TorusGeometry(PORT.ringR, 4.5, 12, 96).translate(0, 0, zr), color: WHITE });        // cincin sandar
+  for (let k = 0; k < 8; k++) {
+    const a = k * TAU / 8 + TAU / 16, g = bx(PORT.ringR - 14, 2.2, 3, (PORT.ringR + 14) / 2, 0, 0).rotateZ(a).translate(0, 0, zr);
+    P.push({ geo: g, color: METAL });
+  }
+  for (const a of PORT.berthAng) {
+    const c = Math.cos(a), s = Math.sin(a);
+    const tube = new THREE.CylinderGeometry(1.4, 1.4, 8, 14).rotateZ(-Math.PI / 2).translate(78.5, 0, 0).rotateZ(a).translate(0, 0, zr);
+    P.push({ geo: tube, color: METAL });
+    for (const dz of [-9, 9]) P.push({ geo: bx(9, 0.8, 0.8, 79, 0, dz).rotateZ(a).translate(0, 0, zr), color: DARKM });   // lengan penjepit
+    P.push({ geo: bx(6, 6, 1.2, 76, 0, 0).rotateZ(a).translate(0, 0, zr), color: DARKM });
+  }
+  const dockMesh = new THREE.Mesh(mergeColored(P), litMat);
+  DOCK.add(dockMesh);
+  // lampu: suar cincin + garis pemandu masuk tiap berth (mengarah ke -z)
+  const beacons = [], guides = [];
+  for (let k = 0; k < 12; k++) { const a = k * TAU / 12; beacons.push(bx(0.8, 0.8, 0.8, (PORT.ringR + 4.8) * Math.cos(a), (PORT.ringR + 4.8) * Math.sin(a), zr)); }
+  for (const a of PORT.berthAng) for (let d = 1; d <= 8; d++) guides.push(bx(0.6, 0.6, 0.6, 0, 0, 0).translate(PORT.berthR * Math.cos(a) + 10 * Math.cos(a), PORT.berthR * Math.sin(a) + 10 * Math.sin(a), zr - 18 - d * 22));
+  DOCK.add(new THREE.Mesh(mergeColored(beacons.map((geo) => ({ geo, color: [1, 1, 1] }))), NAV.beacon));
+  DOCK.add(new THREE.Mesh(mergeColored(guides.map((geo) => ({ geo, color: [1, 1, 1] }))), NAV.guide));
+}
+// --- terowongan batang dermaga: cincin lampu tiap 25 m + kapsul penumpang ---
+const PODG = new THREE.Group();
+{
+  const rings = [];
+  for (let z = -HALF_L - 10; z > PORT.zArm; z -= 25) rings.push({ geo: new THREE.TorusGeometry(3.2, 0.12, 6, 32).translate(0, 0, z), color: [1, 1, 1] });
+  const tl = new THREE.Mesh(mergeColored(rings), new THREE.MeshBasicMaterial({ color: 0x9fd8ff })); tl.userData.noLight = true; scene.add(tl);
+  const P = [];
+  for (const dz of [-1.4, 1.4]) P.push({ geo: new THREE.TorusGeometry(1.7, 0.08, 6, 32).translate(0, 0, dz), color: [0.7, 0.72, 0.75] });
+  for (let k = 0; k < 6; k++) { const a = k * TAU / 6; P.push({ geo: bx(0.06, 0.06, 2.8, 1.7 * Math.cos(a), 1.7 * Math.sin(a), 0), color: [0.7, 0.72, 0.75] }); }
+  const pm = new THREE.Mesh(mergeColored(P), new THREE.MeshBasicMaterial({ vertexColors: true })); pm.userData.noLight = true;
+  PODG.add(pm); PODG.visible = false; scene.add(PODG);
+}
+// --- kapal-kapal ---
+const SHIPS = { player: makeShuttle(), ai: makeShuttle(), cargo: makeCargo(), tug: makeTug() };
+for (const s of Object.values(SHIPS)) { s.matrixAutoUpdate = false; DOCK.add(s); }
+// kokpit (hanya terlihat saat pandangan kokpit)
+const COCKPIT = new THREE.Group();
+{
+  const DK = [0.1, 0.11, 0.12], MID = [0.22, 0.23, 0.25], LT = [0.36, 0.38, 0.4];
+  const P = [
+    { geo: bx(3.2, 0.1, 4.2, 0, -0.05, -7.1), color: MID }, { geo: bx(2.8, 0.38, 0.75, 0, 0.55, -8.75), color: DK },
+    { geo: bx(0.12, 1.3, 4.2, -1.65, 0.6, -7.1), color: MID }, { geo: bx(0.12, 1.3, 4.2, 1.65, 0.6, -7.1), color: MID },
+    { geo: bx(3.4, 2.4, 0.12, 0, 1.0, -5.0), color: MID }, { geo: bx(3.4, 0.12, 2.2, 0, 2.05, -6.0), color: LT },
+    { geo: bx(0.08, 1.2, 0.08, 0, 1.35, -8.9).rotateX(-0.5), color: DK },
+    { geo: bx(0.1, 1.4, 0.1, -1.55, 1.35, -8.6).rotateX(-0.45), color: DK }, { geo: bx(0.1, 1.4, 0.1, 1.55, 1.35, -8.6).rotateX(-0.45), color: DK },
+    { geo: bx(3.3, 0.1, 0.1, 0, 2.0, -7.1), color: DK },
+    { geo: bx(0.5, 0.45, 1.6, -1.25, 0.55, -7.2), color: DK }, { geo: bx(0.5, 0.45, 1.6, 1.25, 0.55, -7.2), color: DK },
+    { geo: new THREE.CylinderGeometry(0.03, 0.04, 0.35, 8).translate(0.42, 0.55, -7.7), color: DK },
+  ];
+  const m = new THREE.Mesh(mergeColored(P), new THREE.MeshBasicMaterial({ vertexColors: true }));
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 128;
+  const tex = new THREE.CanvasTexture(cv);
+  const scr = new THREE.Mesh(new THREE.PlaneGeometry(2.3, 0.55).rotateX(-0.6).translate(0, 0.86, -8.55), new THREE.MeshBasicMaterial({ map: tex }));
+  COCKPIT.add(m, scr); COCKPIT.userData = { cv, tex }; COCKPIT.visible = false;
+  SHIPS.player.add(COCKPIT);
+}
+DOCK.traverse((o) => { if (o.isMesh) o.userData.noLight = true; });
+PODG.traverse((o) => { if (o.isMesh) o.userData.noLight = true; });
+
+// pose berth: atas kapal (lubang palka) menghadap sumbu, hidung ke -z
+const _pb = new THREE.Vector3(), _pm = new THREE.Matrix4(), _px = new THREE.Vector3(), _py = new THREE.Vector3(), _pz = new THREE.Vector3(0, 0, 1);
+function berthPose(i, outP, outQ, zOff = -1) {
+  const a = PORT.berthAng[i], c = Math.cos(a), s = Math.sin(a);
+  outP.set(PORT.berthR * c, PORT.berthR * s, PORT.ringZ + zOff);
+  _py.set(-c, -s, 0); _px.crossVectors(_py, _pz);
+  outQ.setFromRotationMatrix(_pm.makeBasis(_px, _py, _pz));
+}
+function placeShip(obj, p, q) { obj.matrix.compose(p, q, _one3); obj.matrixWorldNeedsUpdate = true; }
+const _one3 = new THREE.Vector3(1, 1, 1);
+const BERTH_P = [0, 1, 2, 3].map((i) => { const p = new THREE.Vector3(), q = new THREE.Quaternion(); berthPose(i, p, q, i === 2 ? 29.5 : -1); return { p, q }; });
+berthPose(0, PORT.p, PORT.q);
+// jadwal shuttle terjadwal (berth 2): sandar 120 s, berangkat 90 s, hilang 30 s, datang 90 s
+const AI = { period: 330, p: new THREE.Vector3(), q: new THREE.Quaternion() };
+function aiShuttleState(t) {
+  const T = ((t % AI.period) + AI.period) % AI.period, B = BERTH_P[1];
+  const out = (tau) => { const back = Math.min(1, tau / 8), eb = back * back * (3 - 2 * back), d = tau > 8 ? (tau - 8) * (tau - 8) : 0;
+    const u = _pb.set(Math.cos(PORT.berthAng[1]), Math.sin(PORT.berthAng[1]), 0);
+    return AI.p.copy(B.p).addScaledVector(u, 14 * eb).add(_px.set(0, 0, -d)); };
+  if (T < 120) return { phase: 'sandar', vis: true, burn: 0, p: AI.p.copy(B.p), left: 120 - T };
+  if (T < 210) { const tau = T - 120; return { phase: 'berangkat', vis: true, burn: tau > 8 ? 1 : 0, p: out(tau), left: 0 }; }
+  if (T < 240) return { phase: 'di luar', vis: false, burn: 0, p: AI.p, left: 0, arrive: 240 - T + 90 };
+  const tau = AI.period - T; return { phase: 'tiba', vis: true, burn: tau > 8 ? 0.8 : 0, p: out(tau), left: 0, arrive: tau };
+}
+placeShip(SHIPS.cargo, BERTH_P[2].p, BERTH_P[2].q);
+
+// --- terminal di plaza spaceport ---
+const TERM = { s: 110, za: 196, w: 120, d: 64, h: 11 };
+{
+  const G = new THREE.Group(), P = [], GL = [], m4 = new THREE.Matrix4();
+  const { w, d, h } = TERM, STONE = [0.8, 0.79, 0.76], COLW = [0.9, 0.91, 0.92], MUL = [0.25, 0.27, 0.3], TEAL = [0.1, 0.45, 0.5];
+  P.push({ geo: bx(w, 0.08, d, 0, 0.04, 0), color: STONE }, { geo: bx(w + 8, 0.9, d + 8, 0, h + 0.45, 0), color: COLW }, { geo: bx(w + 8.2, 0.3, d + 8.2, 0, h - 0.1, 0), color: [0.35, 0.37, 0.4] });
+  const cols = [];
+  for (let x = -w / 2; x <= w / 2 + 0.1; x += 20) for (const z of [-d / 2, d / 2]) cols.push([x, z]);
+  for (let z = -d / 2 + 16; z < d / 2; z += 16) for (const x of [-w / 2, w / 2]) cols.push([x, z]);
+  for (const x of [-30, 0, 30]) cols.push([x, 0]);
+  for (const [x, z] of cols) P.push({ geo: bx(0.7, h, 0.7, x, h / 2, z), color: COLW });
+  // dinding kaca + mullion; pintu: selatan (+z, ke kota) x -6..6, barat (-x, ke halte trem) z -5..5
+  const wall = (x0, z0, x1, z1, gap) => {
+    const L = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / L, uz = (z1 - z0) / L;
+    for (let t = 0; t < L; t += 5) {
+      const a = t, b = Math.min(L, t + 5), mx = x0 + ux * (a + b) / 2, mz = z0 + uz * (a + b) / 2;
+      if (gap && gap(mx, mz)) continue;
+      GL.push(bx(ux ? b - a : 0.08, h, uz ? b - a : 0.08, mx, h / 2, mz));
+      P.push({ geo: bx(ux ? 0.12 : 0.14, h, uz ? 0.12 : 0.14, x0 + ux * a, h / 2, z0 + uz * a), color: MUL });
+    }
+    P.push({ geo: bx(ux ? L : 0.16, 0.14, uz ? L : 0.16, (x0 + x1) / 2, 3.2, (z0 + z1) / 2), color: MUL });
+  };
+  wall(-w / 2, -d / 2, w / 2, -d / 2); wall(w / 2, -d / 2, w / 2, d / 2);
+  wall(-w / 2, d / 2, w / 2, d / 2, (x) => Math.abs(x) < 6); wall(-w / 2, -d / 2, -w / 2, d / 2, (x, z) => Math.abs(z) < 5);
+  // konter check-in + dinding merek
+  for (const x of [-36, -18, 18, 36]) { P.push({ geo: bx(6, 1.1, 1.2, x, 0.55, 14), color: [0.3, 0.26, 0.22] }, { geo: bx(6, 2.8, 0.2, x, 1.4, 16.2), color: TEAL }); }
+  // papan keberangkatan (bingkai)
+  P.push({ geo: bx(11, 3.8, 0.35, 0, 6.6, 4), color: [0.12, 0.13, 0.14] }, { geo: bx(0.2, 5, 0.2, -4, h - 2.4, 4), color: MUL }, { geo: bx(0.2, 5, 0.2, 4, h - 2.4, 4), color: MUL });
+  const mesh = new THREE.Mesh(mergeSimple(P.map(({ geo, color }) => ({ geo, color }))), new THREE.MeshBasicMaterial({ vertexColors: true }));
+  const glass = new THREE.Mesh(mergeSimple(GL.map((geo) => ({ geo, color: [1, 1, 1] }))), new THREE.MeshBasicMaterial({ color: 0xa8cfe0, transparent: true, opacity: 0.16, depthWrite: false, vertexColors: true }));
+  glass.renderOrder = 7; glass.userData.noShadow = true;
+  // papan keberangkatan (kanvas) + papan nama gedung
+  const bc = document.createElement('canvas'); bc.width = 1024; bc.height = 352;
+  const btex = new THREE.CanvasTexture(bc); btex.anisotropy = 4;
+  const board = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 3.5).translate(0, 6.6, 4.19), new THREE.MeshBasicMaterial({ map: btex }));
+  board.userData.noLight = true; board.userData.noShadow = true;
+  const sc = document.createElement('canvas'); sc.width = 1024; sc.height = 128;
+  { const g = sc.getContext('2d'); g.fillStyle = '#123a40'; g.fillRect(0, 0, 1024, 128); g.fillStyle = '#e8f4f4'; g.font = 'bold 64px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('SPACEPORT  ·  DERMAGA SUMBU', 512, 66); }
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(26, 3.2).translate(0, h - 1.9, d / 2 + 0.3), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc) }));
+  sign.userData.noShadow = true;
+  G.add(mesh, glass, board, sign);
+  // bangku ruang tunggu menghadap jendela (ke end cap A dan dermaga)
+  const seats = [];
+  for (let z = -24; z <= -12; z += 3) for (let x = -40; x <= 40; x += 2.1) if (Math.abs(x) > 4) seats.push([x, z]);
+  const bm = new THREE.InstancedMesh(FURN.GEO.bench, new THREE.MeshBasicMaterial({ vertexColors: true }), seats.length), mm = new THREE.Matrix4();
+  seats.forEach(([x, z], i) => bm.setMatrixAt(i, mm.makeRotationY(Math.PI).setPosition(x, 0.05, z)));
+  G.add(bm);
+  surfaceMatrix(m4, TERM.s / R, TERM.za, 0); G.matrixAutoUpdate = false; G.matrix.copy(m4);
+  scene.add(G);
+  TERM.board = { cv: bc, tex: btex, t: -1 };
+  // kolisi (lokal x = s, z = za)
+  const S = TERM.s, Z = TERM.za, C = (x, z, hx, hz) => addCollider(S + x, Z + z, hx, hz);
+  C(0, -d / 2, w / 2, 0.2); C(w / 2, 0, 0.2, d / 2);
+  C(-(w / 2 + 6) / 2, d / 2, (w / 2 - 6) / 2, 0.2); C((w / 2 + 6) / 2, d / 2, (w / 2 - 6) / 2, 0.2);
+  C(-w / 2, -(d / 2 + 5) / 2, 0.2, (d / 2 - 5) / 2); C(-w / 2, (d / 2 + 5) / 2, 0.2, (d / 2 - 5) / 2);
+  for (const [x, z] of cols) C(x, z, 0.4, 0.4);
+  for (const x of [-36, -18, 18, 36]) C(x, 14.5, 3, 1.0);
+  for (let z = -24; z <= -12; z += 3) { C(-22, z, 18.2, 0.35); C(22, z, 18.2, 0.35); }
+}
+function drawDepartureBoard() {
+  const B = TERM.board, g = B.cv.getContext('2d'), W = B.cv.width;
+  g.fillStyle = '#07090c'; g.fillRect(0, 0, W, B.cv.height);
+  g.font = 'bold 30px ui-monospace, monospace'; g.textBaseline = 'middle';
+  g.fillStyle = '#f2c14e'; g.fillText('KEBERANGKATAN · DEPARTURES', 24, 30);
+  g.fillStyle = '#9aa4ad'; g.textAlign = 'right'; g.fillText(fmtHour(clock.hour), W - 24, 30); g.textAlign = 'left';
+  const ai = aiShuttleState(clock.sim), mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const rows = [
+    ['KS-07', 'Orbit Saturnus (bebas)', 'B1', PORT.mode === 'idle' ? 'SIAP · naik di 8' : PORT.mode === 'docked' ? 'NAIK' : 'TERBANG'],
+    ['KS-12', 'Titan · Kraken Mare', 'B2', ai.phase === 'sandar' ? `NAIK · ${mmss(ai.left)}` : ai.phase === 'berangkat' ? 'BERANGKAT' : ai.phase === 'tiba' ? `TIBA · ${mmss(ai.arrive)}` : 'DI JALAN'],
+    ['CG-3', 'Kargo · Enceladus', 'B3', 'BONGKAR MUAT'],
+    ['TG-1', 'Kapal tunda · patroli', '-', 'BERTUGAS'],
+    ['KS-21', 'Rhea · stasiun riset', 'B4', `${fmtHour((clock.hour + 3.5) % 24)} · TERJADWAL`],
+  ];
+  g.font = '28px ui-monospace, monospace';
+  rows.forEach((r, i) => {
+    const y = 90 + i * 52;
+    g.fillStyle = i % 2 ? '#0d1116' : '#10151b'; g.fillRect(12, y - 24, W - 24, 48);
+    g.fillStyle = '#e8eef2'; g.fillText(r[0], 24, y); g.fillText(r[1], 170, y); g.fillText(r[2], 640, y);
+    g.fillStyle = /NAIK|SIAP/.test(r[3]) ? '#7dd87d' : /BERANGKAT|TIBA|TERBANG/.test(r[3]) ? '#f2c14e' : '#9aa4ad'; g.fillText(r[3], 720, y);
+  });
+  B.tex.needsUpdate = true;
+}
+drawDepartureBoard();
+
+// --- aksi: terowongan, naik, lepas sandar, terbang, sandar otomatis, keluar ---
+function portEnterPod(dir) {                                        // dir -1 = ke dermaga, +1 = kembali ke hub
+  PORT.pod.dir = dir; PORT.pod.v = 0; PORT.pod.z = dir < 0 ? PORT.zHubPod : PORT.zDockPod;
+  const F = player.float; if (!F.up.lengthSq()) { upAt(LIFT.theta, F.up); tanAt(LIFT.theta, F.tan); }
+  player.state = 'pod'; player.heading = dir < 0 ? Math.PI : 0; player.pitch = 0;
+  setLabText(dir < 0 ? 'Kapsul terowongan: meluncur 766 m ke dermaga despun (Shift = 5x).' : 'Kembali ke hub nol-g.');
+}
+function stepPod(dt) {
+  const P = PORT.pod, total = PORT.zHubPod - PORT.zDockPod, fast = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 5 : 1;
+  const trav = P.dir < 0 ? PORT.zHubPod - P.z : P.z - PORT.zDockPod, rem = Math.max(0, total - trav);
+  P.v = Math.min(70, Math.sqrt(2 * 4 * (trav + 0.5)), Math.sqrt(2 * 4 * rem)) * fast;
+  P.z += P.dir * Math.min(P.v * dt, rem);
+  player.mode = 'kapsul terowongan';
+  if (rem <= 1e-3) {
+    if (P.dir < 0) portBoard();
+    else { const F = player.float; F.pos.set(0, 0, PORT.zHubPod + 2); F.vel.set(0, 0, 0); player.state = 'float'; }
+  }
+}
+function portBoard() {                                              // masuk kokpit shuttle di berth 1
+  if (PORT.mode === 'idle') { PORT.mode = 'docked'; berthPose(0, PORT.p, PORT.q); PORT.v.set(0, 0, 0); }
+  PORT.view = 'cockpit'; PORT.look.yaw = 0; PORT.look.pitch = -0.05;
+  player.state = 'ship'; player.mode = 'di kokpit';
+  ext.flight = true;
+  if (!ext.active) toggleExterior();
+  camera.near = 0.3; camera.updateProjectionMatrix();
+  lockPointer();
+  setLabText('Di kokpit shuttle KS-07. E = lepas sandar, L = keluar ke terowongan.');
+}
+function portLeaveShip(toHub) {                                    // keluar kokpit (kapal kembali parkir di berth 1)
+  ext.flight = false;
+  if (ext.active) toggleExterior();
+  PORT.mode = 'idle'; berthPose(0, PORT.p, PORT.q); PORT.v.set(0, 0, 0);
+  if (toHub) portEnterPod(1);
+}
+function portAction() {
+  if (PORT.mode === 'docked') { PORT.mode = 'undock'; PORT.t = 0; setLabText('Lepas sandar: menjauh 15 m dari cincin, lalu kendali di tanganmu.'); }
+  else if (PORT.mode === 'fly' && portCanDock()) {
+    PORT.mode = 'autodock'; PORT.t = 0; PORT.from = { p: PORT.p.clone(), v: PORT.v.clone(), q: PORT.q.clone() };
+    PORT.from.T = Math.max(8, Math.min(40, PORT.p.distanceTo(BERTH_P[0].p) / 6));
+    setLabText('Sandar otomatis ke berth 1.');
+  }
+}
+const portCanDock = () => PORT.p.distanceTo(BERTH_P[0].p) < 400 && PORT.v.length() < 30;
+function portKey(code) {
+  if (code === 'KeyE') { portAction(); return true; }
+  if (code === 'KeyL') { if (PORT.mode === 'docked') portLeaveShip(true); return true; }
+  if (code === 'KeyV') { PORT.view = PORT.view === 'cockpit' ? 'chase' : 'cockpit'; camera.near = PORT.view === 'cockpit' ? 0.3 : 1.5; camera.updateProjectionMatrix(); return true; }
+  if (code === 'KeyX') { PORT.brake = !PORT.brake; return true; }
+  return ['KeyZ', 'KeyC', 'KeyR', 'KeyF', 'KeyB', 'KeyG', 'KeyT', 'KeyO', 'Space'].includes(code);
+}
+const _qa = new THREE.Quaternion(), _va = new THREE.Vector3(), _vb = new THREE.Vector3();
+function portMouse(dx, dy) {
+  if (PORT.mode === 'fly' && PORT.view === 'cockpit' || PORT.mode === 'fly' && PORT.view === 'chase') {   // mouse = arah hidung
+    _qa.setFromAxisAngle(_va.set(0, 1, 0), -dx * 0.0022); PORT.q.multiply(_qa);
+    _qa.setFromAxisAngle(_va.set(1, 0, 0), -dy * 0.0022); PORT.q.multiply(_qa); PORT.q.normalize();
+  } else {                                                           // sandar: melihat sekeliling kokpit
+    PORT.look.yaw = Math.max(-2.4, Math.min(2.4, PORT.look.yaw - dx * 0.003));
+    PORT.look.pitch = Math.max(-1.2, Math.min(1.3, PORT.look.pitch - dy * 0.003));
+  }
+}
+function stepPort(dt) {
+  // kapal tunda: patroli melingkar lambat di sekitar dermaga
+  { const w = TAU / 420, a = clock.sim * w, p = _pb.set(900 * Math.cos(a), 900 * Math.sin(a), -4450 + 180 * Math.sin(a * 0.5));
+    _py.set(-Math.sin(a), Math.cos(a), 0); _px.set(Math.cos(a), Math.sin(a), 0); const zf = _vb.copy(_py).negate();
+    _qa.setFromRotationMatrix(_pm.makeBasis(_va.crossVectors(_pz, zf).normalize(), _pz, zf)); placeShip(SHIPS.tug, p, _qa); }
+  // shuttle terjadwal
+  { const s = aiShuttleState(clock.sim); SHIPS.ai.visible = s.vis; placeShip(SHIPS.ai, s.p, BERTH_P[1].q);
+    SHIPS.ai.userData.glowMat.color.setRGB(1.5 * s.burn, 1.1 * s.burn, 2.4 * s.burn); }
+  if (player.state === 'pod') stepPod(dt);
+  let thr = 0;
+  if (PORT.mode === 'undock') {
+    PORT.t += dt; const e = Math.min(1, PORT.t / 5), k = e * e * (3 - 2 * e);
+    const a = PORT.berthAng[0]; PORT.p.copy(BERTH_P[0].p).add(_va.set(Math.cos(a), Math.sin(a), 0).multiplyScalar(15 * k));
+    if (e >= 1) { PORT.mode = 'fly'; PORT.v.set(0, 0, 0); PORT.view = PORT.view || 'cockpit'; setLabText('Kendali manual. W/S dorong, mouse arah, Z/C guling, Shift boost, X rem, E sandar saat dekat.'); }
+  } else if (PORT.mode === 'autodock') {
+    const F = PORT.from; PORT.t += dt; const u = Math.min(1, PORT.t / F.T), T = F.T;
+    const h00 = 2 * u ** 3 - 3 * u * u + 1, h10 = u ** 3 - 2 * u * u + u, h01 = -2 * u ** 3 + 3 * u * u;   // Hermite: kecepatan awal dijaga, berhenti di berth
+    PORT.p.copy(F.p).multiplyScalar(h00).addScaledVector(F.v, h10 * T).addScaledVector(BERTH_P[0].p, h01);
+    PORT.q.slerpQuaternions(F.q, BERTH_P[0].q, u * u * (3 - 2 * u));
+    thr = 0.3;
+    if (u >= 1) { PORT.mode = 'docked'; PORT.v.set(0, 0, 0); setLabText('Sudah sandar di berth 1. E = lepas sandar lagi, L = keluar ke terowongan.'); }
+  } else if (PORT.mode === 'fly') {
+    const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+    const sx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0), sy = (keys.has('KeyR') || keys.has('Space') ? 1 : 0) - (keys.has('KeyF') ? 1 : 0);
+    const roll = (keys.has('KeyC') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyZ') || keys.has('ArrowLeft') ? 1 : 0);
+    const boost = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 10 : 1;
+    if (roll) { _qa.setFromAxisAngle(_va.set(0, 0, 1), -roll * 0.9 * dt); PORT.q.multiply(_qa).normalize(); }
+    _va.set(sx * PORT.A_RCS, sy * PORT.A_RCS, -f * PORT.A_MAIN * boost).applyQuaternion(PORT.q);
+    if (PORT.brake) { const sp = PORT.v.length(), a = Math.min(sp / dt, PORT.A_MAIN * 3); if (sp > 1e-4) _va.addScaledVector(PORT.v, -a / sp); if (sp < 0.05) PORT.brake = false; }
+    PORT.v.addScaledVector(_va, dt); PORT.p.addScaledVector(PORT.v, dt);
+    thr = Math.max(0, f) * (boost > 1 ? 1 : 0.55) + (PORT.brake ? 0.4 : 0);
+    // jangan menembus stasiun: silinder + kerah end cap, batang dermaga
+    const r = Math.hypot(PORT.p.x, PORT.p.y), RC = R_OUT + HULL.collarT + 12, ZC = HALF_L + HULL.collarOut + 12;
+    if (Math.abs(PORT.p.z) < ZC && r < RC) {
+      if (RC - r < ZC - Math.abs(PORT.p.z)) { const k = RC / r; PORT.p.x *= k; PORT.p.y *= k; const vr = (PORT.v.x * PORT.p.x + PORT.v.y * PORT.p.y) / RC; if (vr < 0) { PORT.v.x -= vr * PORT.p.x / RC; PORT.v.y -= vr * PORT.p.y / RC; } }
+      else { const sg = Math.sign(PORT.p.z); PORT.p.z = sg * ZC; if (PORT.v.z * sg < 0) PORT.v.z = 0; }
+    }
+    if (PORT.p.z < -HALF_L && PORT.p.z > PORT.zArm - 70 && r < 26) { const k = 26 / Math.max(r, 1e-3); PORT.p.x *= k; PORT.p.y *= k; }
+  }
+  SHIPS.player.userData.glowMat.color.setRGB(1.5 * thr, 1.1 * thr, 2.4 * thr);
+}
+const _camQ = new THREE.Quaternion(), _eul = new THREE.Euler(0, 0, 0, 'YXZ');
+function updateFlightCamera() {
+  scene.rotation.z = OMEGA * clock.sim;
+  updateCrawlers(1 / 60);
+  if (PORT.view === 'cockpit') {
+    _eul.set(PORT.mode === 'fly' ? 0 : PORT.look.pitch, PORT.mode === 'fly' ? 0 : PORT.look.yaw, 0);
+    camera.position.copy(PORT.eye).applyQuaternion(PORT.q).add(PORT.p);
+    camera.quaternion.copy(PORT.q).multiply(_camQ.setFromEuler(_eul));
+  } else {
+    camera.position.copy(_va.set(0, 7, 34).applyQuaternion(PORT.q).add(PORT.p));
+    camera.quaternion.copy(PORT.q).multiply(_camQ.setFromAxisAngle(_vb.set(1, 0, 0), -0.12));
+  }
+}
+function updatePortVisual() {
+  DOCK.rotation.z = -OMEGA * clock.sim;                             // despun: diam di ruang inersia
+  placeShip(SHIPS.player, PORT.p, PORT.q);
+  COCKPIT.visible = ext.flight && PORT.view === 'cockpit';
+  SHIPS.player.userData.hull.visible = SHIPS.player.userData.parts.visible = !COCKPIT.visible;
+  PODG.visible = player.state === 'pod'; if (PODG.visible) PODG.position.set(0, 0, PORT.pod.z);
+  const T = clock.sim, strobe = (T % 1.3) < 0.08, beacon = (T % 2) < 1;
+  NAV.strobe.color.setScalar(strobe ? 6 : 0.05);
+  NAV.beacon.color.setRGB(beacon ? 3 : 0.3, beacon ? 1.6 : 0.15, beacon ? 0.2 : 0.02);
+  NAV.guide.color.setRGB(0.3, 1.2 + 1.2 * Math.sin(T * 4), 3);
+  if (Math.floor(T) !== TERM.board.t) { TERM.board.t = Math.floor(T); drawDepartureBoard(); if (COCKPIT.visible) drawCockpitScreen(); }
+}
+function drawCockpitScreen() {
+  const { cv, tex } = COCKPIT.userData, g = cv.getContext('2d');
+  g.fillStyle = '#041014'; g.fillRect(0, 0, 512, 128); g.font = 'bold 26px ui-monospace, monospace'; g.fillStyle = '#6ff0c8';
+  const sp = PORT.v.length(), d = PORT.p.distanceTo(BERTH_P[0].p), r = PORT.p.length();
+  g.fillText(`V ${sp.toFixed(1)} m/s`, 14, 34); g.fillText(`BERTH ${d < 1000 ? d.toFixed(0) + ' m' : (d / 1000).toFixed(2) + ' km'}`, 260, 34);
+  g.fillText(`STASIUN ${(r / 1000).toFixed(2)} km`, 14, 76); g.fillText(PORT.brake ? 'REM' : PORT.mode.toUpperCase(), 330, 76);
+  g.fillStyle = '#2c7a64'; g.fillRect(14, 100, 484 * Math.min(1, sp / 300), 12);
+  tex.needsUpdate = true;
+}
+function portPrompt() {
+  if (player.state === 'pod') { const P = PORT.pod, rem = P.dir < 0 ? P.z - PORT.zDockPod : PORT.zHubPod - P.z; return `Kapsul terowongan · ${P.v.toFixed(1)} m/s · sisa ${Math.abs(rem).toFixed(0)} m · Shift = 5x`; }
+  const sp = PORT.v.length(), d = PORT.p.distanceTo(BERTH_P[0].p), fmt = (x) => x < 1000 ? `${x.toFixed(0)} m` : `${(x / 1000).toFixed(2)} km`;
+  const cam = `V ${PORT.view === 'cockpit' ? 'kamera belakang' : 'kokpit'}`;
+  if (PORT.mode === 'docked') return `Shuttle KS-07 · sandar di berth 1 · E lepas sandar · L keluar ke terowongan · mouse melihat · ${cam}`;
+  if (PORT.mode === 'undock') return 'Lepas sandar...';
+  if (PORT.mode === 'autodock') return `Sandar otomatis · ${fmt(d)}`;
+  return `${sp.toFixed(1)} m/s · berth ${fmt(d)} · W/S dorong · A/D geser · R/F naik-turun · Z/C guling · mouse arah · Shift boost 10x · X rem${PORT.brake ? ' (aktif)' : ''} · ${portCanDock() ? 'E SANDAR OTOMATIS · ' : ''}${cam}`;
+}
+SPOTS.spaceport = { s: TERM.s, za: TERM.za + 22, heading: 180, pitch: 4, name: 'Terminal spaceport' };
 
 // --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
 hub.userData.noLight = true;
@@ -5803,6 +6275,7 @@ function frame(now) {
   while (acc >= STEP && n < CONFIG.maxSubSteps) { physicsStep(STEP); acc -= STEP; n++; }
   if (n === CONFIG.maxSubSteps) acc = 0;           // cegah spiral lambat
   updateCamera();
+  updatePortVisual();
   updateReal();
   updateFar();
   updateClouds(dt);
@@ -5831,7 +6304,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
