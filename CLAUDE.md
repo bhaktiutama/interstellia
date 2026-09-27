@@ -1,16 +1,40 @@
-# CLAUDE.md - Cooper Station
+# CLAUDE.md - Aplikasi multi-experience (nama kerja: Lazarus)
 
-Simulasi silinder O'Neill (terinspirasi Cooper Station) yang mengorbit Saturnus. Satu file HTML, three.js, bisa dijelajahi berjalan kaki. Dibangun bertahap; tiap tahap diuji oleh pemilik proyek (Bhakti) di PC GTX 1060 dan MacBook M1.
+Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utama (`index.html`). Proyek penggemar, tidak berafiliasi dengan studio film mana pun. Pemilik proyek: Bhakti; diuji di PC GTX 1060 dan MacBook M1.
+
+## Struktur repo
+
+| Path | Isi |
+| --- | --- |
+| `index.html` | Menu utama. Nama aplikasi dan daftar experience ada di konstanta `APP` dan `EXPERIENCES` |
+| `experiences/<id>/index.html` | Satu experience = satu halaman HTML mandiri, plus `preview.jpg` (16:9) untuk kartu menu |
+| `experiences/cooper-station/` | Silinder O'Neill di orbit Saturnus (paling lengkap, lihat bagian di bawah) |
+| `experiences/gargantua/` | Lubang hitam berputar (WebGL mandiri) |
+| `docs/app/` | Dokumen tingkat aplikasi (penamaan, arsitektur) |
+| `docs/<id>/` | Konsep dan rencana per experience |
+| `tools/qc_load.py` | Cek halaman termuat tanpa error |
+| `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
+
+## Aturan aplikasi
+
+- Menambah experience: buat `experiences/<id>/index.html` + `preview.jpg`, lalu tambahkan entri di `EXPERIENCES` (ready: true). Tiap experience wajib punya tautan kembali ke `../../index.html`.
+- Tiap experience tetap halaman terpisah (memori GPU bersih saat pindah). Kode bersama dipindah ke `shared/` bertahap, jangan membongkar Cooper Station sekaligus.
+- Rencana experience berikutnya: Planet Ombak (dunia air, dilatasi waktu), Penerbangan Kestrel (shuttle KS-07 dari Cooper Station). Usulan nama: `docs/app/penamaan.md`.
+- Jangan memakai judul film, logo, huruf judul, musik, cuplikan, atau desain kendaraan film.
+
+# Experience: Cooper Station
+
+Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/cooper-station/index.html`), three.js, bisa dijelajahi berjalan kaki. Dibangun bertahap.
 
 ## Aturan kerja
 
 - Bahasa: Indonesia untuk teks UI, komentar kode, dokumen, dan balasan.
-- Satu file: semua kode ada di `index.html` (CSS + JS modul). Tidak ada build step, tidak ada addon three.js.
+- Satu file: semua kode Cooper Station ada di `experiences/cooper-station/index.html` (CSS + JS modul). Tidak ada build step, tidak ada addon three.js.
 - three.js 0.186.1 dari importmap `https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js`.
 - "Pertahankan yang ada": fitur lama tidak boleh hilang atau berubah tanpa diminta.
 - Uji: pemilik proyek yang menguji visual dan FPS. Cukup cek halaman termuat tanpa error (lihat `tools/`). Jangan menghabiskan waktu dengan screenshot berulang.
 - Hak cipta: jangan meniru desain kendaraan/musik film (Endurance, Ranger, musik Interstellar). Desain pesawat orisinal (shuttle "Kestrel" KS-07).
-- Dokumen rencana ditulis sebagai file .md di `docs/` (pemilik membaca di ponsel).
+- Dokumen rencana ditulis sebagai file .md di `docs/<id>/` (pemilik membaca di ponsel).
 - Format laporan: ringkasan dulu, tabel, tanpa em dash.
 
 ## Angka dasar
@@ -69,4 +93,4 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 10-10f | Trem berinterior, mobil, lampu jalan, preset, kamera luar, lift dan hub, baseball |
 | 11a-11d | Cuaca dinamis, sunrays, perabot kota, spaceport dan shuttle |
 
-Rencana berikutnya: `docs/rencana-tahap-12-cooper-station.md`.
+Rencana berikutnya: `docs/cooper-station/rencana-tahap-12-cooper-station.md`.
