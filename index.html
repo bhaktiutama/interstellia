@@ -83,7 +83,20 @@
   .hidden-ui #lab { display: none; }
   #touchbtns { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 150px); }
   #touchbtns button { padding: 8px 10px; }
-  @media (max-width: 520px) { body.lab-open #hud { display: none; } }
+  @media (max-width: 640px) {
+    #lab { display: none; left: 12px; right: 12px; width: auto; }
+    body.lab-open #lab { display: block; }
+    body.lab-open #hud { display: none; }
+  }
+  #prompt { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 12px;
+    background: var(--panel); border: 1px solid var(--accent); border-radius: 6px; color: #fff; pointer-events: none; white-space: nowrap; }
+  #plaque, #map { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,0.45); z-index: 5; }
+  #plaque .card, #map .card { background: #14171c; border: 1px solid var(--line); border-radius: 10px; padding: 16px; max-width: 420px; }
+  #plaque p { white-space: pre-wrap; margin: 0 0 12px; color: #fff; line-height: 1.55; }
+  #plaque button, #map button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+  #map .mhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; color: var(--accent); }
+  #map canvas { display: block; border-radius: 4px; max-width: 100%; }
+  #map .mnote { color: var(--muted); font-size: 10.5px; margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -91,7 +104,10 @@
 <div id="cross"></div>
 <div id="hud"></div>
 <div id="joy" hidden><div id="knob"></div></div>
-<div id="touchbtns"><button id="btnHud" type="button">HUD</button><button id="btnLab" type="button">Uji</button><button id="btnRun" type="button">Lari</button><button id="btnAuto" type="button">Otomatis</button><button id="btnJump" type="button">Lompat</button><button id="btnThrow" type="button">Lempar</button><button id="btnLift" type="button">Lift</button></div>
+<div id="touchbtns"><button id="btnHud" type="button">HUD</button><button id="btnLab" type="button">Uji</button><button id="btnRun" type="button">Lari</button><button id="btnAuto" type="button">Otomatis</button><button id="btnJump" type="button">Lompat</button><button id="btnThrow" type="button">Lempar</button><button id="btnAct" type="button">Aksi</button><button id="btnMap" type="button">Peta</button></div>
+<div id="prompt" hidden></div>
+<div id="plaque" hidden><div class="card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
+<div id="map" hidden><div class="card"><div class="mhead"><span>Peta silinder (dibuka)</span><button id="mapClose" type="button">Tutup (M)</button></div><canvas id="mapCanvas"></canvas><div class="mnote">Kiri-kanan = keliling 6,28 km · bawah-atas = sumbu 8 km dari end cap A</div></div></div>
 <div id="lab">
   <div id="labHead"><span>Uji fisika</span><span class="chev">&#9662;</span></div>
   <div class="body">
@@ -115,7 +131,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 3 gray-box · Saturnus lewat strip jendela · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 4 gray-box · kota, museum Cooper, baseball, trem, peta · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -123,13 +139,14 @@
       <tr class="desk-only"><td>Space</td><td>Lompat (di hub: naik)</td></tr>
       <tr class="desk-only"><td>B · G</td><td>Lempar bola · jatuhkan bola dari ketinggian</td></tr>
       <tr class="desk-only"><td>L</td><td>Lift ke sumbu (0 g) / turun lagi; Shift = 5x cepat</td></tr>
+      <tr class="desk-only"><td>E · M</td><td>Aksi (naik/turun trem, baca plakat, lift) · peta</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
       <tr class="desk-only"><td>O</td><td>Jalan otomatis ke depan</td></tr>
       <tr class="desk-only"><td>X</td><td>Turbo 50 m/s (debug)</td></tr>
       <tr class="desk-only"><td>R · H · Esc</td><td>Kembali ke titik awal · sembunyikan HUD · lepas kursor</td></tr>
       <tr class="touch-only"><td>Jempol kiri</td><td>Joystick untuk berjalan</td></tr>
       <tr class="touch-only"><td>Jempol kanan</td><td>Geser untuk melihat</td></tr>
-      <tr class="touch-only"><td>Tombol</td><td>Lompat, Lempar, Lift, Uji (panel fisika)</td></tr>
+      <tr class="touch-only"><td>Tombol</td><td>Aksi, Peta, Lompat, Lempar, Uji (panel fisika, termasuk lift)</td></tr>
     </table>
     <button id="go" type="button">Mulai</button>
   </div>
@@ -174,7 +191,7 @@ const CONFIG = {
   gridAlong: 100,        // garis grid sepanjang sumbu (m)
   markerEvery: 500,      // tiang penanda sepanjang sumbu (m)
   markerAround: 8,       // tiang penanda di keliling
-  spawn: { za: 700, theta: 0.06, heading: 0, pitch: 4 },   // theta 0,06 rad = 60 m dari garis acuan   // za = jarak dari end cap A (m)
+  spawn: { za: 750, theta: 0.0, heading: 0, pitch: 4 },    // di persimpangan jalan kota, dekat halte trem Kota; za = jarak dari end cap A (m)
   // zona sepanjang sumbu, jarak dari end cap A (m) -> warna gray-box
   zones: [
     { name: 'Spaceport',    from: 0,    to: 150,  color: '#8b9099' },
@@ -572,6 +589,226 @@ scene.add(hub);
   scene.add(beams);
 }
 
+
+/* =====================================================================
+   TAHAP 4: KONTEN GRAY-BOX
+   Semua posisi dalam (s, za): s = theta * R (busur keliling, m), za = jarak dari end cap A (m).
+   Objek dibuat sekali dengan seed tetap. Kolisi = kotak AABB di bidang (s, za) + spatial hash.
+   ===================================================================== */
+const CIRC = TAU * R;
+const STREET = CIRC / 78;                                       // 78 blok keliling, sekitar 80,5 m
+const CITY = { za0: 190, za1: 1150, blockZ: 80 };
+const TRAM = { s: CIRC - STREET, stops: [
+  { za: 120, name: 'Spaceport' }, { za: 750, name: 'Kota' }, { za: 2030, name: 'Museum Cooper' },
+  { za: 4400, name: 'Pertanian' }, { za: 7200, name: 'Utilitas' } ], len: 18, maxV: 25, accel: 1.0, dwell: 12 };
+const COOPER = { s: 40, za: 2062, w: 14, d: 10, hWall: 3.0 };   // rumah Cooper: 14 m (keliling) x 10 m (sumbu)
+const FIELD = { s: 150, za: 1300 };                             // home plate lapangan baseball
+const wrapS = (d) => { d = ((d + CIRC / 2) % CIRC + CIRC) % CIRC - CIRC / 2; return d; };
+let seedRng = 20260926;
+const rnd = () => ((seedRng = (seedRng * 1664525 + 1013904223) >>> 0) / 4294967296);
+
+// --- kolisi -----------------------------------------------------------
+const COL = { cell: 32, items: [], grid: new Map() };
+function addCollider(s, za, hs, hz) {
+  const i = COL.items.length;
+  COL.items.push([s, za, hs, hz]);
+  const r = 0.5;
+  for (let cs = Math.floor((s - hs - r) / COL.cell); cs <= Math.floor((s + hs + r) / COL.cell); cs++)
+    for (let cz = Math.floor((za - hz - r) / COL.cell); cz <= Math.floor((za + hz + r) / COL.cell); cz++) {
+      const key = ((cs % 1000) + 1000) % 1000 * 1000 + cz;
+      let arr = COL.grid.get(key); if (!arr) COL.grid.set(key, arr = []);
+      arr.push(i);
+    }
+}
+// dorong pemain keluar dari kotak yang ditabrak; mengembalikan true bila ada tabrakan
+function collide(radius) {
+  let s = player.theta * R, za = player.za, hit = false;
+  const cs = ((Math.floor(s / COL.cell) % 1000) + 1000) % 1000, cz = Math.floor(za / COL.cell);
+  const arr = COL.grid.get(cs * 1000 + cz);
+  if (!arr) return false;
+  for (let pass = 0; pass < 2; pass++) for (const i of arr) {
+    const [cS, cZ, hs, hz] = COL.items[i];
+    const dx = wrapS(s - cS), dz = za - cZ;
+    const px = hs + radius - Math.abs(dx), pz = hz + radius - Math.abs(dz);
+    if (px > 0 && pz > 0) {
+      hit = true;
+      if (px < pz) s += Math.sign(dx || 1) * px; else za += Math.sign(dz || 1) * pz;
+    }
+  }
+  if (hit) { player.theta = ((s / R) % TAU + TAU) % TAU; player.za = za; }
+  return hit;
+}
+
+// --- geometri gabungan sederhana (tanpa addon) -------------------------
+function mergeSimple(parts) {           // parts: [{geo, color:[r,g,b]}], semua dijadikan non-indexed
+  const pos = [], col = [];
+  for (const { geo, color } of parts) {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    const p = g.attributes.position.array, c = g.attributes.color ? g.attributes.color.array : null;
+    for (let i = 0; i < p.length; i += 3) {
+      pos.push(p[i], p[i + 1], p[i + 2]);
+      const sh = c ? c[i] : 1;
+      col.push(color[0] * sh, color[1] * sh, color[2] * sh);
+    }
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return out;
+}
+// Matriks instance: kotak/objek di permukaan, lokal X = keliling, Y = atas, Z = sumbu, diskalakan
+const _im = new THREE.Matrix4(), _isc = new THREE.Vector3();
+function placeAt(mesh, i, s, za, sx, sy, sz, h = 0, color = null) {
+  surfaceMatrix(_im, s / R, za, h);
+  mesh.setMatrixAt(i, _im.scale(_isc.set(sx, sy, sz)));
+  if (color) mesh.setColorAt(i, color);
+}
+const _c = new THREE.Color();
+
+// --- rumah kota: 1 InstancedMesh (badan + atap pelana) ------------------
+const houseGeo = mergeSimple([
+  { geo: bakeShade(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)), color: [1, 1, 1] },
+  { geo: (() => { const g = new THREE.CylinderGeometry(0.72, 0.72, 1.02, 3, 1).rotateX(Math.PI / 2).rotateZ(Math.PI / 2).scale(0.72, 0.38, 1).translate(0, 1.18, 0);
+      const n = g.toNonIndexed(); const cc = []; const pp = n.attributes.position.array;
+      for (let i = 0; i < pp.length; i += 9) { const sh = 0.55 + 0.25 * ((i / 9) % 2); cc.push(sh, sh, sh, sh, sh, sh, sh, sh, sh); }
+      n.setAttribute('color', new THREE.Float32BufferAttribute(cc, 3)); return n; })(), color: [0.62, 0.36, 0.30] },
+]);
+const houseList = [];
+for (let bi = 0; bi < 78; bi++) {
+  for (let bz = CITY.za0; bz + CITY.blockZ <= CITY.za1 + 1; bz += CITY.blockZ) {
+    const cS = (bi + 0.5) * STREET, cZ = bz + CITY.blockZ / 2;
+    if (Math.abs(wrapS(cS - WIN.theta * R)) < STREET * 0.75) continue;          // blok di tepi Skyway dijadikan taman
+    for (const [os, oz] of [[-20, -20], [20, -20], [-20, 20], [20, 20]]) {
+      const w = 10 + rnd() * 6, d = 8 + rnd() * 4, h = 5.5 + rnd() * 3.5;
+      houseList.push([cS + os, cZ + oz, w, d, h, rnd()]);
+    }
+  }
+}
+const houses = new THREE.InstancedMesh(houseGeo, new THREE.MeshBasicMaterial({ vertexColors: true }), houseList.length);
+houseList.forEach(([s, za, w, d, h, t], i) => {
+  _c.setHSL(0.07 + t * 0.08, 0.18 + t * 0.12, 0.62 + t * 0.18);
+  placeAt(houses, i, s, za, w, h, d, 0, _c);
+  addCollider(s, za, w / 2, d / 2);
+});
+houses.instanceMatrix.needsUpdate = true; houses.instanceColor.needsUpdate = true; houses.frustumCulled = false;
+scene.add(houses);
+
+// --- pohon: 1 InstancedMesh (batang + kerucut daun) ---------------------
+const treeGeo = mergeSimple([
+  { geo: new THREE.CylinderGeometry(0.25, 0.35, 2.4, 4, 1, true).translate(0, 1.2, 0), color: [0.42, 0.30, 0.20] },   // tanpa tutup: 8 segitiga
+  { geo: new THREE.ConeGeometry(2.6, 7.5, 6, 1, true).translate(0, 5.6, 0), color: [0.30, 0.48, 0.26] },               // tanpa alas: 6 segitiga
+]);
+{ // bayangan palsu: sisi kerucut diberi variasi terang dari normal
+  const c = treeGeo.attributes.color.array, p = treeGeo.attributes.position.array;
+  for (let i = 0; i < p.length; i += 3) { const k = 0.8 + 0.2 * Math.sign(p[i]) * Math.min(1, Math.abs(p[i]) / 2); c[i] *= k; c[i + 1] *= k; c[i + 2] *= k; }
+}
+const treeList = [];
+const nearTram = (s) => Math.abs(wrapS(s - TRAM.s)) < 10;
+const nearWin = (s) => Math.abs(wrapS(s - WIN.theta * R)) < WIN.width / 2 + 5;
+for (let i = 0; i < 700; i++) {                                 // taman di zona rekreasi
+  const s = rnd() * CIRC, za = 1215 + rnd() * 570;
+  if (nearTram(s) || nearWin(s) || s < 5 || s > CIRC - 5) continue;
+  const dx = wrapS(s - FIELD.s), dz = za - FIELD.za;
+  if (Math.hypot(dx, dz) < 140 && dz > -20) continue;           // kosongkan lapangan baseball
+  treeList.push([s, za, 0.8 + rnd() * 0.5]);
+}
+for (let za = 2500; za <= 6000; za += 500) {                    // barisan penahan angin di pertanian
+  for (let s = 12; s < CIRC - 12; s += 30) {
+    if (nearTram(s) || nearWin(s)) continue;
+    treeList.push([s, za, 0.9 + rnd() * 0.3]);
+  }
+}
+for (let bi = 0; bi < 78; bi++) {                               // taman kecil di blok tepi Skyway
+  const cS = (bi + 0.5) * STREET;
+  if (Math.abs(wrapS(cS - WIN.theta * R)) >= STREET * 0.75) continue;
+  for (let bz = CITY.za0 + 20; bz < CITY.za1; bz += 40) for (const os of [-22, 22]) {
+    const s = cS + os; if (!nearWin(s)) treeList.push([s, bz, 0.8 + rnd() * 0.4]);
+  }
+}
+const trees = new THREE.InstancedMesh(treeGeo, new THREE.MeshBasicMaterial({ vertexColors: true }), treeList.length);
+treeList.forEach(([s, za, k], i) => {
+  _c.setRGB(0.85 + rnd() * 0.25, 0.85 + rnd() * 0.3, 0.85 + rnd() * 0.2);
+  placeAt(trees, i, s, za, k, k, k, 0, _c);
+  addCollider(s, za, 0.4 * k, 0.4 * k);
+});
+trees.instanceMatrix.needsUpdate = true; trees.instanceColor.needsUpdate = true; trees.frustumCulled = false;
+scene.add(trees);
+
+// --- kotak lain (rel trem, peron, rumah Cooper, lumbung, truk, base, plakat): 1 InstancedMesh ---
+const propList = [];   // [s, za, sx, sy, sz, h, hex, collide]
+const prop = (s, za, sx, sy, sz, h, hex, col = false) => propList.push([s, za, sx, sy, sz, h, hex, col]);
+prop(TRAM.s, CONFIG.L / 2, 2.6, 0.25, CONFIG.L - 60, 0, '#4d545d');                 // rel trem
+for (const st of TRAM.stops) prop(TRAM.s + 4.2, st.za, 4, 0.45, 26, 0, '#9aa1aa');  // peron
+{ // rumah Cooper: dinding dengan pintu di sisi -za, atap datar, rak buku, meja
+  const { s, za, w, d, hWall } = COOPER, t = 0.3, wall = '#d9ccb4';
+  prop(s, za + d / 2, w, hWall, t, 0, wall, true);                                  // dinding belakang
+  prop(s - w / 2, za, t, hWall, d, 0, wall, true);                                  // dinding kiri
+  prop(s + w / 2, za, t, hWall, d, 0, wall, true);                                  // dinding kanan
+  prop(s - (w / 2 + 0.8) / 2, za - d / 2, w / 2 - 0.8, hWall, t, 0, wall, true);    // depan kiri
+  prop(s + (w / 2 + 0.8) / 2, za - d / 2, w / 2 - 0.8, hWall, t, 0, wall, true);    // depan kanan
+  prop(s, za - d / 2, 1.6, hWall - 2.2, t, 2.2, wall);                              // ambang pintu
+  prop(s, za, w + 1.2, 0.3, d + 1.2, hWall, '#7a4b3a');                             // atap
+  prop(s, za - d / 2 - 1.5, w, 0.2, 3, 0, '#b7a78a');                               // beranda
+  prop(s - 3, za + d / 2 - 0.6, 3.5, 2.2, 0.6, 0, '#6b4a33', true);                 // rak buku Murph
+  prop(s + 2, za + 1, 2, 0.8, 1.2, 0, '#8a6a4a', true);                             // meja
+  prop(s + 3, za - d / 2 - 4, 1.2, 1.4, 0.2, 0, '#2f3640');                         // plakat
+  prop(s + 30, za + 28, 16, 9, 12, 0, '#8e3b2f', true);                             // lumbung
+  prop(s - 15, za - 12, 2.1, 1.8, 5.2, 0, '#3f5f7a', true);                         // truk pickup
+}
+{ // lapangan baseball: base, gundukan pitcher
+  const b = 27.43 / Math.SQRT2;                                                       // jarak base 90 ft
+  for (const [ds, dz] of [[0, 0], [b, b], [0, 2 * b], [-b, b]]) prop(FIELD.s + ds, FIELD.za + dz, 0.45, 0.08, 0.45, 0, '#f2f2f2');
+  prop(FIELD.s, FIELD.za + 18.4, 5.5, 0.25, 5.5, 0, '#b08a5a');
+}
+const props = new THREE.InstancedMesh(bakeShade(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)),
+  new THREE.MeshBasicMaterial({ vertexColors: true }), propList.length);
+propList.forEach(([s, za, sx, sy, sz, h, hex, col], i) => {
+  placeAt(props, i, s, za, sx, sy, sz, h, _c.set(hex));
+  if (col) addCollider(s, za, sx / 2, sz / 2);
+});
+props.instanceMatrix.needsUpdate = true; props.instanceColor.needsUpdate = true; props.frustumCulled = false;
+scene.add(props);
+
+// --- garis lapangan baseball (garis foul dan pagar luar), 1 LineSegments ---
+{
+  const pts = [], P = (s, za) => pts.push(groundPoint(s / R, za, -0.03, new THREE.Vector3()));
+  const seg = (s0, z0, s1, z1, n) => { for (let i = 0; i < n; i++) { const a = i / n, b2 = (i + 1) / n;
+    P(s0 + (s1 - s0) * a, z0 + (z1 - z0) * a); P(s0 + (s1 - s0) * b2, z0 + (z1 - z0) * b2); } };
+  const L = 100 / Math.SQRT2;
+  seg(FIELD.s, FIELD.za, FIELD.s + L, FIELD.za + L, 10);
+  seg(FIELD.s, FIELD.za, FIELD.s - L, FIELD.za + L, 10);
+  for (let i = 0; i < 24; i++) {
+    const a0 = -Math.PI / 4 + (i / 24) * Math.PI / 2, a1 = -Math.PI / 4 + ((i + 1) / 24) * Math.PI / 2;
+    P(FIELD.s + 100 * Math.sin(a0), FIELD.za + 100 * Math.cos(a0)); P(FIELD.s + 100 * Math.sin(a1), FIELD.za + 100 * Math.cos(a1));
+  }
+  const g = new THREE.BufferGeometry().setFromPoints(pts);
+  scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xffffff })));
+}
+
+// --- trem ---------------------------------------------------------------
+const tramMesh = new THREE.Mesh(bakeShade(new THREE.BoxGeometry(3, 3.4, TRAM.len).translate(0, 0.55 + 1.7, 0)),
+  new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xd8a24a }));
+tramMesh.matrixAutoUpdate = false;
+scene.add(tramMesh);
+const tram = { za: TRAM.stops[1].za, v: 0, target: 2, dir: 1, dwell: TRAM.dwell, from: TRAM.stops[1].za };
+function stepTram(dt) {
+  if (tram.dwell > 0) { tram.dwell -= dt; tram.v = 0; return; }
+  const goal = TRAM.stops[tram.target].za;
+  const remaining = Math.abs(goal - tram.za), travelled = Math.abs(tram.za - tram.from);
+  tram.v = Math.min(TRAM.maxV, Math.sqrt(2 * TRAM.accel * (travelled + 0.5)), Math.sqrt(2 * TRAM.accel * remaining));
+  const step = Math.min(tram.v * dt, remaining);
+  tram.za += Math.sign(goal - tram.za) * step;
+  if (remaining - step <= 1e-6) {                               // tiba di halte
+    tram.za = goal; tram.from = goal; tram.dwell = TRAM.dwell;
+    if (tram.target === TRAM.stops.length - 1) tram.dir = -1; else if (tram.target === 0) tram.dir = 1;
+    tram.target += tram.dir;
+  }
+}
+function tramStopName() {
+  const st = TRAM.stops.find((x) => Math.abs(x.za - tram.za) < 0.5);
+  return st ? st.name : null;
+}
+
 // Bola (1 InstancedMesh, diameter visual 1 m agar terlihat dari jauh), penanda (1 InstancedMesh), lintasan (1 Line)
 const MAX_BALLS = 24, MAX_MARKS = 48, MAX_TRAIL = 4000;
 const ballMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 12, 8), new THREE.MeshBasicMaterial({ color: 0xf6f2ea }), MAX_BALLS);
@@ -722,6 +959,7 @@ function stepGround(dt) {
   player.distance += Math.hypot(zaNew - player.za, dT);
   player.za = zaNew;
   player.theta = (player.theta + dT / R + TAU) % TAU;
+  collide(0.35);
 }
 
 function jump() {
@@ -810,7 +1048,10 @@ function physicsStep(dt) {
     case 'air': stepAir(dt); break;
     case 'lift': stepLift(dt); break;
     case 'float': stepFloat(dt); break;
+    case 'tram': stepTramRider(); break;
   }
+  stepTram(dt);
+  if (player.state === 'tram') stepTramRider();
   for (const b of balls) if (!b.done) {
     advanceBody(b, dt);
     if (b === lastBall && (b.stepCount++ % 2 === 0 || b.done)) trailPush(b.pos);
@@ -907,6 +1148,79 @@ function runSelfTest() {
   return rows;
 }
 
+
+/* =====================================================================
+   INTERAKSI (tombol E) dan PETA (tombol M)
+   ===================================================================== */
+const PLAQUE_TEXT = 'Museum Cooper Farm\n\nReplika rumah pertanian keluarga Cooper, dipindahkan ke stasiun sebagai museum. ' +
+  'Stasiun ini dinamai dari Murphy Cooper.\n\nRak buku di dinding belakang adalah rak kamar Murph.\n\n(Teks placeholder tahap gray-box.)';
+const PLAQUE_POS = { s: COOPER.s + 3, za: COOPER.za - COOPER.d / 2 - 4 };
+function nearDist(s, za) { return Math.hypot(wrapS(player.theta * R - s), player.za - za); }
+function availableAction() {
+  if (player.state === 'tram') return tram.dwell > 0 ? { key: 'alight', label: `Turun di ${tramStopName()}` } : { key: null, label: 'Di dalam trem · tunggu halte berikutnya' };
+  if (player.state !== 'ground') return null;
+  if (tram.dwell > 0 && nearDist(TRAM.s, tram.za) < 14) return { key: 'board', label: `Naik trem (berikutnya: ${TRAM.stops[tram.target].name})` };
+  if (nearDist(PLAQUE_POS.s, PLAQUE_POS.za) < 4) return { key: 'plaque', label: 'Baca plakat' };
+  if (nearDist(LIFT.theta * R, LIFT.za) < 8) return { key: 'lift', label: 'Naik lift ke sumbu' };
+  return null;
+}
+const plaqueEl = document.getElementById('plaque');
+function doAction() {
+  if (!plaqueEl.hidden) { plaqueEl.hidden = true; return; }
+  const a = availableAction();
+  if (!a || !a.key) return;
+  if (a.key === 'board') { player.state = 'tram'; player.tramOffset = Math.max(-7, Math.min(7, player.za - tram.za)); player.mode = 'di trem'; }
+  else if (a.key === 'alight') { player.state = 'ground'; player.theta = ((TRAM.s + 4.5) / R) % TAU; player.za = tram.za; }
+  else if (a.key === 'plaque') { plaqueEl.querySelector('p').textContent = PLAQUE_TEXT; plaqueEl.hidden = false; }
+  else if (a.key === 'lift') enterLift();
+}
+function stepTramRider() {
+  player.theta = TRAM.s / R; player.za = tram.za + (player.tramOffset || 0); player.h = 0.55;
+  player.mode = 'di trem';
+}
+
+const mapEl = document.getElementById('map'), mapCv = document.getElementById('mapCanvas');
+const mapStatic = document.createElement('canvas');
+function drawMapStatic() {
+  const W = mapCv.width, H = mapCv.height, g = mapStatic.getContext('2d');
+  mapStatic.width = W; mapStatic.height = H;
+  const X = (s) => (s / CIRC) * W, Y = (za) => H - (za / CONFIG.L) * H;
+  for (const z of CONFIG.zones) { g.fillStyle = z.color; g.fillRect(0, Y(z.to), W, Y(z.from) - Y(z.to)); }
+  g.fillStyle = 'rgba(0,0,0,0.35)';
+  for (const [s, za, w, d] of houseList) g.fillRect(X(s - w / 2), Y(za + d / 2), Math.max(1, X(w)), Math.max(1, Y(0) - Y(d)));
+  g.fillStyle = 'rgba(30,60,30,0.5)';
+  for (const [s, za] of treeList) g.fillRect(X(s), Y(za), 1, 1);
+  g.fillStyle = '#10141c'; g.fillRect(X(WIN.theta * R - WIN.width / 2), 0, Math.max(2, X(WIN.width)), H);
+  g.fillStyle = '#4d545d'; g.fillRect(X(TRAM.s) - 1, Y(CONFIG.L - 30), 2, Y(30) - Y(CONFIG.L - 30));
+  g.font = '10px ui-monospace, monospace'; g.textBaseline = 'middle';
+  for (const st of TRAM.stops) { g.fillStyle = '#fff'; g.fillRect(X(TRAM.s) - 3, Y(st.za) - 1.5, 6, 3); }
+  const label = (s, za, t) => { g.fillStyle = '#111'; g.fillText(t, X(s) + 5, Y(za) + 0.5); g.fillStyle = '#fff'; g.fillText(t, X(s) + 4, Y(za)); };
+  label(COOPER.s, COOPER.za, 'Rumah Cooper'); label(FIELD.s, FIELD.za + 40, 'Baseball'); label(LIFT.theta * R, 60, 'Lift');
+  label(WIN.theta * R + 16, CONFIG.L * 0.5, 'Skyway');
+  for (const z of CONFIG.zones) if (z.to - z.from > 400) { g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillText(z.name, 4, Y((z.from + z.to) / 2)); }
+}
+function drawMap() {
+  if (mapEl.hidden) return;
+  const W = mapCv.width, H = mapCv.height, g = mapCv.getContext('2d');
+  g.drawImage(mapStatic, 0, 0);
+  const X = (s) => (s / CIRC) * W, Y = (za) => H - (za / CONFIG.L) * H;
+  g.fillStyle = '#d8a24a'; g.fillRect(X(TRAM.s) - 3, Y(tram.za + 9), 6, Math.max(3, Y(0) - Y(18)));
+  const px = X(player.theta * R), py = Y(player.za);
+  // heading 0 = +za (ke atas di peta), 90 derajat = +s (ke kanan)
+  const hx = Math.sin(player.heading), hy = -Math.cos(player.heading);
+  g.strokeStyle = '#000'; g.fillStyle = '#ff5a3c'; g.lineWidth = 1;
+  g.beginPath(); g.arc(px, py, 4, 0, TAU); g.fill(); g.stroke();
+  g.strokeStyle = '#ff5a3c'; g.lineWidth = 2; g.beginPath(); g.moveTo(px, py); g.lineTo(px + hx * 12, py + hy * 12); g.stroke();
+}
+function sizeMap() {
+  const w = Math.min(window.innerWidth - 32, 340), h = Math.round(w * CONFIG.L / CIRC);
+  const hMax = window.innerHeight - 120;
+  const scale = h > hMax ? hMax / h : 1;
+  mapCv.width = Math.round(w * scale); mapCv.height = Math.round(h * scale);
+  drawMapStatic();
+}
+function toggleMap() { mapEl.hidden = !mapEl.hidden; if (!mapEl.hidden) { sizeMap(); drawMap(); } }
+
 /* =====================================================================
    KAMERA
    ===================================================================== */
@@ -928,6 +1242,7 @@ function updateCamera() {
   // kabin lift mengikuti lantai kabin
   surfaceMatrix(cabin.matrix, LIFT.theta, LIFT.za, R - player.lift.r);
   cabin.visible = player.state === 'lift' || player.state === 'float';
+  surfaceMatrix(tramMesh.matrix, TRAM.s / R, tram.za, 0);
   // bola
   let k = 0;
   for (const b of balls) { _mm.makeTranslation(b.pos.x, b.pos.y, b.pos.z); ballMesh.setMatrixAt(k++, _mm); }
@@ -977,6 +1292,8 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyG') dropBall();
   if (e.code === 'KeyL') enterLift();
   if (e.code === 'KeyT') cycleOrbitSpeed();
+  if (e.code === 'KeyE') doAction();
+  if (e.code === 'KeyM') toggleMap();
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -1023,7 +1340,10 @@ on('btnRun', (e) => { input.run = !input.run; e.currentTarget.classList.toggle('
 on('btnAuto', (e) => { input.auto = !input.auto; e.currentTarget.classList.toggle('on', input.auto); });
 on('btnJump', () => jump());
 on('btnThrow', () => throwBall());
-on('btnLift', () => enterLift());
+on('btnAct', () => doAction());
+on('btnMap', () => toggleMap());
+on('plaqueClose', () => { plaqueEl.hidden = true; });
+on('mapClose', () => toggleMap());
 on('btnLab', () => toggleLab());
 
 /* =====================================================================
@@ -1078,7 +1398,7 @@ window.addEventListener('resize', () => {
    ===================================================================== */
 const hud = document.getElementById('hud');
 hud.innerHTML = `
-  <div class="title">Tahap 3 · langit luar</div>
+  <div class="title">Tahap 4 · konten gray-box</div>
   <span class="k">FPS</span><span class="v" id="hFps">-</span>
   <span class="k wide">Frame</span><span class="v wide" id="hMs">-</span>
   <span class="k">Draw call</span><span class="v" id="hCalls">-</span>
@@ -1099,9 +1419,10 @@ hud.innerHTML = `
   <div class="sep"></div>
   <span class="k">Saturnus</span><span class="v" id="hSat">-</span>
   <span class="k wide">Fase orbit</span><span class="v wide" id="hOrb">-</span>
-  <span class="k">Orbit x</span><span class="v" id="hOrbX">-</span>`;
+  <span class="k">Orbit x</span><span class="v" id="hOrbX">-</span>
+  <span class="k wide">Trem</span><span class="v wide" id="hTram">-</span>`;
 const H = (id) => document.getElementById(id);
-const hEl = { sat: H('hSat'), orb: H('hOrb'), orbX: H('hOrbX'), fps: H('hFps'), ms: H('hMs'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
+const hEl = { tram: H('hTram'), sat: H('hSat'), orb: H('hOrb'), orbX: H('hOrbX'), fps: H('hFps'), ms: H('hMs'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
   theta: H('hTheta'), z: H('hZ'), h: H('hH'), head: H('hHead'), dist: H('hDist'), mode: H('hMode'), g: H('hG') };
 const _tmpV2 = new THREE.Vector2(), _satDir = new THREE.Vector3();
 const ORBIT_SPEEDS = [1, 100, 1000, 10000];
@@ -1111,6 +1432,13 @@ function cycleOrbitSpeed() { clock.orbitScale = ORBIT_SPEEDS[(ORBIT_SPEEDS.index
 function localG() {
   if (player.state === 'float') return OMEGA * OMEGA * Math.hypot(player.float.pos.x, player.float.pos.y) / CONFIG.g;
   return OMEGA * OMEGA * (R - player.h) / CONFIG.g;
+}
+const promptEl = document.getElementById('prompt');
+let lastPrompt = '';
+function updatePrompt() {
+  const a = availableAction();
+  const t = a ? (a.key ? `E · ${a.label}` : a.label) : '';
+  if (t !== lastPrompt) { promptEl.textContent = t; promptEl.hidden = !t; lastPrompt = t; }
 }
 const STATE_NAME = { ground: 'di tanah', air: 'di udara', lift: '', float: '' };
 const stats = { frames: 0, time: 0, fps: 0, ms: 0, low: 0, high: 0 };
@@ -1140,6 +1468,7 @@ function updateStats(dt) {
   hEl.head.textContent = hd.toFixed(0) + '°';
   hEl.dist.textContent = player.distance >= 1000 ? (player.distance / 1000).toFixed(2) + ' km' : player.distance.toFixed(0) + ' m';
   const st = player.state === 'ground' ? player.mode + (input.auto ? ' · otomatis' : '') : player.state === 'air' ? 'di udara' : player.mode;
+  hEl.tram.textContent = tram.dwell > 0 ? `berhenti di ${tramStopName()}` : `${tram.v.toFixed(0)} m/s ke ${TRAM.stops[tram.target].name}`;
   hEl.mode.textContent = st;
   // sudut antara arah Saturnus dan "atas" pemain (0 derajat = tepat di atas kepala, 180 = tepat di bawah kaki)
   saturnDirStation(_satDir);
@@ -1171,6 +1500,8 @@ function frame(now) {
   renderer.clearDepth();
   renderer.render(scene, camera);
   updateStats(dt);
+  updatePrompt();
+  drawMap();
   requestAnimationFrame(frame);
 }
 respawn();
@@ -1178,7 +1509,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R };
 requestAnimationFrame(frame);
 </script>
 </body>
