@@ -284,7 +284,7 @@
     <div class="hhead"><span>Bantuan</span><button id="helpClose" type="button">Tutup (?)</button></div>
     <div class="htabs"><button type="button" data-tab="dasar">Dasar</button><button type="button" data-tab="trans" class="desk-only">Transportasi</button><button type="button" data-tab="kamera" class="desk-only">Kamera dan foto</button><button type="button" data-tab="waktu" class="desk-only">Waktu dan cuaca</button><button type="button" data-tab="grafik" class="desk-only">Grafik dan suara</button><button type="button" data-tab="kapal" class="desk-only">Pesawat</button><button type="button" data-tab="tentang">Tentang</button></div>
     <table data-pane="dasar">
-        <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
+        <tr class="desk-only"><td>Mouse</td><td>Melihat. Klik = kunci kursor untuk melihat, klik lagi = kursor bebas untuk panel (Esc juga)</td></tr>
         <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
         <tr class="desk-only"><td>Shift</td><td>Lari 5 m/s</td></tr>
         <tr class="desk-only"><td>Space</td><td>Lompat (di hub: naik)</td></tr>
@@ -440,7 +440,7 @@ Object.assign(I18N.en, {
   "Mulai": "Start",
   "Kontrol dan bantuan (?)": "Controls and help (?)",
   "Kembali ke menu utama": "Back to main menu",
-  "W A S D berjalan · mouse melihat (klik untuk mengunci) · E aksi · ? bantuan": "W A S D walk · mouse look (click to lock) · E action · ? help",
+  "W A S D berjalan · klik = kunci / lepas kursor · E aksi · ? bantuan": "W A S D walk · click = lock / free the cursor · E action · ? help",
   "Jempol kiri berjalan · jempol kanan melihat · tombol Panel = panel kontrol": "Left thumb walks · right thumb looks · Panel button = control panel",
   "Bantuan": "Help",
   "Tutup (?)": "Close (?)",
@@ -451,7 +451,7 @@ Object.assign(I18N.en, {
   "Grafik dan suara": "Graphics and sound",
   "Pesawat": "Spacecraft",
   "Tentang": "About",
-  "Melihat (klik untuk mengunci kursor)": "Look around (click to lock the cursor)",
+  "Melihat. Klik = kunci kursor untuk melihat, klik lagi = kursor bebas untuk panel (Esc juga)": "Look around. Click = lock the cursor to look, click again = free cursor for the panel (Esc works too)",
   "W A S D / panah": "W A S D / arrows",
   "Berjalan 1,4 m/s": "Walk 1.4 m/s",
   "Lari 5 m/s": "Run 5 m/s",
@@ -856,10 +856,10 @@ function patchLit(mat) {
           lw = instanceMatrix * lw; ln = transpose(inverse(mat3(instanceMatrix))) * ln;
         #endif
         vLitWorld = (modelMatrix * lw).xyz;
-        vLitNormal = normalize(mat3(modelMatrix) * ln);
+        vec3 wn = mat3(modelMatrix) * ln; vLitNormal = wn * inversesqrt(max(dot(wn, wn), 1e-12));   // normal nol tetap nol (tanpa NaN)
       }`);
     sh.fragmentShader = 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + LIGHT_GLSL +
-      sh.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= stationLight(vLitWorld, normalize(vLitNormal));\n#include <opaque_fragment>');
+      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\noutgoingLight *= stationLight(vLitWorld, litN);\n#include <opaque_fragment>');
   };
   mat.customProgramCacheKey = () => 'stationLit';
   mat.needsUpdate = true;
@@ -3057,7 +3057,7 @@ function ballparkModel() {
     for (let k = 0; k < 900; k++) { g.fillStyle = `rgba(60,40,20,${Math.random() * 0.12})`; g.fillRect(-20 + Math.random() * 90, -40 + Math.random() * 80, 0.3, 0.3); }   // tekstur tanah
   }, false);
   const decalMat = new THREE.MeshBasicMaterial({ map: decal, polygonOffset: true, polygonOffsetFactor: -2 });
-  const dm = new THREE.Mesh(new THREE.PlaneGeometry(U1 - U0, V1 - V0).rotateX(-Math.PI / 2).translate((U0 + U1) / 2, 0.03, (V0 + V1) / 2), decalMat);
+  const dm = new THREE.Mesh(new THREE.PlaneGeometry(U1 - U0, V1 - V0, 75, 1).rotateX(-Math.PI / 2).translate((U0 + U1) / 2, 0.03, (V0 + V1) / 2), decalMat);
   dm.userData.noShadow = true; G.add(dm);
   G.userData.decalMat = decalMat;
   // --- material ---
@@ -3136,6 +3136,16 @@ function ballparkModel() {
   }, false);
   const board = new THREE.Mesh(new THREE.PlaneGeometry(12, 5.2), new THREE.MeshBasicMaterial({ map: sb })); board.rotation.y = -Math.PI / 2; board.position.set(114, 6.2, 0); G.add(board);
   box(0.3, 12, 12.4, M.dark, 114.2, 4.4, 0); col(114.2, 0, 0.3, 6.2);
+  // Lantai stasiun melengkung naik u^2 / 2R (di pagar tengah 107 m: 5,7 m). Model di atas dibangun datar, jadi tiap bagian
+  // dipindah ke permukaan silinder pada busur u dan dimiringkan mengikuti arah atas setempat; decal ditekuk per vertex.
+  const qz = new THREE.Quaternion(), zAx = new THREE.Vector3(0, 0, 1);
+  for (const m of G.children) {
+    if (m === dm) continue;
+    const a = m.position.x / R, y = m.position.y;
+    m.position.set((R - y) * Math.sin(a), R - (R - y) * Math.cos(a), m.position.z);
+    m.quaternion.premultiply(qz.setFromAxisAngle(zAx, a));
+  }
+  { const pa = dm.geometry.attributes.position; for (let i = 0; i < pa.count; i++) { const a = pa.getX(i) / R, y = pa.getY(i); pa.setXY(i, (R - y) * Math.sin(a), R - (R - y) * Math.cos(a)); } }
   G.traverse((o) => { o.frustumCulled = false; });
   scene.add(G);
   return G;
@@ -3866,7 +3876,7 @@ function lockPointer() {
 const helpEl = document.getElementById('help'), hintEl = document.getElementById('hint');
 function showHint() {                                              // petunjuk satu baris 6 s setelah Mulai
   hintEl.textContent = isTouch ? t('Jempol kiri berjalan · jempol kanan melihat · tombol Panel = panel kontrol')
-    : t('W A S D berjalan · mouse melihat (klik untuk mengunci) · E aksi · ? bantuan');
+    : t('W A S D berjalan · klik = kunci / lepas kursor · E aksi · ? bantuan');
   hintEl.hidden = false; hintEl.style.opacity = 1;
   setTimeout(() => { hintEl.style.opacity = 0; }, 6000);
   setTimeout(() => { hintEl.hidden = true; }, 7000);
@@ -3887,10 +3897,15 @@ function toggleHelp() {                                           // tombol ? (a
 document.getElementById('helpClose').addEventListener('click', () => toggleHelp());
 document.getElementById('helpLink').addEventListener('click', (e) => { e.preventDefault(); toggleHelp(); });
 helpEl.addEventListener('click', (e) => { if (e.target === helpEl) toggleHelp(); });
-canvas.addEventListener('click', lockPointer);
+// Klik kiri saat kursor terkunci = lepas kursor (bebas ke panel); klik lagi di layar = kunci lagi untuk melihat
+let freedAt = 0;
+canvas.addEventListener('click', () => { if (performance.now() - freedAt > 400) lockPointer(); });
 
 let dragging = false, lastX = 0, lastY = 0;
-canvas.addEventListener('mousedown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button === 0 && document.pointerLockElement === canvas) { freedAt = performance.now(); document.exitPointerLock(); return; }
+  dragging = true; lastX = e.clientX; lastY = e.clientY;
+});
 window.addEventListener('mouseup', () => { dragging = false; });
 window.addEventListener('mousemove', (e) => {
   if (ext.flight) {                                                  // pesawat: mouse = arah hidung (atau melihat saat sandar)
@@ -7736,6 +7751,7 @@ const VIBE = { cafeSeats: [], bulbMat: null, cafeBulbMat: null, kites: [] };
 {
   for (const [s, za, col] of [[FIELD.s + 140, FIELD.za - 40, 0xd8452e], [FIELD.s - 220, FIELD.za + 90, 0x2e6fd8]]) {
     const k = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.6, 0), new THREE.Vector3(-0.45, 0, 0), new THREE.Vector3(0, -0.8, 0), new THREE.Vector3(0.45, 0, 0)]).setIndex([0, 1, 2, 0, 2, 3]), new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide }));
+    k.geometry.computeVertexNormals();                            // tanpa normal, shader cahaya menghasilkan NaN (kilau seperti komet di M1)
     const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6), 3));
     const line = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0xdddddd, transparent: true, opacity: 0.6 }));
     k.userData.noShadow = true; k.matrixAutoUpdate = false; line.frustumCulled = false; scene.add(k, line);
@@ -7992,6 +8008,15 @@ function updatePeds() {                                                 // pilih
     J[o] = p.scale; J[o + 1] = p.elev; J[o + 2] = p.bag; J[o + 3] = 0;
     if (++n >= PEDS.max) break;
   }
+  if (BASEBALL.on) for (const q of BASEBALL.people) {                  // pemain dan penonton baseball
+    if (n >= PEDS.max) break;
+    const s = FIELD.s + q.u, za = FIELD.za + q.v, ds = wrapS(s - eS), dz = za - eZ;
+    if (ds * ds + dz * dz > R2) continue;
+    const o = n * 4;
+    P[o] = eS + ds; P[o + 1] = za; P[o + 2] = q.hd; P[o + 3] = q.ph;
+    I[o] = q.shirt; I[o + 1] = q.pants; I[o + 2] = q.skin; I[o + 3] = q.pose;
+    J[o] = 1; J[o + 1] = q.elev; J[o + 2] = 0; J[o + 3] = 0; n++;
+  }
   for (const nm of ['aP', 'aI', 'aJ']) { const a = g.attributes[nm]; a.clearUpdateRanges(); a.addUpdateRange(0, n * 4); a.needsUpdate = true; }
   g.instanceCount = PEDS.n = n;
 }
@@ -8005,6 +8030,96 @@ function cyclePeds() {
 }
 PRESET_HOOKS.push(applyPedsPreset); applyPedsPreset(PRESET.idx);
 for (let k = 0; k < 100; k++) stepPeds(0.2, -20 + k * 0.2);          // awal muat: orang sudah tersebar dan menunggu lampu dengan wajar
+/* ---------------------------------------------------------------------
+   Pertandingan baseball siang hari (09.00-17.30, tidak hujan). Pemain memakai model pejalan kaki (disisipkan ke buffer
+   instance PEDS di updatePeds, tanpa draw call baru). Posisi lokal (u = +s dari home plate, v = +za) sama dengan ballparkModel.
+   Siklus: siap, lempar ke catcher; 30% dipukul: bola melambung ke outfield, pemain luar terdekat berlari mengejar, pemukul lari
+   ke base 1, pelari lain maju satu base; bola dilempar balik ke pitcher, pemain luar kembali ke posisi. Penonton di tribun.
+   --------------------------------------------------------------------- */
+const BASEBALL = { on: false, people: [], state: 'ready', t: 0, runners: [], hitT: null, chaser: null, catchAt: null };
+{
+  const b2 = BP.base / Math.SQRT2, B = BASEBALL;
+  B.bases = [[0, 0], [b2, b2], [2 * b2, 0], [b2, -b2]];              // home, 1, 2, 3 (berlawanan jarum jam dilihat dari atas)
+  const mk = (u, v, shirt, pants, skin, pose, extra = {}) => Object.assign({ u, v, hu: u, hv: v, shirt, pants, skin, pose, ph: 0, elev: 0, hd: 0 }, extra);
+  const HOME = 2, HP = 3, AWAY = 1, AP = 0;                          // baju putih/celana abu (tuan rumah), biru/celana gelap (tamu)
+  B.pitcher = mk(BP.mound, 0, HOME, HP, 1, 1);
+  B.catcher = mk(-1.0, 0, HOME, HP, 3, 2);                           // pose duduk = jongkok
+  B.ump = mk(-2.2, 0, 6, 1, 0, 1);
+  B.batter = mk(0.3, -1.1, AWAY, AP, 2, 1);
+  B.fielders = [[22, 17, 4], [32, 9, 0], [32, -9, 5], [22, -17, 2], [68, -38, 1], [82, 0, 3], [68, 38, 5]].map(([u, v, sk]) => mk(u, v, HOME, HP, sk, 1));
+  B.people = [B.pitcher, B.catcher, B.ump, B.batter, ...B.fielders];
+  let sd = 2718; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  for (const sg of [-1, 1]) {                                        // bangku dugout (duduk) dan penonton di tribun
+    const d = [Math.SQRT1_2, sg * Math.SQRT1_2], nn = [-Math.SQRT1_2, sg * Math.SQRT1_2];
+    const P = (t, o) => [t * d[0] + o * nn[0], t * d[1] + o * nn[1]], hd = Math.atan2(-nn[0], -nn[1]);
+    for (let k = 0; k < 4; k++) { const [u, v] = P(10.5 + k * 2.2, 8.8); B.people.push(mk(u, v, sg > 0 ? HOME : AWAY, sg > 0 ? HP : AP, Math.floor(r() * 6), 2, { hd, fixed: true })); }
+    for (let k = 0; k < 9; k++) {
+      const st = Math.floor(r() * 5), [u, v] = P(22 + r() * 12, 12 + st * 0.75);
+      B.people.push(mk(u, v, Math.floor(r() * 14), Math.floor(r() * 8), Math.floor(r() * 6), 2, { hd, elev: 0.45 * st, fixed: true }));
+    }
+  }
+  B.ball = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), new THREE.MeshBasicMaterial({ color: 0xf6f4ee }));
+  B.ball.matrixAutoUpdate = false; B.ball.visible = false; B.ball.userData.noShadow = true; scene.add(B.ball);
+}
+const _bbv = new THREE.Vector3();
+function stepBaseball(dt) {
+  const B = BASEBALL, h = clock.hour;
+  B.on = h > 9 && h < 17.5 && RAIN.k < 0.3 && !ext.active && Math.hypot(wrapS(VU.uEyeSZ.value.x - FIELD.s - 40), VU.uEyeSZ.value.y - FIELD.za) < 450;
+  B.ball.visible = false;
+  if (!B.on) return;
+  B.t += dt;
+  const face = (p, u, v) => { if (Math.hypot(u - p.u, v - p.v) > 0.05) p.hd = Math.atan2(u - p.u, v - p.v); };
+  const moveTo = (p, u, v, sp) => {                                  // true bila sudah sampai
+    const du = u - p.u, dv = v - p.v, d = Math.hypot(du, dv);
+    if (d < 0.1) { p.pose = 1; return true; }
+    const k = Math.min(1, sp * dt / d); p.u += du * k; p.v += dv * k; p.hd = Math.atan2(du, dv); p.pose = 0; p.ph += sp * dt * 2.6; return false;
+  };
+  let ball = null;                                                   // [u, v, tinggi]
+  const P = B.pitcher, C = B.catcher, lerp3 = (a, b, k, arc) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k + arc * 4 * k * (1 - k)];
+  if (B.state === 'ready') { if (B.t > 3) { B.state = 'pitch'; B.t = 0; } }
+  else if (B.state === 'pitch') {
+    const k = Math.min(1, B.t / 0.55); ball = lerp3([BP.mound - 0.5, 0.3, 1.9], [-0.6, 0, 0.8], k, 0.3);
+    if (k >= 1) {
+      if (Math.random() < 0.3) {                                     // dipukul
+        const th = (Math.random() * 2 - 1) * 0.7, dd = 40 + Math.random() * 45;
+        B.target = [dd * Math.cos(th), dd * Math.sin(th)]; B.fly = 2.4 + dd / 60; B.peak = 10 + Math.random() * 16; B.state = 'hit'; B.t = 0;
+        let best = null, bd = 1e9; for (const f of B.fielders) { const q = Math.hypot(f.u - B.target[0], f.v - B.target[1]); if (q < bd) { bd = q; best = f; } }
+        B.chaser = best;
+        for (const rn of B.runners) rn.to = Math.min(4, rn.base + 1);
+        B.runners.push(Object.assign(B.batter, { base: 0, to: 1, runner: true }));
+        const nb = B.batter; B.batter = { u: 0.3, v: -1.1, hu: 0.3, hv: -1.1, shirt: 1, pants: 0, skin: Math.floor(Math.random() * 6), pose: 1, ph: 0, elev: 0, hd: Math.PI / 2, fresh: true };
+        B.people.splice(B.people.indexOf(nb) + 1, 0, B.batter);
+      } else { B.state = 'toss'; B.t = 0; }
+    }
+  } else if (B.state === 'toss') {
+    const k = Math.min(1, B.t / 1.1); ball = lerp3([-0.6, 0, 1.2], [BP.mound - 0.5, 0.3, 1.7], k, 1.5);
+    if (k >= 1) { B.state = 'ready'; B.t = 0; }
+  } else if (B.state === 'hit') {
+    const k = Math.min(1, B.t / B.fly); ball = lerp3([0.8, 0, 1.0], [B.target[0], B.target[1], 1.2], k, B.peak);
+    moveTo(B.chaser, B.target[0] - 1, B.target[1], 6.5);
+    if (k >= 1 && moveTo(B.chaser, B.target[0] - 1, B.target[1], 6.5)) { B.state = 'throw'; B.t = 0; B.from = [B.chaser.u, B.chaser.v, 1.8]; }
+  } else if (B.state === 'throw') {
+    const dd = Math.hypot(B.from[0] - BP.mound, B.from[1]), dur = 0.6 + dd / 30, k = Math.min(1, B.t / dur);
+    ball = lerp3(B.from, [BP.mound, 0, 1.4], k, dd * 0.08);
+    if (k >= 1) { B.state = 'back'; B.t = 0; }
+  } else if (B.state === 'back') {
+    if (moveTo(B.chaser, B.chaser.hu, B.chaser.hv, 2.2) && B.t > 2) { B.chaser = null; B.state = 'ready'; B.t = 0; }
+  }
+  for (const rn of B.runners) {                                      // pelari maju base demi base; yang tiba di home keluar
+    if (rn.base < rn.to) { const nb = B.bases[(rn.base + 1) % 4]; if (moveTo(rn, nb[0] + 0.6, nb[1], 7)) rn.base++; }
+    else { rn.pose = 1; face(rn, BP.mound, 0); }
+  }
+  for (const rn of B.runners.filter((q) => q.base >= 4)) { B.people.splice(B.people.indexOf(rn), 1); }
+  B.runners = B.runners.filter((q) => q.base < 4);
+  if (B.runners.length > 3) { const rn = B.runners.shift(); B.people.splice(B.people.indexOf(rn), 1); }
+  for (const f of B.fielders) if (f !== B.chaser) { if (moveTo(f, f.hu, f.hv, 2.2)) face(f, 0, 0); }
+  face(P, 0, 0); P.pose = 1; C.hd = Math.PI / 2; B.ump.hd = Math.PI / 2; B.batter.hd = Math.PI / 2; B.batter.pose = 1;
+  if (ball) {
+    const s = FIELD.s + ball[0], za = FIELD.za + ball[1];
+    groundPoint(modS(s) / R, za, groundH(s, za) + ball[2], _bbv);
+    B.ball.matrix.makeTranslation(_bbv.x, _bbv.y, _bbv.z); B.ball.matrixWorldNeedsUpdate = true; B.ball.visible = true;
+  }
+}
 
 await bootStep(BOOT_W[23], 'Burung...');
 /* =====================================================================
@@ -8695,6 +8810,7 @@ function frame(now) {
   updatePhoto();                                   // 12d
   updatePortVisual();
   updateReal();
+  stepBaseball(Math.min(0.1, dt));                 // pertandingan baseball siang
   updatePeds();                                    // 12b-3
   stepBirds(Math.min(0.1, dt)); updateBirds();     // 12b-4
   updateVibe();                                    // 12b-5
@@ -8751,7 +8867,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

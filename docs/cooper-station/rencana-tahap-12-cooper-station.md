@@ -77,6 +77,15 @@ Uji: `tools/uji_hujan.py` (7 cek). Waktu muat di sandbox sekitar 6,6 s.
 | Genangan tidak kering sampai besok | Pengeringan memakai waktu nyata 5 menit; dengan jam 1 menit = 1 jam itu sama dengan 5-15 jam stasiun | Basah dan kering mengikuti jam stasiun: kering sekitar 1-1,5 jam stasiun di siang hari (lebih lambat malam), saat waktu berhenti sekitar 5 menit nyata. Terukur: basah 1,0 menjadi 0,10 setelah 1 jam stasiun, 0,01 setelah 2 jam |
  Belum dibuat: percikan tetes di tanah, tirai hujan di kejauhan (diwakili kabut mendung yang sudah ada).
 
+### Revisi setelah uji pemilik (baseball, layang-layang, kursor)
+
+| Masalah | Penyebab | Perbaikan |
+| --- | --- | --- |
+| Pagar lapangan baseball tertimbun gundukan, papan skor setengah terpendam | Model lapangan dibangun sebagai bidang datar yang menyinggung tanah di home plate, padahal lantai stasiun melengkung naik u^2/2R: 5,7 m di pagar tengah (107 m), 6,5 m di papan skor (114 m) | Semua bagian lapangan dipindah ke permukaan silinder dan dimiringkan mengikuti arah atas setempat; decal lapangan ditekuk per vertex. Terukur: pusat pagar 2,4 m tepat 1,2 m di atas tanah di seluruh busur |
+| Dua kilau seperti komet di sekitar lapangan (ternyata layang-layang) | Geometri layang-layang tanpa atribut normal; shader cahaya stasiun menormalkan vektor nol, jadi NaN di M1, disebar bloom dan berkas sunrays | Normal dihitung; shader cahaya stasiun dijaga (normal nol memakai arah atas setempat). Pindai: 0 mesh bercahaya tanpa normal |
+| Lapangan baseball sepi di siang hari | Belum ada pemain | Pertandingan 09.00-17.30 (tidak saat hujan): pitcher, catcher, wasit, pemukul, 7 pemain bertahan, pemain di dugout, 18 penonton di tribun. Siklus lempar; 30% dipukul: bola melambung ke outfield, pemain terdekat mengejar, pemukul lari ke base, pelari maju, bola dilempar balik. Memakai model pejalan kaki (tanpa draw call baru) |
+| Harus menekan Esc untuk memakai panel kanan | Klik hanya mengunci kursor | Klik kiri saat kursor terkunci = kursor bebas; klik lagi di layar = kunci lagi. Esc tetap bisa |
+
 ## 12d. Ladang, foto, tur
 
 | No | Item | Rencana | Biaya |
