@@ -136,6 +136,7 @@
       <div class="btns">
         <button id="labTime" type="button"><kbd>Z</kbd>Waktu: 1 menit = 1 jam</button>
         <button id="labOrbit" type="button"><kbd>T</kbd>Orbit Saturnus: 1x</button>
+        <button id="labWeather" type="button"><kbd>N</kbd>Cuaca: Otomatis (Berawan)</button>
       </div>
     </details>
     <details open><summary>Uji fisika (bola)</summary>
@@ -172,7 +173,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 10 · trem dengan interior, mobil, lampu jalan, preset kualitas, kamera luar sinematik · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 11a · cuaca dinamis: awan hanyut, terbentuk dan menghilang, bayangan awan ikut bergerak · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -183,6 +184,7 @@
       <tr class="desk-only"><td>E · M</td><td>Aksi (naik trem dan duduk di kursi jendela, turun di halte, baca plakat, lift) · peta</td></tr>
       <tr class="desk-only"><td>V</td><td>Kamera luar: seret / WASD putar, scroll / + - zoom, C orbit otomatis, 1-4 fokus</td></tr>
       <tr class="desk-only"><td>[ · ] · Z</td><td>Jam stasiun mundur / maju 1 jam · kecepatan waktu (1 menit = 1 jam, 10 s, 1 s, berhenti)</td></tr>
+      <tr class="desk-only"><td>N</td><td>Cuaca: otomatis (berganti cerah, berawan, mendung), atau tetap cerah / berawan / mendung</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
       <tr class="desk-only"><td>1 - 6</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum · Skyway · lapangan baseball</td></tr>
       <tr class="desk-only"><td>Q</td><td>Preset kualitas: Ultra, Tinggi, Sedang, Rendah (awal: Ultra, turun otomatis bila FPS di bawah 30)</td></tr>
@@ -3355,6 +3357,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit6') teleport('baseball');
   if (e.code === 'KeyQ') cyclePreset();
   if (e.code === 'KeyZ') cycleTimeRate();
+  if (e.code === 'KeyN') cycleWeather();
   if (e.code === 'KeyK') cycleVegQuality();
   if (e.code === 'KeyP') cyclePost();
   if (e.code === 'KeyU') toggleSound();
@@ -3442,6 +3445,7 @@ on('labLift', () => enterLift());
 on('labOrbit', () => cycleOrbitSpeed());
 on('labExt', () => toggleExterior());
 on('labTime', () => cycleTimeRate());
+on('labWeather', () => cycleWeather());
 function updateTimeLabels() {
   const tr = TIME_RATES.find((x) => x[0] === clock.hourRate); const b = document.getElementById('labTime'); if (b && tr) b.innerHTML = `<kbd>Z</kbd>Waktu: ${tr[1]}`;
   const o = document.getElementById('labOrbit'); if (o) o.innerHTML = `<kbd>T</kbd>Orbit Saturnus: ${clock.orbitScale.toLocaleString('id-ID')}x`;
@@ -3661,82 +3665,180 @@ for (const sgn of [-1, 1]) {
   scene.add(halo, rim);
 }
 
-// --- awan: billboard lembut, 1 draw call --------------------------------
+// --- awan dinamis + cuaca (tahap 11a): billboard lembut, 1 draw call --------------------------------
+// Tekstur atlas 2x2: 4 variasi bentuk gumpalan agar langit tidak berulang.
 const cloudTex = (() => {
-  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const c = document.createElement('canvas'); c.width = c.height = 256;
   const g = c.getContext('2d');
   let sd = 7; const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 26; i++) {
-    const x = 34 + rr() * 60, y = 44 + rr() * 44, r = 16 + rr() * 26;
-    const grd = g.createRadialGradient(x, y, 0, x, y, r);
-    grd.addColorStop(0, 'rgba(255,255,255,0.55)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  for (let v = 0; v < 4; v++) {
+    const ox = (v % 2) * 128, oy = Math.floor(v / 2) * 128;
+    g.save(); g.beginPath(); g.rect(ox, oy, 128, 128); g.clip();
+    const n = 22 + v * 4;
+    for (let i = 0; i < n; i++) {
+      const x = ox + 30 + rr() * 68, y = oy + 40 + rr() * 50 - (v === 3 ? 8 : 0), r = 12 + rr() * (22 + v * 2);
+      const grd = g.createRadialGradient(x, y, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(255,255,255,0.5)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+    }
+    g.restore();
   }
-  return new THREE.CanvasTexture(c);
+  const t = new THREE.CanvasTexture(c); t.generateMipmaps = true; return t;
 })();
 const cloudMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false,
-  uniforms: { uTex: { value: cloudTex }, uCol: { value: new THREE.Vector3(1, 1, 1) }, uFogCol: { value: new THREE.Vector3() }, uFogD: { value: CONFIG.fogDensity }, uAlpha: { value: 0.9 } },
+  uniforms: { uTex: { value: cloudTex }, uCol: { value: new THREE.Vector3(1, 1, 1) }, uFogCol: { value: new THREE.Vector3() }, uFogD: { value: CONFIG.fogDensity }, uAlpha: { value: 0.9 }, uBase: { value: 0.62 } },
   vertexShader: /* glsl */`
-    varying vec2 vUv; varying float vDist;
+    attribute float aVar, aA;
+    varying vec2 vUv; varying float vDist, vShade, vA;
     void main() {
-      vUv = uv;
+      vUv = (uv + vec2(mod(aVar, 2.0), floor(aVar / 2.0))) * 0.5;
+      vA = aA;
       vec4 c = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
       float size = length(instanceMatrix[0].xyz);
       vec3 camRight = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
       vec3 camUp = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
-      vec4 mv = viewMatrix * vec4(c.xyz + (camRight * position.x + camUp * position.y) * size, 1.0);
+      vec3 off = camRight * position.x + camUp * position.y;
+      vec3 upW = vec3(-normalize(c.xy), 0.0);                 // "atas" = ke arah sumbu
+      vShade = dot(off, upW);                                  // -0,5 (sisi bawah) sampai 0,5 (sisi atas)
+      vec4 mv = viewMatrix * vec4(c.xyz + off * size, 1.0);
       vDist = -mv.z;
       gl_Position = projectionMatrix * mv;
     }`,
   fragmentShader: /* glsl */`
-    uniform sampler2D uTex; uniform vec3 uCol, uFogCol; uniform float uFogD, uAlpha;
-    varying vec2 vUv; varying float vDist;
+    uniform sampler2D uTex; uniform vec3 uCol, uFogCol; uniform float uFogD, uAlpha, uBase;
+    varying vec2 vUv; varying float vDist, vShade, vA;
     void main() {
-      float a = texture2D(uTex, vUv).a * uAlpha;
+      float a = texture2D(uTex, vUv).a * uAlpha * vA;
+      if (a < 0.004) discard;
+      vec3 col = uCol * mix(uBase, 1.06, smoothstep(-0.45, 0.4, vShade));   // sisi bawah (jauh dari sunline) lebih gelap
       float f = 1.0 - exp(-uFogD * uFogD * vDist * vDist);
-      gl_FragColor = vec4(mix(uCol, uFogCol, f * 0.8), a * (1.0 - 0.5 * f) * smoothstep(20.0, 120.0, vDist));
+      gl_FragColor = vec4(mix(col, uFogCol, f * 0.8), a * (1.0 - 0.5 * f) * smoothstep(20.0, 120.0, vDist));
       #include <colorspace_fragment>
     }`,
 });
+
+// Cuaca: cover 0 (langit bersih) sampai 1 (mendung penuh). Mode otomatis berganti cerah -> berawan -> mendung.
+const WEATHER = {
+  modes: [['auto', 'Otomatis'], ['cerah', 'Cerah'], ['berawan', 'Berawan'], ['mendung', 'Mendung']],
+  target: { cerah: 0.14, berawan: 0.5, mendung: 0.93 },
+  mode: 'auto', state: 'berawan', cover: 0.5, dwell: 300, T: 0, ov: 0,
+  wind: 1.8, shadowT: 0, shadowEvery: 1.5,
+};
+const CLOUD = { groups: [], mesh: null, aA: null, n: 0 };
 {
-  const puffs = [];
   let sd = 99; const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
-  for (let i = 0; i < 45; i++) {
-    const th = rr() * TAU, za = 300 + rr() * 7400, h = 260 + rr() * 160;
-    const n = 3 + Math.floor(rr() * 3);
-    for (let q = 0; q < n; q++) puffs.push([th + (rr() - 0.5) * 120 / R, za + (rr() - 0.5) * 160, h + (rr() - 0.5) * 30, 80 + rr() * 70]);
+  const G = 130; let count = 0;
+  for (let i = 0; i < G; i++) {
+    const g = { th: rr() * TAU, za: 300 + rr() * 7500, h: 260 + rr() * 160, rank: rr(), ph: rr() * TAU,
+      rate: TAU / (360 + rr() * 540), vs: (rr() - 0.5) * 1.2, puffs: [], w: 0 };
+    const n = 4 + Math.floor(rr() * 3);
+    for (let q = 0; q < n; q++) g.puffs.push({ ds: (rr() - 0.5) * 150, dz: (rr() - 0.5) * 190, dh: (rr() - 0.5) * 30,
+      size: 80 + rr() * 70, ph: rr() * TAU, var: Math.floor(rr() * 4), idx: count++ });
+    CLOUD.groups.push(g);
   }
-  const clouds = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), cloudMat, puffs.length);
-  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
-  puffs.forEach(([th, za, h, size], i) => {
-    const r = R - h;
-    clouds.setMatrixAt(i, m.compose(p.set(r * Math.cos(th), r * Math.sin(th), za - HALF_L), q, s.set(size, size, size)));
-  });
-  // bayangan awan di tanah (tahap 6). Sunline adalah sumber garis sepanjang sumbu: awan 100 m di ketinggian 300 m
-  // hanya menutup potongan pendek garis itu, jadi bayangannya lembut, memanjang searah sumbu, dan redup (sekitar 16%).
-  {
-    const CW = 512, CH = 1024, cc = document.createElement('canvas'); cc.width = CW; cc.height = CH;
-    const cg = cc.getContext('2d'); cg.fillStyle = '#000'; cg.fillRect(0, 0, CW, CH);
+  CLOUD.n = count;
+  const geo = new THREE.PlaneGeometry(1, 1);
+  const aVar = new Float32Array(count), aA = new Float32Array(count);
+  for (const g of CLOUD.groups) for (const p of g.puffs) aVar[p.idx] = p.var;
+  geo.setAttribute('aVar', new THREE.InstancedBufferAttribute(aVar, 1));
+  CLOUD.aA = new THREE.InstancedBufferAttribute(aA, 1); CLOUD.aA.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('aA', CLOUD.aA);
+  const clouds = new THREE.InstancedMesh(geo, cloudMat, count);
+  clouds.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  clouds.frustumCulled = false; clouds.renderOrder = 6; clouds.userData.noLight = true;
+  CLOUD.mesh = clouds;
+  scene.add(clouds);
+
+  // bayangan awan di tanah (tahap 6, dinamis sejak 11a). Sunline adalah sumber garis sepanjang sumbu: awan 100 m
+  // di ketinggian 300 m hanya menutup potongan pendek garis itu, jadi bayangannya lembut, memanjang searah sumbu, dan redup.
+  const CW = 512, CH = 1024, cc = document.createElement('canvas'); cc.width = CW; cc.height = CH;
+  const cg = cc.getContext('2d');
+  const blob = document.createElement('canvas'); blob.width = blob.height = 64;
+  { const bg = blob.getContext('2d'), gr = bg.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(90,90,90,1)'); gr.addColorStop(1, 'rgba(0,0,0,1)');
+    bg.fillStyle = gr; bg.fillRect(0, 0, 64, 64); }
+  const cloudShadowTex = new THREE.CanvasTexture(cc);
+  cloudShadowTex.colorSpace = THREE.NoColorSpace; cloudShadowTex.wrapS = THREE.RepeatWrapping;
+  groundMat.uniforms.uCloudTex.value = cloudShadowTex;
+  CLOUD.drawShadow = () => {
+    cg.globalCompositeOperation = 'source-over'; cg.globalAlpha = 1; cg.fillStyle = '#000'; cg.fillRect(0, 0, CW, CH);
     cg.globalCompositeOperation = 'lighter';
-    for (const [th, za, h, size] of puffs) {
-      const u = ((th / TAU) % 1 + 1) % 1, x = u * CW, y = (1 - za / CONFIG.L) * CH;
-      const rx = (0.35 * size / CIRC) * CW, ry = (0.35 * size * (1 + h / 300)) / CONFIG.L * CH;
-      for (const ox of [-CW, 0, CW]) {
-        cg.save(); cg.translate(x + ox, y); cg.scale(rx, ry);
-        const gr = cg.createRadialGradient(0, 0, 0, 0, 0, 1);
-        gr.addColorStop(0, 'rgba(90,90,90,1)'); gr.addColorStop(1, 'rgba(0,0,0,1)');
-        cg.fillStyle = gr; cg.beginPath(); cg.arc(0, 0, 1, 0, TAU); cg.fill(); cg.restore();
+    for (const g of CLOUD.groups) {
+      if (g.w < 0.02) continue;
+      for (const p of g.puffs) {
+        const sz = p.cur; if (!sz) continue;
+        const th = g.th + p.ds / (R - g.h), za = g.za + p.dz, h = g.h + p.dh;
+        const u = ((th / TAU) % 1 + 1) % 1, x = u * CW, y = (1 - za / CONFIG.L) * CH;
+        const rx = (0.35 * sz / CIRC) * CW, ry = (0.35 * sz * (1 + h / 300)) / CONFIG.L * CH;
+        cg.globalAlpha = Math.min(1, g.w * p.a);
+        cg.drawImage(blob, x - rx, y - ry, 2 * rx, 2 * ry);
+        if (x - rx < 0) cg.drawImage(blob, x + CW - rx, y - ry, 2 * rx, 2 * ry);
+        if (x + rx > CW) cg.drawImage(blob, x - CW - rx, y - ry, 2 * rx, 2 * ry);
       }
     }
-    const cloudTex = new THREE.CanvasTexture(cc);
-    cloudTex.colorSpace = THREE.NoColorSpace; cloudTex.wrapS = THREE.RepeatWrapping;
-    groundMat.uniforms.uCloudTex.value = cloudTex;
-  }
-  clouds.instanceMatrix.needsUpdate = true; clouds.frustumCulled = false; clouds.renderOrder = 6;
-  clouds.userData.noLight = true;
-  scene.add(clouds);
+    cg.globalAlpha = 1;
+    cloudShadowTex.needsUpdate = true;
+  };
 }
+const sstep0 = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function updateClouds(dt) {
+  const W = WEATHER;
+  const k = Math.max(1, Math.min(20, (clock.hourRate || 0) * 60));        // waktu dipercepat -> cuaca ikut dipercepat
+  const wdt = dt * k; W.T += wdt;
+  // mesin cuaca otomatis
+  if (W.mode === 'auto') {
+    W.dwell -= wdt;
+    if (W.dwell <= 0) {
+      const r = Math.random();
+      W.state = W.state === 'cerah' ? 'berawan' : W.state === 'mendung' ? 'berawan' : (r < 0.5 ? 'cerah' : 'mendung');
+      W.dwell = 240 + Math.random() * 240; updateWeatherLabel();
+    }
+  }
+  const tgt = W.target[W.mode === 'auto' ? W.state : W.mode];
+  const maxStep = wdt / 120;                                      // transisi penuh sekitar 1-2 menit
+  W.cover += Math.max(-maxStep, Math.min(maxStep, tgt - W.cover));
+  W.ov = sstep0(0.55, 1.0, W.cover);
+  const grow = 1 + 0.9 * W.ov;                                    // mendung: gumpalan melebar menjadi lapisan
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p3 = new THREE.Vector3(), s3 = new THREE.Vector3();
+  const aA = CLOUD.aA.array, T = W.T;
+  for (const g of CLOUD.groups) {
+    // hanyut: angin sepanjang sumbu + pusaran kecil keliling
+    g.za += (W.wind + 0.6 * Math.sin(g.th * 3 + T * 0.002)) * wdt;
+    g.th += (g.vs + 0.5 * Math.sin(g.za / 1200 + T * 0.001)) / (R - g.h) * wdt;
+    if (g.za > 7800) g.za -= 7500;
+    // terbentuk dan menghilang: ambang tiap gugus bergeser perlahan
+    const r = 0.65 * g.rank + 0.35 * (0.5 + 0.5 * Math.sin(T * g.rate + g.ph));
+    const edge = sstep0(300, 700, g.za) * (1 - sstep0(7400, 7800, g.za));
+    g.w = sstep0(r - 0.1, r + 0.1, W.cover) * edge;
+    for (const p of g.puffs) {
+      const breathe = 0.85 + 0.15 * Math.sin(T * 0.004 + p.ph);  // bentuk berubah perlahan
+      const sz = g.w > 0.005 ? p.size * grow * breathe * (0.55 + 0.45 * g.w) : 0;
+      p.cur = sz; p.a = 0.8 + 0.2 * breathe;
+      const th = g.th + p.ds * grow / (R - g.h), za = g.za + p.dz * grow, rr = R - g.h - p.dh;
+      m.compose(p3.set(rr * Math.cos(th), rr * Math.sin(th), za - HALF_L), q, s3.set(sz || 0.001, sz || 0.001, sz || 0.001));
+      CLOUD.mesh.setMatrixAt(p.idx, m);
+      aA[p.idx] = g.w * p.a;
+    }
+  }
+  CLOUD.mesh.instanceMatrix.needsUpdate = true; CLOUD.aA.needsUpdate = true;
+  W.shadowT -= dt;
+  if (W.shadowT <= 0) { CLOUD.drawShadow(); W.shadowT = Math.max(0.25, Math.min(W.shadowEvery, 3 / k)); }
+}
+function cycleWeather() {
+  const i = WEATHER.modes.findIndex((x) => x[0] === WEATHER.mode);
+  WEATHER.mode = WEATHER.modes[(i + 1) % WEATHER.modes.length][0];
+  if (WEATHER.mode !== 'auto') WEATHER.state = WEATHER.mode;
+  else WEATHER.dwell = 240 + Math.random() * 240;
+  updateWeatherLabel();
+  setLabText(`Cuaca: ${weatherText()}. Awan berubah bertahap sekitar 1-2 menit.`);
+}
+function weatherText() {
+  const name = (k) => WEATHER.modes.find((x) => x[0] === k)[1];
+  return WEATHER.mode === 'auto' ? `Otomatis (${name(WEATHER.state)})` : name(WEATHER.mode);
+}
+function updateWeatherLabel() { const b = document.getElementById('labWeather'); if (b) b.innerHTML = `<kbd>N</kbd>Cuaca: ${weatherText()}`; }
+updateClouds(0); CLOUD.drawShadow();
 
 // --- bayangan real-time dari cincin lampu end cap terdekat (radius sekitar 320 m dari pemain) ---
 const SHADOW = { enabled: true, size: 2048, extent: 320 };
@@ -3781,20 +3883,24 @@ function updateLighting() {
   const h = clock.hour, U = LIGHT.uniforms;
   const day = sstep(5.5, 7.5, h) * (1 - sstep(17.5, 19.5, h));
   const golden = Math.min(1, Math.exp(-(((h - 18.2) / 1.1) ** 2)) + 0.6 * Math.exp(-(((h - 6.6) / 0.9) ** 2)));
-  U.uL_Sunline.value = 0.04 + 0.9 * day;
+  const ov = WEATHER.ov, cov = WEATHER.cover;                       // tahap 11a: mendung meredupkan sunline, cahaya jadi rata
+  U.uL_Sunline.value = (0.04 + 0.9 * day) * (1 - 0.5 * ov);
   U.uL_SunlineCol.value.set(1.0, 0.97 - 0.14 * golden, 0.92 - 0.32 * golden);
-  const amb = mixV(mixV([0.02, 0.025, 0.045], [0.17, 0.2, 0.25], day), [0.2, 0.14, 0.09], golden * 0.6);
+  let amb = mixV(mixV([0.02, 0.025, 0.045], [0.17, 0.2, 0.25], day), [0.2, 0.14, 0.09], golden * 0.6 * (1 - 0.6 * ov));
+  amb = mixV(amb, [0.16 * (0.15 + day), 0.17 * (0.15 + day), 0.19 * (0.15 + day)], 0.6 * ov);
   U.uL_AmbCol.value.set(amb[0], amb[1], amb[2]);
-  U.uL_CapI.value = 0.05 + 0.25 * day + 1.1 * golden;
+  U.uL_CapI.value = 0.05 + 0.25 * day + 1.1 * golden * (1 - 0.35 * ov);
   // sinar Matahari dalam kerangka stasiun (atau inersia saat kamera luar)
   if (ext.active) U.uL_SunDir.value.copy(SUN_DIR);
   else { const c = Math.cos(OMEGA * clock.sim), s = Math.sin(OMEGA * clock.sim);
     U.uL_SunDir.value.set(SUN_DIR.x * c + SUN_DIR.y * s, -SUN_DIR.x * s + SUN_DIR.y * c, SUN_DIR.z); }
   // kabut: biru siang, keemasan senja, biru gelap malam
-  const fog = mixV(mixV([0.05, 0.06, 0.09], [0.68, 0.76, 0.86], day), [0.86, 0.66, 0.46], Math.min(1, golden * 0.75));
+  let fog = mixV(mixV([0.05, 0.06, 0.09], [0.68, 0.76, 0.86], day), [0.86, 0.66, 0.46], Math.min(1, golden * 0.75) * (1 - 0.5 * ov));
+  fog = mixV(fog, [0.08 + 0.5 * day, 0.085 + 0.52 * day, 0.1 + 0.53 * day], 0.7 * ov);          // mendung: kabut abu-abu, lebih tebal
   scene.fog.color.setRGB(fog[0], fog[1], fog[2], THREE.SRGBColorSpace);
+  if (!ext.active) scene.fog.density = CONFIG.fogDensity * (1 + 0.25 * cov + 0.9 * ov);
   // visual sunline, cincin lampu, awan
-  const I = U.uL_Sunline.value;
+  const I = 0.04 + 0.9 * day;                                        // sunline sendiri tidak meredup, hanya cahaya yang sampai ke tanah
   sunCore.material.color.setRGB(0.25 + 1.2 * I, 0.24 + 1.15 * I * (1 - 0.1 * golden), 0.22 + 1.05 * I * (1 - 0.3 * golden));
   glowMat.uniforms.uI.value = 0.15 + 1.1 * I;
   { const cr = Math.hypot(camera.position.x, camera.position.y), inG = cr < 40 && !ext.active; sunGlowIn.visible = inG; sunGlow.visible = !inG; }
@@ -3802,7 +3908,11 @@ function updateLighting() {
   capGlowMat.uniforms.uI.value = 0.15 + 0.85 * U.uL_CapI.value;
   BUILD_U.uNight.value = 1 - sstep(5.8, 7.2, h) * (1 - sstep(17.8, 19.4, h));   // lampu jendela menyala saat senja sampai subuh
   const cc = U.uL_SunlineCol.value;
-  cloudMat.uniforms.uCol.value.set(cc.x * (0.25 + 0.9 * I) + amb[0] + 0.25 * golden, cc.y * (0.25 + 0.9 * I) + amb[1] + 0.12 * golden, cc.z * (0.25 + 0.9 * I) + amb[2]);
+  { const kc = 1 - 0.5 * ov, gl = golden * (1 - 0.6 * ov);
+    const r = cc.x * (0.25 + 0.9 * I) + amb[0] + 0.25 * gl, g = cc.y * (0.25 + 0.9 * I) + amb[1] + 0.12 * gl, b = cc.z * (0.25 + 0.9 * I) + amb[2];
+    const lum = 0.3 * r + 0.55 * g + 0.15 * b, sat = 1 - 0.7 * ov;       // mendung: awan abu-abu, sisi bawah gelap
+    cloudMat.uniforms.uCol.value.set((lum + (r - lum) * sat) * kc, (lum + (g - lum) * sat) * kc, (lum + (b - lum) * sat) * kc * 1.02);
+    cloudMat.uniforms.uBase.value = 0.62 - 0.26 * ov; cloudMat.uniforms.uAlpha.value = 0.9 + 0.08 * ov; }
   cloudMat.uniforms.uFogCol.value.set(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b);
   cloudMat.uniforms.uFogD.value = scene.fog.density;
 }
@@ -5364,6 +5474,7 @@ function frame(now) {
   updateCamera();
   updateReal();
   updateFar();
+  updateClouds(dt);
   updateLighting();
   groundMat.uniforms.uTime.value = clock.sim % 3600;
   renderer.info.reset();
@@ -5388,7 +5499,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
