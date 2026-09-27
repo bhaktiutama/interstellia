@@ -1296,7 +1296,9 @@ const cabin = new THREE.Group(); cabin.matrixAutoUpdate = false;
   const cb = (sx, sy, sz, x, y, z, mat, flag) => { const mm = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); mm.position.set(x, y, z); if (flag) mm.userData[flag] = true; if (mat === glassM) mm.userData.noShadow = true; cabin.add(mm); };
   cb(3.1, 0.15, 3.1, 0, -0.075, 0, dark); cb(3.1, 0.18, 3.1, 0, 2.6, 0, metal);
   for (const x of [-1.5, 1.5]) for (const z of [-1.5, 1.5]) cb(0.12, 2.6, 0.12, x, 1.3, z, metal);
-  cb(0.03, 2.5, 3.0, -1.5, 1.3, 0, glassM); cb(0.03, 2.5, 3.0, 1.5, 1.3, 0, glassM); cb(3.0, 2.5, 0.03, 0, 1.3, 1.5, glassM); cb(3.0, 2.5, 0.03, 0, 1.3, -1.5, glassM);
+  cb(0.03, 2.5, 3.0, -1.5, 1.3, 0, glassM); cb(0.03, 2.5, 3.0, 1.5, 1.3, 0, glassM); cb(3.0, 2.5, 0.03, 0, 1.3, -1.5, glassM);
+  cb(0.8, 2.5, 0.03, -1.1, 1.3, 1.5, glassM); cb(0.8, 2.5, 0.03, 1.1, 1.3, 1.5, glassM); cb(1.4, 0.35, 0.03, 0, 2.38, 1.5, glassM);   // sisi depan: pintu 1,4 x 2,2 m
+  cb(0.08, 2.2, 0.08, -0.7, 1.1, 1.5, metal); cb(0.08, 2.2, 0.08, 0.7, 1.1, 1.5, metal);
   cb(0.05, 0.05, 2.8, -1.38, 1.0, 0, rail); cb(0.05, 0.05, 2.8, 1.38, 1.0, 0, rail); cb(2.8, 0.05, 0.05, 0, 1.0, -1.38, rail);
   cb(2.2, 0.1, 0.45, 0, 0.45, -1.15, seat); cb(2.2, 0.55, 0.08, 0, 0.8, -1.4, seat);
   cb(0.5, 1.1, 0.2, 1.2, 0.55, 1.3, dark); cb(0.36, 0.26, 0.02, 1.2, 1.0, 1.19, screen, 'noLight');
@@ -2001,7 +2003,10 @@ const BUILD_FS = /* glsl */`
       float nB = max(1.0, floor(W / bay + 0.5)), bx = (u / W + 0.5) * nB, fx = fract(bx), bi = floor(bx);
       float yy = y - groundH, fy = fract(yy / fh), fi = floor(yy / fh);
       float fwx = fwU * nB / W, fwy = fwY / fh;
-      float detail = 1.0 - smoothstep(0.12, 0.35, max(fwx, fwy));  // LOD: pola jendela memudar saat < ~3 px per bay
+      // LOD per sumbu: bila bay terlalu rapat secara horizontal, jendela dirata-ratakan menjadi pita lantai (dan sebaliknya),
+      // jadi gedung jauh tetap terlihat berlantai dengan dinding gelap, bukan satu warna rata
+      float ax = smoothstep(0.12, 0.35, fwx), ay = smoothstep(0.12, 0.35, fwy);
+      float detail = 1.0 - max(ax, ay);
       float winM = 0.0, frameM = 0.0;
       bool hasWin = code != 5.0 && code != 6.0 && code != 9.0 && !gableEnd && yy > 0.0 && y < H - 0.5;
       if (code == 4.0 || code == 10.0) {                          // gudang: jendela pita tinggi
@@ -2009,8 +2014,9 @@ const BUILD_FS = /* glsl */`
         fy = (y - (H - 2.6)) / 1.6; wy0 = 0.0; wy1 = 1.0; wx0 = 0.08; wx1 = 0.92; fwy = fwY / 1.6;
       }
       if (hasWin) {
-        winM = band(fx, wx0, wx1, fwx) * band(fy, wy0, wy1, fwy);
-        frameM = band(fx, wx0 - 0.04, wx1 + 0.04, fwx) * band(fy, wy0 - 0.04, wy1 + 0.04, fwy) - winM;
+        ax = smoothstep(0.12, 0.35, fwx); ay = smoothstep(0.12, 0.35, fwy); detail = 1.0 - max(ax, ay);
+        winM = mix(band(fx, wx0, wx1, fwx), wx1 - wx0, ax) * mix(band(fy, wy0, wy1, fwy), wy1 - wy0, ay);
+        frameM = max(0.0, band(fx, wx0 - 0.04, wx1 + 0.04, fwx) * band(fy, wy0 - 0.04, wy1 + 0.04, fwy) - winM) * detail;
         if (code == 3.0 || code == 7.0) winM *= 1.0 - 0.8 * max(lines(fx, 0.5, 0.006, fwx), lines(fy, 0.5, 0.006, fwy));   // kisi jendela
         if (code == 1.0) winM *= 1.0 - 0.7 * lines(fx, 1.0, 0.02, fwx);                    // mullion
       }
@@ -2055,20 +2061,16 @@ const BUILD_FS = /* glsl */`
       }
       // kaca: interior gelap + pantulan langit (Fresnel); malam: sebagian menyala
       float wid = hash1(vec2(bi + vSeed * 97.0, fi + (fz ? 13.0 : 71.0)));
-      vec3 inner = vec3(0.06, 0.06, 0.065) * (0.6 + 0.9 * wid);
+      vec3 inner = vec3(0.06, 0.06, 0.065) * (0.6 + 0.9 * mix(wid, 0.5, max(ax, ay)));
       if (code == 1.0) inner = mix(inner, base * 0.25, 0.5);
       vec3 glass = inner * light + sky * (0.18 + 0.7 * F) * (code == 1.0 ? 1.2 : 0.8);
-      float on = step(wid, litP) * uNight;
-      vec3 warm = mix(vec3(1.0, 0.72, 0.42), vec3(0.85, 0.9, 1.0), step(0.8, hash1(vec2(wid, 5.0)))) * (0.8 + 0.6 * hash1(vec2(fi, bi)));
+      float on = mix(step(wid, litP), litP, max(ax, ay)) * uNight;     // jauh: rata-rata jendela menyala
+      float far = max(ax, ay);
+      vec3 warm = mix(vec3(1.0, 0.72, 0.42), vec3(0.85, 0.9, 1.0), mix(step(0.8, hash1(vec2(wid, 5.0))), 0.2, far)) * (0.8 + 0.6 * mix(hash1(vec2(fi, bi)), 0.5, far));
       vec3 frameC = code == 3.0 || code == 7.0 ? vec3(0.88, 0.87, 0.84) : code == 1.0 ? vec3(0.2, 0.22, 0.24) : vec3(0.55, 0.55, 0.53);
       vec3 wallLit = wall * light;
-      vec3 detailed = mix(mix(wallLit, frameC * light, frameM), glass, max(winM, shopM));
-      emit = warm * on * max(winM, shopM * 0.8) * 1.6 + vec3(1.0, 0.8, 0.55) * shopM * uNight * 0.5;
-      vec3 avgGlass = glass;
-      vec3 flatC = mix(wallLit, avgGlass, avgWin + (groundH > 0.0 && y < groundH ? 0.6 : 0.0));
-      vec3 flatEmit = warm * uNight * litP * avgWin * 1.3;
-      col = mix(flatC, detailed, detail);
-      emit = mix(flatEmit, emit, detail);
+      col = mix(mix(wallLit, frameC * light, frameM), glass, max(winM, shopM));
+      emit = (warm * on * max(winM, shopM * 0.8) * 1.6 + vec3(1.0, 0.8, 0.55) * shopM * uNight * 0.5) * mix(1.0, 0.55, ax * ay);
       col *= mix(0.65, 1.0, smoothstep(0.0, 1.2, y));             // AO dekat tanah
       col += emit;
     }
@@ -2798,6 +2800,21 @@ function stepLift(dt) {
   }
 }
 
+// --- kolisi kabin lift: dinding kaca, lantai, atap padat; pintu 1,4 x 2,2 m di sisi depan (+z) ---
+// Wilayah: 0 = ruang dalam, 1 = ambang pintu, 2 = luar, 3 = di dalam dinding (terlarang). Perpindahan yang sah: 0-0, 0-1, 1-1, 1-2, 2-2.
+const CABIN = { hx: 1.5, h: 2.6, hz: 1.5, dx: 0.7, dh: 2.2 };
+const _co = new THREE.Vector3(), _cX = new THREE.Vector3(), _cY = new THREE.Vector3(), _cZ = new THREE.Vector3(0, 0, 1), _cl = new THREE.Vector3();
+function cabinFrame() { groundPoint(LIFT.theta, LIFT.za, R - player.lift.r, _co); tanAt(LIFT.theta, _cX); upAt(LIFT.theta, _cY); }
+function cabinLocal(p, out) { _cl.subVectors(p, _co); return out.set(_cl.dot(_cX), _cl.dot(_cY), _cl.dot(_cZ)); }
+function cabinRegion(q, r) {
+  const C = CABIN;
+  if (Math.abs(q.x) < C.hx - r && q.y > r && q.y < C.h - r && Math.abs(q.z) < C.hz - r) return 0;
+  if (Math.abs(q.x) < C.dx - r && q.y > r && q.y < C.dh - r && q.z >= C.hz - r - 0.01 && q.z <= C.hz + r + 0.01) return 1;
+  if (Math.abs(q.x) > C.hx + r || q.y < -r || q.y > C.h + r || Math.abs(q.z) > C.hz + r) return 2;
+  return 3;
+}
+const cabinOK = (a, b) => (a === b && a !== 3) || (a === 0 && b === 1) || (a === 1 && b === 0) || (a === 1 && b === 2) || (a === 2 && b === 1);
+const _q0 = new THREE.Vector3(), _q1 = new THREE.Vector3();
 // Mode melayang di hub: persamaan gerak di kerangka berputar
 // a = dorongan + omega^2 r_perp (sentrifugal) - 2 omega x v (Coriolis) - k v (hambatan udara yang ikut berputar)
 function stepFloat(dt) {
@@ -2814,7 +2831,10 @@ function stepFloat(dt) {
   _v1.y += OMEGA * OMEGA * F.pos.y - 2 * OMEGA * F.vel.x;
   _v1.addScaledVector(F.vel, -PHYS.airDrag);
   F.vel.addScaledVector(_v1, dt);
+  cabinFrame(); const reg0 = cabinRegion(cabinLocal(F.pos, _q0), 0.35);
   F.pos.addScaledVector(F.vel, dt);
+  const reg1 = cabinRegion(cabinLocal(F.pos, _q1), 0.35);
+  if (!cabinOK(reg0, reg1)) { F.pos.addScaledVector(F.vel, -dt); F.vel.multiplyScalar(-0.3); }   // menabrak dinding kabin: memantul pelan
   const r = Math.hypot(F.pos.x, F.pos.y);                    // batasi di dalam hub
   if (r > HUB.r - 1) {
     const k = (HUB.r - 1) / r; F.pos.x *= k; F.pos.y *= k;
@@ -2840,14 +2860,31 @@ function physicsStep(dt) {
   }
   stepTram(dt);
   if (player.state === 'tram') stepTramRider();
+  const cabinStill = player.state !== 'lift';
+  if (cabinStill) cabinFrame();
   for (const b of balls) if (!b.done) {
+    const nearCabin = cabinStill && b.pos.z + HALF_L < LIFT.za + 12 && Math.abs(Math.hypot(b.pos.x, b.pos.y) - player.lift.r) < 12;
+    let reg0 = 2; if (nearCabin) { _v3.copy(b.pos); reg0 = cabinRegion(cabinLocal(b.pos, _q0), 0.15); }
     advanceBody(b, dt);
+    if (nearCabin && !b.done) {                                        // bola memantul di dinding, lantai, atap kabin
+      const reg1 = cabinRegion(cabinLocal(b.pos, _q1), 0.15);
+      if (!cabinOK(reg0, reg1)) {
+        const v = _v2.subVectors(b.pos, _v3).divideScalar(dt);
+        const vl = _q1.set(v.dot(_cX), v.dot(_cY), v.dot(_cZ));
+        const C = CABIN, ins = reg0 === 0;
+        if (ins ? Math.abs(_q0.x + vl.x * dt) > C.hx - 0.15 : Math.abs(_q0.x) > C.hx) vl.x *= -0.5;
+        if (ins ? (_q0.y + vl.y * dt < 0.15 || _q0.y + vl.y * dt > C.h - 0.15) : (_q0.y < 0 || _q0.y > C.h)) vl.y *= -0.5;
+        if (ins ? Math.abs(_q0.z + vl.z * dt) > C.hz - 0.15 : Math.abs(_q0.z) > C.hz) vl.z *= -0.5;
+        if (vl.length() < 0.05 && ins && _q0.y < 0.4) { b.done = true; b.inCabin = true; b.pos.copy(_v3); if (b === lastBall) setLabText('Bola akhirnya diam di lantai kabin: gaya sentrifugal kecil (sekitar 0,006 g) mendorongnya ke lantai.'); }   // diam di lantai kabin
+        else { v.copy(_cX).multiplyScalar(vl.x).addScaledVector(_cY, vl.y).addScaledVector(_cZ, vl.z); launchBody(b, _v3, v); b.pos.copy(_v3); }
+      }
+    }
     if (!b.done && b.t > 0.05) {                                    // bola mendarat di bukit area uji
       const bs = modS(Math.atan2(b.pos.y, b.pos.x) * R), bz = b.pos.z + HALF_L;
       if (R - Math.hypot(b.pos.x, b.pos.y) <= groundH(bs, bz)) b.done = true;
     }
     if (b === lastBall && (b.stepCount++ % 2 === 0 || b.done)) trailPush(b.pos);
-    if (b.done) { _tmpL.copy(b.pos); addMark(Math.atan2(_tmpL.y, _tmpL.x), _tmpL.z + HALF_L, COL_LAND); }
+    if (b.done && !b.inCabin) { _tmpL.copy(b.pos); addMark(Math.atan2(_tmpL.y, _tmpL.x), _tmpL.z + HALF_L, COL_LAND); }
   }
 }
 
@@ -3362,26 +3399,37 @@ function updateStats(dt) {
    ===================================================================== */
 const SPINE = { z0: -HALF_L + 80, z1: HALF_L - 80, modules: 5 };
 // inti sunline + cahaya pendar (additive) + modul cincin di tulang sumbu
-const sunCore = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, SPINE.z1 - SPINE.z0, 16, 1, true).rotateX(Math.PI / 2),
-  new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }));
+const sunCore = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, SPINE.z1 - SPINE.z0, 24, 1, false).rotateX(Math.PI / 2),   // tabung tertutup, terlihat dari segala arah
+  new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, side: THREE.DoubleSide }));
 sunCore.userData.noLight = true;
 const glowMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-  uniforms: { uCol: { value: new THREE.Vector3(1, 0.95, 0.85) }, uI: { value: 1 } },
+  uniforms: { uCol: { value: new THREE.Vector3(1, 0.95, 0.85) }, uI: { value: 1 }, uZ: { value: new THREE.Vector2(SPINE.z0, SPINE.z1) } },
   vertexShader: /* glsl */`
-    varying vec3 vN; varying vec3 vV;
-    void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    varying vec3 vW;
+    void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
   fragmentShader: /* glsl */`
-    uniform vec3 uCol; uniform float uI;
-    varying vec3 vN; varying vec3 vV;
-    void main() { float f = pow(max(dot(normalize(vN), normalize(vV)), 0.0), 3.0); gl_FragColor = vec4(pow(max(uCol * f * uI * 0.55, vec3(0.0)), vec3(2.2)), 1.0);
+    // pendar volumetrik: jarak terdekat garis pandang ke sumbu (bekerja dari tanah maupun dari dalam, di sepanjang sumbu)
+    uniform vec3 uCol; uniform float uI; uniform vec2 uZ;
+    varying vec3 vW;
+    void main() {
+      vec3 D = vW - cameraPosition;
+      vec2 c = cameraPosition.xy, d = D.xy;
+      float t = clamp(-dot(c, d) / max(dot(d, d), 1e-6), 0.0, 1.0);
+      float dist = length(c + t * d), zc = cameraPosition.z + t * D.z;
+      float inside = smoothstep(uZ.x - 60.0, uZ.x, zc) * (1.0 - smoothstep(uZ.y, uZ.y + 60.0, zc));
+      float g = (exp(-pow(dist / 11.0, 2.0)) * 0.85 + exp(-dist / 26.0) * 0.3) * inside;
+      gl_FragColor = vec4(pow(max(uCol * g * uI * 0.55, vec3(0.0)), vec3(2.2)), 1.0);
       #include <colorspace_fragment>
     }`,
 });
-const sunGlow = new THREE.Mesh(new THREE.CylinderGeometry(38, 38, SPINE.z1 - SPINE.z0, 32, 1, true).rotateX(Math.PI / 2), glowMat);
-sunGlow.renderOrder = 5;
-sunCore.position.z = sunGlow.position.z = (SPINE.z0 + SPINE.z1) / 2;
-scene.add(sunCore, sunGlow);
+const sunGlow = new THREE.Mesh(new THREE.CylinderGeometry(38, 38, SPINE.z1 - SPINE.z0, 32, 1, false).rotateX(Math.PI / 2), glowMat);
+const glowMatIn = glowMat.clone(); glowMatIn.uniforms = glowMat.uniforms; glowMatIn.side = THREE.BackSide;
+const sunGlowIn = new THREE.Mesh(sunGlow.geometry, glowMatIn);   // dipakai saat kamera di dalam tabung pendar (dekat sumbu)
+sunGlow.renderOrder = sunGlowIn.renderOrder = 5;
+sunCore.position.z = sunGlow.position.z = sunGlowIn.position.z = (SPINE.z0 + SPINE.z1) / 2;
+sunGlowIn.visible = false; sunGlowIn.userData.noLight = true;
+scene.add(sunCore, sunGlow, sunGlowIn);
 {
   const modMat = new THREE.MeshBasicMaterial({ color: 0x2b3038 });
   for (let k = 1; k <= SPINE.modules; k++) {
@@ -3574,6 +3622,7 @@ function updateLighting() {
   const I = U.uL_Sunline.value;
   sunCore.material.color.setRGB(0.25 + 1.2 * I, 0.24 + 1.15 * I * (1 - 0.1 * golden), 0.22 + 1.05 * I * (1 - 0.3 * golden));
   glowMat.uniforms.uI.value = 0.15 + 1.1 * I;
+  { const cr = Math.hypot(camera.position.x, camera.position.y), inG = cr < 40 && !ext.active; sunGlowIn.visible = inG; sunGlow.visible = !inG; }
   capRingMat.color.setRGB(0.3 + 1.6 * U.uL_CapI.value, 0.2 + 1.0 * U.uL_CapI.value, 0.08 + 0.45 * U.uL_CapI.value);
   capGlowMat.uniforms.uI.value = 0.15 + 0.85 * U.uL_CapI.value;
   BUILD_U.uNight.value = 1 - sstep(5.8, 7.2, h) * (1 - sstep(17.8, 19.4, h));   // lampu jendela menyala saat senja sampai subuh
@@ -5150,7 +5199,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
