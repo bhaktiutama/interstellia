@@ -59,6 +59,31 @@
   #err[hidden], [hidden] { display: none !important; }
   .hidden-ui #hud, .hidden-ui #cross { display: none; }
   @media (max-width: 520px) { #hud { font-size: 10.5px; padding: 8px 10px; } #hud .wide { display: none; } }
+  #lab { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: min(300px, calc(100vw - 24px));
+    max-height: calc(100vh - 90px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  #labHead { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; cursor: pointer; user-select: none;
+    color: var(--accent); letter-spacing: .08em; text-transform: uppercase; font-size: 10.5px; }
+  #lab.collapsed .body { display: none; }
+  #lab.collapsed #labHead .chev { transform: rotate(-90deg); }
+  #lab .body { padding: 0 12px 12px; display: grid; gap: 8px; }
+  #lab .row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
+  #lab .row input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+  #lab .row output { color: var(--accent); font-variant-numeric: tabular-nums; }
+  #lab .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #lab button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 6px; cursor: pointer; }
+  #lab button:hover { border-color: rgba(232,183,101,0.6); }
+  #lab button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  #lab kbd { font: inherit; color: var(--muted); margin-right: 4px; }
+  #labResult { color: #fff; min-height: 2.9em; }
+  #labTable { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 11px; }
+  #labTable th { text-align: left; color: var(--muted); font-weight: normal; border-bottom: 1px solid var(--line); padding: 2px 4px 2px 0; }
+  #labTable td { padding: 3px 4px 3px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  #labTable .ok { color: #8fd18a; } #labTable .bad { color: var(--warn); }
+  #lab .note { color: var(--muted); font-size: 11px; }
+  .hidden-ui #lab { display: none; }
+  #touchbtns { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 150px); }
+  #touchbtns button { padding: 8px 10px; }
+  @media (max-width: 520px) { body.lab-open #hud { display: none; } }
 </style>
 </head>
 <body>
@@ -66,21 +91,42 @@
 <div id="cross"></div>
 <div id="hud"></div>
 <div id="joy" hidden><div id="knob"></div></div>
-<div id="touchbtns"><button id="btnHud" type="button">HUD</button><button id="btnRun" type="button">Lari</button><button id="btnAuto" type="button">Jalan otomatis</button></div>
+<div id="touchbtns"><button id="btnHud" type="button">HUD</button><button id="btnLab" type="button">Uji</button><button id="btnRun" type="button">Lari</button><button id="btnAuto" type="button">Otomatis</button><button id="btnJump" type="button">Lompat</button><button id="btnThrow" type="button">Lempar</button><button id="btnLift" type="button">Lift</button></div>
+<div id="lab">
+  <div id="labHead"><span>Uji fisika</span><span class="chev">&#9662;</span></div>
+  <div class="body">
+    <div class="row"><label for="inSpeed">Kecepatan lempar</label><output id="inSpeedV"></output><input id="inSpeed" type="range" min="1" max="100" step="1"></div>
+    <div class="row"><label for="inElev">Sudut elevasi</label><output id="inElevV"></output><input id="inElev" type="range" min="0" max="90" step="1"></div>
+    <div class="row"><label for="inDrop">Tinggi jatuh</label><output id="inDropV"></output><input id="inDrop" type="range" min="1" max="500" step="1"></div>
+    <div class="btns">
+      <button id="labThrow" type="button"><kbd>B</kbd>Lempar</button>
+      <button id="labDrop" type="button"><kbd>G</kbd>Jatuhkan</button>
+      <button id="labLift" type="button"><kbd>L</kbd>Lift ke sumbu</button>
+      <button id="labTest" type="button">Self-test</button>
+    </div>
+    <div id="labResult">Lempar ke arah hadap, dengan sudut elevasi dari slider. Tiang biru = titik lepas, tiang merah = titik mendarat.</div>
+    <table id="labTable"></table>
+    <div class="note">Hambatan udara diabaikan untuk bola. Jarak + = searah putaran stasiun.</div>
+  </div>
+</div>
 
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 1 gray-box · silinder R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 2 gray-box · fisika rotasi · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
       <tr class="desk-only"><td>Shift</td><td>Lari 5 m/s</td></tr>
+      <tr class="desk-only"><td>Space</td><td>Lompat (di hub: naik)</td></tr>
+      <tr class="desk-only"><td>B · G</td><td>Lempar bola · jatuhkan bola dari ketinggian</td></tr>
+      <tr class="desk-only"><td>L</td><td>Lift ke sumbu (0 g) / turun lagi; Shift = 5x cepat</td></tr>
       <tr class="desk-only"><td>O</td><td>Jalan otomatis ke depan</td></tr>
       <tr class="desk-only"><td>X</td><td>Turbo 50 m/s (debug)</td></tr>
       <tr class="desk-only"><td>R · H · Esc</td><td>Kembali ke titik awal · sembunyikan HUD · lepas kursor</td></tr>
       <tr class="touch-only"><td>Jempol kiri</td><td>Joystick untuk berjalan</td></tr>
       <tr class="touch-only"><td>Jempol kanan</td><td>Geser untuk melihat</td></tr>
+      <tr class="touch-only"><td>Tombol</td><td>Lompat, Lempar, Lift, Uji (panel fisika)</td></tr>
     </table>
     <button id="go" type="button">Mulai</button>
   </div>
@@ -328,27 +374,166 @@ scene.add(markers);
 }
 
 /* =====================================================================
-   PLAYER: koordinat silinder (theta, za, h) + basis lokal
+   OBJEK TAHAP 2: lift, hub 0 g, bola, penanda mendarat, lintasan
+   ===================================================================== */
+const R = CONFIG.R;
+const LIFT = { theta: 0.06, za: 4, maxSpeed: 20, accel: 1.0, topR: 6 };   // lift menempel di dinding end cap A
+const HUB = { r: 25, zaMin: 2, zaMax: 60 };                                // ruang 0 g di sumbu (spaceport)
+const PHYS = { jump: 3.0, handH: 1.5, floatThrust: 1.2, airDrag: 0.3 };
+
+function bakeShade(geo) {   // pencahayaan palsu per sisi kotak, tanpa light
+  const shade = [0.78, 0.78, 1.0, 0.45, 0.62, 0.62];
+  const cols = [];
+  for (let f = 0; f < 6; f++) for (let v = 0; v < 4; v++) cols.push(shade[f], shade[f], shade[f]);
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  return geo;
+}
+// Matriks dengan lokal +Y = arah atas (menuju sumbu) di titik tanah (theta, za) dan ketinggian h
+const _bx = new THREE.Vector3(), _by = new THREE.Vector3(), _bz = new THREE.Vector3(0, 0, 1);
+function surfaceMatrix(m, theta, za, h) {
+  const c = Math.cos(theta), s = Math.sin(theta), r = R - h;
+  _bx.set(-s, c, 0); _by.set(-c, -s, 0);
+  m.makeBasis(_bx, _by, _bz);
+  m.setPosition(r * c, r * s, za - HALF_L);
+  return m;
+}
+
+// Rel lift dari tanah sampai sumbu (1 mesh), kabin (garis tepi), hub (wireframe)
+const liftRail = new THREE.Mesh(bakeShade(new THREE.BoxGeometry(2, R, 1).translate(0, R / 2, 0)),
+  new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x9aa3ad }));
+surfaceMatrix(liftRail.matrix, LIFT.theta - 3 / R, 1.2, 0);
+liftRail.matrixAutoUpdate = false;
+scene.add(liftRail);
+const cabin = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(3, 3, 3).translate(0, 1.5, 0)),
+  new THREE.LineBasicMaterial({ color: 0xe8b765 }));
+cabin.matrixAutoUpdate = false;
+scene.add(cabin);
+const hub = new THREE.Mesh(new THREE.CylinderGeometry(HUB.r, HUB.r, HUB.zaMax - HUB.zaMin, 24, 4, true).rotateX(Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0x8fb3d9, wireframe: true, fog: false }));
+hub.position.z = -HALF_L + (HUB.zaMin + HUB.zaMax) / 2;
+scene.add(hub);
+
+// Bola (1 InstancedMesh, diameter visual 1 m agar terlihat dari jauh), penanda (1 InstancedMesh), lintasan (1 Line)
+const MAX_BALLS = 24, MAX_MARKS = 48, MAX_TRAIL = 4000;
+const ballMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.5, 12, 8), new THREE.MeshBasicMaterial({ color: 0xf6f2ea }), MAX_BALLS);
+ballMesh.count = 0; ballMesh.frustumCulled = false;
+scene.add(ballMesh);
+// penanda berupa tiang 25 m agar titik lepas/mendarat terlihat dari ratusan meter
+const markMesh = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.6, 0.6, 25, 8).translate(0, 12.5, 0),
+  new THREE.MeshBasicMaterial({ color: 0xffffff }), MAX_MARKS);
+markMesh.count = 0; markMesh.frustumCulled = false;
+scene.add(markMesh);
+const trailPos = new Float32Array(MAX_TRAIL * 3);
+const trailGeo = new THREE.BufferGeometry();
+trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3).setUsage(THREE.DynamicDrawUsage));
+trailGeo.setDrawRange(0, 0);
+const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({ color: 0xffd98a, fog: false }));
+trail.frustumCulled = false;
+scene.add(trail);
+let trailN = 0, markN = 0;
+const COL_LAUNCH = new THREE.Color('#4aa3df'), COL_LAND = new THREE.Color('#e0623f');
+const _mm = new THREE.Matrix4();
+function addMark(theta, za, color) {
+  const i = markN % MAX_MARKS; markN++;
+  markMesh.setMatrixAt(i, surfaceMatrix(_mm, theta, za, 0));
+  markMesh.setColorAt(i, color);
+  markMesh.count = Math.min(markN, MAX_MARKS);
+  markMesh.instanceMatrix.needsUpdate = true; markMesh.instanceColor.needsUpdate = true;
+}
+function trailReset() { trailN = 0; trailGeo.setDrawRange(0, 0); }
+function trailPush(p) {
+  if (trailN >= MAX_TRAIL) return;
+  trailPos[trailN * 3] = p.x; trailPos[trailN * 3 + 1] = p.y; trailPos[trailN * 3 + 2] = p.z;
+  trailN++;
+  trailGeo.setDrawRange(0, trailN);
+  trailGeo.attributes.position.needsUpdate = true;
+}
+
+/* =====================================================================
+   FISIKA ROTASI
+   Benda di udara: dipindah ke kerangka inersia, bergerak lurus tanpa gaya
+   (hambatan udara diabaikan), lalu dirotasi balik -omega*t ke kerangka stasiun.
+   Waktu mendarat dihitung eksak: |p0_xy + v_xy t| = R.
+   ===================================================================== */
+function makeBody() {
+  return { p0: new THREE.Vector3(), vin: new THREE.Vector3(), pos: new THREE.Vector3(),
+    t: 0, tEnd: Infinity, hitWall: false, done: true, thetaLaunch: 0, zaLaunch: 0 };
+}
+function launchBody(b, pRot, vRot) {
+  b.p0.copy(pRot);
+  b.vin.set(vRot.x - OMEGA * pRot.y, vRot.y + OMEGA * pRot.x, vRot.z);   // v_inersia = v_rot + omega x r
+  b.t = 0; b.done = false;
+  const a = b.vin.x * b.vin.x + b.vin.y * b.vin.y;
+  const bb = 2 * (b.p0.x * b.vin.x + b.p0.y * b.vin.y);
+  const c = b.p0.x * b.p0.x + b.p0.y * b.p0.y - R * R;
+  let tl = Infinity;
+  if (a > 1e-12) tl = (-bb + Math.sqrt(Math.max(0, bb * bb - 4 * a * c))) / (2 * a);
+  let tw = Infinity;
+  const zMin = -HALF_L + 0.5, zMax = HALF_L - 0.5;
+  if (b.vin.z > 1e-9) tw = (zMax - b.p0.z) / b.vin.z; else if (b.vin.z < -1e-9) tw = (zMin - b.p0.z) / b.vin.z;
+  b.tEnd = Math.min(tl, tw); b.hitWall = tw < tl;
+  b.thetaLaunch = Math.atan2(pRot.y, pRot.x); b.zaLaunch = pRot.z + HALF_L;
+  b.pos.copy(pRot);
+  return b;
+}
+function bodyPosAt(b, t, out) {
+  const x = b.p0.x + b.vin.x * t, y = b.p0.y + b.vin.y * t, z = b.p0.z + b.vin.z * t;
+  const c = Math.cos(OMEGA * t), s = Math.sin(OMEGA * t);
+  return out.set(x * c + y * s, -x * s + y * c, z);                      // rotasi -omega*t
+}
+function advanceBody(b, dt) {
+  if (b.done) return;
+  b.t = Math.min(b.t + dt, b.tEnd);
+  bodyPosAt(b, b.t, b.pos);
+  if (b.t >= b.tEnd) b.done = true;
+}
+function wrapPi(a) { return ((a + Math.PI) % TAU + TAU) % TAU - Math.PI; }
+function landingOf(b) {
+  const p = bodyPosAt(b, b.tEnd, _tmpL);
+  return { time: b.tEnd, arc: wrapPi(Math.atan2(p.y, p.x) - b.thetaLaunch) * R, axial: p.z + HALF_L - b.zaLaunch, wall: b.hitWall };
+}
+const _tmpL = new THREE.Vector3();
+
+// Vektor lokal di titik theta
+function upAt(theta, out) { return out.set(-Math.cos(theta), -Math.sin(theta), 0); }
+function tanAt(theta, out) { return out.set(-Math.sin(theta), Math.cos(theta), 0); }
+function groundPoint(theta, za, h, out) { const r = R - h; return out.set(r * Math.cos(theta), r * Math.sin(theta), za - HALF_L); }
+
+/* =====================================================================
+   PLAYER
+   state: ground | air | lift | float
    ===================================================================== */
 const player = {
-  theta: CONFIG.spawn.theta,          // rad, sudut keliling
-  za: CONFIG.spawn.za,                // m, jarak dari end cap A
-  h: 0,                               // m, tinggi kaki di atas tanah
-  heading: CONFIG.spawn.heading * DEG,// rad, 0 = menuju +z (ke arah end cap B), 90 = arah theta naik
-  pitch: CONFIG.spawn.pitch * DEG,
-  distance: 0,                        // total jarak ditempuh (m)
-  mode: 'jalan',
+  theta: CONFIG.spawn.theta, za: CONFIG.spawn.za, h: 0,
+  heading: CONFIG.spawn.heading * DEG, pitch: CONFIG.spawn.pitch * DEG,
+  distance: 0, mode: 'jalan', state: 'ground',
+  vA: 0, vT: 0,                             // kecepatan jalan terakhir (sumbu, tangen) m/s
+  body: makeBody(),
+  lift: { r: R, dir: 1, v: 0 },             // r = radius lantai kabin; dir 1 = naik ke sumbu
+  float: { pos: new THREE.Vector3(), vel: new THREE.Vector3(), up: new THREE.Vector3(), tan: new THREE.Vector3() },
 };
 const input = { f: 0, s: 0, run: false, turbo: false, auto: false, joyF: 0, joyS: 0 };
 const keys = new Set();
 
 function respawn() {
-  Object.assign(player, { theta: CONFIG.spawn.theta, za: CONFIG.spawn.za, h: 0,
-    heading: CONFIG.spawn.heading * DEG, pitch: CONFIG.spawn.pitch * DEG, distance: 0 });
+  Object.assign(player, { theta: CONFIG.spawn.theta, za: CONFIG.spawn.za, h: 0, state: 'ground',
+    heading: CONFIG.spawn.heading * DEG, pitch: CONFIG.spawn.pitch * DEG, distance: 0, vA: 0, vT: 0 });
+  player.body.done = true;
 }
 
-// Satu langkah fisika (fixed timestep). Tahap 1: hanya berjalan di permukaan.
-function physicsStep(dt) {
+// Basis kamera dari (up, tangen) lokal + heading/pitch. Hasil di _fwd (arah pandang), _camUp, _right.
+const _a = new THREE.Vector3(0, 0, 1), _up = new THREE.Vector3(), _t = new THREE.Vector3();
+const _flat = new THREE.Vector3(), _fwd = new THREE.Vector3(), _camUp = new THREE.Vector3(), _right = new THREE.Vector3();
+function lookBasis(up, tan) {
+  _flat.copy(_a).multiplyScalar(Math.cos(player.heading)).addScaledVector(tan, Math.sin(player.heading));
+  const cp = Math.cos(player.pitch), sp = Math.sin(player.pitch);
+  _fwd.copy(_flat).multiplyScalar(cp).addScaledVector(up, sp);
+  _camUp.copy(_flat).multiplyScalar(-sp).addScaledVector(up, cp);
+  _right.crossVectors(_fwd, _camUp);
+}
+
+const _v1 = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3();
+function readMoveInput() {
   let f = input.joyF, s = input.joyS;
   if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1;
   if (keys.has('KeyS') || keys.has('ArrowDown')) f -= 1;
@@ -357,40 +542,236 @@ function physicsStep(dt) {
   if (input.auto) f = Math.max(f, 1);
   const len = Math.hypot(f, s);
   if (len > 1) { f /= len; s /= len; }
-  const speed = input.turbo ? CONFIG.turbo : (input.run || keys.has('ShiftLeft') || keys.has('ShiftRight')) ? CONFIG.run : CONFIG.walk;
-  player.mode = input.turbo ? 'turbo (debug)' : speed === CONFIG.run ? 'lari' : 'jalan';
-  if (len === 0) return;
-
-  // Di bidang singgung (a = sumbu, t = tangen): forward = (cos psi, sin psi), right = (sin psi, -cos psi)
-  const ch = Math.cos(player.heading), sh = Math.sin(player.heading);
-  const dA = (f * ch + s * sh) * speed * dt;        // sepanjang sumbu (m)
-  const dT = (f * sh - s * ch) * speed * dt;        // sepanjang keliling (m)
-  const zaNew = Math.min(CONFIG.L - 1.0, Math.max(1.0, player.za + dA));   // dinding end cap
-  const moved = Math.hypot(zaNew - player.za, dT);
-  player.za = zaNew;
-  player.theta = (player.theta + dT / (CONFIG.R - player.h) + TAU) % TAU;
-  player.distance += moved;
+  return [f, s, len];
+}
+function syncFromPos(p) {                    // posisi kerangka stasiun -> (theta, za, h)
+  player.theta = (Math.atan2(p.y, p.x) + TAU) % TAU;
+  player.za = p.z + HALF_L;
+  player.h = Math.max(0, R - Math.hypot(p.x, p.y));
 }
 
-// Kamera dari basis lokal. Semua objek dipakai ulang (tanpa alokasi per frame).
-const _P = new THREE.Vector3(), _up = new THREE.Vector3(), _a = new THREE.Vector3(0, 0, 1), _t = new THREE.Vector3();
-const _flat = new THREE.Vector3(), _fwd = new THREE.Vector3(), _camUp = new THREE.Vector3(), _right = new THREE.Vector3();
-const _m = new THREE.Matrix4();
+function stepGround(dt) {
+  const [f, s, len] = readMoveInput();
+  const speed = input.turbo ? CONFIG.turbo : (input.run || keys.has('ShiftLeft') || keys.has('ShiftRight')) ? CONFIG.run : CONFIG.walk;
+  player.mode = input.turbo ? 'turbo (debug)' : speed === CONFIG.run ? 'lari' : 'jalan';
+  const ch = Math.cos(player.heading), sh = Math.sin(player.heading);
+  player.vA = len ? (f * ch + s * sh) * speed : 0;          // forward = (cos, sin), right = (sin, -cos) di bidang (a, t)
+  player.vT = len ? (f * sh - s * ch) * speed : 0;
+  if (!len) return;
+  const zaNew = Math.min(CONFIG.L - 1.0, Math.max(1.0, player.za + player.vA * dt));
+  const dT = player.vT * dt;
+  player.distance += Math.hypot(zaNew - player.za, dT);
+  player.za = zaNew;
+  player.theta = (player.theta + dT / R + TAU) % TAU;
+}
+
+function jump() {
+  if (player.state !== 'ground') return;
+  groundPoint(player.theta, player.za, 0, _v1);
+  upAt(player.theta, _v2).multiplyScalar(PHYS.jump);
+  _v2.addScaledVector(tanAt(player.theta, _v3), player.vT);
+  _v2.z += player.vA;
+  launchBody(player.body, _v1, _v2);
+  player.state = 'air';
+}
+function stepAir(dt) {
+  const b = player.body;
+  advanceBody(b, dt);
+  syncFromPos(b.pos);
+  if (b.done) {
+    if (b.hitWall) {                                         // menabrak dinding end cap: buang komponen sumbu
+      bodyPosAt(b, b.t - 1e-3, _v1);
+      _v2.subVectors(b.pos, _v1).divideScalar(1e-3); _v2.z = 0;
+      launchBody(b, b.pos, _v2);
+    } else { player.h = 0; player.state = 'ground'; player.vA = player.vT = 0; }
+  }
+}
+
+function enterLift() {
+  if (player.state === 'float') { player.lift.r = LIFT.topR; player.lift.dir = -1; player.lift.v = 0; player.state = 'lift'; return; }
+  if (player.state === 'lift') return;
+  player.theta = LIFT.theta; player.za = LIFT.za; player.h = 0;
+  player.lift.r = R; player.lift.dir = 1; player.lift.v = 0; player.state = 'lift';
+}
+function stepLift(dt) {
+  const L = player.lift;
+  const fast = keys.has('ShiftLeft') || keys.has('ShiftRight') || input.run ? 5 : 1;
+  const travelled = L.dir > 0 ? R - L.r : L.r - LIFT.topR;
+  const remaining = L.dir > 0 ? L.r - LIFT.topR : R - L.r;
+  // profil kecepatan: percepatan dan perlambatan 1 m/s^2, maksimal 20 m/s
+  L.v = Math.min(LIFT.maxSpeed, Math.sqrt(2 * LIFT.accel * (travelled + 0.5)), Math.sqrt(2 * LIFT.accel * Math.max(remaining, 0))) * fast;
+  L.r -= L.dir * Math.min(L.v * dt, Math.max(remaining, 0));
+  player.theta = LIFT.theta; player.za = LIFT.za; player.h = R - L.r;
+  player.mode = L.dir > 0 ? 'lift naik' : 'lift turun';
+  if (L.dir > 0 && L.r <= LIFT.topR + 1e-6) {               // tiba di sumbu: mode melayang
+    const F = player.float;
+    groundPoint(LIFT.theta, LIFT.za, R - LIFT.topR + CONFIG.eye, F.pos);
+    F.vel.set(0, 0, 0);
+    upAt(LIFT.theta, F.up); tanAt(LIFT.theta, F.tan);
+    player.state = 'float';
+  } else if (L.dir < 0 && L.r >= R - 1e-6) {                 // tiba di tanah
+    player.h = 0; player.za = LIFT.za + 3; player.state = 'ground';
+  }
+}
+
+// Mode melayang di hub: persamaan gerak di kerangka berputar
+// a = dorongan + omega^2 r_perp (sentrifugal) - 2 omega x v (Coriolis) - k v (hambatan udara yang ikut berputar)
+function stepFloat(dt) {
+  const F = player.float;
+  const [f, s] = readMoveInput();
+  let u = 0;
+  if (keys.has('Space')) u += 1;
+  if (keys.has('KeyC') || keys.has('ControlLeft')) u -= 1;
+  lookBasis(F.up, F.tan);
+  _v1.set(0, 0, 0).addScaledVector(_fwd, f).addScaledVector(_right, s).addScaledVector(_camUp, u);
+  if (_v1.lengthSq() > 1) _v1.normalize();
+  _v1.multiplyScalar(PHYS.floatThrust);
+  _v1.x += OMEGA * OMEGA * F.pos.x + 2 * OMEGA * F.vel.y;
+  _v1.y += OMEGA * OMEGA * F.pos.y - 2 * OMEGA * F.vel.x;
+  _v1.addScaledVector(F.vel, -PHYS.airDrag);
+  F.vel.addScaledVector(_v1, dt);
+  F.pos.addScaledVector(F.vel, dt);
+  const r = Math.hypot(F.pos.x, F.pos.y);                    // batasi di dalam hub
+  if (r > HUB.r - 1) {
+    const k = (HUB.r - 1) / r; F.pos.x *= k; F.pos.y *= k;
+    const vr = (F.vel.x * F.pos.x + F.vel.y * F.pos.y) / (HUB.r - 1);
+    if (vr > 0) { F.vel.x -= vr * F.pos.x / (HUB.r - 1); F.vel.y -= vr * F.pos.y / (HUB.r - 1); }
+  }
+  const zMin = -HALF_L + HUB.zaMin + 1, zMax = -HALF_L + HUB.zaMax - 1;
+  if (F.pos.z < zMin) { F.pos.z = zMin; F.vel.z = Math.max(0, F.vel.z); }
+  if (F.pos.z > zMax) { F.pos.z = zMax; F.vel.z = Math.min(0, F.vel.z); }
+  player.mode = 'melayang (0 g)';
+}
+
+function physicsStep(dt) {
+  switch (player.state) {
+    case 'ground': stepGround(dt); break;
+    case 'air': stepAir(dt); break;
+    case 'lift': stepLift(dt); break;
+    case 'float': stepFloat(dt); break;
+  }
+  for (const b of balls) if (!b.done) {
+    advanceBody(b, dt);
+    if (b === lastBall && (b.stepCount++ % 2 === 0 || b.done)) trailPush(b.pos);
+    if (b.done) { _tmpL.copy(b.pos); addMark(Math.atan2(_tmpL.y, _tmpL.x), _tmpL.z + HALF_L, COL_LAND); }
+  }
+}
+
+/* =====================================================================
+   BOLA: lempar dan jatuhkan
+   ===================================================================== */
+const balls = [];
+let lastBall = null, ballN = 0;
+const lab = { speed: 40, elev: 45, drop: 100, last: null };
+function newBall() {
+  let b;
+  if (balls.length < MAX_BALLS) { b = makeBody(); balls.push(b); }
+  else { b = balls[ballN % MAX_BALLS]; }
+  ballN++;
+  b.stepCount = 0;
+  return b;
+}
+function describe(kind, info) {
+  const dir = Math.abs(info.arc) < 0.005 ? 'tepat di bawah' : info.arc > 0 ? 'searah putaran' : 'melawan arah putaran';
+  return `${kind}: terbang ${info.time.toFixed(2)} s · mendarat ${Math.abs(info.arc).toFixed(2)} m ${dir}` +
+    (Math.abs(info.axial) > 0.05 ? ` · ${info.axial.toFixed(1)} m sepanjang sumbu` : '') + (info.wall ? ' · kena dinding end cap' : '');
+}
+function throwBall() {
+  if (player.state === 'float' || player.state === 'lift') { setLabText('Lempar hanya bisa dari tanah atau saat melompat.'); return; }
+  const b = newBall();
+  const el = lab.elev * DEG;
+  groundPoint(player.theta, player.za, player.h + PHYS.handH, _v1);
+  upAt(player.theta, _up); tanAt(player.theta, _t);
+  _v2.copy(_a).multiplyScalar(Math.cos(player.heading)).addScaledVector(_t, Math.sin(player.heading)).multiplyScalar(Math.cos(el) * lab.speed);
+  _v2.addScaledVector(_up, Math.sin(el) * lab.speed);
+  if (player.state === 'ground') { _v2.addScaledVector(_t, player.vT); _v2.z += player.vA; }
+  launchBody(b, _v1, _v2);
+  lastBall = b; trailReset(); trailPush(_v1);
+  addMark(player.theta, player.za, COL_LAUNCH);
+  lab.last = describe(`Lempar ${lab.speed} m/s, ${lab.elev}°`, landingOf(b));
+  setLabText(lab.last);
+}
+function dropBall() {
+  if (player.state === 'float' || player.state === 'lift') { setLabText('Jatuhkan bola dari tanah.'); return; }
+  const b = newBall();
+  // 5 m di depan pemain, setinggi lab.drop
+  const ch = Math.cos(player.heading), sh = Math.sin(player.heading);
+  const th = player.theta + sh * 5 / R, za = Math.min(CONFIG.L - 2, Math.max(2, player.za + ch * 5));
+  const h0 = Math.min(lab.drop, R - 5);
+  groundPoint(th, za, h0, _v1);
+  launchBody(b, _v1, _v2.set(0, 0, 0));
+  lastBall = b; trailReset(); trailPush(_v1);
+  addMark(th, za, COL_LAUNCH);
+  lab.last = describe(`Jatuhkan dari ${h0} m`, landingOf(b));
+  setLabText(lab.last);
+}
+
+/* =====================================================================
+   SELF-TEST FISIKA: kasus acuan dihitung terpisah dengan Python
+   (lintasan lurus di kerangka inersia, R = 1.000 m, g = 9,81 m/s^2)
+   ===================================================================== */
+const TESTS = [
+  { name: 'Lompat 2 m/s tegak', h: 0, speed: 2, elev: 90, dir: 1, t: 0.408, arc: 0.0110 },
+  { name: 'Lempar 20 m/s tegak', h: 0, speed: 20, elev: 90, dir: 1, t: 3.92, arc: 10.46 },
+  { name: 'Jatuhkan dari 10 m', h: 10, speed: 0, elev: 0, dir: 1, t: 1.439, arc: -0.953 },
+  { name: 'Jatuhkan dari 100 m', h: 100, speed: 0, elev: 0, dir: 1, t: 4.89, arc: -33.30 },
+  { name: 'Bola 40 m/s 45° searah', h: 0, speed: 40, elev: 45, dir: 1, t: 3.33, arc: 107.8 },
+  { name: 'Bola 40 m/s 45° melawan', h: 0, speed: 40, elev: 45, dir: -1, t: 9.74, arc: -204.3 },
+];
+function runSelfTest() {
+  const rows = [];
+  const b = makeBody(), p = new THREE.Vector3(), v = new THREE.Vector3(), up = new THREE.Vector3(), tn = new THREE.Vector3();
+  for (const T of TESTS) {
+    groundPoint(0, 4000, T.h, p);
+    upAt(0, up); tanAt(0, tn);
+    v.copy(tn).multiplyScalar(T.dir * T.speed * Math.cos(T.elev * DEG)).addScaledVector(up, T.speed * Math.sin(T.elev * DEG));
+    launchBody(b, p, v);
+    while (!b.done) advanceBody(b, STEP);                    // jalur kode yang sama dengan permainan
+    const info = landingOf(b);
+    const tolT = Math.max(0.01 * T.t, 0.005), tolA = Math.max(0.01 * Math.abs(T.arc), 0.005);
+    const ok = Math.abs(info.time - T.t) <= tolT && Math.abs(info.arc - T.arc) <= tolA;
+    rows.push({ name: T.name, refT: T.t, simT: info.time, refArc: T.arc, simArc: info.arc, ok });
+  }
+  // independensi frame rate: lintasan yang sama dengan langkah 1/30 s dan 1/144 s
+  const res = [];
+  for (const dt of [1 / 30, 1 / 144]) {
+    groundPoint(0, 4000, 0, p); upAt(0, up); tanAt(0, tn);
+    v.copy(tn).multiplyScalar(-40 * Math.cos(45 * DEG)).addScaledVector(up, 40 * Math.sin(45 * DEG));
+    launchBody(b, p, v);
+    while (!b.done) advanceBody(b, dt);
+    res.push(b.pos.clone());
+  }
+  const diff = res[0].distanceTo(res[1]);
+  rows.push({ name: 'Sama di 30 dan 144 FPS', refT: null, simT: null, refArc: 0, simArc: diff, ok: diff < 1e-6 });
+  return rows;
+}
+
+/* =====================================================================
+   KAMERA
+   ===================================================================== */
+const _m = new THREE.Matrix4(), _eye = new THREE.Vector3();
 function updateCamera() {
-  const ct = Math.cos(player.theta), st = Math.sin(player.theta);
-  const r = CONFIG.R - player.h - CONFIG.eye;
-  _P.set(r * ct, r * st, player.za - HALF_L);
-  _up.set(-ct, -st, 0);                                   // menuju sumbu
-  _t.set(-st, ct, 0);                                     // tangen
-  _flat.copy(_a).multiplyScalar(Math.cos(player.heading)).addScaledVector(_t, Math.sin(player.heading));
-  const cp = Math.cos(player.pitch), sp = Math.sin(player.pitch);
-  _fwd.copy(_flat).multiplyScalar(cp).addScaledVector(_up, sp);
-  _camUp.copy(_flat).multiplyScalar(-sp).addScaledVector(_up, cp);
-  _right.crossVectors(_fwd, _camUp);
-  _fwd.negate();
-  _m.makeBasis(_right, _camUp, _fwd);                     // kamera melihat ke -Z lokal
+  if (player.state === 'float') {
+    const F = player.float;
+    lookBasis(F.up, F.tan);
+    _eye.copy(F.pos);
+  } else {
+    upAt(player.theta, _up); tanAt(player.theta, _t);
+    lookBasis(_up, _t);
+    groundPoint(player.theta, player.za, player.h + CONFIG.eye, _eye);
+  }
+  _v3.copy(_fwd).negate();
+  _m.makeBasis(_right, _camUp, _v3);                       // kamera melihat ke -Z lokal
   camera.quaternion.setFromRotationMatrix(_m);
-  camera.position.copy(_P);
+  camera.position.copy(_eye);
+  // kabin lift mengikuti lantai kabin
+  surfaceMatrix(cabin.matrix, LIFT.theta, LIFT.za, R - player.lift.r);
+  cabin.visible = player.state === 'lift' || player.state === 'float';
+  // bola
+  let k = 0;
+  for (const b of balls) { _mm.makeTranslation(b.pos.x, b.pos.y, b.pos.z); ballMesh.setMatrixAt(k++, _mm); }
+  ballMesh.count = k;
+  if (k) ballMesh.instanceMatrix.needsUpdate = true;
 }
 
 /* =====================================================================
@@ -404,18 +785,12 @@ function look(dx, dy, sens) {
   player.heading -= dx * sens;
   player.pitch = Math.max(-89 * DEG, Math.min(89 * DEG, player.pitch - dy * sens));
 }
-
-document.getElementById('go').addEventListener('click', () => {
-  startEl.hidden = true;
-  if (!isTouch && canvas.requestPointerLock) {
-    try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* drag-to-look tetap jalan */ }
-  }
-});
-canvas.addEventListener('click', () => {
-  if (!isTouch && !document.pointerLockElement && canvas.requestPointerLock) {
-    try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* abaikan */ }
-  }
-});
+function lockPointer() {
+  if (isTouch || document.pointerLockElement || !canvas.requestPointerLock) return;
+  try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* drag-to-look tetap jalan */ }
+}
+document.getElementById('go').addEventListener('click', () => { startEl.hidden = true; lockPointer(); });
+canvas.addEventListener('click', lockPointer);
 
 let dragging = false, lastX = 0, lastY = 0;
 canvas.addEventListener('mousedown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
@@ -425,16 +800,21 @@ window.addEventListener('mousemove', (e) => {
     // Chrome kadang mengirim lonjakan movementX/Y besar tepat setelah pointer lock; abaikan
     if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
     look(e.movementX, e.movementY, CONFIG.lookSens);
-  }
-  else if (dragging) { look(e.clientX - lastX, e.clientY - lastY, CONFIG.lookSens); lastX = e.clientX; lastY = e.clientY; }
+  } else if (dragging) { look(e.clientX - lastX, e.clientY - lastY, CONFIG.lookSens); lastX = e.clientX; lastY = e.clientY; }
 });
 
 window.addEventListener('keydown', (e) => {
+  if (e.target && (e.target.tagName === 'INPUT')) return;
   keys.add(e.code);
+  if (e.repeat) return;
   if (e.code === 'KeyO') input.auto = !input.auto;
   if (e.code === 'KeyX') input.turbo = !input.turbo;
   if (e.code === 'KeyR') respawn();
   if (e.code === 'KeyH') document.body.classList.toggle('hidden-ui');
+  if (e.code === 'Space' && player.state === 'ground') jump();
+  if (e.code === 'KeyB') throwBall();
+  if (e.code === 'KeyG') dropBall();
+  if (e.code === 'KeyL') enterLift();
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -475,10 +855,52 @@ const touchEnd = (e) => {
 };
 canvas.addEventListener('touchend', touchEnd);
 canvas.addEventListener('touchcancel', touchEnd);
-const btnRun = document.getElementById('btnRun'), btnAuto = document.getElementById('btnAuto');
-document.getElementById('btnHud').addEventListener('click', () => document.body.classList.toggle('hidden-ui'));
-btnRun.addEventListener('click', () => { input.run = !input.run; btnRun.classList.toggle('on', input.run); });
-btnAuto.addEventListener('click', () => { input.auto = !input.auto; btnAuto.classList.toggle('on', input.auto); });
+const on = (id, fn) => document.getElementById(id).addEventListener('click', (e) => { fn(e); e.currentTarget.blur(); });
+on('btnHud', () => document.body.classList.toggle('hidden-ui'));
+on('btnRun', (e) => { input.run = !input.run; e.currentTarget.classList.toggle('on', input.run); });
+on('btnAuto', (e) => { input.auto = !input.auto; e.currentTarget.classList.toggle('on', input.auto); });
+on('btnJump', () => jump());
+on('btnThrow', () => throwBall());
+on('btnLift', () => enterLift());
+on('btnLab', () => toggleLab());
+
+/* =====================================================================
+   PANEL UJI FISIKA
+   ===================================================================== */
+const labEl = document.getElementById('lab');
+function toggleLab(force) {
+  const open = force !== undefined ? force : labEl.classList.contains('collapsed');
+  labEl.classList.toggle('collapsed', !open);
+  document.body.classList.toggle('lab-open', open);
+}
+document.getElementById('labHead').addEventListener('click', () => toggleLab());
+if (window.innerWidth < 640) toggleLab(false);
+function bindRange(id, key, fmt) {
+  const el = document.getElementById(id), out = document.getElementById(id + 'V');
+  const sync = () => { out.textContent = fmt(lab[key]); el.value = lab[key]; };
+  el.addEventListener('input', () => { lab[key] = +el.value; sync(); });
+  el.addEventListener('change', () => el.blur());
+  sync();
+}
+bindRange('inSpeed', 'speed', (v) => v + ' m/s');
+bindRange('inElev', 'elev', (v) => v + '°');
+bindRange('inDrop', 'drop', (v) => v + ' m');
+function setLabText(t) { document.getElementById('labResult').textContent = t; }
+on('labThrow', () => throwBall());
+on('labDrop', () => dropBall());
+on('labLift', () => enterLift());
+on('labTest', () => {
+  const rows = runSelfTest();
+  const pass = rows.filter((r) => r.ok).length;
+  const fmt = (x, d) => (x === null ? '-' : x.toFixed(d));
+  document.getElementById('labTable').innerHTML =
+    `<tr><th>Kasus</th><th>Acuan</th><th>Simulasi</th><th></th></tr>` +
+    rows.map((r) => r.refT === null
+      ? `<tr><td>${r.name}</td><td>selisih 0</td><td>${r.simArc.toExponential(1)} m</td><td class="${r.ok ? 'ok' : 'bad'}">${r.ok ? 'lulus' : 'gagal'}</td></tr>`
+      : `<tr><td>${r.name}</td><td>${fmt(r.refT, 3)} s<br>${fmt(r.refArc, 3)} m</td><td>${fmt(r.simT, 3)} s<br>${fmt(r.simArc, 3)} m</td><td class="${r.ok ? 'ok' : 'bad'}">${r.ok ? 'lulus' : 'gagal'}</td></tr>`).join('');
+  setLabText(`Self-test: ${pass} dari ${rows.length} lulus. Jarak + = searah putaran, - = melawan arah putaran.`);
+  window.__station.selfTest = rows;
+});
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
@@ -492,33 +914,40 @@ window.addEventListener('resize', () => {
    ===================================================================== */
 const hud = document.getElementById('hud');
 hud.innerHTML = `
-  <div class="title">Tahap 1 · gray-box</div>
+  <div class="title">Tahap 2 · fisika rotasi</div>
   <span class="k">FPS</span><span class="v" id="hFps">-</span>
   <span class="k wide">Frame</span><span class="v wide" id="hMs">-</span>
   <span class="k">Draw call</span><span class="v" id="hCalls">-</span>
-  <span class="k">Segitiga</span><span class="v" id="hTris">-</span>
+  <span class="k wide">Segitiga</span><span class="v wide" id="hTris">-</span>
   <span class="k wide">Resolusi</span><span class="v wide" id="hRes">-</span>
   <div class="sep"></div>
+  <span class="k">Status</span><span class="v" id="hMode">-</span>
   <span class="k">Zona</span><span class="v" id="hZone">-</span>
   <span class="k">Sudut &theta;</span><span class="v" id="hTheta">-</span>
   <span class="k">Posisi z</span><span class="v" id="hZ">-</span>
+  <span class="k">Ketinggian</span><span class="v" id="hH">-</span>
   <span class="k wide">Arah</span><span class="v wide" id="hHead">-</span>
-  <span class="k">Ditempuh</span><span class="v" id="hDist">-</span>
-  <span class="k">Mode</span><span class="v" id="hMode">-</span>
+  <span class="k wide">Ditempuh</span><span class="v wide" id="hDist">-</span>
   <div class="sep"></div>
   <span class="k">g lokal</span><span class="v" id="hG">-</span>
   <span class="k">Rotasi</span><span class="v">${RPM.toFixed(3)} rpm</span>
-  <span class="k">Periode</span><span class="v">${PERIOD.toFixed(1)} s</span>`;
+  <span class="k wide">Periode</span><span class="v wide">${PERIOD.toFixed(1)} s</span>`;
 const H = (id) => document.getElementById(id);
 const hEl = { fps: H('hFps'), ms: H('hMs'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
-  theta: H('hTheta'), z: H('hZ'), head: H('hHead'), dist: H('hDist'), mode: H('hMode'), g: H('hG') };
+  theta: H('hTheta'), z: H('hZ'), h: H('hH'), head: H('hHead'), dist: H('hDist'), mode: H('hMode'), g: H('hG') };
+const _tmpV2 = new THREE.Vector2();
 
+// g lokal = omega^2 * r / g, r = jarak kaki ke sumbu. Di udara pemain jatuh bebas (tidak merasakan berat).
+function localG() {
+  if (player.state === 'float') return OMEGA * OMEGA * Math.hypot(player.float.pos.x, player.float.pos.y) / CONFIG.g;
+  return OMEGA * OMEGA * (R - player.h) / CONFIG.g;
+}
+const STATE_NAME = { ground: 'di tanah', air: 'di udara', lift: '', float: '' };
 const stats = { frames: 0, time: 0, fps: 0, ms: 0, low: 0, high: 0 };
 function updateStats(dt) {
   stats.frames++; stats.time += dt;
-  if (stats.time < 0.5) return;
+  if (stats.time < 0.25) return;
   stats.fps = stats.frames / stats.time; stats.ms = 1000 * stats.time / stats.frames;
-  // resolusi dinamis
   if (stats.fps < CONFIG.dynRes.lowFps) { stats.low += stats.time; stats.high = 0; } else stats.low = 0;
   if (stats.fps > CONFIG.dynRes.highFps) { stats.high += stats.time; } else stats.high = 0;
   if (stats.low >= CONFIG.dynRes.window && dynScale > CONFIG.dynRes.min) { dynScale = Math.max(CONFIG.dynRes.min, +(dynScale - 0.1).toFixed(2)); applyPixelRatio(); stats.low = 0; }
@@ -528,21 +957,23 @@ function updateStats(dt) {
   const size = renderer.getDrawingBufferSize(_tmpV2);
   const zone = CONFIG.zones.find((z) => player.za < z.to) || CONFIG.zones[CONFIG.zones.length - 1];
   const hd = ((player.heading / DEG) % 360 + 360) % 360;
+  const hNow = player.state === 'float' ? R - Math.hypot(player.float.pos.x, player.float.pos.y) : player.h;
   hEl.fps.textContent = stats.fps.toFixed(0);
   hEl.ms.textContent = stats.ms.toFixed(1) + ' ms';
   hEl.calls.textContent = info.calls;
   hEl.tris.textContent = (info.triangles / 1000).toFixed(1) + ' rb';
   hEl.res.textContent = `${size.x}x${size.y}`;
-  hEl.zone.textContent = zone.name;
+  hEl.zone.textContent = player.state === 'float' ? 'Hub sumbu' : zone.name;
   hEl.theta.textContent = (player.theta / DEG).toFixed(1) + '°';
   hEl.z.textContent = player.za.toFixed(0) + ' m';
+  hEl.h.textContent = hNow.toFixed(hNow < 10 ? 2 : 0) + ' m';
   hEl.head.textContent = hd.toFixed(0) + '°';
   hEl.dist.textContent = player.distance >= 1000 ? (player.distance / 1000).toFixed(2) + ' km' : player.distance.toFixed(0) + ' m';
-  hEl.mode.textContent = player.mode + (input.auto ? ' · otomatis' : '');
-  hEl.g.textContent = (OMEGA * OMEGA * (CONFIG.R - player.h) / CONFIG.g).toFixed(3) + ' g';
+  const st = player.state === 'ground' ? player.mode + (input.auto ? ' · otomatis' : '') : player.state === 'air' ? 'di udara' : player.mode;
+  hEl.mode.textContent = st;
+  hEl.g.textContent = player.state === 'air' ? `${localG().toFixed(3)} g (jatuh bebas)` : localG().toFixed(3) + ' g';
   stats.frames = 0; stats.time = 0;
 }
-const _tmpV2 = new THREE.Vector2();
 
 /* =====================================================================
    LOOP: fixed timestep untuk fisika, render tiap frame
@@ -565,7 +996,8 @@ respawn();
 updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
-window.__station = { CONFIG, player, input, physicsStep, updateCamera, camera, renderer, STEP, OMEGA };
+window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG };
 requestAnimationFrame(frame);
 </script>
 </body>
