@@ -43,6 +43,9 @@
   #boot .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
   #boot .bootRow { display: flex; justify-content: space-between; margin-top: 8px; color: var(--muted); font-size: 12px; }
   #ready .plabel { color: var(--accent); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 6px; }
+  .langPick { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+  .langPick button { font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
+  .langPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
   #presetPick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
   #presetPick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
   #presetPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
@@ -252,6 +255,8 @@
         <button id="labHelp" type="button"><kbd>?</kbd>Bantuan</button>
         <button id="labMap" type="button"><kbd>M</kbd>Peta</button>
       </div>
+      <div class="ptitle">Bahasa</div>
+      <div class="btns langPick"></div>
       <div class="note">Panel ini: klik judul atau tombol ` (backtick) untuk membuka/menutup. Tab terakhir diingat.</div>
     </section>
   </div>
@@ -263,6 +268,8 @@
     <div class="sub">Silinder O'Neill 8 km di orbit Saturnus · R 1.000 m · 1 g dari putaran</div>
     <div id="boot"><div class="bar"><i></i></div><div class="bootRow"><span id="bootTxt">Memuat three.js...</span><span id="bootPct">0%</span></div></div>
     <div id="ready" hidden>
+      <div class="plabel">Bahasa</div>
+      <div class="langPick"></div>
       <div class="plabel">Kualitas grafik</div>
       <div id="presetPick"></div>
       <label class="pauto"><input id="presetAuto" type="checkbox"> Turunkan otomatis bila FPS di bawah 30</label>
@@ -339,6 +346,370 @@ import * as THREE from 'three';
    M1: LAYAR MUAT. Dunia dibangun bertahap; di antara bagian besar modul menunggu satu frame (await di tingkat atas)
    supaya garis progres sempat digambar. Urutan kode tidak berubah. Bobot tiap bagian = waktu muat terukur.
    ===================================================================== */
+/* =====================================================================
+   M3: BAHASA. Teks Indonesia di kode = sumber sekaligus kunci kamus (gaya gettext): t('Teks {x}', { x }).
+   Teks HTML statis diterjemahkan otomatis oleh translateDom() (simpul teks yang ada di kamus).
+   Label tombol yang berubah didaftarkan lewat uiLabel() supaya ikut berganti saat bahasa diganti tanpa muat ulang.
+   Kamus: I18N (didefinisikan di bawah, sebelum bagian lain memakai t()).
+   ===================================================================== */
+const LANGS = [['id', 'Bahasa Indonesia'], ['en', 'English']];
+const LANG = { cur: 'id', labels: new Map(), hooks: [], src: new WeakMap() };
+{
+  const ok = (c) => LANGS.some((x) => x[0] === c);
+  let c = null;
+  try { c = new URLSearchParams(location.search).get('lang'); } catch (e) { /* abaikan */ }
+  if (!ok(c)) try { c = localStorage.getItem('lazarus.lang'); } catch (e) { c = null; }
+  if (!ok(c)) c = (navigator.language || 'id').slice(0, 2).toLowerCase();
+  LANG.cur = ok(c) ? c : 'id';
+  document.documentElement.lang = LANG.cur;
+}
+function t(src, v) {
+  let out = src;
+  if (LANG.cur !== 'id') { const d = I18N[LANG.cur]; if (d && d[src] !== undefined) out = d[src]; }
+  if (v) out = out.replace(/\{(\w+)\}/g, (m, k) => (v[k] !== undefined ? v[k] : m));
+  return out;
+}
+const fmtN = (x, d) => { const s = x.toFixed(d); return LANG.cur === 'id' ? s.replace('.', ',') : s; };   // desimal sesuai bahasa
+const fmtInt = (x) => Math.round(x).toLocaleString(LANG.cur === 'id' ? 'id-ID' : 'en-US');
+function uiLabel(id, fn, html) {                                   // label yang dihitung ulang saat bahasa diganti
+  LANG.labels.set(id, [fn, html]);
+  const b = document.getElementById(id); if (b) b[html ? 'innerHTML' : 'textContent'] = fn();
+}
+function translateDom(root) {                                      // simpul teks statis: sumber Indonesia disimpan sekali
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (/^(SCRIPT|STYLE|CANVAS)$/.test(n.parentNode.nodeName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    let src = LANG.src.get(n);
+    if (src === undefined) { const k = n.nodeValue.trim(); src = k && I18N.en[k] !== undefined ? n.nodeValue : null; LANG.src.set(n, src); }
+    if (src === null) continue;
+    const k = src.trim(), lead = src.slice(0, src.indexOf(k)), tail = src.slice(src.indexOf(k) + k.length);
+    n.nodeValue = lead + t(k) + tail;
+  }
+}
+function setLang(c) {
+  if (!LANGS.some((x) => x[0] === c)) return;
+  LANG.cur = c; document.documentElement.lang = c;
+  try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ }
+  translateDom(document.body);
+  for (const [id, [fn, html]] of LANG.labels) { const b = document.getElementById(id); if (b) b[html ? 'innerHTML' : 'textContent'] = fn(); }
+  for (const f of LANG.hooks) f();
+}
+
+const I18N = { en: {} };
+// Kamus English (kunci = teks Indonesia persis seperti di kode/HTML)
+Object.assign(I18N.en, {
+  "Memuat three.js...": "Loading three.js...",
+  "Audio...": "Audio...",
+  "Bukit, pohon, rumput, jagung...": "Hills, trees, grass, corn...",
+  "Burung...": "Birds...",
+  "Cahaya dan renderer...": "Lighting and renderer...",
+  "Daun dan angin...": "Leaves and wind...",
+  "Efek layar...": "Screen effects...",
+  "Fisika...": "Physics...",
+  "Hujan dan air mancur...": "Rain and fountain...",
+  "Jagung...": "Corn...",
+  "Jalan dan lalu lintas...": "Roads and traffic...",
+  "Kafe dan suasana...": "Cafes and ambience...",
+  "Kota, sungai, ladang...": "City, river, fields...",
+  "Langit, awan, bayangan...": "Sky, clouds, shadows...",
+  "Lift dan hub...": "Lift and hub...",
+  "Menyiapkan shader...": "Preparing shaders...",
+  "Mesh tanah...": "Ground mesh...",
+  "Mesin ladang...": "Farm machines...",
+  "Pejalan kaki...": "Pedestrians...",
+  "Perabot kota...": "Street furniture...",
+  "Permukaan silinder...": "Cylinder surface...",
+  "Peta tinggi tanah...": "Terrain height map...",
+  "Pohon...": "Trees...",
+  "Preset grafik...": "Graphics presets...",
+  "Rumput dan gandum...": "Grass and wheat...",
+  "Saturnus dan bintang...": "Saturn and stars...",
+  "Siap": "Ready",
+  "Spaceport dan shuttle...": "Spaceport and shuttle...",
+  "Tekstur ladang...": "Field textures...",
+  "Silinder O'Neill 8 km di orbit Saturnus · R 1.000 m · 1 g dari putaran": "An 8 km O'Neill cylinder orbiting Saturn · R 1,000 m · 1 g from spin",
+  "Bahasa": "Language",
+  "Kualitas grafik": "Graphics quality",
+  "Ultra": "Ultra",
+  "Tinggi": "High",
+  "Sedang": "Medium",
+  "Rendah": "Low",
+  "Hemat": "Saver",
+  "Mati": "Off",
+  "Turunkan otomatis bila FPS di bawah 30": "Lower automatically when FPS drops below 30",
+  "Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.": "Saver: for laptops without a dedicated GPU (MacBook M1). Change any time with Q.",
+  "Mulai": "Start",
+  "Kontrol dan bantuan (?)": "Controls and help (?)",
+  "Kembali ke menu utama": "Back to main menu",
+  "W A S D berjalan · mouse melihat (klik untuk mengunci) · E aksi · ? bantuan": "W A S D walk · mouse look (click to lock) · E action · ? help",
+  "Jempol kiri berjalan · jempol kanan melihat · tombol Panel = panel kontrol": "Left thumb walks · right thumb looks · Panel button = control panel",
+  "Bantuan": "Help",
+  "Tutup (?)": "Close (?)",
+  "Dasar": "Basics",
+  "Transportasi": "Transport",
+  "Kamera dan foto": "Camera and photo",
+  "Waktu dan cuaca": "Time and weather",
+  "Grafik dan suara": "Graphics and sound",
+  "Pesawat": "Spacecraft",
+  "Tentang": "About",
+  "Melihat (klik untuk mengunci kursor)": "Look around (click to lock the cursor)",
+  "W A S D / panah": "W A S D / arrows",
+  "Berjalan 1,4 m/s": "Walk 1.4 m/s",
+  "Lari 5 m/s": "Run 5 m/s",
+  "Lompat (di hub: naik)": "Jump (in the hub: move up)",
+  "Lempar bola · jatuhkan bola dari ketinggian": "Throw a ball · drop a ball from a height",
+  "Aksi (naik trem dan duduk di kursi jendela, turun di halte, baca plakat, lift) · peta": "Action (board the tram and take a window seat, get off at a stop, read plaques, lift) · map",
+  "Jalan otomatis ke depan": "Walk forward automatically",
+  "Turbo 50 m/s (debug)": "Turbo 50 m/s (debug)",
+  "Kembali ke titik awal · sembunyikan HUD · lepas kursor": "Back to the start point · hide HUD · release the cursor",
+  "Buka / tutup panel kontrol (tab: Lokasi, Waktu, Fisika, Foto, Grafik, Suara, Lainnya). Klik judul HUD = ringkas / lengkap": "Open / close the control panel (tabs: Places, Time, Physics, Photo, Graphics, Sound, More). Click the HUD title = compact / full",
+  "? (atau F1)": "? (or F1)",
+  "Tampilkan / tutup bantuan ini": "Show / close this help",
+  "Jempol kiri": "Left thumb",
+  "Joystick untuk berjalan": "Joystick to walk",
+  "Jempol kanan": "Right thumb",
+  "Geser untuk melihat": "Swipe to look around",
+  "Tombol": "Buttons",
+  "Aksi, Peta, Lompat, Lempar, Panel (panel kontrol bertab dari bawah layar, termasuk lift), Foto, Tur": "Action, Map, Jump, Throw, Panel (tabbed control panel from the bottom of the screen, including the lift), Photo, Tour",
+  "Lift ke sumbu (0 g) / turun lagi; Shift = 5x cepat. Di lift dan hub: B lempar bola, G lepas bola": "Lift to the axis (0 g) / back down; Shift = 5x faster. In the lift and hub: B throws a ball, G releases a ball",
+  "Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum · Skyway · lapangan baseball · terminal spaceport · kokpit shuttle · air mancur Coriolis (E di plakat)": "Go to Cooper's house · hilltop · corn field · wheat field · Skyway · baseball field · spaceport terminal · shuttle cockpit · Coriolis fountain (E at the plaque)",
+  "Terminal (7): E di gerbang B1 (dinding utara, ikuti papan jingga) = lift, hub, terowongan, kokpit otomatis (E lagi = langsung ke kokpit). Atau manual: lift (L) ke hub nol-g, E di pintu ujung hub = kapsul terowongan ke dermaga": "Terminal (7): E at gate B1 (north wall, follow the orange signs) = lift, hub, tunnel, cockpit automatically (E again = straight to the cockpit). Or manually: lift (L) to the zero-g hub, E at the door at the end of the hub = tunnel capsule to the dock",
+  "Kamera luar: seret / WASD putar, scroll / + - zoom, C orbit otomatis, 1-4 fokus": "Outside camera: drag / WASD to orbit, scroll / + - to zoom, C auto orbit, 1-4 focus",
+  "Mode foto (jam, sudut pandang, fokus dan blur, eksposur, simpan PNG dengan Enter) · tur sinematik dengan penjelasan fisika (Y atau Esc = berhenti)": "Photo mode (time, field of view, focus and blur, exposure, save PNG with Enter) · cinematic tour with physics explanations (Y or Esc = stop)",
+  "Jam stasiun mundur / maju 1 jam · kecepatan waktu (1 menit = 1 jam, 10 s, 1 s, berhenti)": "Station clock back / forward 1 hour · time speed (1 minute = 1 hour, 10 s, 1 s, stopped)",
+  "Cuaca: otomatis (berganti cerah, berawan, mendung), atau tetap cerah / berawan / mendung. Mendung tebal = hujan (miring sekitar 8 derajat karena Coriolis), tanah basah dan genangan": "Weather: automatic (cycles clear, cloudy, overcast), or fixed clear / cloudy / overcast. Heavy overcast = rain (tilted about 8 degrees by Coriolis), wet ground and puddles",
+  "Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)": "Speed up the Saturn orbit (1x, 100x, 1,000x, 10,000x)",
+  "Preset kualitas: Ultra, Tinggi, Sedang, Rendah, Hemat (untuk MacBook M1). Awal: pilihan terakhir (atau Ultra), turun otomatis bila FPS di bawah 30. Bisa juga lewat alamat: index.html?preset=hemat": "Quality preset: Ultra, High, Medium, Low, Saver (for MacBook M1). Starts with your last choice (or Ultra) and drops automatically when FPS is below 30. Also via the address: index.html?preset=hemat",
+  "Kualitas vegetasi · efek layar (bloom, SSAO, tone mapping): Tinggi, Sedang, Rendah/Mati": "Vegetation quality · screen effects (bloom, SSAO, tone mapping): High, Medium, Low/Off",
+  "Suara nyala/mati · musik: generatif, file sendiri (pilih di panel Uji), mati": "Sound on/off · music: generative, your own file (choose it in the panel), off",
+  "E lepas sandar / sandar otomatis (kotak target hijau = bisa sandar: jarak < 400 m, kecepatan < 30 m/s; layar kokpit: jarak, kecepatan mendekat/geser, penunjuk arah berth) · W/S dorong · A/D geser · R/F naik-turun · Z/C guling · mouse arah · Shift boost 10x · X rem · V kokpit/kamera belakang · L keluar (saat sandar)": "E undock / auto dock (green target box = docking possible: distance < 400 m, speed < 30 m/s; cockpit screen: distance, closing/lateral speed, berth direction) · W/S thrust · A/D strafe · R/F up/down · Z/C roll · mouse to steer · Shift boost 10x · X brake · V cockpit/rear camera · L exit (while docked)",
+  "Tahap 12d · siklus tanam dan mesin panen di ladang, mode foto (F), tur sinematik (Y) · 12c: hujan dengan fisika Coriolis, air mancur Coriolis (9) · 12b-5: suasana kota · 12b-4: burung · 12b-3: pejalan kaki · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g": "Stage 12d · crop cycle and harvesters in the fields, photo mode (F), cinematic tour (Y) · 12c: rain with Coriolis physics, Coriolis fountain (9) · 12b-5: city ambience · 12b-4: birds · 12b-3: pedestrians · 12b-2: 8 tree species, leaf moods, falling leaves · 12b-1: traffic lights, queuing cars, tram crossings, Saver preset · stage 12a: gate B1, shuttle sounds, docking guide · despun dock, original flyable shuttle · street furniture, weather, sunrays · R 1,000 m, L 8,000 m, 1 g",
+  "Proyek penggemar untuk belajar fisika dan grafis 3D, tidak berafiliasi dengan studio film mana pun. Semua model, suara, dan desain dibuat sendiri.": "A fan project for learning physics and 3D graphics, not affiliated with any film studio. All models, sounds and designs are original.",
+  "Segitiga": "Triangles",
+  "Resolusi": "Resolution",
+  "Zona": "Zone",
+  "Sudut θ": "Angle θ",
+  "Posisi z": "Position z",
+  "Ketinggian": "Height",
+  "Arah": "Heading",
+  "Ditempuh": "Travelled",
+  "g lokal": "local g",
+  "Rotasi": "Spin",
+  "Periode": "Period",
+  "Saturnus": "Saturn",
+  "Fase orbit": "Orbit phase",
+  "Jam stasiun": "Station time",
+  "Orbit x": "Orbit x",
+  "Trem": "Tram",
+  " rb": "k",
+  "j": "h",
+  "Hub sumbu": "Axis hub",
+  " · otomatis": " · auto",
+  "berhenti di {stop}": "stopped at {stop}",
+  "{v} m/s ke {stop}": "{v} m/s to {stop}",
+  "pesawat": "spacecraft",
+  "kamera luar": "outside camera",
+  "{a}° dari zenit": "{a}° from zenith",
+  "{g} g (jatuh bebas)": "{g} g (free fall)",
+  "jalan": "walking",
+  "lari": "running",
+  "turbo (debug)": "turbo (debug)",
+  "lift naik": "lift going up",
+  "lift turun": "lift going down",
+  "melayang (0 g)": "floating (0 g)",
+  "di trem": "on the tram",
+  "duduk di trem": "seated on the tram",
+  "kapsul terowongan": "tunnel capsule",
+  "di kokpit": "in the cockpit",
+  "di udara": "in the air",
+  "tur": "tour",
+  "pusat": "centre",
+  "menengah": "mid-rise",
+  "permukiman": "residential",
+  "tepi": "outskirts",
+  "Kota": "City",
+  "Taman & sungai": "Park & river",
+  "Pertanian": "Farmland",
+  "Utilitas": "Utilities",
+  "Museum Cooper": "Cooper Museum",
+  "Engineering": "Engineering",
+  "Pusat kota": "City centre",
+  "Permukiman": "Residential",
+  "Taman": "Park",
+  "Lift": "Lift",
+  "Panel": "Panel",
+  "Lari": "Run",
+  "Otomatis": "Auto",
+  "Lompat": "Jump",
+  "Lempar": "Throw",
+  "Aksi": "Action",
+  "Peta": "Map",
+  "Foto": "Photo",
+  "Tur": "Tour",
+  "Mode foto": "Photo mode",
+  "Tutup (F)": "Close (F)",
+  "Sudut pandang": "Field of view",
+  "Jarak fokus": "Focus distance",
+  "Blur di luar fokus": "Out-of-focus blur",
+  "Eksposur": "Exposure",
+  "Hentikan waktu (awan dan jam diam)": "Stop time (clouds and clock freeze)",
+  "Cuaca (N)": "Weather (N)",
+  "Simpan PNG (Enter)": "Save PNG (Enter)",
+  "Tersimpan": "Saved",
+  "{n} derajat": "{n} degrees",
+  "Cuaca: {w} (N)": "Weather: {w} (N)",
+  "WASD bergerak, seret mouse untuk melihat. H menyembunyikan panel ini. Gambar disimpan tanpa panel.": "WASD to move, drag the mouse to look. H hides this panel. Images are saved without the panel.",
+  "Berhenti (Y)": "Stop (Y)",
+  "Tutup (E)": "Close (E)",
+  "Peta silinder (dibuka)": "Cylinder map (unrolled)",
+  "Tutup (M)": "Close (M)",
+  "Kiri-kanan = keliling 6,28 km · bawah-atas = sumbu 8 km dari end cap A": "Left-right = circumference 6.28 km · bottom-top = 8 km along the axis from end cap A",
+  "Panel kontrol": "Control panel",
+  "Lokasi": "Places",
+  "Waktu": "Time",
+  "Fisika": "Physics",
+  "Grafik": "Graphics",
+  "Suara": "Sound",
+  "Lainnya": "More",
+  "Pindah lokasi": "Go to a place",
+  "Rumah Cooper": "Cooper's house",
+  "Puncak bukit": "Hilltop",
+  "Ladang jagung": "Corn field",
+  "Ladang gandum": "Wheat field",
+  "Lapangan baseball": "Baseball field",
+  "Terminal spaceport": "Spaceport terminal",
+  "Kokpit shuttle": "Shuttle cockpit",
+  "Lift ke sumbu": "Lift to the axis",
+  "Kamera luar": "Outside camera",
+  "Foto dan tur": "Photo and tour",
+  "Tur sinematik": "Cinematic tour",
+  "Waktu dan simulasi": "Time and simulation",
+  "Jam stasiun ([ ])": "Station time ([ ])",
+  "Uji fisika (bola)": "Physics test (ball)",
+  "Kecepatan lempar": "Throw speed",
+  "Sudut elevasi": "Elevation angle",
+  "Tinggi jatuh": "Drop height",
+  "Jatuhkan": "Drop",
+  "Lempar ke arah hadap, dengan sudut elevasi dari slider. Tiang biru = titik lepas, tiang merah = titik mendarat.": "Throws in the direction you face, at the elevation angle from the slider. Blue pole = release point, red pole = landing point.",
+  "Hambatan udara diabaikan untuk bola. Jarak + = searah putaran stasiun. Di lift dan hub nol-g juga bisa.": "Air drag is ignored for the ball. Distance + = in the direction of spin. Also works in the lift and the zero-g hub.",
+  "Bayangan": "Shadows",
+  "Audio": "Audio",
+  "Pilih file musik...": "Choose a music file...",
+  "Sembunyikan UI": "Hide UI",
+  "Panel ini: klik judul atau tombol ` (backtick) untuk membuka/menutup. Tab terakhir diingat.": "This panel: click the title or press ` (backtick) to open/close. The last tab is remembered.",
+  "HUD: ringkas": "HUD: compact",
+  "HUD: lengkap": "HUD: full",
+  "Waktu: {r}": "Time: {r}",
+  "Orbit Saturnus: {x}x": "Saturn orbit: {x}x",
+  "Cuaca: {w}": "Weather: {w}",
+  "Kecepatan waktu: {r}.": "Time speed: {r}.",
+  "1 menit = 1 jam": "1 minute = 1 hour",
+  "10 detik = 1 jam": "10 seconds = 1 hour",
+  "1 detik = 1 jam": "1 second = 1 hour",
+  "berhenti": "stopped",
+  "Cerah": "Clear",
+  "Berawan": "Cloudy",
+  "Mendung": "Overcast",
+  "Cuaca: {w}. Awan berubah bertahap sekitar 1-2 menit.": "Weather: {w}. Clouds change gradually over about 1-2 minutes.",
+  "Suasana daun: {m}": "Leaf mood: {m}",
+  "Suasana daun: {m} ({n} pohon berwarna).": "Leaf mood: {m} ({n} coloured trees).",
+  "Hijau": "Green",
+  "Campur": "Mixed",
+  "Gugur": "Autumn",
+  "Daun jatuh: {s}": "Falling leaves: {s}",
+  " (manual)": " (manual)",
+  "nyala": "on",
+  "mati": "off",
+  "sedikit": "few",
+  "Vegetasi: {q} (K)": "Vegetation: {q} (K)",
+  "Sunrays: {s}": "Sunrays: {s}",
+  " (preset ini: mati)": " (this preset: off)",
+  "Efek layar: {m} (P)": "Screen effects: {m} (P)",
+  "Musik: {m} (J)": "Music: {m} (J)",
+  "generatif": "generative",
+  "file sendiri": "own file",
+  "Musik: {f}": "Music: {f}",
+  "Suara: {s} (U)": "Sound: {s} (U)",
+  "Preset: {p}": "Preset: {p}",
+  " (otomatis)": " (auto)",
+  "FPS rendah: preset diturunkan ke {p}.": "Low FPS: preset lowered to {p}.",
+  "Pejalan kaki: {s}": "Pedestrians: {s}",
+  "Burung: {s}": "Birds: {s}",
+  "Pindah ke {p}.": "Moved to {p}.",
+  "Tengah ladang jagung": "Middle of the corn field",
+  "Ladang gandum dekat bukit": "Wheat field near the hill",
+  "Skyway (jendela ke angkasa)": "Skyway (window to space)",
+  "Air mancur Coriolis": "Coriolis fountain",
+  "Langsung ke kokpit KS-07": "Straight to the KS-07 cockpit",
+  "Turun di {stop}": "Get off at {stop}",
+  "Di dalam trem · tunggu halte berikutnya": "On the tram · wait for the next stop",
+  "Masuk terowongan ke dermaga despun": "Enter the tunnel to the despun dock",
+  "Naik trem (berikutnya: {stop})": "Board the tram (next: {stop})",
+  "Baca plakat": "Read the plaque",
+  "Baca plakat air mancur Coriolis": "Read the Coriolis fountain plaque",
+  "Naik lift ke sumbu": "Take the lift to the axis",
+  "Gerbang B1: lift ke hub, terowongan, lalu kokpit shuttle KS-07 (otomatis)": "Gate B1: lift to the hub, tunnel, then the KS-07 shuttle cockpit (automatic)",
+  "{kind}: terbang {t} s · mendarat {d} m {dir}": "{kind}: flight {t} s · landed {d} m {dir}",
+  " · {a} m sepanjang sumbu": " · {a} m along the axis",
+  " · kena dinding end cap": " · hit the end cap wall",
+  "{what} dari {where} (r {r} m, {g} g)": "{what} from the {where} (r {r} m, {g} g)",
+  "Lempar {v} m/s": "Throw {v} m/s",
+  "Lepas bola": "Release ball",
+  "Lempar {v} m/s, {e}°": "Throw {v} m/s, {e}°",
+  "Jatuhkan dari {h} m": "Drop from {h} m",
+  "tepat di bawah": "straight below",
+  "searah putaran": "in the direction of spin",
+  "melawan arah putaran": "against the direction of spin",
+  "hub nol-g": "zero-g hub",
+  "kabin lift": "lift cabin",
+  "Bola akhirnya diam di lantai kabin: gaya sentrifugal kecil (sekitar 0,006 g) mendorongnya ke lantai.": "The ball finally rests on the cabin floor: a small centrifugal force (about 0.006 g) pushes it down.",
+  "Gerbang B1: lorong ke lift dermaga, naik 994 m ke hub nol-g, lalu kapsul terowongan ke shuttle KS-07 (5x). E = langsung ke kokpit.": "Gate B1: corridor to the dock lift, up 994 m to the zero-g hub, then the tunnel capsule to shuttle KS-07 (5x). E = straight to the cockpit.",
+  "Di kokpit shuttle KS-07. E = lepas sandar, L = keluar ke terowongan.": "In the KS-07 shuttle cockpit. E = undock, L = exit to the tunnel.",
+  "Lepas sandar: menjauh 15 m dari cincin, lalu kendali di tanganmu.": "Undocking: backing 15 m away from the ring, then you have control.",
+  "Sandar otomatis ke berth 1.": "Auto docking to berth 1.",
+  "Kendali manual. W/S dorong, mouse arah, Z/C guling, Shift boost, X rem, E sandar saat dekat.": "Manual control. W/S thrust, mouse to steer, Z/C roll, Shift boost, X brake, E to dock when close.",
+  "Sudah sandar di berth 1. E = lepas sandar lagi, L = keluar ke terowongan.": "Docked at berth 1. E = undock again, L = exit to the tunnel.",
+  "Tur bisa dimulai saat berjalan di dalam stasiun.": "The tour can be started while walking inside the station.",
+  "Tur selesai. Kembali ke posisi semula.": "Tour finished. Back to where you were.",
+  "Kapsul terowongan: meluncur 766 m ke dermaga despun (Shift = 5x).": "Tunnel capsule: gliding 766 m to the despun dock (Shift = 5x).",
+  "Kembali ke hub nol-g.": "Back to the zero-g hub.",
+  "Gravitasi dari putaran": "Gravity from spin",
+  "Tidak ada massa besar di bawah kaki. Silinder berputar sekali tiap 63,4 detik, dan lantai terus mendorong kita ke arah sumbu. Rasanya seperti 1 g (9,81 m/s2). Lihat ke atas: tanah melengkung naik di kiri dan kanan.": "There is no large mass under your feet. The cylinder turns once every 63.4 seconds, and the floor keeps pushing you toward the axis. It feels like 1 g (9.81 m/s2). Look up: the ground curves upward to the left and right.",
+  "Ukuran stasiun": "Size of the station",
+  "Radius 1.000 m, panjang 8.000 m. Dari ketinggian ini seluruh permukaan terlihat sebagai tabung: kota di dekat end cap A, ladang di ujung jauh. Tanah di seberang ada 2 km di atas kepala.": "Radius 1,000 m, length 8,000 m. From this height the whole surface looks like a tube: the city near end cap A, farmland at the far end. The ground on the other side is 2 km overhead.",
+  "Semburan tengah naik lurus 10 m/s, tetapi mendarat sekitar {s10} m searah putaran. Air yang naik menuju sumbu menjaga momentum sudutnya, jadi sedikit mendahului lantai. Hujan miring sekitar 8 derajat karena efek yang sama.": "The central jet rises straight up at 10 m/s, yet lands about {s10} m in the direction of spin. Water rising toward the axis keeps its angular momentum, so it gets slightly ahead of the floor. Rain tilts about 8 degrees because of the same effect.",
+  "Skyway: jendela ke angkasa": "Skyway: a window to space",
+  "Di bawah lantai kaca ini hanya ada ruang hampa. Bintang dan Saturnus melintas sekali tiap 63,4 detik, karena kita ikut berputar bersama stasiun. Tepi silinder bergerak 99 m/s.": "Below this glass floor there is only vacuum. The stars and Saturn sweep past once every 63.4 seconds because we spin with the station. The rim of the cylinder moves at 99 m/s.",
+  "Dekat sumbu: gravitasi mengecil": "Near the axis: gravity fades",
+  "Gravitasi buatan sebanding jarak ke sumbu: g = omega2 x r. Di 100 m dari sumbu hanya sekitar 0,1 g, di sumbu nol. Karena itu hub dan dermaga ada di sumbu, dan lift dari tanah ke hub terasa makin ringan.": "Artificial gravity is proportional to the distance from the axis: g = omega2 x r. At 100 m from the axis it is only about 0.1 g, and zero on the axis. That is why the hub and dock sit on the axis, and the lift from the ground to the hub feels lighter and lighter.",
+  "Ladang dan siklus tanam": "Fields and the crop cycle",
+  "Satu siklus tanam = 4 hari stasiun (96 jam). Gandum tumbuh hijau, menguning, lalu dipanen mesin; ladang lain sedang dibajak traktor. Tekan Z untuk mempercepat waktu dan melihat musim berganti.": "One crop cycle = 4 station days (96 hours). Wheat grows green, turns yellow, then is harvested by machines; other fields are being ploughed by tractors. Press Z to speed up time and watch the seasons change.",
+  "Rumah pertanian dekat end cap B. Di stasiun ini \"atas\" selalu ke arah sumbu, jadi setiap rumah, pohon, dan orang berdiri tegak ke pusat silinder dari segala arah.": "A farmhouse near end cap B. On this station \"up\" always points to the axis, so every house, tree and person stands upright toward the centre of the cylinder from every direction.",
+  "Dari luar: kerangka inersia": "From outside: the inertial frame",
+  "Kamera sekarang tidak ikut berputar. Dari sini terlihat stasiun berputar pada sumbunya, tepinya 99 m/s. Tidak ada yang menarik ke bawah: benda di dalam hanya ingin bergerak lurus, dan lantai terus membelokkannya.": "The camera no longer spins with us. From here you can see the station turning on its axis, its rim moving at 99 m/s. Nothing pulls downward: objects inside just want to move in a straight line, and the floor keeps turning them.",
+  "Dermaga despun": "The despun dock",
+  "Dermaga di ujung end cap A tidak ikut berputar (despun). Shuttle KS-07 sandar di bagian yang diam, lalu penumpang lewat hub di sumbu, tempat putaran hampir tidak terasa. Tekan 8 untuk masuk kokpit.": "The dock at the end of end cap A does not spin (despun). Shuttle KS-07 docks on the still part, and passengers pass through the hub on the axis, where the spin is barely felt. Press 8 to enter the cockpit.",
+  "Museum Cooper Farm\n\nReplika rumah pertanian keluarga Cooper, dipindahkan ke stasiun sebagai museum. Stasiun ini dinamai dari Murphy Cooper.\n\nRak buku di dinding belakang adalah rak kamar Murph.\n\n(Teks placeholder tahap gray-box.)": "Cooper Farm Museum\n\nA replica of the Cooper family farmhouse, moved to the station as a museum. The station is named after Murphy Cooper.\n\nThe bookshelf on the back wall is the shelf from Murph's room.\n\n(Placeholder text from the gray-box stage.)",
+  "Air Mancur Coriolis\n\nSemburan tengah naik lurus 10 m/s sampai sekitar 5,1 m, tetapi mendarat sekitar {s10} m searah putaran stasiun (semburan kecil 6 m/s: {s6} m).\n\nSaat air naik menuju sumbu, jaraknya ke sumbu mengecil. Momentum sudutnya tetap, jadi air sedikit mendahului lantai yang berputar di bawahnya (gaya Coriolis). Besarnya: (4/3) x omega x v^3 / g^2.\n\nDi Bumi efek yang sama hanya beberapa milimeter. Di sini putaran stasiun (satu kali tiap 63 detik) membuatnya terlihat.\n\nHujan di stasiun juga miring sekitar 8 derajat melawan arah putaran walau tanpa angin: tetes jatuh menjauhi sumbu dan tertinggal.": "Coriolis Fountain\n\nThe central jet rises straight up at 10 m/s to about 5.1 m, yet lands about {s10} m in the direction of the station's spin (small 6 m/s jets: {s6} m).\n\nAs the water rises toward the axis, its distance to the axis shrinks. Its angular momentum stays the same, so the water gets slightly ahead of the spinning floor beneath it (the Coriolis force). Its size: (4/3) x omega x v^3 / g^2.\n\nOn Earth the same effect is only a few millimetres. Here the spin of the station (one turn every 63 seconds) makes it visible.\n\nRain on the station also tilts about 8 degrees against the direction of spin even without wind: drops fall away from the axis and lag behind.",
+  "FPS": "FPS",
+  "Frame": "Frame",
+  "Draw call": "Draw call",
+  "Status": "Status",
+  "HUD": "HUD",
+  "Mouse": "Mouse",
+  "Shift": "Shift",
+  "Space": "Space",
+  "R · H · Esc": "R · H · Esc",
+  "` (backtick)": "` (backtick)",
+  "Skyway": "Skyway",
+  "Spaceport": "Spaceport",
+  "Shuttle": "Shuttle",
+});
+translateDom(document.body);
+{                                                                  // tombol bahasa (layar mulai dan tab Lainnya)
+  const mark = () => document.querySelectorAll('.langPick button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG.cur));
+  document.querySelectorAll('.langPick').forEach((box) => { for (const [c, name] of LANGS) { const b = document.createElement('button'); b.type = 'button'; b.dataset.lang = c; b.textContent = name; b.addEventListener('click', (e) => { setLang(c); e.currentTarget.blur(); }); box.appendChild(b); } });
+  LANG.hooks.push(mark); mark();
+}
 window.__stationBoot = true;
 const BOOT_W = [0.013, 0.013, 0.024, 0.033, 0.037, 0.079, 0.08, 0.086, 0.086, 0.669, 0.724, 0.727, 0.731, 0.733, 0.819, 0.822, 0.88, 0.88, 0.88, 0.881, 0.897, 0.914, 0.918, 0.956, 0.957, 0.958];   // bagian muat yang selesai (0-1)
 const BOOT = { t0: performance.now(), log: [], done: 0 };
@@ -347,7 +718,7 @@ async function bootStep(frac, label, sub) {
   BOOT.done = frac;
   document.querySelector('#boot .bar i').style.width = `${Math.round(frac * 100)}%`;
   document.getElementById('bootPct').textContent = `${Math.round(frac * 100)}%`;
-  document.getElementById('bootTxt').textContent = label;
+  document.getElementById('bootTxt').textContent = t(label);
   await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 }
 
@@ -3263,9 +3634,9 @@ function newBall() {
   return b;
 }
 function describe(kind, info) {
-  const dir = Math.abs(info.arc) < 0.005 ? 'tepat di bawah' : info.arc > 0 ? 'searah putaran' : 'melawan arah putaran';
-  return `${kind}: terbang ${info.time.toFixed(2)} s · mendarat ${Math.abs(info.arc).toFixed(2)} m ${dir}` +
-    (Math.abs(info.axial) > 0.05 ? ` · ${info.axial.toFixed(1)} m sepanjang sumbu` : '') + (info.wall ? ' · kena dinding end cap' : '');
+  const dir = t(Math.abs(info.arc) < 0.005 ? 'tepat di bawah' : info.arc > 0 ? 'searah putaran' : 'melawan arah putaran');
+  return t('{kind}: terbang {t} s · mendarat {d} m {dir}', { kind, t: fmtN(info.time, 2), d: fmtN(Math.abs(info.arc), 2), dir }) +
+    (Math.abs(info.axial) > 0.05 ? t(' · {a} m sepanjang sumbu', { a: fmtN(info.axial, 1) }) : '') + (info.wall ? t(' · kena dinding end cap') : '');
 }
 function ballFromAxis(kind) {                                       // bola dari hub nol-g atau dari kabin lift
   const b = newBall(), F = player.float, L = player.lift;
@@ -3276,8 +3647,8 @@ function ballFromAxis(kind) {                                       // bola dari
   launchBody(b, _v1, _v2);
   lastBall = b; trailReset(); trailPush(_v1);
   addMark(Math.atan2(_v1.y, _v1.x), _v1.z + HALF_L, COL_LAUNCH);
-  const where = player.state === 'float' ? 'hub nol-g' : 'kabin lift';
-  lab.last = describe(`${kind === 'throw' ? `Lempar ${lab.speed} m/s` : 'Lepas bola'} dari ${where} (r ${r0.toFixed(1)} m, ${g0.toFixed(4)} g)`, landingOf(b));
+  const where = t(player.state === 'float' ? 'hub nol-g' : 'kabin lift');
+  lab.last = describe(t('{what} dari {where} (r {r} m, {g} g)', { what: kind === 'throw' ? t('Lempar {v} m/s', { v: lab.speed }) : t('Lepas bola'), where, r: fmtN(r0, 1), g: fmtN(g0, 4) }), landingOf(b));
   setLabText(lab.last);
 }
 function throwBall() {
@@ -3292,7 +3663,7 @@ function throwBall() {
   launchBody(b, _v1, _v2);
   lastBall = b; trailReset(); trailPush(_v1);
   addMark(player.theta, player.za, COL_LAUNCH);
-  lab.last = describe(`Lempar ${lab.speed} m/s, ${lab.elev}°`, landingOf(b));
+  lab.last = describe(t('Lempar {v} m/s, {e}°', { v: lab.speed, e: lab.elev }), landingOf(b));
   setLabText(lab.last);
 }
 function dropBall() {
@@ -3306,7 +3677,7 @@ function dropBall() {
   launchBody(b, _v1, _v2.set(0, 0, 0));
   lastBall = b; trailReset(); trailPush(_v1);
   addMark(th, za, COL_LAUNCH);
-  lab.last = describe(`Jatuhkan dari ${h0} m`, landingOf(b));
+  lab.last = describe(t('Jatuhkan dari {h} m', { h: h0 }), landingOf(b));
   setLabText(lab.last);
 }
 
@@ -3359,15 +3730,15 @@ const PLAQUE_TEXT = 'Museum Cooper Farm\n\nReplika rumah pertanian keluarga Coop
 const PLAQUE_POS = { s: COOPER.s + 3, za: COOPER.za - COOPER.d / 2 - 4 };
 function nearDist(s, za) { return Math.hypot(wrapS(player.theta * R - s), player.za - za); }
 function availableAction() {
-  if (PORT.trip && (player.state === 'lift' || player.state === 'float' || player.state === 'pod')) return { key: 'skip', label: 'Langsung ke kokpit KS-07' };
-  if (player.state === 'tram') return tram.dwell > 0 ? { key: 'alight', label: `Turun di ${tramStopName()}` } : { key: null, label: 'Di dalam trem · tunggu halte berikutnya' };
-  if (player.state === 'float' && player.float.pos.z < -HALF_L + HUB.zaMin + 5 && Math.hypot(player.float.pos.x, player.float.pos.y) < 5.5) return { key: 'port', label: 'Masuk terowongan ke dermaga despun' };
+  if (PORT.trip && (player.state === 'lift' || player.state === 'float' || player.state === 'pod')) return { key: 'skip', label: t('Langsung ke kokpit KS-07') };
+  if (player.state === 'tram') return tram.dwell > 0 ? { key: 'alight', label: t('Turun di {stop}', { stop: t(tramStopName()) }) } : { key: null, label: t('Di dalam trem · tunggu halte berikutnya') };
+  if (player.state === 'float' && player.float.pos.z < -HALF_L + HUB.zaMin + 5 && Math.hypot(player.float.pos.x, player.float.pos.y) < 5.5) return { key: 'port', label: t('Masuk terowongan ke dermaga despun') };
   if (player.state !== 'ground') return null;
-  if (tram.dwell > 0 && nearDist(TRAM.s, tram.za) < 14) return { key: 'board', label: `Naik trem (berikutnya: ${TRAM.stops[tram.target].name})` };
-  if (nearDist(PLAQUE_POS.s, PLAQUE_POS.za) < 4) return { key: 'plaque', label: 'Baca plakat' };
-  if (nearDist(FOUNT.plaque.s, FOUNT.plaque.za) < 3.5) return { key: 'fount', label: 'Baca plakat air mancur Coriolis' };
-  if (nearDist(LIFT.theta * R, LIFT.za) < 8) return { key: 'lift', label: 'Naik lift ke sumbu' };
-  if (nearDist(TERM.gate.s, TERM.gate.za) < 4 && player.za > TERM.za - TERM.d / 2) return { key: 'gate', label: 'Gerbang B1: lift ke hub, terowongan, lalu kokpit shuttle KS-07 (otomatis)' };
+  if (tram.dwell > 0 && nearDist(TRAM.s, tram.za) < 14) return { key: 'board', label: t('Naik trem (berikutnya: {stop})', { stop: t(TRAM.stops[tram.target].name) }) };
+  if (nearDist(PLAQUE_POS.s, PLAQUE_POS.za) < 4) return { key: 'plaque', label: t('Baca plakat') };
+  if (nearDist(FOUNT.plaque.s, FOUNT.plaque.za) < 3.5) return { key: 'fount', label: t('Baca plakat air mancur Coriolis') };
+  if (nearDist(LIFT.theta * R, LIFT.za) < 8) return { key: 'lift', label: t('Naik lift ke sumbu') };
+  if (nearDist(TERM.gate.s, TERM.gate.za) < 4 && player.za > TERM.za - TERM.d / 2) return { key: 'gate', label: t('Gerbang B1: lift ke hub, terowongan, lalu kokpit shuttle KS-07 (otomatis)') };
   return null;
 }
 const plaqueEl = document.getElementById('plaque');
@@ -3384,8 +3755,8 @@ function doAction() {
     stepTramRider();
   }
   else if (a.key === 'alight') { const z = TRAM_SEATS[player.seat || 0][1]; player.state = 'ground'; player.theta = ((TRAM.s + 3.6) / R) % TAU; player.za = tram.za + Math.max(-11, Math.min(11, z)); player.h = 0; }
-  else if (a.key === 'plaque') { plaqueEl.querySelector('p').textContent = PLAQUE_TEXT; plaqueEl.hidden = false; }
-  else if (a.key === 'fount') { plaqueEl.querySelector('p').textContent = FOUNT_TEXT; plaqueEl.hidden = false; }
+  else if (a.key === 'plaque') { plaqueEl.querySelector('p').textContent = t(PLAQUE_TEXT); plaqueEl.hidden = false; }
+  else if (a.key === 'fount') { plaqueEl.querySelector('p').textContent = t(FOUNT_TEXT, { s10: fmtN(FOUNT.shift10, 2), s6: fmtN(FOUNT.shift6, 2) }); plaqueEl.hidden = false; }
   else if (a.key === 'lift') enterLift();
   else if (a.key === 'port') portEnterPod(-1);
   else if (a.key === 'gate') portStartTrip();
@@ -3411,10 +3782,11 @@ function drawMapStatic() {
   g.font = '10px ui-monospace, monospace'; g.textBaseline = 'middle';
   for (const st of TRAM.stops) { g.fillStyle = '#fff'; g.fillRect(X(TRAM.s) - 3, Y(st.za) - 1.5, 6, 3); }
   const label = (s, za, t) => { g.fillStyle = '#111'; g.fillText(t, X(s) + 5, Y(za) + 0.5); g.fillStyle = '#fff'; g.fillText(t, X(s) + 4, Y(za)); };
-  label(COOPER.s, COOPER.za, 'Rumah Cooper'); label(FIELD.s, FIELD.za + 40, 'Baseball'); label(LIFT.theta * R, 60, 'Lift');
-  label(WIN.theta * R + 16, CONFIG.L * 0.5, 'Skyway'); label(10, 605, 'Pusat kota');
-  for (const z of CONFIG.zones) if (z.to - z.from > 400) { g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillText(z.name, W * 0.62, Y((z.from + z.to) / 2)); }
+  label(COOPER.s, COOPER.za, t('Rumah Cooper')); label(FIELD.s, FIELD.za + 40, 'Baseball'); label(LIFT.theta * R, 60, t('Lift'));
+  label(WIN.theta * R + 16, CONFIG.L * 0.5, 'Skyway'); label(10, 605, t('Pusat kota'));
+  for (const z of CONFIG.zones) if (z.to - z.from > 400) { g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillText(t(z.name), W * 0.62, Y((z.from + z.to) / 2)); }
 }
+LANG.hooks.push(() => drawMapStatic());
 function drawMap() {
   if (mapEl.hidden) return;
   const W = mapCv.width, H = mapCv.height, g = mapCv.getContext('2d');
@@ -3493,8 +3865,8 @@ function lockPointer() {
 // M1: layar mulai (tombol Mulai muncul setelah muat selesai) dan jendela bantuan bertab (? atau F1)
 const helpEl = document.getElementById('help'), hintEl = document.getElementById('hint');
 function showHint() {                                              // petunjuk satu baris 6 s setelah Mulai
-  hintEl.textContent = isTouch ? 'Jempol kiri berjalan · jempol kanan melihat · tombol Uji = panel kontrol'
-    : 'W A S D berjalan · mouse melihat (klik untuk mengunci) · E aksi · ? bantuan';
+  hintEl.textContent = isTouch ? t('Jempol kiri berjalan · jempol kanan melihat · tombol Panel = panel kontrol')
+    : t('W A S D berjalan · mouse melihat (klik untuk mengunci) · E aksi · ? bantuan');
   hintEl.hidden = false; hintEl.style.opacity = 1;
   setTimeout(() => { hintEl.style.opacity = 0; }, 6000);
   setTimeout(() => { hintEl.hidden = true; }, 7000);
@@ -3677,11 +4049,12 @@ const LABUI = { tab: 'lokasi', toastT: 0 };
 labEl.querySelectorAll('[data-ltab]').forEach((b) => b.addEventListener('click', (e) => { labTab(b.dataset.ltab); e.currentTarget.blur(); }));
 { let t = 'lokasi'; try { t = localStorage.getItem('cooperStation.labTab') || t; } catch (e) { /* abaikan */ } labTab(labEl.querySelector(`[data-lpane="${t}"]`) ? t : 'lokasi'); }
 const toastEl = document.getElementById('toast');
-function setLabText(t) {
-  document.getElementById('labResult').textContent = t;
+function setLabText(msg) {
+  const tx = t(msg);                                               // M3: pesan polos diterjemahkan di sini
+  document.getElementById('labResult').textContent = tx;
   if (!window.__stationReady) return;
   if (!labEl.classList.contains('collapsed') && LABUI.tab === 'fisika' && labEl.offsetParent) return;   // sudah terlihat di panel
-  toastEl.textContent = t; toastEl.hidden = false; toastEl.style.opacity = 1;
+  toastEl.textContent = tx; toastEl.hidden = false; toastEl.style.opacity = 1;
   clearTimeout(LABUI.toastT);
   LABUI.toastT = setTimeout(() => { toastEl.style.opacity = 0; LABUI.toastT = setTimeout(() => { toastEl.hidden = true; }, 500); }, 4000);
 }
@@ -3698,8 +4071,8 @@ on('labFall', () => toggleLeafFall());
 on('labPeds', () => cyclePeds());
 on('labBirds', () => toggleBirds());
 function updateTimeLabels() {
-  const tr = TIME_RATES.find((x) => x[0] === clock.hourRate); const b = document.getElementById('labTime'); if (b && tr) b.innerHTML = `<kbd>Z</kbd>Waktu: ${tr[1]}`;
-  const o = document.getElementById('labOrbit'); if (o) o.innerHTML = `<kbd>T</kbd>Orbit Saturnus: ${clock.orbitScale.toLocaleString('id-ID')}x`;
+  uiLabel('labTime', () => { const tr = TIME_RATES.find((x) => x[0] === clock.hourRate); return `<kbd>Z</kbd>${t('Waktu: {r}', { r: t(tr ? tr[1] : '') })}`; }, true);
+  uiLabel('labOrbit', () => `<kbd>T</kbd>${t('Orbit Saturnus: {x}x', { x: fmtInt(clock.orbitScale) })}`, true);
 }
 on('labCooper', () => teleport('cooper'));
 on('labHill', () => teleport('hill'));
@@ -3762,7 +4135,7 @@ const H = (id) => document.getElementById(id);
 function setHudMode(compact) {
   hud.classList.toggle('compact', compact);
   try { localStorage.setItem('cooperStation.hud', compact ? 'ringkas' : 'lengkap'); } catch (e) { /* abaikan */ }
-  const b = document.getElementById('labHudMode'); if (b) b.textContent = `HUD: ${compact ? 'ringkas' : 'lengkap'}`;
+  uiLabel('labHudMode', () => t(compact ? 'HUD: ringkas' : 'HUD: lengkap'));
 }
 { let m = 'ringkas'; try { m = localStorage.getItem('cooperStation.hud') || m; } catch (e) { /* abaikan */ } setHudMode(m === 'ringkas'); }
 H('hudTitle').addEventListener('click', () => setHudMode(!hud.classList.contains('compact')));
@@ -3812,26 +4185,26 @@ function updateStats(dt) {
   hEl.fps.textContent = stats.fps.toFixed(0);
   hEl.ms.textContent = stats.ms.toFixed(1) + ' ms';
   hEl.calls.textContent = info.calls;
-  hEl.tris.textContent = (info.triangles / 1000).toFixed(1) + ' rb';
+  hEl.tris.textContent = (info.triangles / 1000).toFixed(1) + t(' rb');
   hEl.res.textContent = `${size.x}x${size.y}`;
-  hEl.zone.textContent = player.state === 'float' ? 'Hub sumbu' : zone.name === 'Kota' ? `Kota · ${cityClass(cityDensity(player.theta * R, player.za))}` : zone.name;
+  hEl.zone.textContent = player.state === 'float' ? t('Hub sumbu') : zone.name === 'Kota' ? `${t('Kota')} · ${t(cityClass(cityDensity(player.theta * R, player.za)))}` : t(zone.name);
   hEl.theta.textContent = (player.theta / DEG).toFixed(1) + '°';
   hEl.z.textContent = player.za.toFixed(0) + ' m';
   hEl.h.textContent = hNow.toFixed(hNow < 10 ? 2 : 0) + ' m';
   hEl.head.textContent = hd.toFixed(0) + '°';
   hEl.dist.textContent = player.distance >= 1000 ? (player.distance / 1000).toFixed(2) + ' km' : player.distance.toFixed(0) + ' m';
-  const st = player.state === 'ground' ? player.mode + (input.auto ? ' · otomatis' : '') : player.state === 'air' ? 'di udara' : player.mode;
-  hEl.tram.textContent = tram.dwell > 0 ? `berhenti di ${tramStopName()}` : `${tram.v.toFixed(0)} m/s ke ${TRAM.stops[tram.target].name}`;
-  hEl.mode.textContent = ext.flight ? 'pesawat' : ext.active ? 'kamera luar' : st;
+  const st = player.state === 'ground' ? t(player.mode) + (input.auto ? t(' · otomatis') : '') : t(player.state === 'air' ? 'di udara' : player.state === 'tour' ? 'tur' : player.mode);
+  hEl.tram.textContent = tram.dwell > 0 ? t('berhenti di {stop}', { stop: t(tramStopName()) }) : t('{v} m/s ke {stop}', { v: tram.v.toFixed(0), stop: t(TRAM.stops[tram.target].name) });
+  hEl.mode.textContent = ext.flight ? t('pesawat') : ext.active ? t('kamera luar') : st;
   // sudut antara arah Saturnus dan "atas" pemain (0 derajat = tepat di atas kepala, 180 = tepat di bawah kaki)
   saturnDirStation(_satDir);
   const upNow = player.state === 'float' ? player.float.up : upAt(player.theta, _up);
-  hEl.sat.textContent = `${(Math.acos(Math.max(-1, Math.min(1, _satDir.dot(upNow)))) / DEG).toFixed(0)}° dari zenit`;
-  hEl.orb.textContent = `${(((orbitPhase() / DEG) % 360 + 360) % 360).toFixed(1)}° · ${(T_ORB / 3600).toFixed(2)} j`;
+  hEl.sat.textContent = t('{a}° dari zenit', { a: (Math.acos(Math.max(-1, Math.min(1, _satDir.dot(upNow)))) / DEG).toFixed(0) });
+  hEl.orb.textContent = `${(((orbitPhase() / DEG) % 360 + 360) % 360).toFixed(1)}° · ${(T_ORB / 3600).toFixed(2)} ${t('j')}`;
   hEl.orbX.textContent = clock.orbitScale + 'x';
-  hEl.hour.textContent = `${fmtHour(clock.hour)} · ${TIME_RATES.find((t) => t[0] === clock.hourRate)[1]}`;
+  hEl.hour.textContent = `${fmtHour(clock.hour)} · ${t(TIME_RATES.find((x) => x[0] === clock.hourRate)[1])}`;
   if (document.activeElement !== inHour) { inHour.value = clock.hour.toFixed(1); inHourV.textContent = fmtHour(clock.hour); }
-  hEl.g.textContent = player.state === 'air' ? `${localG().toFixed(3)} g (jatuh bebas)` : localG().toFixed(3) + ' g';
+  hEl.g.textContent = player.state === 'air' ? t('{g} g (jatuh bebas)', { g: localG().toFixed(3) }) : localG().toFixed(3) + ' g';
   stats.frames = 0; stats.time = 0;
 }
 
@@ -4095,13 +4468,13 @@ function cycleWeather() {
   if (WEATHER.mode !== 'auto') WEATHER.state = WEATHER.mode;
   else WEATHER.dwell = 240 + Math.random() * 240;
   updateWeatherLabel();
-  setLabText(`Cuaca: ${weatherText()}. Awan berubah bertahap sekitar 1-2 menit.`);
+  setLabText(t('Cuaca: {w}. Awan berubah bertahap sekitar 1-2 menit.', { w: weatherText() }));
 }
 function weatherText() {
   const name = (k) => WEATHER.modes.find((x) => x[0] === k)[1];
-  return WEATHER.mode === 'auto' ? `Otomatis (${name(WEATHER.state)})` : name(WEATHER.mode);
+  return WEATHER.mode === 'auto' ? `${t('Otomatis')} (${t(name(WEATHER.state))})` : t(name(WEATHER.mode));
 }
-function updateWeatherLabel() { const b = document.getElementById('labWeather'); if (b) b.innerHTML = `<kbd>N</kbd>Cuaca: ${weatherText()}`; }
+function updateWeatherLabel() { uiLabel('labWeather', () => `<kbd>N</kbd>${t('Cuaca: {w}', { w: weatherText() })}`, true); }
 updateClouds(0); CLOUD.drawShadow();
 
 // --- bayangan real-time dari cincin lampu end cap terdekat (radius sekitar 320 m dari pemain) ---
@@ -4186,7 +4559,7 @@ function shiftHour(dh) { clock.hour = ((clock.hour + dh) % 24 + 24) % 24; }
 function cycleTimeRate() {
   const i = TIME_RATES.findIndex((t) => t[0] === clock.hourRate);
   clock.hourRate = TIME_RATES[(i + 1) % TIME_RATES.length][0];
-  updateTimeLabels(); setLabText(`Kecepatan waktu: ${TIME_RATES[(i + 1) % TIME_RATES.length][1]}.`);
+  updateTimeLabels(); setLabText(t('Kecepatan waktu: {r}.', { r: t(TIME_RATES[(i + 1) % TIME_RATES.length][1]) }));
 }
 const fmtHour = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`;
 
@@ -5264,10 +5637,10 @@ function applyLeafMode() {
     }
   }
   LEAF.litter.needsUpdate = true;
-  const b = document.getElementById('labLeaf'); if (b) b.textContent = `Suasana daun: ${LEAF.names[LEAF.mode]}`;
+  uiLabel('labLeaf', () => t('Suasana daun: {m}', { m: t(LEAF.names[LEAF.mode]) }));
 }
 function saveLeaf() { try { localStorage.setItem('cooperStation.leaf', JSON.stringify({ mode: LEAF.mode, fall: LEAF.fallUser })); } catch (e) { /* abaikan */ } }
-function cycleLeafMode() { LEAF.mode = (LEAF.mode + 1) % 3; applyLeafMode(); saveLeaf(); setLabText(`Suasana daun: ${LEAF.names[LEAF.mode]} (${LEAF.colored} pohon berwarna).`); }
+function cycleLeafMode() { LEAF.mode = (LEAF.mode + 1) % 3; applyLeafMode(); saveLeaf(); setLabText(t('Suasana daun: {m} ({n} pohon berwarna).', { m: t(LEAF.names[LEAF.mode]), n: LEAF.colored })); }
 function toggleLeafFall() { LEAF.fallUser = !(FALL.n > 0); applyFall(); saveLeaf(); }
 // --- angin global ---
 const WIND = { ang: 0.6, base: 1.4, gust: 0.45 };
@@ -5347,7 +5720,7 @@ const FALL = { max: 3000, n: 0, NS: 48, nextSrc: 0 };
 function applyFall() {
   FALL.n = LEAF.fallUser === false ? 0 : LEAF.fallUser === true ? Math.max(LEAF.presetN, 400) : LEAF.presetN;
   FALL.mesh.geometry.instanceCount = FALL.n;
-  const b = document.getElementById('labFall'); if (b) b.textContent = `Daun jatuh: ${FALL.n ? 'nyala' : 'mati'}${LEAF.fallUser === null ? '' : ' (manual)'}`;
+  uiLabel('labFall', () => t('Daun jatuh: {s}', { s: t(FALL.n ? 'nyala' : 'mati') }) + (LEAF.fallUser === null ? '' : t(' (manual)')));
 }
 function updateFallSources() {                                      // pohon berwarna terdekat, diperbarui tiap 0,5 s
   const now = performance.now(); if (now < FALL.nextSrc || !FALL.n) return; FALL.nextSrc = now + 500;
@@ -5389,7 +5762,7 @@ function applyVegQuality() {
   TREES.lodD = Q.treeLod; TREES.lastS = 1e9;
   groundMat.uniforms.uGrassR.value = Q.grassFar;
   groundMat.uniforms.uCornR.value = Q.cornMid;
-  const b = document.getElementById('labVeg'); if (b) b.textContent = `Vegetasi: ${Q.name} (K)`;
+  uiLabel('labVeg', () => t('Vegetasi: {q} (K)', { q: t(Q.name) }));
 }
 function cycleVegQuality() { vegQ = (vegQ + 1) % VEG_Q.length; applyVegQuality(); }
 applyVegQuality();
@@ -5440,7 +5813,7 @@ function teleport(key) {
   plaqueEl.hidden = true;
   Object.assign(player, { theta: modS(T.s) / R, za: T.za, h: groundH(T.s, T.za), state: 'ground', heading: T.heading * DEG, pitch: T.pitch * DEG, vA: 0, vT: 0 });
   player.body.done = true; PORT.trip = false;
-  setLabText(`Pindah ke ${T.name}.`);
+  setLabText(t('Pindah ke {p}.', { p: t(T.name) }));
 }
 
 
@@ -5842,7 +6215,7 @@ const rayMat = fsMat(/* glsl */`
   tBright: { value: null }, uViewProj: { value: new THREE.Matrix4() }, uStreak: { value: RAYS.streak }, uAspect: { value: 1 } });
 function toggleRays() {
   RAYS.on = !RAYS.on;
-  const b = document.getElementById('labRays'); if (b) b.textContent = `Sunrays: ${RAYS.on ? 'nyala' : 'mati'}${RAYS.n ? '' : ' (preset ini: mati)'}`;
+  uiLabel('labRays', () => t('Sunrays: {s}', { s: t(RAYS.on ? 'nyala' : 'mati') }) + (RAYS.n ? '' : t(' (preset ini: mati)')));
 }
 // --- komposit: AO, bloom, exposure, ACES, sRGB, vignette, grain ---
 const compMat = fsMat(/* glsl */`
@@ -5978,7 +6351,7 @@ function postEnd() {
 }
 function cyclePost() {
   POST.mode = (POST.mode + 1) % POST.names.length;
-  const b = document.getElementById('labPost'); if (b) b.textContent = `Efek layar: ${POST.names[POST.mode]} (P)`;
+  uiLabel('labPost', () => t('Efek layar: {m} (P)', { m: t(POST.names[POST.mode]) }));
 }
 
 await bootStep(BOOT_W[17], 'Audio...');
@@ -6123,8 +6496,9 @@ function playNote(t, m) {
 function setMusic(mode) {
   AUDIO.music = mode;
   if (AUDIO.fileEl) { if (mode === 'file') AUDIO.fileEl.play().catch(() => {}); else AUDIO.fileEl.pause(); }
-  const b = document.getElementById('labMusic'); if (b) b.textContent = `Musik: ${mode === 'gen' ? 'generatif' : mode === 'file' ? 'file sendiri' : 'mati'} (J)`;
+  musicLabel();
 }
+function musicLabel() { uiLabel('labMusic', () => t('Musik: {m} (J)', { m: t(AUDIO.music === 'gen' ? 'generatif' : AUDIO.music === 'file' ? 'file sendiri' : 'mati') })); }
 function cycleMusic() { setMusic(AUDIO.music === 'gen' ? (AUDIO.fileEl ? 'file' : 'off') : AUDIO.music === 'file' ? 'off' : 'gen'); }
 function loadMusicFile(file) {                                    // file musik milik pengguna (MP3, OGG, WAV, dll.), diputar berulang
   startAudio(); if (!AUDIO.ctx) return;
@@ -6133,7 +6507,7 @@ function loadMusicFile(file) {                                    // file musik 
   if (!AUDIO.fileNode) { AUDIO.fileGain = AUDIO.ctx.createGain(); AUDIO.fileGain.gain.value = 0.8; AUDIO.fileGain.connect(AUDIO.master); }
   AUDIO.fileNode = AUDIO.ctx.createMediaElementSource(el); AUDIO.fileNode.connect(AUDIO.fileGain);
   AUDIO.fileEl = el; setMusic('file');
-  setLabText(`Musik: ${file.name}`);
+  setLabText(t('Musik: {f}', { f: file.name }));
 }
 // 12a: bunyi penjepit dermaga (lepas: pelepasan + desis udara; sandar: dua penjepit mengunci)
 function portClank(release) {
@@ -6166,10 +6540,11 @@ function ding(t, f, amp, dur) {                                    // bel logam:
     o.connect(g).connect(AUDIO.sfx); o.start(t); o.stop(t + dur + 0.05);
   }
 }
+function soundLabel() { uiLabel('labSound', () => t('Suara: {s} (U)', { s: t(AUDIO.on ? 'nyala' : 'mati') })); }
 function toggleSound() {
   AUDIO.on = !AUDIO.on; startAudio();
   if (AUDIO.master) AUDIO.master.gain.setTargetAtTime(AUDIO.on ? 0.9 : 0, AUDIO.ctx.currentTime, 0.1);
-  const b = document.getElementById('labSound'); if (b) b.textContent = `Suara: ${AUDIO.on ? 'nyala' : 'mati'} (U)`;
+  soundLabel();
 }
 function updateAudio(dt) {
   if (!AUDIO.started || !AUDIO.ctx || AUDIO.ctx.state !== 'running') return;
@@ -6281,13 +6656,13 @@ function applyPreset(i) {
   PRESET.idx = i; const P = PRESETS[i];
   CONFIG.dprMax = P.dpr; applyPixelRatio();
   vegQ = P.veg; applyVegQuality();
-  POST.mode = P.post; const bp = document.getElementById('labPost'); if (bp) bp.textContent = `Efek layar: ${POST.names[POST.mode]} (P)`;
+  POST.mode = P.post; uiLabel('labPost', () => t('Efek layar: {m} (P)', { m: t(POST.names[POST.mode]) }));
   SHADOW.enabled = P.shadow; const cb = document.getElementById('inShadow'); if (cb) cb.checked = P.shadow;
   TRAFFIC.U.uTraffic.value = P.traffic;
   LEAF.presetN = [3000, 2200, 1500, 900, 0][i]; applyFall();                  // 12b-2: daun jatuh per preset (Hemat: mati)
   for (const f of PRESET_HOOKS) f(i);                                            // 12b-3: fitur yang didefinisikan belakangan (pejalan kaki)
   RAYS.n = [16, 10, 0, 0, 0][i]; toggleRays(); toggleRays();
-  const b = document.getElementById('labPreset'); if (b) b.textContent = `Preset: ${P.name}${PRESET.auto ? ' (otomatis)' : ''} (Q)`;
+  uiLabel('labPreset', () => t('Preset: {p}', { p: t(P.name) }) + (PRESET.auto ? t(' (otomatis)') : '') + ' (Q)');
   try { localStorage.setItem('cooperStation.preset', JSON.stringify({ idx: i, auto: PRESET.auto })); } catch (e) { /* penyimpanan tidak tersedia */ }
 }
 function cyclePreset() { PRESET.auto = false; applyPreset((PRESET.idx + 1) % PRESETS.length); }
@@ -6304,7 +6679,7 @@ function cyclePreset() { PRESET.auto = false; applyPreset((PRESET.idx + 1) % PRE
 function autoPreset(dt) {
   if (!PRESET.auto || !stats.fps || ext.active) return;
   PRESET.low = stats.fps < 30 ? PRESET.low + dt : Math.max(0, PRESET.low - dt);
-  if (PRESET.low > 4 && PRESET.idx < PRESETS.length - 1) { applyPreset(PRESET.idx + 1); PRESET.low = -6; setLabText(`FPS rendah: preset diturunkan ke ${PRESETS[PRESET.idx].name}.`); }
+  if (PRESET.low > 4 && PRESET.idx < PRESETS.length - 1) { applyPreset(PRESET.idx + 1); PRESET.low = -6; setLabText(t('FPS rendah: preset diturunkan ke {p}.', { p: t(PRESETS[PRESET.idx].name) })); }
 }
 
 await bootStep(BOOT_W[19], 'Perabot kota...');
@@ -7622,7 +7997,7 @@ function updatePeds() {                                                 // pilih
 }
 function applyPedsPreset(i) {
   PEDS.radius = [300, 250, 180, 120, 80][i]; PEDS.dens = [1, 1, 0.85, 0.6, 0.3][i];
-  const b = document.getElementById('labPeds'); if (b) b.textContent = `Pejalan kaki: ${PEDS.names[PEDS.users.indexOf(PEDS.user)]}`;
+  uiLabel('labPeds', () => t('Pejalan kaki: {s}', { s: t(PEDS.names[PEDS.users.indexOf(PEDS.user)]) }));
 }
 function cyclePeds() {
   PEDS.user = PEDS.users[(PEDS.users.indexOf(PEDS.user) + 1) % 3]; applyPedsPreset(PRESET.idx);
@@ -7815,7 +8190,7 @@ function updateBirds() {
 }
 function applyBirdsPreset(i) {
   BIRDS.nFlock = [5, 4, 3, 2, 1][i]; BIRDS.pigeonsOn = i < 4; BIRDS.nVee = [2, 2, 1, 1, 1][i];
-  const b = document.getElementById('labBirds'); if (b) b.textContent = `Burung: ${BIRDS.user ? 'nyala' : 'mati'}`;
+  uiLabel('labBirds', () => t('Burung: {s}', { s: t(BIRDS.user ? 'nyala' : 'mati') }));
 }
 function toggleBirds() {
   BIRDS.user = !BIRDS.user; applyBirdsPreset(PRESET.idx);
@@ -7985,7 +8360,7 @@ const FOUNT = { jets: [], plaque: null };
   FOUNT.shift10 = 4 / 3 * OMEGA * 1000 / (CONFIG.g * CONFIG.g); FOUNT.shift6 = 4 / 3 * OMEGA * 216 / (CONFIG.g * CONFIG.g);
 }
 SPOTS.fountain = { s: FOUNT.s, za: FOUNT.za + 12, heading: 180, pitch: 8, name: 'Air mancur Coriolis' };
-const FOUNT_TEXT = `Air Mancur Coriolis\n\nSemburan tengah naik lurus 10 m/s sampai sekitar 5,1 m, tetapi mendarat sekitar ${FOUNT.shift10.toFixed(2).replace('.', ',')} m searah putaran stasiun (semburan kecil 6 m/s: ${FOUNT.shift6.toFixed(2).replace('.', ',')} m).\n\n` +
+const FOUNT_TEXT = 'Air Mancur Coriolis\n\nSemburan tengah naik lurus 10 m/s sampai sekitar 5,1 m, tetapi mendarat sekitar {s10} m searah putaran stasiun (semburan kecil 6 m/s: {s6} m).\n\n' +
   `Saat air naik menuju sumbu, jaraknya ke sumbu mengecil. Momentum sudutnya tetap, jadi air sedikit mendahului lantai yang berputar di bawahnya (gaya Coriolis). Besarnya: (4/3) x omega x v^3 / g^2.\n\n` +
   `Di Bumi efek yang sama hanya beberapa milimeter. Di sini putaran stasiun (satu kali tiap 63 detik) membuatnya terlihat.\n\n` +
   `Hujan di stasiun juga miring sekitar 8 derajat melawan arah putaran walau tanpa angin: tetes jatuh menjauhi sumbu dan tertinggal.`;
@@ -8143,13 +8518,13 @@ function applyPhoto() {
 }
 function syncPhotoUI() {
   phEl('phHour').value = clock.hour; phEl('phHourV').textContent = fmtHour(clock.hour);
-  phEl('phFov').value = PHOTO.fov; phEl('phFovV').textContent = `${PHOTO.fov} derajat`;
+  phEl('phFov').value = PHOTO.fov; phEl('phFovV').textContent = t('{n} derajat', { n: PHOTO.fov });
   phEl('phFocus').value = sliderFromFocus(PHOTO.focus);
-  phEl('phFocusV').textContent = PHOTO.focus < 10 ? `${PHOTO.focus.toFixed(1).replace('.', ',')} m` : `${Math.round(PHOTO.focus).toLocaleString('id-ID')} m`;
-  phEl('phBlur').value = PHOTO.blur; phEl('phBlurV').textContent = PHOTO.blur > 0 ? `${Math.round(PHOTO.blur * 100)}%` : 'mati';
-  phEl('phExp').value = POST.exposure; phEl('phExpV').textContent = POST.exposure.toFixed(2).replace('.', ',');
+  phEl('phFocusV').textContent = PHOTO.focus < 10 ? `${fmtN(PHOTO.focus, 1)} m` : `${fmtInt(PHOTO.focus)} m`;
+  phEl('phBlur').value = PHOTO.blur; phEl('phBlurV').textContent = PHOTO.blur > 0 ? `${Math.round(PHOTO.blur * 100)}%` : t('mati');
+  phEl('phExp').value = POST.exposure; phEl('phExpV').textContent = fmtN(POST.exposure, 2);
   phEl('phPause').checked = PHOTO.pause;
-  phEl('phWeather').textContent = `Cuaca: ${WEATHER.modes.find((x) => x[0] === WEATHER.mode)[1]} (N)`;
+  phEl('phWeather').textContent = t('Cuaca: {w} (N)', { w: t(WEATHER.modes.find((x) => x[0] === WEATHER.mode)[1]) });
 }
 function togglePhoto(force) {
   const want = force === undefined ? !PHOTO.on : force;
@@ -8182,7 +8557,7 @@ function savePhoto() {
     const a = document.createElement('a');
     a.download = `cooper-station-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}.png`;
     a.href = url; document.body.appendChild(a); a.click(); a.remove();
-    const b = phEl('phSave'); b.textContent = 'Tersimpan'; setTimeout(() => { b.textContent = 'Simpan PNG (Enter)'; }, 1500);
+    const b = phEl('phSave'); b.textContent = t('Tersimpan'); setTimeout(() => { b.textContent = t('Simpan PNG (Enter)'); }, 1500);
   };
 }
 const phInput = (id, fn) => { const el = phEl(id); el.addEventListener('input', () => { fn(parseFloat(el.value)); applyPhoto(); syncPhotoUI(); }); el.addEventListener('change', () => el.blur()); };
@@ -8219,7 +8594,7 @@ function tourKeys() {
     { s: CONFIG.spawn.theta * R, za: 760, h: 230, hd: 0, pt: -6, hold: 8, title: 'Ukuran stasiun',
       cap: 'Radius 1.000 m, panjang 8.000 m. Dari ketinggian ini seluruh permukaan terlihat sebagai tabung: kota di dekat end cap A, ladang di ujung jauh. Tanah di seberang ada 2 km di atas kepala.' },
     { s: FOUNT.s, za: FOUNT.za + 14, h: 1.2, hd: 180, pt: 8, hold: 9, title: 'Air mancur Coriolis',
-      cap: `Semburan tengah naik lurus 10 m/s, tetapi mendarat sekitar ${FOUNT.shift10.toFixed(2).replace('.', ',')} m searah putaran. Air yang naik menuju sumbu menjaga momentum sudutnya, jadi sedikit mendahului lantai. Hujan miring sekitar 8 derajat karena efek yang sama.` },
+      cap: 'Semburan tengah naik lurus 10 m/s, tetapi mendarat sekitar {s10} m searah putaran. Air yang naik menuju sumbu menjaga momentum sudutnya, jadi sedikit mendahului lantai. Hujan miring sekitar 8 derajat karena efek yang sama.' },
     { s: sk.s, za: sk.za, h: 0, hd: sk.heading, pt: sk.pitch, hold: 9, title: 'Skyway: jendela ke angkasa',
       cap: 'Di bawah lantai kaca ini hanya ada ruang hampa. Bintang dan Saturnus melintas sekali tiap 63,4 detik, karena kita ikut berputar bersama stasiun. Tepi silinder bergerak 99 m/s.' },
     { s: LIFT.theta * R, za: 170, h: 900, hd: 0, pt: 0, hold: 9, title: 'Dekat sumbu: gravitasi mengecil',
@@ -8258,12 +8633,13 @@ function stopTour() {
   document.body.classList.remove('tour'); phEl('tourCap').hidden = true;
   setLabText('Tur selesai. Kembali ke posisi semula.');
 }
+LANG.hooks.push(() => { if (TOUR.on) tourCaption(); if (PHOTO.on) syncPhotoUI(); });
 function tourCaption() {
   const K = TOUR.keys[TOUR.i], cap = phEl('tourCap');
   cap.style.opacity = 0;
   setTimeout(() => {
     if (!TOUR.on) return;
-    cap.querySelector('b').textContent = K.title; cap.querySelector('span').textContent = K.cap;
+    cap.querySelector('b').textContent = t(K.title); cap.querySelector('span').textContent = t(K.cap, { s10: fmtN(FOUNT.shift10, 2) });
     phEl('tourStep').textContent = `${TOUR.i + 1} / ${TOUR.keys.length}`;
     cap.style.opacity = 1;
   }, 400);
@@ -8367,13 +8743,15 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
   });
   auto.addEventListener('change', () => { PRESET.auto = auto.checked; applyPreset(PRESET.idx); });
   mark();
+  updateTimeLabels(); updateWeatherLabel(); musicLabel(); soundLabel();   // M3: daftarkan label awal agar ikut ganti bahasa
+  translateDom(document.body);
   document.getElementById('boot').hidden = true; document.getElementById('ready').hidden = false;
   document.getElementById('go').focus();
 }
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, labTab, LABUI, setLabText, setHudMode, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

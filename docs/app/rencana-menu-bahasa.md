@@ -1,6 +1,6 @@
 # Rencana: tata letak menu, layar mulai, dan pilihan bahasa
 
-Status: M1 dan M2 selesai (lihat Hasil M1, Hasil M2). M3 dan M4 belum. Keputusan: Mandarin aksara sederhana, preset dipilih di layar mulai. Berlaku untuk seluruh aplikasi, contoh utama Copper Corn Station.
+Status: M1, M2, M3 selesai (lihat bagian Hasil). M4 belum. Keputusan: Mandarin aksara sederhana, preset dipilih di layar mulai. Berlaku untuk seluruh aplikasi, contoh utama Copper Corn Station.
 
 ## Ringkasan
 
@@ -113,6 +113,21 @@ Belum di M1: pilihan bahasa di layar mulai (M3).
 | Tab Lainnya | HUD ringkas/lengkap, sembunyikan UI (H), bantuan (?), peta (M) |
 | Notifikasi | Pesan panel (hasil lempar, cuaca, preset turun otomatis, pindah lokasi) juga tampil 4 s di atas tengah layar bila tab Fisika tidak terlihat. Teks dan tabel hasil tetap di tab Fisika |
 | HUD | Mode ringkas (FPS, status, zona, g lokal, jam stasiun) dan lengkap (semua baris lama). Awal: ringkas. Klik judul HUD untuk berganti; pilihan diingat. Judul HUD kini "Copper Corn Station" (sebelumnya "Tahap 5 · cahaya") |
+
+## Hasil M3 (selesai)
+
+| Item | Hasil |
+| --- | --- |
+| Cara kerja | Gaya gettext: teks Indonesia di kode tetap menjadi sumber sekaligus kunci kamus, `t('Pindah ke {p}.', { p })`. Kode tetap mudah dibaca dalam bahasa Indonesia; bahasa Indonesia tidak butuh kamus |
+| Teks HTML statis | Diterjemahkan otomatis (`translateDom`): setiap simpul teks yang ada di kamus. Tidak perlu atribut di tiap elemen |
+| Label tombol yang berubah | Didaftarkan lewat `uiLabel(id, fungsi)`, dihitung ulang saat bahasa diganti. Teks per frame (HUD, prompt aksi) memanggil `t()` langsung |
+| Kamus English | 306 entri: layar muat, layar mulai, bantuan (semua tab), panel, HUD, zona dan halte, status pemain, pesan, hasil lempar bola, prompt aksi, mode foto, 9 keterangan tur, plakat rumah Cooper dan air mancur, label peta |
+| Angka | Desimal koma untuk Indonesia, titik untuk English (`fmtN`, `fmtInt`) di plakat, tur, mode foto, hasil lempar |
+| Pilih bahasa | Layar mulai dan tab Lainnya. Tersimpan di `lazarus.lang`, bisa lewat alamat `?lang=en`. Awal: bahasa browser bila id atau en, selain itu Indonesia |
+| Ganti tanpa muat ulang | Ya. Pesan yang sudah tampil tetap di bahasa lama sampai pesan berikutnya |
+| Uji | `tools/uji_bahasa.py`: 0 teks statis tertinggal, 0 teks tanpa entri kamus, 0 `t('...')` tanpa entri English, label berganti dua arah |
+
+Tidak diterjemahkan (sesuai rencana): tulisan di dalam dunia 3D (papan halte, papan keberangkatan terminal, layar kokpit, papan skor baseball, tanda lift), nama tempat (Skyway, Spaceport, Copper Corn Station).
 
 ## Urutan kerja
 

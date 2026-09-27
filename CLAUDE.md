@@ -20,6 +20,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_burung.py` | Uji Copper Corn Station 12b-4: kawanan burung, merpati terbang saat didekati, siklus hari |
 | `tools/uji_suasana.py` | Uji Copper Corn Station 12b-5: kafe, lampu untaian, bendera, suara kota, tidak ada normal nol (NaN) |
 | `tools/uji_hujan.py` | Uji Copper Corn Station 12c: angka fisika hujan dan air mancur Coriolis, hujan, tanah basah, angin |
+| `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
@@ -36,7 +37,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 
 ## Aturan kerja
 
-- Bahasa: Indonesia untuk teks UI, komentar kode, dokumen, dan balasan.
+- Bahasa: Indonesia untuk komentar kode, dokumen, dan balasan. Teks UI ditulis dalam bahasa Indonesia sebagai sumber, lalu diterjemahkan lewat kamus `I18N` (M3). Teks UI baru wajib lewat `t('...')` (atau label `uiLabel`) dan diberi entri di `I18N.en`; `tools/uji_bahasa.py` memeriksa kelengkapannya.
 - Satu file: semua kode Copper Corn Station ada di `experiences/cooper-station/index.html` (CSS + JS modul). Tidak ada build step, tidak ada addon three.js.
 - three.js 0.186.1 dari importmap `https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js`.
 - "Pertahankan yang ada": fitur lama tidak boleh hilang atau berubah tanpa diminta.
@@ -86,6 +87,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Lift/hub | `LIFT`, `HUB`, `CABIN`, `enterLift()`, `stepFloat()` |
 | Lokasi | `SPOTS` + `teleport(key)`: cooper, hill, corn, wheat, skyway, baseball, spaceport, fountain |
 | Panel dan HUD (M2) | `labEl`, `toggleLab()`, `labTab(id)` (data-ltab / data-lpane), `LABUI`, `setLabText()` (juga notifikasi `#toast`), `setHudMode(compact)` (kelas `x` = baris HUD lengkap) |
+| Bahasa (M3) | `LANGS`, `LANG` (cur, labels, hooks), `t(src, vars)`, `fmtN()`, `fmtInt()`, `uiLabel(id, fn, html)`, `translateDom()`, `setLang(c)`, kamus `I18N.en` (kunci = teks Indonesia persis), pilihan di `.langPick`, `?lang=en`, localStorage `lazarus.lang` |
 | Layar muat dan bantuan (M1) | `BOOT`, `BOOT_W` (bobot progres terukur), `bootStep(frac, label)`, `startEl`, `helpEl` + `toggleHelp()` / `helpTab()`, `showHint()`, pilihan preset `#presetPick` |
 | Uji | `window.__station` mengekspor objek penting untuk skrip uji |
 
