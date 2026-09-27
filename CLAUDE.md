@@ -15,6 +15,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/qc_load.py` | Cek halaman termuat tanpa error |
 | `tools/uji_spaceport.py` | Uji Cooper Station 12a: pintu terminal, gerbang B1 ke kokpit, sandar otomatis |
 | `tools/uji_lalu_lintas.py` | Uji Cooper Station 12b-1: peron trem, lalu lintas 30 menit tanpa tabrakan |
+| `tools/uji_pohon.py` | Uji Cooper Station 12b-2: jenis pohon, suasana daun, daun jatuh per preset |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
 ## Aturan aplikasi
@@ -58,7 +59,8 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Cahaya | `LIGHT_GLSL` / `stationLight()`, `LIGHT.uniforms` (uL_Sunline, uL_SunDir, uL_CapI), `patchLit()` untuk MeshBasicMaterial, `updateLighting()` |
 | Bayangan | `SHADOW`, pass layer 1; alpha caster layer 2 (`ALPHA_CASTERS`) |
 | Tanah | heightmap `TER` (half-float, sama CPU/GPU), `groundH(s, za)`, `groundMat` (uLand, uFieldTex, uCloudTex, uShadeTex, lampPool) |
-| Vegetasi | `VEG_COMMON`, `TREES` (LOD + impostor), `GRASS`, `CORN` |
+| Vegetasi | `VEG_COMMON`, `TREES` (LOD + impostor, 16 template: oak, elm, poplar, maple, birch, pine, willow, bunga), `TREE_KINDS`, `GRASS`, `CORN` |
+| Suasana daun (12b-2) | `LEAF` (mode Hijau/Campur/Gugur), `leafColorFor()`, `applyLeafMode()`, atribut `aLeafC` + `LEAF_RECOLOR`, `WIND` + `updateWind()` (uniform `uWind`), `FALL` (daun jatuh GPU) + `updateFallSources()`, `uLitterTex` (serakan daun) |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
 | Kolisi | `COL`, `addCollider(s, za, hs, hz)` (AABB di bidang s-za), `LATE_COLLIDERS` |
 | Awan/cuaca (11a) | `WEATHER` (mode auto/cerah/berawan/mendung, cover, ov), `CLOUD`, `updateClouds(dt)`, `cycleWeather()` (N) |
@@ -97,5 +99,6 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 11a-11d | Cuaca dinamis, sunrays, perabot kota, spaceport dan shuttle |
 | 12a | Gerbang B1 terminal ke kokpit, pintu terminal bisa dilewati (hanggar lama di dalam terminal dihapus), suara shuttle, panduan sandar |
 | 12b-1 | Halte trem pindah dari simpang, lampu lalu lintas merah-kuning-hijau, mobil antre (simulasi CPU), perlintasan trem berpalang dan bel, preset Hemat |
+| 12b-2 | 8 jenis pohon, suasana daun Hijau/Campur/Gugur, daun jatuh tertiup angin, serakan daun, angin global |
 
 Rencana berikutnya: `docs/cooper-station/rencana-tahap-12b-cooper-station.md` (12b-2 sampai 12b-5), lalu `rencana-tahap-12-cooper-station.md` (12c, 12d).

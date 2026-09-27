@@ -1,6 +1,6 @@
 # Rencana Tahap 12b: Kota hidup dan suasana (Cooper Station)
 
-Status: 12b-1 selesai (lihat "Hasil 12b-1"). 12b-2 sampai 12b-5 belum dikerjakan. Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
+Status: 12b-1 dan 12b-2 selesai (lihat "Hasil 12b-1" dan "Hasil 12b-2"). 12b-3 sampai 12b-5 belum dikerjakan. Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
 
 ## Catatan pemilik (sebelum dikerjakan)
 
@@ -75,6 +75,21 @@ Catatan: di 10 dari 192 simpang tidak ada tiang lampu (tiang dilewati di dekat s
 | P6 | Serakan daun di tanah | Bercak daun kuning di bawah pohon kuning (dari tekstur bayangan tajuk yang sudah ada, dipakai ulang di shader tanah) dan di tepi trotoar | Rendah |
 | W1 | Angin global | Objek `WIND` baru: arah (berubah pelan), kekuatan dasar, hembusan (gust) yang berjalan melintasi kota sebagai gelombang. Dipakai daun jatuh, goyang tajuk (amplitudo dinaikkan dari 5 cm menjadi 5-25 cm saat hembusan), rumput, bendera, dan suara angin. Tahap 12c (B5) nanti tinggal menaikkan kekuatan saat mendung | Rendah |
 | W2 | Catatan fisika | Udara stasiun ikut berputar, jadi dalam kerangka stasiun daun jatuh hampir lurus ke bawah bila tidak ada angin. Pergeseran Coriolis untuk daun (turun pelan, sekitar 1 m/s dari 10 m) kurang dari 2 m, dihitung sekalian di rumus lintasan supaya konsisten dengan bola | Rendah |
+
+### Hasil 12b-2 (selesai)
+
+| No | Status | Yang dikerjakan |
+| --- | --- | --- |
+| P1 | Selesai | 5 jenis baru: maple, birch (batang putih, 18 m), pinus (kerucut), willow, pohon bunga. Total 8 jenis. Willow rimbun tapi bentuk menjuntainya belum kuat terlihat |
+| P2 | Selesai | Atlas daun 4 kolom: daun lebar, poplar, semprotan jarum pinus, untaian willow |
+| P3 | Selesai | 16 template (6 lama tidak berubah + 10 baru). Posisi, skala, dan kolisi semua pohon tetap; hanya jenisnya yang diganti per zona dari hash posisi. Dari 11.587 pohon: elm 2.869, oak 2.040, poplar 1.988, maple 1.643, pinus 1.275, birch 1.266, bunga 405, willow 101. Pohon halaman Cooper, barisan poplar Cooper, dan jalur elm Skyway tidak diganti |
+| P4 | Selesai | Pengaturan "Suasana daun" di panel Grafik (tersimpan di browser). Pohon berwarna: Hijau 3,5% (pohon bunga saja), Campur 21,7% (bawaan; 18,2% daun kuning-jingga-merah + 3,5% bunga), Gugur 65,0%. Warna diterapkan di shader hanya ke piksel hijau, jadi berlaku juga untuk gambar pohon jauh (impostor) tanpa mewarnai batang |
+| P5 | Selesai | Daun jatuh: partikel GPU dari maksimal 48 pohon berwarna terdekat (120 m), berbentuk elips runcing, turun 0,8-1,4 m/s sambil berputar, terbawa angin, rebah di tanah lalu hilang (siklus 16 s). Jumlah per preset: Ultra 2.000, Tinggi 1.500, Sedang 1.000, Rendah 600, Hemat 0. Saklar "Daun jatuh" di panel Grafik (pilihan manual menang atas preset) |
+| P6 | Selesai sebagian | Serakan daun di tanah di bawah pohon berwarna (tekstur 4 m per piksel, dibuat ulang saat suasana daun diganti). Serakan di tepi trotoar belum dibuat |
+| W1 | Selesai | `WIND`: arah berubah pelan, hembusan 0..1. Dipakai goyang tajuk (5 sampai 25 cm), daun jatuh, dan suara angin (menggantikan hembusan acak suara lama) |
+| W2 | Selesai | Hanyut Coriolis daun jatuh 2 omega v^2 / g ke arah -s (sekitar 3 cm/s, jadi 0,3 m untuk jatuh 10 s) |
+
+Uji: `tools/uji_pohon.py` (7 cek lolos). Waktu muat di sandbox tanpa GPU naik dari 5,9 s ke 6,3 s (rata-rata 2 kali muat). FPS belum diukur di GTX 1060 dan M1.
 
 ## 12b-3. Pejalan kaki
 
