@@ -64,7 +64,16 @@ Rencana detail (diperluas: perlintasan trem, pohon beragam, daun kuning, suasana
 | B5 | Selesai | Angin dasar naik dari 1,4 m/s (cerah) sampai 3,5 m/s (mendung penuh). Goyang rumput, jagung, dan tajuk ikut kuat; suara angin mengikuti hembusan (12b-2) |
 | B6 | Selesai | Air mancur di plaza pusat kota terdekat dari titik awal (tombol 9). Semburan tengah 10 m/s setinggi 5,1 m mendarat 1,37 m searah putaran, 8 semburan kecil 6 m/s bergeser 0,30 m. Lintasan memakai rumus orde pertama (4/3) omega v^3 / g^2; dibandingkan hitungan eksak di kerangka inersia (1,352 m dan 0,292 m) selisihnya sekitar 1,5%. Plakat di depan kolam (E) menjelaskan Coriolis dan hujan miring |
 
-Uji: `tools/uji_hujan.py` (7 cek). Waktu muat di sandbox sekitar 6,6 s. Belum dibuat: percikan tetes di tanah, tirai hujan di kejauhan (diwakili kabut mendung yang sudah ada).
+Uji: `tools/uji_hujan.py` (7 cek). Waktu muat di sandbox sekitar 6,6 s.
+
+### Revisi hujan (setelah uji pemilik)
+
+| Masalah | Penyebab | Perbaikan |
+| --- | --- | --- |
+| Gerak tetes aneh, seperti zoom in/out ke arah kamera | Tetes yang lewat sangat dekat kamera ikut digambar (besar dan melesat), dan lebar garis membesar dengan jarak | Tetes dalam 1,2 m dari kamera tidak digambar, redup sampai 5 m; lebar garis tetap 1 cm |
+| Garis tetes terlalu terang di malam hari | Warna tetes tetap (0,72), tidak ikut cahaya | Warna tetes diambil dari warna kabut (terang siang, gelap malam). Air mancur juga ikut pencahayaan |
+| Hujan global | Hujan hanya bergantung tingkat mendung seluruh stasiun | Hujan hanya di bawah awan: tiap tetes membaca peta bayangan awan tepat di atasnya. Saat mendung penuh, awan menutupi sekitar 20% area, jadi hujan turun di bawah gugusan awan dan kering di celahnya. Tanah basah terutama di bawah awan, suara hujan mengikuti awan di atas pemain (dibaca tiap 0,4 s) |
+ Belum dibuat: percikan tetes di tanah, tirai hujan di kejauhan (diwakili kabut mendung yang sudah ada).
 
 ## 12d. Ladang, foto, tur
 
