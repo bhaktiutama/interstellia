@@ -132,7 +132,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 4c gray-box · kota bervariasi, sungai, ladang, cincin struktur · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 4d gray-box · lambung 80 m, utilitas luar (tekan V) · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -336,9 +336,10 @@ function saturnDirStation(out) {
   return out.set(out.x * c + out.y * s, -out.x * s + out.y * c, out.z);   // rotasi -omega*t
 }
 // Kamera luar (tombol V): mengorbit stasiun di kerangka inersia; stasiun terlihat berputar
-const ext = { active: false, yaw: 212 * Math.PI / 180, pitch: 12 * Math.PI / 180, dist: 7500, target: new THREE.Vector3(0, 0, -2200) };
+const ext = { active: false, yaw: 212 * Math.PI / 180, pitch: 12 * Math.PI / 180, dist: 6500, target: new THREE.Vector3(0, 0, -2400) };
 function toggleExterior() {
   ext.active = !ext.active;
+  exteriorGroup.visible = ext.active;
   if (ext.active) {
     if (document.pointerLockElement) document.exitPointerLock();
     camera.near = 5; camera.far = 120000; scene.fog.density = 0;
@@ -349,6 +350,7 @@ function toggleExterior() {
   camera.updateProjectionMatrix();
 }
 function updateExteriorCamera() {
+  updateCrawlers(1 / 60);
   scene.rotation.z = OMEGA * clock.sim;                                     // stasiun berputar di ruang inersia
   const cp = Math.cos(ext.pitch);
   camera.position.set(ext.dist * cp * Math.sin(ext.yaw), ext.dist * Math.sin(ext.pitch), ext.dist * cp * Math.cos(ext.yaw)).add(ext.target);
@@ -505,9 +507,76 @@ function bakeShadeBox() {
   return g;
 }
 
-// Lambung luar (hanya terlihat dari kamera luar): panel gelap dengan garis sambungan dan jendela menyala
+// =====================================================================
+// TAHAP 4d: LAMBUNG TEBAL + UTILITAS LUAR
+// Lambung setebal HULL.t (80 m) di bawah permukaan tanah: lempeng tanah, 3 dek utilitas, perisai radiasi,
+// kulit luar. Terlihat sebagai cincin berlapis di end cap dan sebagai dinding lubang Skyway.
+// Utilitas luar (rel memanjang, rangka melingkar, sirip radiator, kendaraan perawatan, dermaga) hanya
+// dirender saat kamera luar aktif, jadi tidak membebani tampilan dari dalam.
+// =====================================================================
+const HULL = { t: 80, slotOuter: 88, collarT: 18, collarOut: 22, rails: 24, hoopEvery: 500 };
+const R_OUT = CONFIG.R + HULL.t;
+const exteriorGroup = new THREE.Group();
+exteriorGroup.visible = false;
+scene.add(exteriorGroup);
+
+// Shader lapisan penampang lambung: dipakai cincin end cap (mode 0) dan dinding lubang Skyway (mode 1)
+const layerMat = new THREE.ShaderMaterial({
+  side: THREE.DoubleSide,
+  uniforms: { uR: { value: CONFIG.R }, uMode: { value: 0 } },
+  vertexShader: /* glsl */`
+    varying vec3 vPos;
+    void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform float uR, uMode;
+    varying vec3 vPos;
+    float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+    void main() {
+      float r = length(vPos.xy), d = r - uR;                     // kedalaman di bawah tanah (m)
+      float u = uMode < 0.5 ? atan(vPos.y, vPos.x) * r : vPos.z; // koordinat sepanjang penampang (m)
+      vec3 col;
+      if (d < 5.0) col = vec3(0.36, 0.29, 0.22);                 // tanah dan akar
+      else if (d > 76.0) col = vec3(0.10, 0.105, 0.115);         // kulit luar
+      else if (d > 58.0) col = vec3(0.23, 0.24, 0.25) * (0.85 + 0.3 * h21(floor(vec2(u / 6.0, d / 3.0))));   // perisai radiasi (regolit/air)
+      else {
+        float fl = mod(d - 5.0, 17.66);                          // 3 dek, masing-masing 17,66 m
+        if (fl < 2.0) col = vec3(0.30, 0.31, 0.33);              // lantai dek (beton/baja)
+        else {
+          float deck = floor((d - 5.0) / 17.66);
+          vec2 cell = floor(vec2(u / 9.0, deck));
+          float lit = step(0.35, h21(cell)) * step(0.35, fl / 17.66) * step(fl / 17.66, 0.8);
+          float pipe = step(0.9, fract(u / 3.0)) * step(2.0, deck);      // dek 3: pipa utilitas
+          col = vec3(0.07, 0.075, 0.085) + lit * vec3(0.55, 0.50, 0.38) * (0.6 + 0.4 * h21(cell + 3.0)) + pipe * vec3(0.18, 0.2, 0.22);
+        }
+      }
+      gl_FragColor = vec4(col, 1.0);
+      #include <colorspace_fragment>
+    }`,
+});
+const layerMatWall = layerMat.clone();
+layerMatWall.uniforms.uMode.value = 1;
+
+// Cincin penampang di kedua end cap (dari R sampai R + 80 m)
+{
+  const g = new THREE.RingGeometry(CONFIG.R, R_OUT, 256, 1);
+  for (const sgn of [-1, 1]) { const m = new THREE.Mesh(g, layerMat); m.position.z = sgn * HALF_L; scene.add(m); }
+}
+// Dinding lubang Skyway: miring melebar ke luar (30 m di dalam, 88 m di kulit luar) agar pandangan ke angkasa lebar
+{
+  const pos = [];
+  const quad = (a, b, c, d) => pos.push(...a, ...b, ...c, ...a, ...c, ...d);
+  for (const side of [-1, 1]) {
+    const tIn = WIN.theta + side * (WIN.width / 2) / CONFIG.R, tOut = WIN.theta + side * (HULL.slotOuter / 2) / R_OUT;
+    const pIn = (z) => [CONFIG.R * Math.cos(tIn), CONFIG.R * Math.sin(tIn), z], pOut = (z) => [R_OUT * Math.cos(tOut), R_OUT * Math.sin(tOut), z];
+    quad(pIn(-HALF_L), pOut(-HALF_L), pOut(HALF_L), pIn(HALF_L));
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const walls = new THREE.Mesh(g, layerMatWall); walls.frustumCulled = false; scene.add(walls);
+}
+
+// Lambung luar (hanya terlihat dari kamera luar): panel gelap dengan garis sambungan
 const hullMat = new THREE.ShaderMaterial({
-  uniforms: { uR: { value: CONFIG.R }, uHalfL: { value: HALF_L } },
+  uniforms: { uR: { value: R_OUT }, uHalfL: { value: HALF_L } },
   vertexShader: /* glsl */`
     varying vec3 vPos;
     void main() { vPos = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -517,27 +586,115 @@ const hullMat = new THREE.ShaderMaterial({
     float h21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
     void main() {
       float th = atan(vPos.y, vPos.x) + 3.14159265;
-      vec2 uv = vec2(th * uR, vPos.z + uHalfL);                 // meter di permukaan lambung
+      vec2 uv = vec2(th * uR, vPos.z + uHalfL);
       vec2 cell = floor(uv / vec2(40.0, 60.0));
       vec2 f = fract(uv / vec2(40.0, 60.0));
       vec2 fw = fwidth(uv / vec2(40.0, 60.0));
-      float seamFade = clamp(1.0 - max(fw.x, fw.y) * 8.0, 0.0, 1.0);    // garis sambungan memudar dari jauh (anti moire)
+      float seamFade = clamp(1.0 - max(fw.x, fw.y) * 8.0, 0.0, 1.0);
       float seam = (1.0 - smoothstep(0.0, 0.02 + fw.x, f.x)) + (1.0 - smoothstep(0.0, 0.015 + fw.y, f.y));
-      vec3 col = vec3(0.030, 0.032, 0.037) * (0.8 + 0.4 * h21(cell));
+      vec3 col = vec3(0.034, 0.036, 0.041) * (0.8 + 0.4 * h21(cell));
       col = mix(col, vec3(0.008), clamp(seam, 0.0, 1.0) * seamFade);
-      float lit = step(0.985, h21(cell + 7.0)) * step(0.2, f.x) * step(f.x, 0.8) * step(0.3, f.y) * step(f.y, 0.7);
-      col += lit * vec3(0.85, 0.82, 0.7);
+      float lit = step(0.997, h21(cell + 7.0)) * step(0.3, f.x) * step(f.x, 0.7) * step(0.4, f.y) * step(f.y, 0.6);
+      col += lit * vec3(0.9, 0.5, 0.3);                          // lampu navigasi jarang
       gl_FragColor = vec4(col, 1.0);
       #include <colorspace_fragment>
     }`,
 });
 {
-  const hullGeo = new THREE.CylinderGeometry(CONFIG.R + 8, CONFIG.R + 8, CONFIG.L, 256, 1, true,
-    WIN.theta + Math.PI / 2 + (WIN_GAP * 1.02) / 2, TAU - WIN_GAP * 1.02);
+  const gapOut = HULL.slotOuter / R_OUT;
+  const hullGeo = new THREE.CylinderGeometry(R_OUT, R_OUT, CONFIG.L, 256, 1, true, WIN.theta + Math.PI / 2 + gapOut / 2, TAU - gapOut);
   hullGeo.rotateX(Math.PI / 2);
-  const hull = new THREE.Mesh(hullGeo, hullMat);   // FrontSide: dari dalam stasiun tidak terlihat
+  const hull = new THREE.Mesh(hullGeo, hullMat);
   hull.frustumCulled = false;
-  scene.add(hull);
+  exteriorGroup.add(hull);
+  // kerah end cap: cincin tebal yang menonjol 22 m melewati kaca, sehingga kaca tampak tersembunyi di dalam bingkai
+  const collarMat = new THREE.MeshBasicMaterial({ color: 0x2c3036 });
+  const collarFace = new THREE.MeshBasicMaterial({ color: 0x3a3f46, side: THREE.DoubleSide });
+  for (const sgn of [-1, 1]) {
+    const len = HULL.collarOut + 40;
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(R_OUT + HULL.collarT, R_OUT + HULL.collarT, len, 192, 1, true).rotateX(Math.PI / 2), collarMat);
+    shell.position.z = sgn * (HALF_L + HULL.collarOut - len / 2);
+    const face = new THREE.Mesh(new THREE.RingGeometry(CONFIG.R - 6, R_OUT + HULL.collarT, 192, 1), collarFace);
+    face.position.z = sgn * (HALF_L + HULL.collarOut);
+    const inner = new THREE.Mesh(new THREE.CylinderGeometry(CONFIG.R - 6, CONFIG.R - 6, HULL.collarOut, 192, 1, true).rotateX(Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x4a5058, side: THREE.BackSide }));
+    inner.position.z = sgn * (HALF_L + HULL.collarOut / 2);
+    exteriorGroup.add(shell, face, inner);
+  }
+}
+
+// Utilitas luar: 1 InstancedMesh kotak (rel, rangka melingkar, sirip radiator, dermaga)
+const _ex = new THREE.Vector3(), _ey = new THREE.Vector3(), _ez = new THREE.Vector3(0, 0, 1);
+function outerMatrix(m, theta, z, radius, sx, sy, sz) {       // lokal X = tangen, Y = keluar radial, Z = sumbu
+  const c = Math.cos(theta), s = Math.sin(theta);
+  _ey.set(c, s, 0); _ex.set(s, -c, 0);
+  m.makeBasis(_ex, _ey, _ez); m.setPosition(radius * c, radius * s, z);
+  return m.scale(_isc2.set(sx, sy, sz));
+}
+const _isc2 = new THREE.Vector3();
+const EXT = { list: [], crawlers: [] };
+const nearSlot = (th) => Math.abs(((th - WIN.theta + Math.PI) % TAU + TAU) % TAU - Math.PI) < (HULL.slotOuter / 2 + 25) / R_OUT;
+for (let k = 0; k < HULL.rails; k++) {                          // rel memanjang sepanjang 8 km
+  const th = (k / HULL.rails) * TAU;
+  if (nearSlot(th)) continue;
+  EXT.list.push([th, 0, R_OUT, 9, 7, CONFIG.L, '#3b4048']);
+  EXT.list.push([th, 0, R_OUT + 7, 4, 1.5, CONFIG.L, '#8a9098']);   // lintasan kendaraan di atas rel
+  if (k % 2 === 0) EXT.crawlers.push({ th, z: (k * 997) % CONFIG.L - HALF_L, v: (k % 4 === 0 ? 1 : -1) * (12 + (k % 5) * 3) });
+}
+for (let z = -HALF_L + HULL.hoopEvery; z < HALF_L; z += HULL.hoopEvery) {   // rangka melingkar tiap 500 m
+  const n = 96;
+  for (let i = 0; i < n; i++) {
+    const th = ((i + 0.5) / n) * TAU;
+    if (nearSlot(th)) continue;
+    EXT.list.push([th, z, R_OUT, TAU * R_OUT / n + 1, 12, 16, '#2f343b']);
+  }
+}
+for (let seg = 0; seg < CONFIG.L / HULL.hoopEvery; seg++) {       // sirip radiator di 6 posisi keliling
+  const z0 = -HALF_L + seg * HULL.hoopEvery;
+  for (const k of [2, 6, 10, 14, 18, 22]) {
+    const th = (k / HULL.rails) * TAU + TAU / (HULL.rails * 2);
+    if (nearSlot(th)) continue;
+    for (let q = 0; q < 3; q++) EXT.list.push([th, z0 + 90 + q * 160, R_OUT, 0.8, 34, 120, '#c9ced4']);
+  }
+}
+{
+  const exMesh = new THREE.InstancedMesh(bakeShadeBox().translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ vertexColors: true }), EXT.list.length);
+  const m = new THREE.Matrix4(), c = new THREE.Color();
+  EXT.list.forEach(([th, z, rad, sx, sy, sz, hex], i) => { exMesh.setMatrixAt(i, outerMatrix(m, th, z, rad, sx, sy, sz)); exMesh.setColorAt(i, c.set(hex)); });
+  exMesh.instanceMatrix.needsUpdate = true; exMesh.instanceColor.needsUpdate = true; exMesh.frustumCulled = false;
+  exteriorGroup.add(exMesh);
+}
+// kendaraan perawatan yang berjalan di rel (diperbarui hanya saat kamera luar aktif)
+const crawlerMesh = new THREE.InstancedMesh(bakeShadeBox().translate(0, 0.5, 0), new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xe0a93a }), EXT.crawlers.length);
+crawlerMesh.frustumCulled = false;
+exteriorGroup.add(crawlerMesh);
+const _cm = new THREE.Matrix4();
+function updateCrawlers(dt) {
+  EXT.crawlers.forEach((c, i) => {
+    c.z += c.v * dt;
+    if (c.z > HALF_L - 60 || c.z < -HALF_L + 60) { c.v = -c.v; c.z = Math.max(-HALF_L + 60, Math.min(HALF_L - 60, c.z)); }
+    crawlerMesh.setMatrixAt(i, outerMatrix(_cm, c.th, c.z, R_OUT + 8.5, 7, 5, 18));
+  });
+  crawlerMesh.instanceMatrix.needsUpdate = true;
+}
+updateCrawlers(0);
+// dermaga di ujung batang spaceport: cincin sandar + 4 kapal
+{
+  const zDock = -HALF_L - CAP.hubLen - CAP.dockLen + 60;
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(90, 9, 10, 48), new THREE.MeshBasicMaterial({ color: 0x5a616b }));
+  ring.position.z = zDock; exteriorGroup.add(ring);
+  const mid = new THREE.Mesh(new THREE.TorusGeometry(55, 6, 8, 40), new THREE.MeshBasicMaterial({ color: 0x4a515a }));
+  mid.position.z = -HALF_L - CAP.hubLen - CAP.dockLen * 0.45; exteriorGroup.add(mid);
+  const ships = new THREE.InstancedMesh(bakeShadeBox(), new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xb9c0c8 }), 4);
+  const m = new THREE.Matrix4();
+  for (let i = 0; i < 4; i++) {
+    const a = i * TAU / 4 + 0.4;
+    m.makeRotationZ(a).setPosition(130 * Math.cos(a), 130 * Math.sin(a), zDock - 10);
+    m.scale(_isc2.set(40, 16, 70));
+    ships.setMatrixAt(i, m);
+  }
+  ships.instanceMatrix.needsUpdate = true;
+  exteriorGroup.add(ships);
 }
 
 
@@ -1733,7 +1890,7 @@ window.addEventListener('resize', () => {
    ===================================================================== */
 const hud = document.getElementById('hud');
 hud.innerHTML = `
-  <div class="title">Tahap 4c · tata letak kota</div>
+  <div class="title">Tahap 4d · lambung tebal</div>
   <span class="k">FPS</span><span class="v" id="hFps">-</span>
   <span class="k wide">Frame</span><span class="v wide" id="hMs">-</span>
   <span class="k">Draw call</span><span class="v" id="hCalls">-</span>
