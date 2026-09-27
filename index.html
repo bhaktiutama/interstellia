@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cooper Station</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --ink: #d9dde3;
+    --muted: #8b929c;
+    --panel: rgba(12, 14, 18, 0.72);
+    --line: rgba(255, 255, 255, 0.10);
+    --accent: #e8b765;
+    --warn: #e7806b;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0f12; color: var(--ink);
+    font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+
+  #hud { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; padding: 10px 12px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; pointer-events: none;
+    display: grid; grid-template-columns: auto auto; gap: 1px 14px; font-variant-numeric: tabular-nums; max-width: calc(100vw - 24px); }
+  #hud .k { color: var(--muted); }
+  #hud .v { text-align: right; }
+  #hud .sep { grid-column: 1 / -1; border-top: 1px solid var(--line); margin: 4px 0; }
+  #hud .title { grid-column: 1 / -1; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; font-size: 10.5px; }
+
+  #cross { position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; opacity: .7; }
+  #cross::before, #cross::after { content: ""; position: fixed; background: #fff; }
+  #cross::before { left: 50%; top: 50%; width: 14px; height: 1px; margin: 0 0 0 -7px; }
+  #cross::after  { left: 50%; top: 50%; width: 1px; height: 14px; margin: -7px 0 0 0; }
+
+  #start { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(8, 9, 12, 0.66); }
+  #start .card { max-width: 440px; width: 100%; background: #14171c; border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
+  #start h1 { margin: 0 0 4px; font-size: 18px; letter-spacing: .04em; color: #fff; }
+  #start .sub { color: var(--muted); margin-bottom: 14px; }
+  #start table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  #start td { padding: 3px 0; vertical-align: top; }
+  #start td:first-child { color: var(--accent); white-space: nowrap; padding-right: 14px; }
+  #start button { width: 100%; font: inherit; font-size: 13px; padding: 10px; border-radius: 8px; border: 1px solid var(--accent);
+    background: rgba(232, 183, 101, 0.14); color: #fff; cursor: pointer; }
+  #start button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .touch-only { display: none; }
+  body.touch .touch-only { display: table-row; }
+  body.touch .desk-only { display: none; }
+
+  #joy { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.05); pointer-events: none; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: rgba(255,255,255,0.28); }
+  #touchbtns { position: fixed; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: none; gap: 8px; }
+  body.touch #touchbtns { display: flex; }
+  #touchbtns button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  #touchbtns button.on { border-color: var(--accent); color: #fff; }
+
+  #err { position: fixed; inset: 16px; overflow: auto; background: rgba(30, 8, 6, 0.95); color: #ffc2b5; border: 1px solid #6b2a22;
+    border-radius: 8px; padding: 16px; white-space: pre-wrap; z-index: 10; margin: 0; }
+  #err[hidden], [hidden] { display: none !important; }
+  .hidden-ui #hud, .hidden-ui #cross { display: none; }
+  @media (max-width: 520px) { #hud { font-size: 10.5px; padding: 8px 10px; } #hud .wide { display: none; } }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+<div id="cross"></div>
+<div id="hud"></div>
+<div id="joy" hidden><div id="knob"></div></div>
+<div id="touchbtns"><button id="btnHud" type="button">HUD</button><button id="btnRun" type="button">Lari</button><button id="btnAuto" type="button">Jalan otomatis</button></div>
+
+<div id="start">
+  <div class="card">
+    <h1>Cooper Station</h1>
+    <div class="sub">Tahap 1 gray-box · silinder R 1.000 m, L 8.000 m, 1 g</div>
+    <table>
+      <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
+      <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
+      <tr class="desk-only"><td>Shift</td><td>Lari 5 m/s</td></tr>
+      <tr class="desk-only"><td>O</td><td>Jalan otomatis ke depan</td></tr>
+      <tr class="desk-only"><td>X</td><td>Turbo 50 m/s (debug)</td></tr>
+      <tr class="desk-only"><td>R · H · Esc</td><td>Kembali ke titik awal · sembunyikan HUD · lepas kursor</td></tr>
+      <tr class="touch-only"><td>Jempol kiri</td><td>Joystick untuk berjalan</td></tr>
+      <tr class="touch-only"><td>Jempol kanan</td><td>Geser untuk melihat</td></tr>
+    </table>
+    <button id="go" type="button">Mulai</button>
+  </div>
+</div>
+<pre id="err" hidden></pre>
+
+<script>
+  // Loader watchdog: tampilkan pesan bila three.js gagal dimuat dari CDN.
+  window.__showErr = function (msg) { var e = document.getElementById('err'); e.hidden = false; e.textContent = msg; };
+  window.addEventListener('error', function (e) { if (e && e.message) window.__showErr('Error: ' + e.message); });
+  setTimeout(function () {
+    if (!window.__stationReady) window.__showErr('three.js belum termuat setelah 15 detik.\n\nPeriksa koneksi internet: library dimuat dari cdn.jsdelivr.net.');
+  }, 15000);
+</script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================================
+   CONFIG: semua parameter di satu tempat
+   ===================================================================== */
+const CONFIG = {
+  R: 1000,               // radius permukaan tanah (m)
+  L: 8000,               // panjang silinder (m)
+  g: 9.81,               // gravitasi target di tanah (m/s^2)
+  eye: 1.7,              // tinggi mata (m)
+  walk: 1.4, run: 5.0, turbo: 50.0,   // kecepatan (m/s)
+  physicsHz: 120,        // fixed timestep
+  maxSubSteps: 12,       // fisika tetap real-time sampai sekitar 10 FPS
+  lookSens: 0.0022,      // rad per piksel mouse
+  touchLookSens: 0.0045,
+  fov: 70,
+  dprMax: 1.5,           // batas device pixel ratio
+  dynRes: { min: 0.5, lowFps: 50, highFps: 57, window: 2.0 },
+  fogDensity: 0.00030,   // FogExp2: faktor = 1 - exp(-(d*density)^2)
+  fogColor: 0xa9b6c4,
+  checkerAround: 24,     // jumlah petak kotak di keliling (261,8 m)
+  checkerAlong: 250,     // panjang petak kotak sepanjang sumbu (m)
+  gridAround: 64,        // garis grid keliling (98,2 m)
+  gridAlong: 100,        // garis grid sepanjang sumbu (m)
+  markerEvery: 500,      // tiang penanda sepanjang sumbu (m)
+  markerAround: 8,       // tiang penanda di keliling
+  spawn: { za: 700, theta: 0.06, heading: 0, pitch: 4 },   // theta 0,06 rad = 60 m dari garis acuan   // za = jarak dari end cap A (m)
+  // zona sepanjang sumbu, jarak dari end cap A (m) -> warna gray-box
+  zones: [
+    { name: 'Spaceport',    from: 0,    to: 150,  color: '#8b9099' },
+    { name: 'Kota',         from: 150,  to: 1200, color: '#bfae93' },
+    { name: 'Rekreasi',     from: 1200, to: 1800, color: '#86a86f' },
+    { name: 'Museum Cooper',from: 1800, to: 2300, color: '#c79d5c' },
+    { name: 'Pertanian',    from: 2300, to: 6500, color: '#a3b061' },
+    { name: 'Utilitas',     from: 6500, to: 7850, color: '#7f8995' },
+    { name: 'Engineering',  from: 7850, to: 8000, color: '#6f7785' },
+  ],
+};
+const OMEGA = Math.sqrt(CONFIG.g / CONFIG.R);            // rad/s
+const RPM = OMEGA * 60 / (2 * Math.PI);
+const PERIOD = 2 * Math.PI / OMEGA;
+const HALF_L = CONFIG.L / 2;
+const TAU = Math.PI * 2;
+const DEG = Math.PI / 180;
+
+/* =====================================================================
+   RENDERER
+   ===================================================================== */
+const canvas = document.getElementById('view');
+if (!canvas.getContext('webgl2')) {
+  window.__showErr('WebGL2 tidak tersedia di browser atau GPU ini.\n\nGunakan Chrome, Edge, Firefox, atau Safari 15+ dengan akselerasi hardware aktif.');
+  throw new Error('no webgl2');
+}
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+renderer.setClearColor(0x0d0f12, 1);
+let dynScale = 1.0;
+function applyPixelRatio() { renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, CONFIG.dprMax) * dynScale); }
+applyPixelRatio();
+renderer.setSize(window.innerWidth, window.innerHeight, false);
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(CONFIG.fogColor, CONFIG.fogDensity);
+const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 0.25, 12000);
+
+/* =====================================================================
+   WORLD (gray-box): permukaan silinder, end cap, tiang penanda, sumbu
+   ===================================================================== */
+// Zona dalam uniform (tepi dan warna)
+const zoneEdges = CONFIG.zones.map((z) => z.to);
+const zoneColors = CONFIG.zones.map((z) => new THREE.Color(z.color));
+
+const groundMat = new THREE.ShaderMaterial({
+  fog: true,
+  side: THREE.BackSide,
+  uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+    uR: { value: CONFIG.R }, uHalfL: { value: HALF_L },
+    uCheckAround: { value: CONFIG.checkerAround }, uCheckAlong: { value: CONFIG.checkerAlong },
+    uGridAround: { value: CONFIG.gridAround }, uGridAlong: { value: CONFIG.gridAlong },
+    uZoneEdge: { value: zoneEdges }, uZoneColor: { value: zoneColors },
+  }]),
+  vertexShader: /* glsl */`
+    #include <fog_pars_vertex>
+    varying vec3 vPos;
+    void main() {
+      vPos = position;
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }`,
+  fragmentShader: /* glsl */`
+    #include <fog_pars_fragment>
+    uniform float uR, uHalfL, uCheckAround, uCheckAlong, uGridAround, uGridAlong;
+    uniform float uZoneEdge[7];
+    uniform vec3 uZoneColor[7];
+    varying vec3 vPos;
+    const float PI = 3.141592653589793;
+
+    // anti-aliased line coverage; fades out when the pixel footprint is much wider than the line
+    float gridLine(float coord, float spacing, float halfW, float footprint) {
+      float d = abs(fract(coord / spacing + 0.5) - 0.5) * spacing;   // distance to nearest line (m)
+      float cov = 1.0 - smoothstep(halfW - footprint, halfW + footprint, d);
+      return cov * clamp(2.0 * halfW / max(footprint, 1e-4), 0.0, 1.0);
+    }
+
+    void main() {
+      float th = atan(vPos.y, vPos.x) + PI;       // 0..2pi
+      float za = vPos.z + uHalfL;                  // 0..L, from end cap A
+
+      vec3 base = uZoneColor[6];
+      for (int i = 6; i >= 0; i--) { if (za < uZoneEdge[i]) base = uZoneColor[i]; }
+
+      // checkerboard: 24 cells around, 250 m along
+      float ct = floor(th / (2.0 * PI / uCheckAround));
+      float cz = floor(za / uCheckAlong);
+      base *= mix(0.84, 1.0, mod(ct + cz, 2.0));
+
+      // grid lines: arc derivative taken from xy (seam-free), not from atan
+      float fpA = length(fwidth(vPos.xy));
+      float fpZ = fwidth(za);
+      float arc = th * uR;
+      float spacingA = 2.0 * PI * uR / uGridAround;
+      float minor = max(gridLine(arc, spacingA, 0.4, fpA), gridLine(za, uGridAlong, 0.4, fpZ));
+      float major = max(gridLine(arc, spacingA * 8.0, 1.0, fpA), gridLine(za, 1000.0, 1.0, fpZ));
+      // fine 10 m grid: gives a sense of walking speed up close, fades out with distance by itself
+      float fine = max(gridLine(arc, spacingA / 10.0, 0.08, fpA), gridLine(za, uGridAlong / 10.0, 0.08, fpZ));
+      vec3 col = base;
+      col = mix(col, base * 0.8, fine * 0.5);
+      col = mix(col, base * 0.62, minor * 0.7);
+      col = mix(col, base * 0.38, major * 0.9);
+
+      gl_FragColor = vec4(col, 1.0);
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`,
+});
+
+// Permukaan dalam silinder: open-ended, 512 segmen keliling (sagitta 1,9 cm), 32 segmen panjang.
+// Sumbu silinder = Z dunia.
+const groundGeo = new THREE.CylinderGeometry(CONFIG.R, CONFIG.R, CONFIG.L, 512, 32, true);
+groundGeo.rotateX(Math.PI / 2);
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.frustumCulled = false;
+scene.add(ground);
+
+// End cap: cincin konsentris tiap 100 m, 8 jari-jari
+const capMat = new THREE.ShaderMaterial({
+  fog: true,
+  side: THREE.DoubleSide,
+  uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uColor: { value: new THREE.Color('#7b828d') } }]),
+  vertexShader: /* glsl */`
+    #include <fog_pars_vertex>
+    varying vec2 vXY;
+    void main() {
+      vXY = position.xy;
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }`,
+  fragmentShader: /* glsl */`
+    #include <fog_pars_fragment>
+    uniform vec3 uColor;
+    varying vec2 vXY;
+    void main() {
+      float r = length(vXY);
+      float fp = fwidth(r);
+      float d = abs(fract(r / 100.0 + 0.5) - 0.5) * 100.0;
+      float ring = (1.0 - smoothstep(0.6 - fp, 0.6 + fp, d)) * clamp(1.2 / max(fp, 1e-4), 0.0, 1.0);
+      float a = atan(vXY.y, vXY.x);
+      float sd = abs(fract(a / (3.14159265 / 4.0) + 0.5) - 0.5) * (3.14159265 / 4.0) * r;   // arc distance to spoke
+      float spoke = 1.0 - smoothstep(1.0, 1.0 + fwidth(sd) * 1.5, sd);
+      vec3 col = uColor * mix(1.0, 0.55, max(ring, spoke) * 0.85);
+      col *= mix(0.8, 1.0, smoothstep(0.0, 1000.0, r));     // darker toward the hub
+      gl_FragColor = vec4(col, 1.0);
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`,
+});
+const capGeo = new THREE.CircleGeometry(CONFIG.R, 256);
+for (const sgn of [-1, 1]) {
+  const cap = new THREE.Mesh(capGeo, capMat);
+  cap.position.z = sgn * HALF_L;
+  scene.add(cap);
+}
+
+// Tiang penanda: 1 InstancedMesh. Pencahayaan palsu di-bake ke vertex color (tanpa light, tanpa shadow).
+const markerGeo = new THREE.BoxGeometry(3, 20, 3);
+markerGeo.translate(0, 10, 0);                                  // alas di tanah, lokal +Y = arah atas
+{
+  const shade = [0.78, 0.78, 1.0, 0.45, 0.62, 0.62];           // +x -x +y -y +z -z
+  const cols = [];
+  for (let f = 0; f < 6; f++) for (let v = 0; v < 4; v++) cols.push(shade[f], shade[f], shade[f]);
+  markerGeo.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+}
+const markerMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+const nAlong = Math.floor(CONFIG.L / CONFIG.markerEvery) + 1;
+const markers = new THREE.InstancedMesh(markerGeo, markerMat, nAlong * CONFIG.markerAround);
+{
+  const m = new THREE.Matrix4(), X = new THREE.Vector3(), Y = new THREE.Vector3(), Z = new THREE.Vector3(0, 0, 1);
+  const c = new THREE.Color();
+  let k = 0;
+  for (let i = 0; i < nAlong; i++) {
+    const za = Math.min(CONFIG.L - 2, Math.max(2, i * CONFIG.markerEvery));
+    const zone = CONFIG.zones.find((z) => za < z.to) || CONFIG.zones[CONFIG.zones.length - 1];
+    for (let j = 0; j < CONFIG.markerAround; j++) {
+      const th = (j / CONFIG.markerAround) * TAU;
+      X.set(-Math.sin(th), Math.cos(th), 0);                     // tangent (arah theta naik)
+      Y.set(-Math.cos(th), -Math.sin(th), 0);                    // up = menuju sumbu
+      m.makeBasis(X, Y, Z);
+      m.setPosition(CONFIG.R * Math.cos(th), CONFIG.R * Math.sin(th), za - HALF_L);
+      markers.setMatrixAt(k, m);
+      c.set(zone.color).multiplyScalar(j === 0 ? 1.25 : 0.95);   // theta = 0 sedikit lebih terang sebagai acuan
+      markers.setColorAt(k, c);
+      k++;
+    }
+  }
+  markers.instanceMatrix.needsUpdate = true;
+  markers.instanceColor.needsUpdate = true;
+  markers.frustumCulled = false;
+}
+scene.add(markers);
+
+// Sumbu: placeholder Sunline (garis)
+{
+  const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -HALF_L), new THREE.Vector3(0, 0, HALF_L)]);
+  const axis = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xfff1d6, fog: false }));
+  scene.add(axis);
+}
+
+/* =====================================================================
+   PLAYER: koordinat silinder (theta, za, h) + basis lokal
+   ===================================================================== */
+const player = {
+  theta: CONFIG.spawn.theta,          // rad, sudut keliling
+  za: CONFIG.spawn.za,                // m, jarak dari end cap A
+  h: 0,                               // m, tinggi kaki di atas tanah
+  heading: CONFIG.spawn.heading * DEG,// rad, 0 = menuju +z (ke arah end cap B), 90 = arah theta naik
+  pitch: CONFIG.spawn.pitch * DEG,
+  distance: 0,                        // total jarak ditempuh (m)
+  mode: 'jalan',
+};
+const input = { f: 0, s: 0, run: false, turbo: false, auto: false, joyF: 0, joyS: 0 };
+const keys = new Set();
+
+function respawn() {
+  Object.assign(player, { theta: CONFIG.spawn.theta, za: CONFIG.spawn.za, h: 0,
+    heading: CONFIG.spawn.heading * DEG, pitch: CONFIG.spawn.pitch * DEG, distance: 0 });
+}
+
+// Satu langkah fisika (fixed timestep). Tahap 1: hanya berjalan di permukaan.
+function physicsStep(dt) {
+  let f = input.joyF, s = input.joyS;
+  if (keys.has('KeyW') || keys.has('ArrowUp')) f += 1;
+  if (keys.has('KeyS') || keys.has('ArrowDown')) f -= 1;
+  if (keys.has('KeyD') || keys.has('ArrowRight')) s += 1;
+  if (keys.has('KeyA') || keys.has('ArrowLeft')) s -= 1;
+  if (input.auto) f = Math.max(f, 1);
+  const len = Math.hypot(f, s);
+  if (len > 1) { f /= len; s /= len; }
+  const speed = input.turbo ? CONFIG.turbo : (input.run || keys.has('ShiftLeft') || keys.has('ShiftRight')) ? CONFIG.run : CONFIG.walk;
+  player.mode = input.turbo ? 'turbo (debug)' : speed === CONFIG.run ? 'lari' : 'jalan';
+  if (len === 0) return;
+
+  // Di bidang singgung (a = sumbu, t = tangen): forward = (cos psi, sin psi), right = (sin psi, -cos psi)
+  const ch = Math.cos(player.heading), sh = Math.sin(player.heading);
+  const dA = (f * ch + s * sh) * speed * dt;        // sepanjang sumbu (m)
+  const dT = (f * sh - s * ch) * speed * dt;        // sepanjang keliling (m)
+  const zaNew = Math.min(CONFIG.L - 1.0, Math.max(1.0, player.za + dA));   // dinding end cap
+  const moved = Math.hypot(zaNew - player.za, dT);
+  player.za = zaNew;
+  player.theta = (player.theta + dT / (CONFIG.R - player.h) + TAU) % TAU;
+  player.distance += moved;
+}
+
+// Kamera dari basis lokal. Semua objek dipakai ulang (tanpa alokasi per frame).
+const _P = new THREE.Vector3(), _up = new THREE.Vector3(), _a = new THREE.Vector3(0, 0, 1), _t = new THREE.Vector3();
+const _flat = new THREE.Vector3(), _fwd = new THREE.Vector3(), _camUp = new THREE.Vector3(), _right = new THREE.Vector3();
+const _m = new THREE.Matrix4();
+function updateCamera() {
+  const ct = Math.cos(player.theta), st = Math.sin(player.theta);
+  const r = CONFIG.R - player.h - CONFIG.eye;
+  _P.set(r * ct, r * st, player.za - HALF_L);
+  _up.set(-ct, -st, 0);                                   // menuju sumbu
+  _t.set(-st, ct, 0);                                     // tangen
+  _flat.copy(_a).multiplyScalar(Math.cos(player.heading)).addScaledVector(_t, Math.sin(player.heading));
+  const cp = Math.cos(player.pitch), sp = Math.sin(player.pitch);
+  _fwd.copy(_flat).multiplyScalar(cp).addScaledVector(_up, sp);
+  _camUp.copy(_flat).multiplyScalar(-sp).addScaledVector(_up, cp);
+  _right.crossVectors(_fwd, _camUp);
+  _fwd.negate();
+  _m.makeBasis(_right, _camUp, _fwd);                     // kamera melihat ke -Z lokal
+  camera.quaternion.setFromRotationMatrix(_m);
+  camera.position.copy(_P);
+}
+
+/* =====================================================================
+   INPUT: keyboard, mouse (pointer lock atau drag), sentuh
+   ===================================================================== */
+const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+if (isTouch) document.body.classList.add('touch');
+const startEl = document.getElementById('start');
+
+function look(dx, dy, sens) {
+  player.heading -= dx * sens;
+  player.pitch = Math.max(-89 * DEG, Math.min(89 * DEG, player.pitch - dy * sens));
+}
+
+document.getElementById('go').addEventListener('click', () => {
+  startEl.hidden = true;
+  if (!isTouch && canvas.requestPointerLock) {
+    try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* drag-to-look tetap jalan */ }
+  }
+});
+canvas.addEventListener('click', () => {
+  if (!isTouch && !document.pointerLockElement && canvas.requestPointerLock) {
+    try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* abaikan */ }
+  }
+});
+
+let dragging = false, lastX = 0, lastY = 0;
+canvas.addEventListener('mousedown', (e) => { dragging = true; lastX = e.clientX; lastY = e.clientY; });
+window.addEventListener('mouseup', () => { dragging = false; });
+window.addEventListener('mousemove', (e) => {
+  if (document.pointerLockElement === canvas) {
+    // Chrome kadang mengirim lonjakan movementX/Y besar tepat setelah pointer lock; abaikan
+    if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
+    look(e.movementX, e.movementY, CONFIG.lookSens);
+  }
+  else if (dragging) { look(e.clientX - lastX, e.clientY - lastY, CONFIG.lookSens); lastX = e.clientX; lastY = e.clientY; }
+});
+
+window.addEventListener('keydown', (e) => {
+  keys.add(e.code);
+  if (e.code === 'KeyO') input.auto = !input.auto;
+  if (e.code === 'KeyX') input.turbo = !input.turbo;
+  if (e.code === 'KeyR') respawn();
+  if (e.code === 'KeyH') document.body.classList.toggle('hidden-ui');
+  if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
+});
+window.addEventListener('keyup', (e) => keys.delete(e.code));
+window.addEventListener('blur', () => keys.clear());
+
+// Sentuh: separuh kiri = joystick, separuh kanan = melihat
+const joy = document.getElementById('joy'), knob = document.getElementById('knob');
+let joyId = null, joyX = 0, joyY = 0, lookId = null, lookX = 0, lookY = 0;
+canvas.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.clientX < window.innerWidth / 2 && joyId === null) {
+      joyId = t.identifier; joyX = t.clientX; joyY = t.clientY;
+      joy.style.left = joyX + 'px'; joy.style.top = joyY + 'px'; joy.hidden = false;
+    } else if (lookId === null) { lookId = t.identifier; lookX = t.clientX; lookY = t.clientY; }
+  }
+}, { passive: false });
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyId) {
+      let dx = t.clientX - joyX, dy = t.clientY - joyY;
+      const d = Math.hypot(dx, dy), max = 50;
+      if (d > max) { dx *= max / d; dy *= max / d; }
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      input.joyS = dx / max; input.joyF = -dy / max;
+    } else if (t.identifier === lookId) {
+      look(t.clientX - lookX, t.clientY - lookY, CONFIG.touchLookSens);
+      lookX = t.clientX; lookY = t.clientY;
+    }
+  }
+}, { passive: false });
+const touchEnd = (e) => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === joyId) { joyId = null; input.joyF = input.joyS = 0; joy.hidden = true; knob.style.transform = ''; }
+    if (t.identifier === lookId) lookId = null;
+  }
+};
+canvas.addEventListener('touchend', touchEnd);
+canvas.addEventListener('touchcancel', touchEnd);
+const btnRun = document.getElementById('btnRun'), btnAuto = document.getElementById('btnAuto');
+document.getElementById('btnHud').addEventListener('click', () => document.body.classList.toggle('hidden-ui'));
+btnRun.addEventListener('click', () => { input.run = !input.run; btnRun.classList.toggle('on', input.run); });
+btnAuto.addEventListener('click', () => { input.auto = !input.auto; btnAuto.classList.toggle('on', input.auto); });
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  applyPixelRatio();
+  renderer.setSize(window.innerWidth, window.innerHeight, false);
+});
+
+/* =====================================================================
+   HUD dan statistik
+   ===================================================================== */
+const hud = document.getElementById('hud');
+hud.innerHTML = `
+  <div class="title">Tahap 1 · gray-box</div>
+  <span class="k">FPS</span><span class="v" id="hFps">-</span>
+  <span class="k wide">Frame</span><span class="v wide" id="hMs">-</span>
+  <span class="k">Draw call</span><span class="v" id="hCalls">-</span>
+  <span class="k">Segitiga</span><span class="v" id="hTris">-</span>
+  <span class="k wide">Resolusi</span><span class="v wide" id="hRes">-</span>
+  <div class="sep"></div>
+  <span class="k">Zona</span><span class="v" id="hZone">-</span>
+  <span class="k">Sudut &theta;</span><span class="v" id="hTheta">-</span>
+  <span class="k">Posisi z</span><span class="v" id="hZ">-</span>
+  <span class="k wide">Arah</span><span class="v wide" id="hHead">-</span>
+  <span class="k">Ditempuh</span><span class="v" id="hDist">-</span>
+  <span class="k">Mode</span><span class="v" id="hMode">-</span>
+  <div class="sep"></div>
+  <span class="k">g lokal</span><span class="v" id="hG">-</span>
+  <span class="k">Rotasi</span><span class="v">${RPM.toFixed(3)} rpm</span>
+  <span class="k">Periode</span><span class="v">${PERIOD.toFixed(1)} s</span>`;
+const H = (id) => document.getElementById(id);
+const hEl = { fps: H('hFps'), ms: H('hMs'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
+  theta: H('hTheta'), z: H('hZ'), head: H('hHead'), dist: H('hDist'), mode: H('hMode'), g: H('hG') };
+
+const stats = { frames: 0, time: 0, fps: 0, ms: 0, low: 0, high: 0 };
+function updateStats(dt) {
+  stats.frames++; stats.time += dt;
+  if (stats.time < 0.5) return;
+  stats.fps = stats.frames / stats.time; stats.ms = 1000 * stats.time / stats.frames;
+  // resolusi dinamis
+  if (stats.fps < CONFIG.dynRes.lowFps) { stats.low += stats.time; stats.high = 0; } else stats.low = 0;
+  if (stats.fps > CONFIG.dynRes.highFps) { stats.high += stats.time; } else stats.high = 0;
+  if (stats.low >= CONFIG.dynRes.window && dynScale > CONFIG.dynRes.min) { dynScale = Math.max(CONFIG.dynRes.min, +(dynScale - 0.1).toFixed(2)); applyPixelRatio(); stats.low = 0; }
+  else if (stats.high >= CONFIG.dynRes.window && dynScale < 1) { dynScale = Math.min(1, +(dynScale + 0.1).toFixed(2)); applyPixelRatio(); stats.high = 0; }
+
+  const info = renderer.info.render;
+  const size = renderer.getDrawingBufferSize(_tmpV2);
+  const zone = CONFIG.zones.find((z) => player.za < z.to) || CONFIG.zones[CONFIG.zones.length - 1];
+  const hd = ((player.heading / DEG) % 360 + 360) % 360;
+  hEl.fps.textContent = stats.fps.toFixed(0);
+  hEl.ms.textContent = stats.ms.toFixed(1) + ' ms';
+  hEl.calls.textContent = info.calls;
+  hEl.tris.textContent = (info.triangles / 1000).toFixed(1) + ' rb';
+  hEl.res.textContent = `${size.x}x${size.y}`;
+  hEl.zone.textContent = zone.name;
+  hEl.theta.textContent = (player.theta / DEG).toFixed(1) + '°';
+  hEl.z.textContent = player.za.toFixed(0) + ' m';
+  hEl.head.textContent = hd.toFixed(0) + '°';
+  hEl.dist.textContent = player.distance >= 1000 ? (player.distance / 1000).toFixed(2) + ' km' : player.distance.toFixed(0) + ' m';
+  hEl.mode.textContent = player.mode + (input.auto ? ' · otomatis' : '');
+  hEl.g.textContent = (OMEGA * OMEGA * (CONFIG.R - player.h) / CONFIG.g).toFixed(3) + ' g';
+  stats.frames = 0; stats.time = 0;
+}
+const _tmpV2 = new THREE.Vector2();
+
+/* =====================================================================
+   LOOP: fixed timestep untuk fisika, render tiap frame
+   ===================================================================== */
+const STEP = 1 / CONFIG.physicsHz;
+let acc = 0, last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000);
+  last = now;
+  acc += dt;
+  let n = 0;
+  while (acc >= STEP && n < CONFIG.maxSubSteps) { physicsStep(STEP); acc -= STEP; n++; }
+  if (n === CONFIG.maxSubSteps) acc = 0;           // cegah spiral lambat
+  updateCamera();
+  renderer.render(scene, camera);
+  updateStats(dt);
+  requestAnimationFrame(frame);
+}
+respawn();
+updateCamera();
+window.__stationReady = true;
+// Hook untuk pengujian otomatis (tidak dipakai UI)
+window.__station = { CONFIG, player, input, physicsStep, updateCamera, camera, renderer, STEP, OMEGA };
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
