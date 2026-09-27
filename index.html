@@ -130,6 +130,7 @@
       <button id="labCorn" type="button"><kbd>3</kbd>Ladang jagung</button>
       <button id="labWheat" type="button"><kbd>4</kbd>Ladang gandum</button>
       <button id="labVeg" type="button">Vegetasi: Tinggi (K)</button>
+      <button id="labPreset" type="button">Preset: Ultra (otomatis) (Q)</button>
       <button id="labPost" type="button">Efek layar: Tinggi (P)</button>
       <button id="labSound" type="button">Suara: nyala (U)</button>
       <button id="labMusic" type="button">Musik: generatif (J)</button>
@@ -146,7 +147,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 9 · bloom, SSAO, tone mapping ACES, FXAA, audio lingkungan dan musik generatif · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 10 · trem dengan interior, mobil, lampu jalan, preset kualitas, kamera luar sinematik · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -154,11 +155,12 @@
       <tr class="desk-only"><td>Space</td><td>Lompat (di hub: naik)</td></tr>
       <tr class="desk-only"><td>B · G</td><td>Lempar bola · jatuhkan bola dari ketinggian</td></tr>
       <tr class="desk-only"><td>L</td><td>Lift ke sumbu (0 g) / turun lagi; Shift = 5x cepat</td></tr>
-      <tr class="desk-only"><td>E · M</td><td>Aksi (naik/turun trem, baca plakat, lift) · peta</td></tr>
-      <tr class="desk-only"><td>V</td><td>Kamera luar: lihat stasiun dari angkasa (drag = putar, scroll = zoom)</td></tr>
+      <tr class="desk-only"><td>E · M</td><td>Aksi (naik trem dan duduk di kursi jendela, turun di halte, baca plakat, lift) · peta</td></tr>
+      <tr class="desk-only"><td>V</td><td>Kamera luar: seret / WASD putar, scroll / + - zoom, C orbit otomatis, 1-4 fokus</td></tr>
       <tr class="desk-only"><td>[ · ]</td><td>Jam stasiun mundur / maju 1 jam (siklus siang-malam)</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
       <tr class="desk-only"><td>1 · 2 · 3 · 4</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum dekat bukit</td></tr>
+      <tr class="desk-only"><td>Q</td><td>Preset kualitas: Ultra, Tinggi, Sedang, Rendah (awal: Ultra, turun otomatis bila FPS di bawah 30)</td></tr>
       <tr class="desk-only"><td>K · P</td><td>Kualitas vegetasi · efek layar (bloom, SSAO, tone mapping): Tinggi, Sedang, Rendah/Mati</td></tr>
       <tr class="desk-only"><td>U · J</td><td>Suara nyala/mati · musik: generatif, file sendiri (pilih di panel Uji), mati</td></tr>
       <tr class="desk-only"><td>? (atau F1)</td><td>Tampilkan / tutup bantuan ini</td></tr>
@@ -610,9 +612,28 @@ function toggleExterior() {
   }
   camera.updateProjectionMatrix();
 }
+// tahap 10: kamera luar dengan inersia, zoom halus, orbit sinematik (C), fokus 1/2/3, WASD/panah untuk memutar, +/- zoom
+const EXT_FOCUS = [[new THREE.Vector3(0, 0, -2400), 6500], [new THREE.Vector3(0, 0, -HALF_L), 2600], [new THREE.Vector3(0, 0, HALF_L), 2600], [new THREE.Vector3(0, 0, 0), 14000]];
+Object.assign(ext, { vyaw: 0, vpitch: 0, auto: true, distT: ext.dist, targetT: ext.target.clone() });
+function extKey(code) {
+  if (code === 'KeyC') { ext.auto = !ext.auto; return true; }
+  const i = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(code);
+  if (i >= 0) { ext.targetT.copy(EXT_FOCUS[i][0]); ext.distT = EXT_FOCUS[i][1]; return true; }
+  return false;
+}
 function updateExteriorCamera() {
   updateCrawlers(1 / 60);
   scene.rotation.z = OMEGA * clock.sim;                                     // stasiun berputar di ruang inersia
+  const dt = 1 / 60, kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+  const ky = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+  if (kx || ky) ext.auto = false;
+  ext.vyaw += (kx * 0.9 - ext.vyaw) * 0.08; ext.vpitch += (ky * 0.6 - ext.vpitch) * 0.08;
+  ext.yaw += (ext.vyaw + (ext.auto ? 0.035 : 0)) * dt;
+  ext.pitch = Math.max(-1.45, Math.min(1.45, ext.pitch + ext.vpitch * dt));
+  if (keys.has('Equal') || keys.has('NumpadAdd')) ext.distT = Math.max(1500, ext.distT * 0.985);
+  if (keys.has('Minus') || keys.has('NumpadSubtract')) ext.distT = Math.min(60000, ext.distT * 1.015);
+  ext.dist += (ext.distT - ext.dist) * 0.06;
+  ext.target.lerp(ext.targetT, 0.04);
   const cp = Math.cos(ext.pitch);
   camera.position.set(ext.dist * cp * Math.sin(ext.yaw), ext.dist * Math.sin(ext.pitch), ext.dist * cp * Math.cos(ext.yaw)).add(ext.target);
   camera.up.set(0, 1, 0);
@@ -631,7 +652,7 @@ const groundMat = new THREE.ShaderMaterial({
     uLand: { value: null }, uR: { value: CONFIG.R }, uHalfL: { value: HALF_L }, uL: { value: CONFIG.L },
     uFieldTex: { value: null }, uCloudTex: { value: null }, uTime: { value: 0 }, uArt: { value: TAU * CONFIG.R / 26 },
     uCloudK: { value: 0.2 }, uFieldZ: { value: new THREE.Vector2(3200, 7850) }, uCityZ: { value: new THREE.Vector2(250, 2500) },
-    uReal: { value: new THREE.Vector4(-1e9, -1e9, -1e9, -1e9) }, uShadeTex: { value: null }, uGrassR: { value: 0 }, uCornR: { value: 0 }, uGapHalf: { value: 0 },
+    uReal: { value: new THREE.Vector4(-1e9, -1e9, -1e9, -1e9) }, uShadeTex: { value: null }, uGrassR: { value: 0 }, uCornR: { value: 0 }, uGapHalf: { value: 0 }, uNight: { value: 0 },
   }, LIGHT.uniforms]),
   vertexShader: /* glsl */`
     #include <fog_pars_vertex>
@@ -653,7 +674,37 @@ const groundMat = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */`
     #include <fog_pars_fragment>
     uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex;
-    uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf;
+    uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf, uNight;
+    // tahap 10: kolam cahaya lampu jalan (posisi sama dengan tiang lampu di JS)
+    float lampPool(float s, float za) {
+      const float SP = 45.0, OFF = 13.5, RR = 81.0, CIRC = 6283.185307;
+      float pool = 0.0;
+      float sp = s < 0.0 ? s + CIRC : s;
+      float skyS = CIRC * 0.5;
+      if (za > 140.0 && za < 2610.0) {
+        float kS = floor(sp / uArt + 0.5), dS = sp - kS * uArt, km = mod(kS, 26.0);
+        if (km > 0.5 && km < 25.5 && abs(km - 13.0) > 0.5 && abs(abs(dS) - OFF) < 12.0) {
+          float side = sign(dS), ph = side > 0.0 ? 0.0 : SP * 0.5;
+          float zl = 150.0 + ph + floor((za - 150.0 - ph) / SP + 0.5) * SP;
+          float dz = abs(zl - floor(zl / 250.0 + 0.5) * 250.0);
+          if (dz >= 16.0 && zl >= 150.0 && zl < 2600.0) pool += exp(-((abs(dS) - OFF) * (abs(dS) - OFF) + (za - zl) * (za - zl)) / RR);
+        }
+        float kZ = floor(za / 250.0 + 0.5), dZ = za - kZ * 250.0;
+        if (kZ >= 1.0 && kZ <= 10.0 && abs(abs(dZ) - OFF) < 12.0) {
+          float side = sign(dZ), ph = side > 0.0 ? 0.0 : SP * 0.5;
+          float sl = ph + floor((sp - ph) / SP + 0.5) * SP;
+          float dsA = abs(sl - floor(sl / uArt + 0.5) * uArt), dsk = abs(mod(sl - skyS + CIRC * 1.5, CIRC) - CIRC * 0.5);
+          if (dsA >= 16.0 && dsk >= 40.0) pool += exp(-((abs(dZ) - OFF) * (abs(dZ) - OFF) + (sp - sl) * (sp - sl)) / RR);
+        }
+      }
+      float kR = floor(za / 1000.0 + 0.5);
+      if (kR >= 1.0 && kR <= 7.0) {                                   // tiang lampu cincin struktur tiap 40 m
+        float zl = kR * 1000.0 + 9.0, sl = floor(sp / 40.0 + 0.5) * 40.0;
+        float dsk = abs(mod(sl - skyS + CIRC * 1.5, CIRC) - CIRC * 0.5);
+        if (dsk >= 20.0 && sl < CIRC - 20.0) pool += 0.8 * exp(-((za - zl) * (za - zl) + (sp - sl) * (sp - sl)) / RR);
+      }
+      return pool;
+    }
     uniform vec2 uFieldZ, uCityZ;
     uniform vec4 uReal;
     varying vec3 vPos;
@@ -815,6 +866,7 @@ const groundMat = new THREE.ShaderMaterial({
       vec3 nrm = up;
       #endif
       vec3 light = stationLight(vWorld, nrm);
+      if (uNight > 0.01) light += vec3(1.0, 0.72, 0.42) * 1.5 * uNight * lampPool(s, za);   // lampu jalan malam
       {                                                           // bayangan tajuk pohon dari sunline (tepat di atas)
         float tsh = textureGrad(uShadeTex, uv, gx, gy).r;
         light -= (uL_SunlineCol * uL_Sunline * 0.7 + uL_AmbCol * 0.35) * tsh;
@@ -2023,8 +2075,15 @@ landTex.needsUpdate = true;
 // --- kotak lain: rel trem, peron, rumah Cooper, base, plakat, tiang lampu cincin ---
 const propList = [];   // [s, za, sx, sy, sz, h, hex, collide]
 const prop = (s, za, sx, sy, sz, h, hex, col = false) => propList.push([s, za, sx, sy, sz, h, hex, col]);
-prop(TRAM.s, CONFIG.L / 2, 2.6, 0.25, CONFIG.L - 60, 0, '#4d545d');                 // rel trem
-for (const st of TRAM.stops) prop(TRAM.s + 4.2, st.za, 4, 0.45, 26, 0, '#9aa1aa');  // peron
+prop(TRAM.s, CONFIG.L / 2, 2.8, 0.12, CONFIG.L - 60, 0, '#5b5851');                 // alas rel (kerikil)
+for (const sx of [-1, 1]) prop(TRAM.s + sx * 0.7175, CONFIG.L / 2, 0.08, 0.16, CONFIG.L - 60, 0.12, '#8d9298');   // rel baja, lebar sepur 1.435 mm
+for (const st of TRAM.stops) {                                  // peron setinggi lantai trem + halte beratap + bangku
+  prop(TRAM.s + 3.8, st.za, 4.7, 0.35, 26, 0, '#9aa1aa');
+  prop(TRAM.s + 1.55, st.za, 0.2, 0.36, 26, 0, '#e2c040');           // garis kuning tepi peron
+  prop(TRAM.s + 4.9, st.za, 3.0, 0.1, 9, 2.95, '#4e5660');            // atap halte
+  for (const dz of [-4, 4]) prop(TRAM.s + 6.0, st.za + dz, 0.12, 2.6, 0.12, 0.35, '#8d949b', true);
+  prop(TRAM.s + 5.6, st.za, 0.45, 0.45, 3.2, 0.35, '#7b5a3c');       // bangku
+}
 { // rumah Cooper: bangunan detail di modul tahap 8; di sini isi interior dan plakat
   const { s, za, d } = COOPER;
   prop(s - 3, za + d / 2 - 0.6, 3.5, 2.2, 0.6, 0, '#6b4a33', true);                 // rak buku Murph
@@ -2274,12 +2333,151 @@ const COOPER_HOUSE = new THREE.Group();
   scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ color: 0xffffff })));
 }
 
-// --- trem ---------------------------------------------------------------
-const tramMesh = new THREE.Mesh(bakeShade(new THREE.BoxGeometry(3, 3.4, TRAM.len).translate(0, 0.55 + 1.7, 0)),
-  new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xd8a24a }));
+// --- trem (tahap 10): kereta lantai rendah 18 m, jendela kaca, pintu geser, kursi, tiang, lampu, papan tujuan ---
+// Lokal: x = +s (lateral, sisi +x menghadap peron), y = atas, z = +za (sepanjang rel). Lantai di y 0,35 m.
+const TRAM_CAR = { half: TRAM.len / 2, halfW: 1.325, floor: 0.35, roof: 2.95, doors: [-3.8, 3.8], doorW: 1.3 };
+const tramMesh = new THREE.Group();
 tramMesh.matrixAutoUpdate = false;
+const TRAM_SEATS = [];                                           // [x, z, arah hadap z] posisi duduk
+const TRAM_PARTS = {};
+{
+  const T = TRAM_CAR, hw = T.halfW, L = T.half, F = T.floor;
+  const tx = (w, h, draw, rep = true) => { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; if (rep) t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
+  const floorTex = tx(128, 128, (g, w, h) => { g.fillStyle = '#3a3d42'; g.fillRect(0, 0, w, h); g.fillStyle = '#2c2f33';
+    for (let y = 8; y < h; y += 16) for (let x = 8; x < w; x += 16) { g.beginPath(); g.arc(x, y, 3, 0, TAU); g.fill(); } });
+  const seatTex = tx(64, 64, (g, w, h) => { g.fillStyle = '#26466e'; g.fillRect(0, 0, w, h);
+    for (let k = 0; k < 90; k++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '230,170,60' : '120,160,210'},0.5)`; g.fillRect(Math.random() * w, Math.random() * h, 2, 2); } });
+  const M = {
+    body: new THREE.MeshBasicMaterial({ color: 0xe9e7e2 }), stripe: new THREE.MeshBasicMaterial({ color: 0xd8a24a }),
+    dark: new THREE.MeshBasicMaterial({ color: 0x24272b }), roof: new THREE.MeshBasicMaterial({ color: 0xb9bcc0 }),
+    inner: new THREE.MeshBasicMaterial({ color: 0xd9dadb }), floor: new THREE.MeshBasicMaterial({ map: floorTex }),
+    seat: new THREE.MeshBasicMaterial({ map: seatTex }), seatFrame: new THREE.MeshBasicMaterial({ color: 0x8d9298 }),
+    pole: new THREE.MeshBasicMaterial({ color: 0xe0b020 }), steel: new THREE.MeshBasicMaterial({ color: 0x6d7278 }),
+    glass: new THREE.MeshBasicMaterial({ color: 0x8fa6b3, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
+    lamp: new THREE.MeshBasicMaterial({ color: 0xfff4e0 }),
+  };
+  const staticG = new THREE.Group();
+  const box = (sx, sy, sz, mat, x, y, z, parent = staticG, tile = 1) => {
+    const g = new THREE.BoxGeometry(sx, sy, sz);
+    if (mat.map) { const uv = g.attributes.uv; for (let f = 0; f < 6; f++) { const [du, dv] = f < 2 ? [sz, sy] : f < 4 ? [sx, sz] : [sx, sy];
+      for (let v = 0; v < 4; v++) { const k = f * 4 + v; uv.setXY(k, uv.getX(k) * du / tile, uv.getY(k) * dv / tile); } } }
+    const m = new THREE.Mesh(g, mat); m.position.set(x, y, z); parent.add(m); return m;
+  };
+  const inDoor = (z) => T.doors.some((d) => Math.abs(z - d) < T.doorW / 2 + 0.05);
+  // rangka bawah, bogie, roda
+  box(2.5, 0.25, 2 * L - 0.6, M.dark, 0, 0.22, 0);
+  for (const bz of [-L + 3.2, L - 3.2]) {
+    box(2.2, 0.3, 2.4, M.dark, 0, 0.3, bz);
+    for (const sx of [-1, 1]) for (const wz of [-0.8, 0.8]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(0.33, 0.33, 0.12, 14).rotateZ(Math.PI / 2), M.steel); w.position.set(sx * 0.72, 0.33, bz + wz); staticG.add(w); }
+  }
+  // lantai + lambung bawah (di bawah jendela), strip warna, pita atas, atap
+  box(2 * hw - 0.1, 0.06, 2 * L - 0.2, M.floor, 0, F - 0.03, 0, staticG, 1);
+  for (const sx of [-1, 1]) {
+    for (const [z0, z1] of [[-L, T.doors[0] - T.doorW / 2], [T.doors[0] + T.doorW / 2, T.doors[1] - T.doorW / 2], [T.doors[1] + T.doorW / 2, L]]) {
+      const len = z1 - z0, cz = (z0 + z1) / 2;
+      box(0.06, 0.7, len, M.body, sx * hw, F + 0.35, cz);                              // panel bawah
+      box(0.07, 0.12, len, M.stripe, sx * (hw + 0.005), F + 0.62, cz);                // strip keemasan
+      box(0.04, 0.68, len, M.inner, sx * (hw - 0.06), F + 0.35, cz);                  // lapisan dalam
+      box(0.06, 0.42, len, M.body, sx * hw, T.roof - 0.21, cz);                       // pita atas
+    }
+    box(0.06, 0.42, T.doorW, M.body, sx * hw, T.roof - 0.21, T.doors[0]); box(0.06, 0.42, T.doorW, M.body, sx * hw, T.roof - 0.21, T.doors[1]);
+    // kaca samping (satu bidang) + tiang jendela tiap 1,9 m
+    const gl = new THREE.Mesh(new THREE.PlaneGeometry(2 * L - 0.6, T.roof - 0.42 - (F + 0.7)).rotateY(Math.PI / 2), M.glass);
+    gl.position.set(sx * hw, (F + 0.7 + T.roof - 0.42) / 2, 0); gl.userData.noShadow = true; tramMesh.add(gl);
+    for (let z = -L + 0.3; z <= L - 0.3; z += 1.9) if (!inDoor(z)) box(0.08, T.roof - 0.42 - (F + 0.7), 0.1, M.body, sx * hw, (F + 0.7 + T.roof - 0.42) / 2, z);
+    for (const d of T.doors) for (const e of [-1, 1]) box(0.09, T.roof - 0.42 - F, 0.08, M.dark, sx * hw, F + (T.roof - 0.42 - F) / 2, d + e * (T.doorW / 2 + 0.04));   // kusen pintu
+  }
+  box(2 * hw + 0.02, 0.12, 2 * L, M.roof, 0, T.roof + 0.06, 0);                        // atap
+  box(1.6, 0.35, 3.2, M.roof, 0, T.roof + 0.3, -2.5); box(1.6, 0.35, 2.2, M.roof, 0, T.roof + 0.3, 3.5);   // unit pendingin atap
+  box(2 * hw - 0.2, 0.04, 2 * L - 0.4, M.inner, 0, T.roof - 0.1, 0);                   // plafon
+  // ujung depan/belakang: panel bawah, kaca depan miring, lampu, papan tujuan
+  const destTex = [];
+  for (const ez of [-1, 1]) {
+    const z = ez * L;
+    box(2 * hw, 0.8, 0.08, M.body, 0, F + 0.35, z); box(2 * hw + 0.01, 0.12, 0.09, M.stripe, 0, F + 0.62, z);
+    const ws = new THREE.Mesh(new THREE.PlaneGeometry(2 * hw - 0.1, 1.45), M.glass); ws.position.set(0, F + 1.5, z + ez * 0.02); ws.rotation.x = ez * 0.12; ws.userData.noShadow = true; tramMesh.add(ws);
+    box(2 * hw, 0.5, 0.1, M.body, 0, T.roof - 0.2, z);
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 64;
+    const dt = new THREE.CanvasTexture(cv); dt.colorSpace = THREE.SRGBColorSpace; destTex.push({ cv, dt });
+    const dm = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 0.24), new THREE.MeshBasicMaterial({ map: dt })); dm.position.set(0, T.roof - 0.2, z + ez * 0.06);
+    if (ez < 0) dm.rotation.y = Math.PI; dm.userData.noLight = true; dm.userData.noShadow = true; tramMesh.add(dm);
+    for (const sx of [-1, 1]) {                                     // lampu: putih di depan, merah di belakang (diatur tiap frame)
+      const lm = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.04), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+      lm.position.set(sx * 0.85, F + 0.5, z + ez * 0.05); lm.userData.noLight = true; lm.userData.noShadow = true; lm.userData.end = ez; tramMesh.add(lm);
+      (TRAM_PARTS.lights || (TRAM_PARTS.lights = [])).push(lm);
+    }
+  }
+  TRAM_PARTS.dest = destTex;
+  // interior: kursi berpasangan di kedua sisi (bangku 0,9 m: kursi jendela + kursi lorong), tiang pegangan, lampu plafon
+  for (let z = -L + 1.1; z <= L - 1.0; z += 0.9) {
+    if (T.doors.some((d) => Math.abs(z - d) < 1.25)) continue;
+    const face = z < 0 ? 1 : -1;                                   // kursi menghadap ke tengah kereta
+    for (const sx of [-1, 1]) {
+      const cx = sx * (hw - 0.52);
+      box(0.9, 0.1, 0.46, M.seat, cx, F + 0.44, z, staticG, 0.5);
+      box(0.9, 0.62, 0.08, M.seat, cx, F + 0.8, z - face * 0.22, staticG, 0.5);
+      box(0.08, 0.4, 0.3, M.seatFrame, sx * 0.3, F + 0.2, z);
+      TRAM_SEATS.push([sx * (hw - 0.3), z, face], [sx * (hw - 0.74), z, face]);   // kursi jendela, kursi lorong
+    }
+  }
+  for (const d of T.doors) for (const dz of [-0.9, 0.9]) {
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, T.roof - 0.1 - F, 8), M.pole); p.position.set(0, F + (T.roof - 0.1 - F) / 2, d + dz); staticG.add(p);
+  }
+  for (const sx of [-1, 1]) {
+    const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 2 * L - 1, 8).rotateX(Math.PI / 2), M.pole); rail.position.set(sx * 0.45, T.roof - 0.35, 0); staticG.add(rail);
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 2 * L - 1.2), M.lamp); lamp.position.set(sx * 0.55, T.roof - 0.13, 0); lamp.userData.noLight = true; tramMesh.add(lamp);
+  }
+  // pintu geser: 2 daun per pintu per sisi (hanya sisi peron +x yang membuka)
+  TRAM_PARTS.doors = [];
+  for (const sx of [-1, 1]) for (const d of T.doors) for (const e of [-1, 1]) {
+    const leaf = new THREE.Group();
+    box(0.05, 0.75, T.doorW / 2 - 0.02, M.body, 0, F + 0.4, 0, leaf);
+    box(0.05, 0.28, T.doorW / 2 - 0.02, M.body, 0, T.roof - 0.58, 0, leaf);
+    const g = new THREE.Mesh(new THREE.PlaneGeometry(T.doorW / 2 - 0.1, T.roof - 0.72 - (F + 0.8)).rotateY(Math.PI / 2), M.glass);
+    g.position.set(0, (F + 0.8 + T.roof - 0.72) / 2, 0); g.userData.noShadow = true; leaf.add(g);
+    for (const ee of [-1, 1]) box(0.06, T.roof - 0.45 - F, 0.05, M.dark, 0, F + (T.roof - 0.45 - F) / 2, ee * (T.doorW / 4 - 0.03), leaf);
+    leaf.position.set(sx * (hw + 0.01), 0, d + e * T.doorW / 4);
+    leaf.userData = { sx, d, e };
+    tramMesh.add(leaf); TRAM_PARTS.doors.push(leaf);
+  }
+  // gabungkan bagian statis per material (sekitar 250 mesh jadi belasan)
+  staticG.updateMatrixWorld(true);
+  const byMat = new Map();
+  staticG.traverse((o) => { if (!o.isMesh) return; const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrixWorld);
+    if (!byMat.has(o.material)) byMat.set(o.material, []); byMat.get(o.material).push(g); });
+  for (const [mat, geos] of byMat) {
+    const n = geos.reduce((a, g) => a + g.attributes.position.count, 0), pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+    let k = 0; for (const g of geos) { pos.set(g.attributes.position.array, k * 3); nrm.set(g.attributes.normal.array, k * 3); if (g.attributes.uv) uv.set(g.attributes.uv.array, k * 2); k += g.attributes.position.count; }
+    const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); mg.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    tramMesh.add(new THREE.Mesh(mg, mat));
+  }
+  tramMesh.traverse((o) => { o.frustumCulled = false; });
+}
 scene.add(tramMesh);
-const tram = { za: TRAM.stops[1].za, v: 0, target: 2, dir: 1, dwell: TRAM.dwell, from: TRAM.stops[1].za };
+const tram = { za: TRAM.stops[1].za, v: 0, target: 2, dir: 1, dwell: TRAM.dwell, from: TRAM.stops[1].za, shownTarget: -1 };
+function updateTramVisual() {
+  const T = TRAM_CAR, dw = tram.dwell;
+  const open = dw > 0 ? sstep(0, 1, Math.min(TRAM.dwell - dw, dw - 0.6) / 1.2) : 0;   // buka setelah berhenti, tutup sebelum berangkat
+  for (const leaf of TRAM_PARTS.doors) {
+    const { sx, d, e } = leaf.userData, o = sx > 0 ? open : 0;
+    leaf.position.set(sx * (T.halfW + 0.01 + 0.07 * Math.min(1, o * 4)), 0, d + e * (T.doorW / 4 + o * (T.doorW / 2 - 0.05)));
+  }
+  const night = BUILD_U.uNight.value;
+  for (const lm of TRAM_PARTS.lights) {
+    const front = lm.userData.end === tram.dir;
+    lm.material.color.setRGB(front ? 1.2 + 2.5 * night : 0.5 + 1.2 * night, front ? 1.15 + 2.3 * night : 0.04, front ? 1.0 + 2.0 * night : 0.03);
+  }
+  if (tram.shownTarget !== tram.target) {                          // papan tujuan: halte berikutnya
+    tram.shownTarget = tram.target;
+    for (const { cv, dt } of TRAM_PARTS.dest) {
+      const g = cv.getContext('2d'); g.fillStyle = '#0c0c0c'; g.fillRect(0, 0, 512, 64);
+      g.fillStyle = '#ffb030'; g.font = 'bold 38px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(`${tram.dir > 0 ? '>' : '<'} ${TRAM.stops[tram.target].name}`, 256, 34); dt.needsUpdate = true;
+    }
+  }
+}
+
 function stepTram(dt) {
   if (tram.dwell > 0) { tram.dwell -= dt; tram.v = 0; return; }
   const goal = TRAM.stops[tram.target].za;
@@ -2436,6 +2634,7 @@ function syncFromPos(p) {                    // posisi kerangka stasiun -> (thet
 }
 
 function stepGround(dt) {
+  if (ext.active) { player.vA = player.vT = 0; return; }           // WASD dipakai kamera luar
   const [f, s, len] = readMoveInput();
   const speed = input.turbo ? CONFIG.turbo : (input.run || keys.has('ShiftLeft') || keys.has('ShiftRight')) ? CONFIG.run : CONFIG.walk;
   player.mode = input.turbo ? 'turbo (debug)' : speed === CONFIG.run ? 'lari' : 'jalan';
@@ -2668,14 +2867,22 @@ function doAction() {
   if (!plaqueEl.hidden) { plaqueEl.hidden = true; return; }
   const a = availableAction();
   if (!a || !a.key) return;
-  if (a.key === 'board') { player.state = 'tram'; player.tramOffset = Math.max(-7, Math.min(7, player.za - tram.za)); player.mode = 'di trem'; }
-  else if (a.key === 'alight') { player.state = 'ground'; player.theta = ((TRAM.s + 4.5) / R) % TAU; player.za = tram.za; }
+  if (a.key === 'board') {                                          // duduk di kursi jendela terdekat
+    const rel = player.za - tram.za; let best = 0, bd = 1e9;
+    TRAM_SEATS.forEach(([x, z], i) => { if (Math.abs(x) < 0.9) return; const d = Math.abs(z - rel) + (x > 0 ? 0 : 0.5); if (d < bd) { bd = d; best = i; } });
+    const [x, z, face] = TRAM_SEATS[best]; player.seat = best;
+    player.state = 'tram'; player.mode = 'di trem';
+    player.heading = Math.atan2(0.85 * Math.sign(x), 0.5 * face); player.pitch = -3 * DEG;
+    stepTramRider();
+  }
+  else if (a.key === 'alight') { const z = TRAM_SEATS[player.seat || 0][1]; player.state = 'ground'; player.theta = ((TRAM.s + 3.6) / R) % TAU; player.za = tram.za + Math.max(-11, Math.min(11, z)); player.h = 0; }
   else if (a.key === 'plaque') { plaqueEl.querySelector('p').textContent = PLAQUE_TEXT; plaqueEl.hidden = false; }
   else if (a.key === 'lift') enterLift();
 }
 function stepTramRider() {
-  player.theta = TRAM.s / R; player.za = tram.za + (player.tramOffset || 0); player.h = 0.55;
-  player.mode = 'di trem';
+  const [x, z] = TRAM_SEATS[player.seat || 0];
+  player.theta = ((TRAM.s + x) / R + TAU) % TAU; player.za = tram.za + z; player.h = TRAM_CAR.floor;
+  player.mode = 'duduk di trem';
 }
 
 const mapEl = document.getElementById('map'), mapCv = document.getElementById('mapCanvas');
@@ -2731,7 +2938,7 @@ function updateCamera() {
   } else {
     upAt(player.theta, _up); tanAt(player.theta, _t);
     lookBasis(_up, _t);
-    groundPoint(player.theta, player.za, player.h + CONFIG.eye, _eye);
+    groundPoint(player.theta, player.za, player.h + (player.state === 'tram' ? 1.2 : CONFIG.eye), _eye);   // duduk: mata 1,2 m di atas lantai
   }
   if (!ext.active) {
     _v3.copy(_fwd).negate();
@@ -2743,6 +2950,7 @@ function updateCamera() {
   surfaceMatrix(cabin.matrix, LIFT.theta, LIFT.za, R - player.lift.r);
   cabin.visible = player.state === 'lift' || player.state === 'float';
   surfaceMatrix(tramMesh.matrix, TRAM.s / R, tram.za, 0);
+  updateTramVisual();
   // bola
   let k = 0;
   for (const b of balls) { _mm.makeTranslation(b.pos.x, b.pos.y, b.pos.z); ballMesh.setMatrixAt(k++, _mm); }
@@ -2783,6 +2991,7 @@ window.addEventListener('mousemove', (e) => {
     if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
     look(e.movementX, e.movementY, CONFIG.lookSens);
   } else if (dragging && ext.active) {
+    ext.auto = false;
     ext.yaw -= (e.clientX - lastX) * 0.005;
     ext.pitch = Math.max(-1.45, Math.min(1.45, ext.pitch + (e.clientY - lastY) * 0.005));
     lastX = e.clientX; lastY = e.clientY;
@@ -2791,7 +3000,7 @@ window.addEventListener('mousemove', (e) => {
 canvas.addEventListener('wheel', (e) => {
   if (!ext.active) return;
   e.preventDefault();
-  ext.dist = Math.max(1500, Math.min(60000, ext.dist * Math.exp(e.deltaY * 0.001)));
+  ext.distT = Math.max(1500, Math.min(60000, ext.distT * Math.exp(e.deltaY * 0.001)));
 }, { passive: false });
 
 window.addEventListener('keydown', (e) => {
@@ -2811,10 +3020,12 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyE') doAction();
   if (e.code === 'KeyM') toggleMap();
   if (e.code === 'KeyV') toggleExterior();
+  if (ext.active && extKey(e.code)) return;                          // kamera luar: tombol sendiri
   if (e.code === 'Digit1') teleport('cooper');
   if (e.code === 'Digit2') teleport('hill');
   if (e.code === 'Digit3') teleport('corn');
   if (e.code === 'Digit4') teleport('wheat');
+  if (e.code === 'KeyQ') cyclePreset();
   if (e.code === 'KeyK') cycleVegQuality();
   if (e.code === 'KeyP') cyclePost();
   if (e.code === 'KeyU') toggleSound();
@@ -2908,6 +3119,7 @@ on('labCorn', () => teleport('corn'));
 on('labWheat', () => teleport('wheat'));
 on('labVeg', () => cycleVegQuality());
 on('labPost', () => cyclePost());
+on('labPreset', () => cyclePreset());
 on('labSound', () => toggleSound());
 on('labMusic', () => { startAudio(); cycleMusic(); });
 on('labMusicFile', () => document.getElementById('inMusicFile').click());
@@ -2982,7 +3194,8 @@ const promptEl = document.getElementById('prompt');
 let lastPrompt = '';
 function updatePrompt() {
   const a = availableAction();
-  const t = a ? (a.key ? `E · ${a.label}` : a.label) : '';
+  let t = a ? (a.key ? `E · ${a.label}` : a.label) : '';
+  if (ext.active) t = `Kamera luar · seret / WASD putar · scroll / + - zoom · C orbit otomatis (${ext.auto ? 'nyala' : 'mati'}) · 1 2 3 4 fokus · V kembali`;
   if (t !== lastPrompt) { promptEl.textContent = t; promptEl.hidden = !t; lastPrompt = t; }
 }
 const STATE_NAME = { ground: 'di tanah', air: 'di udara', lift: '', float: '' };
@@ -4238,6 +4451,146 @@ function teleport(key) {
 
 
 /* =====================================================================
+   TAHAP 10: LALU LINTAS + LAMPU JALAN
+   Mobil: posisi dihitung di GPU dari (jalur, waktu), tanpa beban CPU. Lajur kanan, 11-16 m/s.
+   Jalan arteri keliling (za 150-3.200), arteri melingkar di kota (tiap 250 m), cincin struktur di pertanian.
+   Lampu jalan: tiang di tepi arteri kota tiap 45 m; malam hari kepala lampu menyala (bloom) dan menerangi
+   aspal (kolam cahaya dihitung analitik di shader tanah dengan aturan posisi yang sama).
+   ===================================================================== */
+const LAMP = { spacing: 45, off: ROAD.art / 2 + 1.5, z0: 150, z1: 2600 };
+const TRAFFIC = {};
+{
+  // --- geometri mobil (sedan/hatchback 4,4 m): bodi dicat, kabin kaca gelap, roda, lampu ---
+  const pos = [], nrm = [], kind = [];                              // kind: 0 cat, 1 kaca, 2 hitam, 3 lampu depan, 4 lampu belakang, 5 krom
+  const idx = [];
+  const addBox = (sx, sy, sz, x, y, z, k, kTop = k) => {                // kotak ber-indeks: 24 titik
+    const g = new THREE.BoxGeometry(sx, sy, sz); g.translate(x, y, z);
+    const p = g.attributes.position.array, n = g.attributes.normal.array, v0 = pos.length / 3;
+    for (let i = 0; i < p.length / 3; i++) { pos.push(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); nrm.push(n[i * 3], n[i * 3 + 1], n[i * 3 + 2]); kind.push(n[i * 3 + 1] > 0.9 ? kTop : k); }
+    for (const q of g.index.array) idx.push(v0 + q);
+  };
+  addBox(1.78, 0.62, 4.4, 0, 0.62, 0, 0);                            // bodi
+  addBox(1.62, 0.52, 2.3, 0, 1.19, -0.25, 1, 0);                     // kabin (atap dicat)
+  for (const wz of [-1.35, 1.35]) addBox(1.86, 0.6, 0.62, 0, 0.3, wz, 2);   // pasangan roda (satu kotak per poros)
+  addBox(1.5, 0.12, 0.04, 0, 0.78, 2.21, 3); addBox(1.5, 0.12, 0.04, 0, 0.8, -2.21, 4);   // lampu depan / belakang
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); g.setAttribute('aKind', new THREE.Float32BufferAttribute(kind, 1)); g.setIndex(idx);
+  // --- jalur ---
+  let sd = 24680; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const lanes = [], moves = [], paints = [];
+  const PAINT = ['#e8e8e6', '#1d1f22', '#8c9196', '#9a1c1c', '#1f3a66', '#c9c3b5', '#2f5a3a', '#d8a23a', '#5a6470', '#f2f2f0'];
+  const add = (type, line, lat, dir, segStart, segLen, gap) => {
+    for (let p = r() * gap; p < segLen; p += gap * (0.6 + 0.8 * r())) {
+      lanes.push(type, line, lat, dir); moves.push(p, 11 + 5 * r(), segStart, segLen);
+      const c = new THREE.Color(PAINT[Math.floor(r() * PAINT.length)]); paints.push(c.r, c.g, c.b);
+    }
+  };
+  for (let k = 1; k < 26; k++) {                                     // arteri keliling (bergerak sepanjang za)
+    if (k === 13) continue;
+    for (const dir of [1, -1]) for (const lat of [3.2, 7.0]) add(0, k * ART, lat, dir, 160, 3030, lat < 5 ? 110 : 190);
+  }
+  for (let k = 1; k <= 10; k++) for (const dir of [1, -1]) for (const lat of [3.2, 7.0])   // arteri melingkar kota
+    add(1, k * 250, lat, dir, SKY_S + 30, CIRC - 60, lat < 5 ? 130 : 230);
+  for (const z of RINGS_Z.filter((z) => z > 2600)) for (const dir of [1, -1]) add(1, z, 3.0, dir, SKY_S + 30, CIRC - 60, 260);   // cincin di pertanian
+  const n = lanes.length / 4, ig = new THREE.InstancedBufferGeometry();
+  ig.index = g.index; for (const k of Object.keys(g.attributes)) ig.setAttribute(k, g.attributes[k]);
+  ig.setAttribute('aLane', new THREE.InstancedBufferAttribute(new Float32Array(lanes), 4));
+  ig.setAttribute('aMove', new THREE.InstancedBufferAttribute(new Float32Array(moves), 4));
+  ig.setAttribute('aPaint', new THREE.InstancedBufferAttribute(new Float32Array(paints), 3));
+  ig.instanceCount = n;
+  const CAR_VS = /* glsl */`
+    attribute vec4 aLane, aMove;
+    attribute vec3 aPaint;
+    attribute float aKind;
+    uniform float uNight, uTraffic;
+    uniform vec3 fogColor;
+    varying vec3 vCol;
+    void main() {
+      if (fract(float(gl_InstanceID) * 0.6180339) > uTraffic) { ${CLIP_AWAY} }
+      float dir = aLane.w, lat = aLane.z * dir;
+      float p = mod(aMove.x + aMove.y * uTime, aMove.w);
+      float along = aMove.z + (dir > 0.0 ? p : aMove.w - p);
+      vec2 P = aLane.x < 0.5 ? vec2(aLane.y + lat, along) : vec2(along, aLane.y - lat);
+      vec2 fw2 = aLane.x < 0.5 ? vec2(0.0, dir) : vec2(dir, 0.0);
+      if (distance(P, uEyeSZ) > 900.0) { ${CLIP_AWAY} }                // LOD: mobil lebih dari 900 m tidak digambar
+      vec3 up, tS;
+      vec3 base = groundFrame(P, 0.0, up, tS);
+      vec3 F = tS * fw2.x + vec3(0.0, 0.0, fw2.y);
+      vec3 Rt = cross(up, F);
+      vec3 p3 = base + Rt * position.x + up * position.y + F * position.z;
+      #ifndef DEPTH_ONLY
+      vec3 n = normalize(Rt * normal.x + up * normal.y + F * normal.z);
+      vec3 L = vegLight(p3, n, P, 1.0);
+      vec3 c = aKind < 0.5 ? aPaint : aKind < 1.5 ? vec3(0.03, 0.04, 0.05) : aKind < 2.5 ? vec3(0.02) : aKind < 3.5 ? vec3(0.9) : aKind < 4.5 ? vec3(0.35, 0.02, 0.02) : vec3(0.6);
+      vCol = c * L;
+      if (aKind < 1.5 && aKind > 0.5) vCol += fogColor * 0.25;               // pantulan langit di kaca
+      if (aKind > 2.5 && aKind < 3.5) vCol += vec3(1.0, 0.92, 0.75) * (0.3 + 4.0 * uNight);
+      if (aKind > 3.5 && aKind < 4.5) vCol += vec3(1.0, 0.05, 0.03) * (0.2 + 2.0 * uNight);
+      #endif
+      vec4 mvPosition = modelViewMatrix * vec4(p3, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #ifndef DEPTH_ONLY
+      #include <fog_vertex>
+      #endif
+    }`;
+  const CAR_FS = /* glsl */`
+    varying vec3 vCol;
+    void main() { gl_FragColor = vec4(vCol, 1.0);
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`;
+  const carU = { uNight: BUILD_U.uNight, uTraffic: { value: 1 } };
+  TRAFFIC.cars = new THREE.Mesh(ig, vegMaterial({ vertex: CAR_VS, fragment: CAR_FS, uniforms: carU, side: THREE.FrontSide }));
+  TRAFFIC.cars.frustumCulled = false; TRAFFIC.cars.userData.noLight = true;
+  TRAFFIC.count = n; TRAFFIC.U = carU;
+  realGroup.add(TRAFFIC.cars);
+  // --- lampu jalan: tiang + lengan (MeshBasic, ikut model cahaya) + kepala lampu (menyala malam) ---
+  const lamps = [];
+  for (let k = 1; k < 26; k++) {
+    if (k === 13) continue;
+    for (const side of [-1, 1]) for (let z = LAMP.z0 + (side > 0 ? 0 : LAMP.spacing / 2); z < LAMP.z1; z += LAMP.spacing) {
+      const dz = Math.abs(z - Math.round(z / ART_Z) * ART_Z);
+      if (dz < 16 || inWater(k * ART + side * LAMP.off, z, 2) || inRiver(k * ART, z, 6)) continue;
+      lamps.push([k * ART + side * LAMP.off, z, -side, 0]);
+    }
+  }
+  for (let k = 1; k <= 10; k++) for (const side of [-1, 1]) for (let s = (side > 0 ? 0 : LAMP.spacing / 2); s < CIRC; s += LAMP.spacing) {
+    const ds = Math.abs(wrapS(s - Math.round(s / ART) * ART));
+    if (ds < 16 || Math.abs(wrapS(s - SKY_S)) < 40) continue;
+    lamps.push([s, k * 250 + side * LAMP.off, 0, -side]);
+  }
+  const poleGeo = mergeSimple([
+    { geo: new THREE.BoxGeometry(0.16, 8, 0.16).translate(0, 4, 0), color: [0.42, 0.45, 0.48] },
+    { geo: new THREE.BoxGeometry(0.1, 0.1, 1.6).translate(0, 7.9, 0.75), color: [0.42, 0.45, 0.48] },
+    { geo: new THREE.BoxGeometry(0.34, 0.14, 0.6).translate(0, 7.85, 1.5), color: [0.3, 0.32, 0.34] },
+  ]);
+  const headGeo = new THREE.BoxGeometry(0.28, 0.04, 0.5).translate(0, 7.77, 1.5);
+  const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshBasicMaterial({ vertexColors: true }), lamps.length);
+  const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), lamps.length + propRingLampCount());
+  const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4();
+  lamps.forEach(([s, za, fs, fz], i) => {                             // lengan lampu mengarah ke tengah jalan
+    surfaceMatrix(m4, s / R, za, 0);
+    m4.multiply(rot.makeRotationY(Math.atan2(fs, fz)));
+    poles.setMatrixAt(i, m4); heads.setMatrixAt(i, m4);
+  });
+  let hi = lamps.length;                                             // kepala lampu untuk tiang cincin struktur (sudah ada sejak tahap 4)
+  for (const z of RINGS_Z) for (let s = 0; s < CIRC - 20; s += 40) {
+    if (Math.abs(wrapS(s - SKY_S)) < 20) continue;
+    surfaceMatrix(m4, s / R, z + ROAD.ring / 2 + 1, 0); m4.multiply(rot.makeTranslation(0, 9.08 - 7.77, -1.5)); heads.setMatrixAt(hi++, m4);
+  }
+  heads.count = hi;
+  for (const m of [poles, heads]) { m.instanceMatrix.needsUpdate = true; m.frustumCulled = false; scene.add(m); }
+  heads.userData.noLight = true; heads.userData.noShadow = true; poles.userData.noShadow = true;
+  TRAFFIC.heads = heads; TRAFFIC.lamps = lamps.length;
+  function propRingLampCount() { let c = 0; for (const z of RINGS_Z) for (let s = 0; s < CIRC - 20; s += 40) if (Math.abs(wrapS(s - SKY_S)) >= 20) c++; return c; }
+}
+function updateTraffic() {
+  const nt = BUILD_U.uNight.value;
+  TRAFFIC.heads.material.color.setRGB(0.35 + 3.2 * nt, 0.33 + 2.5 * nt, 0.3 + 1.6 * nt);
+  groundMat.uniforms.uNight.value = nt;
+}
+
+/* =====================================================================
    TAHAP 9: POST-PROCESSING (tanpa addon)
    Scene dirender ke target HDR (half float) -> SSAO setengah resolusi -> bloom berantai (mip 6 tingkat)
    -> komposit: exposure + tone mapping ACES + sRGB + vignette + grain -> FXAA ke layar.
@@ -4601,6 +4954,33 @@ function updateAudio(dt) {
   } else { AUDIO.nextChord = 0; }
 }
 
+/* =====================================================================
+   TAHAP 10: PRESET KUALITAS PC (tombol Q) + turun otomatis bila FPS < 30 selama 4 detik
+   ===================================================================== */
+const PRESETS = [
+  { name: 'Ultra', dpr: 2.0, veg: 0, post: 0, shadow: true, traffic: 1.0 },
+  { name: 'Tinggi', dpr: 1.5, veg: 0, post: 1, shadow: true, traffic: 1.0 },
+  { name: 'Sedang', dpr: 1.25, veg: 1, post: 1, shadow: true, traffic: 0.6 },
+  { name: 'Rendah', dpr: 1.0, veg: 2, post: 2, shadow: false, traffic: 0.35 },
+];
+const PRESET = { idx: 0, auto: true, low: 0 };
+function applyPreset(i) {
+  PRESET.idx = i; const P = PRESETS[i];
+  CONFIG.dprMax = P.dpr; applyPixelRatio();
+  vegQ = P.veg; applyVegQuality();
+  POST.mode = P.post; const bp = document.getElementById('labPost'); if (bp) bp.textContent = `Efek layar: ${POST.names[POST.mode]} (P)`;
+  SHADOW.enabled = P.shadow; const cb = document.getElementById('inShadow'); if (cb) cb.checked = P.shadow;
+  TRAFFIC.U.uTraffic.value = P.traffic;
+  const b = document.getElementById('labPreset'); if (b) b.textContent = `Preset: ${P.name}${PRESET.auto ? ' (otomatis)' : ''} (Q)`;
+}
+function cyclePreset() { PRESET.auto = false; applyPreset((PRESET.idx + 1) % PRESETS.length); }
+applyPreset(0);
+function autoPreset(dt) {
+  if (!PRESET.auto || !stats.fps || ext.active) return;
+  PRESET.low = stats.fps < 30 ? PRESET.low + dt : Math.max(0, PRESET.low - dt);
+  if (PRESET.low > 4 && PRESET.idx < PRESETS.length - 1) { applyPreset(PRESET.idx + 1); PRESET.low = -6; setLabText(`FPS rendah: preset diturunkan ke ${PRESETS[PRESET.idx].name}.`); }
+}
+
 // --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
 hub.userData.noLight = true;
 ballMesh.userData.noShadow = true; markMesh.userData.noShadow = true;
@@ -4637,6 +5017,8 @@ function frame(now) {
   renderer.render(scene, camera);
   if (post) postEnd();
   updateAudio(dt);
+  updateTraffic();
+  autoPreset(dt);
   if (window.__captureCb) { const cb = window.__captureCb; window.__captureCb = null; cb(canvas.toDataURL('image/png')); }   // hook uji
   updateStats(dt);
   updatePrompt();
@@ -4648,7 +5030,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, POST, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
