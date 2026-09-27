@@ -191,6 +191,15 @@ Uji: `tools/uji_suasana.py` (7 cek). Waktu muat di sandbox sekitar 6,4-6,7 s.
 | Titik putih menyala di setiap tanaman jagung | Ujung daun jagung (10 per tanaman) hanya dimiliki segitiga berluas nol, jadi normalnya (0,0,0). `normalize(0)` menghasilkan NaN di sebagian GPU (terlihat di MacBook M1), lalu bloom menyebarkan NaN jadi titik putih. Diagnosis di 12b-4 (warna tongkol) salah: sandbox tanpa GPU tidak menampilkan NaN | Normal nol di model jagung diganti arah atas, dan shader jagung tidak lagi menormalkan vektor nol. Uji `uji_suasana.py` memeriksa tidak ada normal nol di seluruh scene |
 | Daun di tanah masih bergerak seperti tikus | Zig-zag dihitung dari umur daun (terus bertambah setelah mendarat), dan hanyut angin memakai angin saat itu (berubah tiap hembusan) | Zig-zag dihitung dari waktu jatuh (berhenti saat mendarat), hanyut memakai angin rata-rata yang dihaluskan 2 menit, jadi daun di tanah praktis diam |
 
+### Revisi: titik menyala berkedip di ladang jagung (setelah 12b-5)
+
+| Temuan | Penjelasan |
+| --- | --- |
+| Bukan fitur kunang-kunang | Tidak ada fitur kunang-kunang di kode. Titik itu adalah piksel NaN yang disebar bloom |
+| Penyebab utama | Shader jagung menghitung gelap di bawah tanaman dengan `pow(t, 0.8)`, t = tinggi titik. Ujung 2 daun bawah tiap tanaman terkulai sampai -0,047 (di bawah tanah). `pow` dengan bilangan negatif = NaN di GPU. Berkedip karena daun bergoyang angin, ujungnya naik-turun melewati 0. Perbaikan 12b-5 (normal nol) benar tapi tidak cukup |
+| Perbaikan | `pow(max(t, 0.0), 0.8)`, ujung daun ditahan minimal 1,2 cm di atas tanah, dan pengaman sejenis di 4 tempat lain yang bisa NaN: kartu jagung jauh, SSAO (normal dari kedalaman bisa nol), impostor pohon (kamera tepat di atas pohon), konversi sRGB akhir |
+| Keterbatasan uji | Sandbox uji (SwiftShader, tanpa GPU) tidak menampilkan NaN, jadi hasil harus dicek pemilik di M1 |
+
 ## Urutan kerja dan uji
 
 | Urutan | Sub-tahap | Isi | Yang diuji |

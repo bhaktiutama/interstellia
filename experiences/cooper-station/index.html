@@ -4443,7 +4443,7 @@ function cornPlantGeo() {
     const segs = 5, v0 = pos.length / 3;
     const base = l < 2 ? [0.42, 0.38, 0.2] : [0.24 + r() * 0.06, 0.42 + r() * 0.08, 0.14];
     for (let k = 0; k <= segs; k++) {
-      const t = k / segs, reach = L * t, yy = y0 + L * (rise * t - droop * t * t);
+      const t = k / segs, reach = L * t, yy = Math.max(0.012, y0 + L * (rise * t - droop * t * t));   // ujung daun terkulai tidak menembus tanah
       const w = W * Math.sin(Math.PI * (0.12 + 0.88 * t)) * (k === segs ? 0 : 1), fold = w * 0.25;
       const cx = dx * reach, cz = dz * reach, sh = 0.75 + 0.35 * t;
       const cc = [base[0] * sh, base[1] * sh, base[2] * sh];
@@ -4503,7 +4503,7 @@ const CORN_NEAR_VS = /* glsl */`
     vec3 n = tS * nxz.x + vec3(0.0, 0.0, nxz.y) + up * normal.y;
     n = dot(n, n) > 1e-10 ? normalize(n) : up;                       // jaga-jaga: jangan normalize vektor nol (NaN)
     if (dot(n, up) < 0.0) n = -n;
-    float ao = mix(0.22, 1.0, pow(t, 0.8));                         // bagian bawah ladang jagung gelap
+    float ao = mix(0.22, 1.0, pow(max(t, 0.0), 0.8));               // bagian bawah ladang jagung gelap (max: ujung daun terkulai bisa di bawah 0, pow negatif = NaN)
     vCol = color * (0.88 + 0.24 * h2) * ao * vegLight(p, n, P, 1.0 - 0.6 * t);
     #endif
     vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
@@ -4579,7 +4579,7 @@ const CORN_CARD_FS = /* glsl */`
     #ifdef DEPTH_ONLY
     gl_FragColor = vec4(0.0);
     #else
-    gl_FragColor = vec4(tx.rgb * mix(0.25, 1.0, pow(vT, 0.8)) * vLight, 1.0);
+    gl_FragColor = vec4(tx.rgb * mix(0.25, 1.0, pow(clamp(vT, 0.0, 1.0), 0.8)) * vLight, 1.0);
     #include <colorspace_fragment>
     #include <fog_fragment>
     #endif
@@ -4780,7 +4780,8 @@ const IMP_VS = /* glsl */`
     if (distance(C, uEye) < uLodD - 2.0) { ${CLIP_AWAY} }           // dekat: digambar sebagai mesh penuh
     vec3 Y = mat3(modelMatrix) * vec3(instanceMatrix[1]); float sc = length(Y); Y /= sc;
     vec3 toC = uEye - C; toC -= Y * dot(toC, Y);
-    vec3 X = normalize(cross(Y, toC));
+    if (dot(toC, toC) < 1e-6) toC = vec3(1e-3, 0.0, 0.0);           // 12b: kamera tepat di atas pohon -> cross nol -> NaN
+    vec3 X = cross(Y, toC); X = dot(X, X) > 1e-12 ? normalize(X) : vec3(1.0, 0.0, 0.0);
     vec3 p = C + X * position.x * uSize.x * sc + Y * position.y * uSize.y * sc;
     vUv = uv;
     #ifndef DEPTH_ONLY
@@ -5477,11 +5478,13 @@ const aoMat = fsMat(/* glsl */`
     vec3 pr = vpos(vUv + vec2(uTexel.x, 0.0)), pl = vpos(vUv - vec2(uTexel.x, 0.0)), pu = vpos(vUv + vec2(0.0, uTexel.y)), pd = vpos(vUv - vec2(0.0, uTexel.y));
     vec3 dx = abs(pr.z - P.z) < abs(P.z - pl.z) ? pr - P : P - pl;
     vec3 dy = abs(pu.z - P.z) < abs(P.z - pd.z) ? pu - P : P - pd;
-    vec3 N = normalize(cross(dx, dy));
+    vec3 N = cross(dx, dy);
+    N = dot(N, N) > 1e-16 ? normalize(N) : vec3(0.0, 0.0, 1.0);    // 12b: piksel tetangga sama kedalaman -> cross nol -> NaN
     if (dot(N, -P) < 0.0) N = -N;
     float a = ign(gl_FragCoord.xy) * 6.2831853;
     vec3 rv = vec3(cos(a), sin(a), 0.0);
-    vec3 T = normalize(rv - N * dot(rv, N)), B = cross(N, T);
+    vec3 T = rv - N * dot(rv, N); T = dot(T, T) > 1e-8 ? normalize(T) : vec3(1.0, 0.0, 0.0);
+    vec3 B = cross(N, T);
     float R = uRadius * (1.0 + dist * 0.01), occ = 0.0;
     for (int i = 0; i < 8; i++) {
       vec3 S = P + (T * uKernel[i].x + B * uKernel[i].y + N * uKernel[i].z) * R;
@@ -5619,7 +5622,7 @@ const compMat = fsMat(/* glsl */`
     vec3 v = m1 * x; vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
     return clamp(m2 * (a / b), 0.0, 1.0);
   }
-  vec3 toSRGB(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+  vec3 toSRGB(vec3 c) { c = max(c, vec3(0.0)); return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }   // max: pow negatif = NaN
   float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   void main() {
     vec3 c = texture2D(tHdr, vUv).rgb;

@@ -112,4 +112,4 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 
 Rencana berikutnya: `docs/cooper-station/rencana-tahap-12-cooper-station.md` (12c hujan dan Coriolis, 12d ladang, foto, tur).
 
-Catatan GPU: jangan `normalize()` vektor yang bisa nol di shader (NaN di Apple M1 disebar bloom jadi titik putih). Sandbox uji (SwiftShader) tidak memperlihatkan NaN.
+Catatan GPU: di shader jangan `normalize()` vektor yang bisa nol, jangan `pow()` bilangan yang bisa negatif, jangan `sqrt()`/`asin()` di luar rentang (NaN di Apple M1 disebar bloom jadi titik putih berkedip). Sandbox uji (SwiftShader) tidak memperlihatkan NaN.
