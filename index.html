@@ -451,6 +451,8 @@ const groundMat = new THREE.ShaderMaterial({
   side: THREE.BackSide,
   uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
     uLand: { value: null }, uR: { value: CONFIG.R }, uHalfL: { value: HALF_L }, uL: { value: CONFIG.L },
+    uFieldTex: { value: null }, uCloudTex: { value: null }, uTime: { value: 0 }, uArt: { value: TAU * CONFIG.R / 26 },
+    uCloudK: { value: 0.2 }, uFieldZ: { value: new THREE.Vector2(3200, 7850) }, uCityZ: { value: new THREE.Vector2(250, 2500) },
   }, LIGHT.uniforms]),
   vertexShader: /* glsl */`
     #include <fog_pars_vertex>
@@ -465,16 +467,40 @@ const groundMat = new THREE.ShaderMaterial({
     }`,
   fragmentShader: /* glsl */`
     #include <fog_pars_fragment>
-    uniform sampler2D uLand;
-    uniform float uR, uHalfL, uL;
+    uniform sampler2D uLand, uFieldTex, uCloudTex;
+    uniform float uR, uHalfL, uL, uTime, uArt, uCloudK;
+    uniform vec2 uFieldZ, uCityZ;
     varying vec3 vPos;
     varying vec3 vWorld;
     ${LIGHT_GLSL}
     const float PI = 3.141592653589793;
-    float gridLine(float coord, float spacing, float halfW, float footprint) {
-      float d = abs(fract(coord / spacing + 0.5) - 0.5) * spacing;
-      float cov = 1.0 - smoothstep(halfW - footprint, halfW + footprint, d);
-      return cov * clamp(2.0 * halfW / max(footprint, 1e-4), 0.0, 1.0);
+    // ---- noise (hash integer, stabil untuk koordinat besar) ----
+    float hash2(vec2 p) {
+      uvec2 q = uvec2(ivec2(floor(p)) + 32768);
+      uint n = q.x * 1597334677u ^ q.y * 3812015801u;
+      n = (n ^ (n >> 15u)) * 2246822519u; n ^= n >> 13u;
+      return float(n) * (1.0 / 4294967295.0);
+    }
+    float vnoise(vec2 p) {
+      vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash2(i), hash2(i + vec2(1, 0)), u.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), u.x), u.y);
+    }
+    float fbm2(vec2 p) { return 0.62 * vnoise(p) + 0.38 * vnoise(p * 2.31 + 17.0); }
+    // garis dengan anti-alias: pusat c, setengah lebar hw, jejak piksel fp
+    float lineAA(float d, float hw, float fp) {
+      float cov = 1.0 - smoothstep(hw - fp, hw + fp, abs(d));
+      return cov * clamp(2.0 * hw / max(fp, 1e-4), 0.0, 1.0);
+    }
+    float dashAA(float x, float period, float duty, float fp) {         // putus-putus sepanjang x
+      float f = fract(x / period);
+      float on = smoothstep(0.0, 0.04, f) * (1.0 - smoothstep(duty, duty + 0.04, f));
+      return mix(on, duty, smoothstep(period * 0.1, period * 0.4, fp));
+    }
+    // marka jalan: tengah putus-putus + garis tepi, d = jarak ke sumbu jalan, x = posisi sepanjang jalan
+    float roadMarks(float d, float x, float hwRoad, float fp) {
+      float c = lineAA(d, 0.08, fp) * dashAA(x, 12.0, 0.5, fp);
+      float e = lineAA(abs(d) - (hwRoad - 0.7), 0.08, fp);
+      return max(c, e);
     }
     void main() {
       float a = atan(vPos.y, vPos.x);
@@ -487,10 +513,135 @@ const groundMat = new THREE.ShaderMaterial({
       vec2 gy = vec2((vPos.x * dy.y - vPos.y * dy.x) / r2 / (2.0 * PI), dFdy(za) / uL);
       vec3 base = textureGrad(uLand, uv, gx, gy).rgb;
       float fpA = length(fwidth(vPos.xy)), fpZ = fwidth(za);
-      float fine = max(gridLine(uv.x * 2.0 * PI * uR, 10.0, 0.06, fpA), gridLine(za, 10.0, 0.06, fpZ));
-      vec3 col = mix(base, base * 0.86, fine * 0.35);
+      float fp = max(fpA, fpZ);                                  // ukuran satu piksel di tanah (m)
+      float s = a * uR;                                          // busur (m); sambungan di theta = pi ada di celah jendela Skyway
+      vec2 P = vec2(s, za);
+
+      // ---- klasifikasi permukaan dari warna peta (ruang sRGB perkiraan) ----
+      vec3 sb = sqrt(max(base, 0.0));
+      float mx = max(sb.r, max(sb.g, sb.b)), mn = min(sb.r, min(sb.g, sb.b));
+      float sat = (mx - mn) / max(mx, 1e-3);
+      float lum = dot(sb, vec3(0.299, 0.587, 0.114));
+      float blueX = sb.b - max(sb.r, sb.g);
+      float wetM = smoothstep(0.06, 0.12, blueX);
+      float waterM = wetM * (1.0 - smoothstep(0.52, 0.60, sb.g));      // air dalam; tepi yang lebih terang = tanggul
+      float shoreM = wetM - waterM;
+      float grayM = (1.0 - smoothstep(0.145, 0.165, sat)) * (1.0 - wetM);
+      float asphM = grayM * (1.0 - smoothstep(0.38, 0.46, lum));
+      float concM = grayM - asphM;
+      float vegM = max(0.0, 1.0 - grayM - wetM);
+
+      vec3 col = base;
+      // variasi skala besar (terlihat dari jauh): petak lembap, rumput tidak rata
+      float big = fbm2(P / 38.0);
+      col *= mix(1.0, 0.86 + 0.28 * big, vegM);
+      col *= mix(1.0, 0.94 + 0.12 * vnoise(P / 9.0), concM + asphM);
+      // tanggul batu di tepi sungai dan danau
+      col = mix(col, vec3(0.30, 0.28, 0.25) * (0.85 + 0.3 * vnoise(P * 0.8)), shoreM);
+
+      // ---- jarak ke jalan arteri (dipakai marka dan jalan tanah ladang) ----
+      float kS = floor(s / uArt + 0.5);
+      float dS = s - kS * uArt;                                   // jarak ke arteri keliling terdekat (garis s tetap)
+      float kZ = floor(za / 250.0 + 0.5);
+      float dZ = za - kZ * 250.0;                                 // jarak ke arteri melingkar terdekat
+      float kSm = mod(kS, 26.0);
+      bool blvd = kSm < 0.5 || kSm > 25.5;
+
+      // ---- ladang: data per petak (arah baris, jarak baris, jenis) ----
+      float inFarm = step(uFieldZ.x, za) * step(za, uFieldZ.y);
+      float farmRoadZ = inFarm * (1.0 - step(6400.0, za) * step(za, 6900.0));
+      float dirtM = farmRoadZ * (!blvd && mod(kS, 2.0) < 0.5 ? 1.0 : 0.0) * (1.0 - smoothstep(2.7, 3.3, abs(dS)));
+      vegM *= 1.0 - dirtM;
+      vec4 fd = inFarm > 0.5 ? textureLod(uFieldTex, vec2(uv.x, (za - uFieldZ.x) / (uFieldZ.y - uFieldZ.x)), 0.0) : vec4(0.0);
+      float fieldM = step(0.2, fd.b) * vegM;
+
+      // ---- jalan dan ladang dari dekat ----
+      float detail = 1.0 - smoothstep(1.2, 3.0, fp);
+      if (detail > 0.0) {
+        // aspal: bintik agregat + tambalan, marka putih
+        float spk = hash2(P * 18.0) - 0.5;
+        float asph = 1.0 + (0.10 * spk) * (1.0 - smoothstep(0.02, 0.08, fp)) + 0.06 * (vnoise(P / 2.5) - 0.5);
+        float mark = 0.0;
+        if (!blvd && za > 150.0 && za < 3200.0 && abs(dS) < 13.0 && !(abs(dZ) < 13.0 && za > uCityZ.x - 13.0 && za < uCityZ.y + 13.0))
+          mark = roadMarks(dS, za, 12.0, fp);
+        if (za > uCityZ.x - 13.0 && za < uCityZ.y + 13.0 && abs(dZ) < 13.0 && abs(dS) > (blvd ? 21.0 : 13.0))
+          mark = max(mark, roadMarks(dZ, s, 12.0, fp));
+        if (blvd && za > 150.0 && abs(dS) < 21.0) mark = max(mark, lineAA(abs(dS) - 19.3, 0.1, fp));   // tepi boulevard
+        vec3 asphCol = col * asph;
+        asphCol = mix(asphCol, vec3(0.62, 0.62, 0.58), mark * 0.85 * detail);
+        col = mix(col, asphCol, asphM);
+        // beton dan paving: sambungan petak 3 m, tiap petak sedikit beda terang
+        vec2 tid = floor(P / 3.0);
+        float tv = 0.94 + 0.12 * hash2(tid + 101.0);
+        vec2 tf = abs(fract(P / 3.0 + 0.5) - 0.5) * 3.0;
+        float joint = max(lineAA(tf.x, 0.03, fp), lineAA(tf.y, 0.03, fp));
+        col = mix(col, col * mix(tv, 0.72, joint) * (1.0 + 0.05 * spk * (1.0 - smoothstep(0.02, 0.08, fp))), concM * detail);
+        // jalan tanah ladang: kerikil + dua alur roda
+        float ruts = max(lineAA(abs(dS) - 1.0, 0.28, fp), 0.0);
+        col = mix(col, col * (0.92 + 0.16 * hash2(P * 9.0) * (1.0 - smoothstep(0.03, 0.12, fp))) * (1.0 - 0.2 * ruts), dirtM * detail);
+        // rumput: tekstur halus dua skala
+        float gN = vnoise(P * 3.3) * 0.6 + hash2(P * 11.0) * 0.4 * (1.0 - smoothstep(0.03, 0.1, fp));
+        col *= mix(1.0, 0.86 + 0.28 * gN, vegM * (1.0 - fieldM) * detail);
+        // baris tanaman: arah dari data petak, jarak 0,7 sampai 1,6 m
+        if (fieldM > 0.0) {
+          float ang = fd.r * PI;
+          vec2 dir = vec2(cos(ang), sin(ang));
+          float per = 0.7 + fd.g * 0.9;
+          float u = dot(P, vec2(-dir.y, dir.x));
+          float along = dot(P, dir);
+          float row = 1.0 - smoothstep(0.18, 0.42, abs(fract(u / per) - 0.5) * 2.0);
+          row *= 0.8 + 0.4 * vnoise(vec2(along * 1.7, u / per * 3.0));        // tanaman tidak rata sepanjang baris
+          float rowAmp = 1.0 - smoothstep(0.2 * per, 0.55 * per, fp);
+          bool plow = fd.b < 0.7;                                          // tanah dibajak: alur gelap-terang
+          vec3 soil = vec3(0.16, 0.11, 0.07);
+          vec3 cropCol = plow ? col * (0.8 + 0.35 * row) : mix(soil * (0.8 + 0.4 * big), col * 1.12, row);
+          vec3 avg = plow ? col * 0.98 : mix(soil, col * 1.12, 0.45);
+          vec3 fcol = mix(mix(col, avg, 0.6), cropCol, rowAmp);
+          // jejak roda traktor tiap 18 m (dua garis 1,8 m)
+          float tr = abs(fract(u / 18.0) - 0.5) * 18.0;
+          fcol *= 1.0 - 0.25 * max(lineAA(tr - 0.9, 0.22, fp), lineAA(tr + 0.9, 0.22, fp));
+          col = mix(col, fcol, fieldM * detail);
+        }
+      }
+      // dari jauh ladang tetap sedikit lebih gelap (tanah terlihat di sela baris)
+      col = mix(col, col * (fd.b < 0.7 ? 0.98 : 0.86), fieldM * (1.0 - detail));
+
+      // ---- cahaya ----
       float rw = length(vWorld.xy);
-      col *= stationLight(vWorld, vec3(-vWorld.xy / rw, 0.0));
+      vec3 up = vec3(-vWorld.xy / rw, 0.0);
+      vec3 light = stationLight(vWorld, up);
+      float cshadow = textureLod(uCloudTex, uv, 0.0).r;           // bayangan awan (sunline terhalang sebagian)
+      light -= uL_SunlineCol * uL_Sunline * uCloudK * cshadow;
+      col *= max(light, vec3(0.0));
+
+      // ---- air: riak gelombang, fresnel, pantulan atmosfer dan kilau sunline ----
+      if (waterM > 0.01) {
+        vec3 tS = vec3(-up.y, up.x, 0.0), tZ = vec3(0.0, 0.0, 1.0);
+        vec2 grad = vec2(0.0);
+        // 6 gelombang: panjang 0,8 sampai 7 m, kecepatan dari dispersi air dalam c = sqrt(g L / 2 pi), arus 0,4 m/s arah keliling
+        vec2 Pf = P - vec2(0.4 * uTime, 0.0);
+        for (int i = 0; i < 6; i++) {
+          float fi = float(i);
+          float L = 7.0 * pow(0.66, fi);
+          float k = 2.0 * PI / L;
+          float an = 0.4 + fi * 2.1;
+          vec2 d = vec2(cos(an), sin(an));
+          float w = sqrt(9.81 * k);
+          float amp = 0.035 * (1.0 - smoothstep(0.15 * L, 0.5 * L, fp));
+          grad += amp * d * cos(k * dot(d, Pf) - w * uTime + fi * 1.7);
+        }
+        vec3 N = normalize(up - tS * grad.x - tZ * grad.y);
+        vec3 V = normalize(cameraPosition - vWorld);
+        float cosT = max(dot(N, V), 0.0);
+        float F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
+        vec3 deep = vec3(0.012, 0.045, 0.07) * light * 2.2;
+        vec3 sky = mix(vec3(0.22, 0.30, 0.20) * light, fogColor, 0.55);   // yang terpantul: sisi seberang + udara
+        vec3 Rf = reflect(-V, N);
+        float g = dot(normalize(Rf.xy + vec2(1e-5)), up.xy) * step(0.0, dot(Rf, up));
+        float glint = pow(max(g, 0.0), 900.0) * 6.0 + pow(max(g, 0.0), 40.0) * 0.25;
+        vec3 wcol = mix(deep, sky, F) + uL_SunlineCol * uL_Sunline * glint * (0.3 + F);
+        col = mix(col, wcol, waterM);
+      }
       gl_FragColor = vec4(col, 1.0);
       #include <colorspace_fragment>
       #include <fog_fragment>
@@ -1040,6 +1191,38 @@ landTex.colorSpace = THREE.SRGBColorSpace;
 landTex.wrapS = THREE.RepeatWrapping; landTex.wrapT = THREE.ClampToEdgeWrapping;
 landTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
 groundMat.uniforms.uLand.value = landTex;
+
+// --- tahap 6: data petak ladang untuk shader (arah baris, jarak baris, jenis), 3,07 m per piksel ---
+{
+  const FZ0 = 3200, FZ1 = 7850, FW = 2048, FH = Math.ceil((FZ1 - FZ0) / (CIRC / FW));
+  const fc = document.createElement('canvas'); fc.width = FW; fc.height = FH;
+  const fg = fc.getContext('2d');
+  fg.fillStyle = '#000'; fg.fillRect(0, 0, FW, FH);
+  const FX = (s) => (s / CIRC) * FW, FY = (za) => (1 - (za - FZ0) / (FZ1 - FZ0)) * FH, FK = FW / CIRC;
+  const frect = (s0, z0, s1, z1, style) => {
+    fg.fillStyle = style;
+    const a = modS(s0), w = s1 - s0, draw = (x) => { const x0 = Math.round(FX(x)), y0 = Math.round(FY(z1)); fg.fillRect(x0, y0, Math.round(FX(x + w)) - x0, Math.round(FY(z0)) - y0); };
+    draw(a); if (a + w > CIRC) draw(a - CIRC);
+  };
+  let sd = 4242; const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  for (const f of fieldList) {
+    const plowed = f.col === '#8b6f4e';                           // petak cokelat = tanah baru dibajak
+    const r = rr();
+    const ang = r < 0.45 ? 0.5 : r < 0.9 ? 0.0 : (r < 0.95 ? 0.25 : 0.75);   // baris sejajar sumbu, keliling, atau diagonal
+    const per = rr();
+    frect(f.s0 + 1, f.z0 + 1, f.s1 - 1, f.z1 - 1, `rgb(${Math.round(ang * 255)},${Math.round(per * 255)},${plowed ? 128 : 255})`);
+  }
+  // jalan tanah, boulevard, halaman Cooper dan promenade bukan ladang
+  for (let i = 0; i < 26; i++) frect(i * ART - 5, FZ0, i * ART + 5, FZ1, '#000');
+  frect(TRAM.s - 22, FZ0, TRAM.s + 22, FZ1, '#000');
+  frect(SKY_S - 48, FZ0, SKY_S + 48, FZ1, '#000');
+  frect(COOPER.s - 72, COOPER.za - 47, COOPER.s + 92, COOPER.za + 62, '#000');
+  const fieldTex = new THREE.CanvasTexture(fc);
+  fieldTex.colorSpace = THREE.NoColorSpace;
+  fieldTex.minFilter = fieldTex.magFilter = THREE.NearestFilter; fieldTex.generateMipmaps = false;
+  fieldTex.wrapS = THREE.RepeatWrapping; fieldTex.wrapT = THREE.ClampToEdgeWrapping;
+  groundMat.uniforms.uFieldTex.value = fieldTex;
+}
 
 // --- kolisi -----------------------------------------------------------
 const COL = { cell: 32, items: [], grid: new Map() };
@@ -2162,6 +2345,26 @@ const cloudMat = new THREE.ShaderMaterial({
     const r = R - h;
     clouds.setMatrixAt(i, m.compose(p.set(r * Math.cos(th), r * Math.sin(th), za - HALF_L), q, s.set(size, size, size)));
   });
+  // bayangan awan di tanah (tahap 6). Sunline adalah sumber garis sepanjang sumbu: awan 100 m di ketinggian 300 m
+  // hanya menutup potongan pendek garis itu, jadi bayangannya lembut, memanjang searah sumbu, dan redup (sekitar 16%).
+  {
+    const CW = 512, CH = 1024, cc = document.createElement('canvas'); cc.width = CW; cc.height = CH;
+    const cg = cc.getContext('2d'); cg.fillStyle = '#000'; cg.fillRect(0, 0, CW, CH);
+    cg.globalCompositeOperation = 'lighter';
+    for (const [th, za, h, size] of puffs) {
+      const u = ((th / TAU) % 1 + 1) % 1, x = u * CW, y = (1 - za / CONFIG.L) * CH;
+      const rx = (0.35 * size / CIRC) * CW, ry = (0.35 * size * (1 + h / 300)) / CONFIG.L * CH;
+      for (const ox of [-CW, 0, CW]) {
+        cg.save(); cg.translate(x + ox, y); cg.scale(rx, ry);
+        const gr = cg.createRadialGradient(0, 0, 0, 0, 0, 1);
+        gr.addColorStop(0, 'rgba(90,90,90,1)'); gr.addColorStop(1, 'rgba(0,0,0,1)');
+        cg.fillStyle = gr; cg.beginPath(); cg.arc(0, 0, 1, 0, TAU); cg.fill(); cg.restore();
+      }
+    }
+    const cloudTex = new THREE.CanvasTexture(cc);
+    cloudTex.colorSpace = THREE.NoColorSpace; cloudTex.wrapS = THREE.RepeatWrapping;
+    groundMat.uniforms.uCloudTex.value = cloudTex;
+  }
   clouds.instanceMatrix.needsUpdate = true; clouds.frustumCulled = false; clouds.renderOrder = 6;
   clouds.userData.noLight = true;
   scene.add(clouds);
@@ -2259,6 +2462,7 @@ function frame(now) {
   updateCamera();
   updateFar();
   updateLighting();
+  groundMat.uniforms.uTime.value = clock.sim % 3600;
   renderer.info.reset();
   shadowPass();
   renderer.clear();
