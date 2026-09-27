@@ -103,6 +103,8 @@
       <button id="labDrop" type="button"><kbd>G</kbd>Jatuhkan</button>
       <button id="labLift" type="button"><kbd>L</kbd>Lift ke sumbu</button>
       <button id="labTest" type="button">Self-test</button>
+      <button id="labOrbit" type="button"><kbd>T</kbd>Percepat orbit</button>
+      <button id="labWin" type="button">Ke Skyway</button>
     </div>
     <div id="labResult">Lempar ke arah hadap, dengan sudut elevasi dari slider. Tiang biru = titik lepas, tiang merah = titik mendarat.</div>
     <table id="labTable"></table>
@@ -113,7 +115,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 2 gray-box · fisika rotasi · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 3 gray-box · Saturnus lewat strip jendela · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -121,6 +123,7 @@
       <tr class="desk-only"><td>Space</td><td>Lompat (di hub: naik)</td></tr>
       <tr class="desk-only"><td>B · G</td><td>Lempar bola · jatuhkan bola dari ketinggian</td></tr>
       <tr class="desk-only"><td>L</td><td>Lift ke sumbu (0 g) / turun lagi; Shift = 5x cepat</td></tr>
+      <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
       <tr class="desk-only"><td>O</td><td>Jalan otomatis ke depan</td></tr>
       <tr class="desk-only"><td>X</td><td>Turbo 50 m/s (debug)</td></tr>
       <tr class="desk-only"><td>R · H · Esc</td><td>Kembali ke titik awal · sembunyikan HUD · lepas kursor</td></tr>
@@ -199,7 +202,9 @@ if (!canvas.getContext('webgl2')) {
   throw new Error('no webgl2');
 }
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
-renderer.setClearColor(0x0d0f12, 1);
+renderer.setClearColor(0x000000, 1);
+renderer.autoClear = false;              // render 2 scene: jauh dulu, lalu dekat
+renderer.info.autoReset = false;
 let dynScale = 1.0;
 function applyPixelRatio() { renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, CONFIG.dprMax) * dynScale); }
 applyPixelRatio();
@@ -208,6 +213,104 @@ renderer.setSize(window.innerWidth, window.innerHeight, false);
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(CONFIG.fogColor, CONFIG.fogDensity);
 const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 0.25, 12000);
+
+/* =====================================================================
+   TAHAP 3: SCENE JAUH (Saturnus, cincin, bintang, Matahari)
+   Kerangka inersia berpusat di stasiun, satuan 1 = 1.000 km. Sumbu z = sumbu stasiun = normal bidang orbit.
+   Kamera jauh selalu di titik asal, hanya rotasi: q_far = rotZ(omega*t) * q_kamera_stasiun.
+   ===================================================================== */
+const SATURN = { GM: 3.7931e16, rEq: 60.268, rPole: 54.364 };   // m^3/s^2 dan 1.000 km (NASA NSSDCA)
+const ORBIT = { r: 260, tiltDeg: 15, phi0: 0 };                 // radius orbit 260.000 km, cincin miring 15 derajat
+const T_ORB = 2 * Math.PI * Math.sqrt(Math.pow(ORBIT.r * 1e6, 3) / SATURN.GM);   // s, sekitar 37,57 jam
+const RINGS = [   // radius dalam dan luar (1.000 km), warna, alpha (NASA Saturnian Rings Fact Sheet)
+  { r0: 66.900, r1: 74.510, c: [0.55, 0.52, 0.48], a: 0.06 },   // D
+  { r0: 74.658, r1: 91.975, c: [0.62, 0.58, 0.52], a: 0.30 },   // C
+  { r0: 91.975, r1: 117.507, c: [0.93, 0.87, 0.76], a: 0.92 },  // B
+  { r0: 117.507, r1: 122.340, c: [0.30, 0.28, 0.26], a: 0.08 }, // celah Cassini
+  { r0: 122.340, r1: 136.780, c: [0.85, 0.80, 0.70], a: 0.70 }, // A
+  { r0: 139.600, r1: 140.050, c: [0.90, 0.86, 0.80], a: 0.55 }, // F (lebar dibesarkan agar terlihat)
+];
+const farScene = new THREE.Scene();
+const farCam = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 1, 20000);
+const SUN_DIR = new THREE.Vector3(0.75, 0.45, 0.35).normalize();   // Matahari di belakang stasiun: Saturnus tampak hampir penuh di fase 0
+{
+  const sun = new THREE.DirectionalLight(0xffffff, 2.4);
+  sun.position.copy(SUN_DIR);
+  farScene.add(sun, new THREE.AmbientLight(0xffffff, 0.06));
+}
+const saturn = new THREE.Group();
+// kutub: +Y lokal -> sumbu z, lalu dimiringkan 15 derajat ke arah x. Di fase orbit 0 cincin terlihat terbuka 15 derajat.
+saturn.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), ORBIT.tiltDeg * DEG)
+  .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
+farScene.add(saturn);
+{
+  // planet: pita lintang sederhana di vertex color
+  const g = new THREE.SphereGeometry(1, 96, 64);
+  const pos = g.attributes.position, cols = new Float32Array(pos.count * 3);
+  for (let i = 0; i < pos.count; i++) {
+    const lat = Math.asin(Math.max(-1, Math.min(1, pos.getY(i))));
+    const band = 0.5 + 0.5 * Math.sin(lat * 14.0) * Math.cos(lat * 3.0);
+    const polar = Math.pow(Math.abs(Math.sin(lat)), 6);
+    const k = 0.86 + 0.14 * band;
+    cols[i * 3] = (0.86 * k) * (1 - 0.35 * polar);
+    cols[i * 3 + 1] = (0.76 * k) * (1 - 0.25 * polar);
+    cols[i * 3 + 2] = (0.56 * k) * (1 + 0.10 * polar);
+  }
+  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+  const planet = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  planet.scale.set(SATURN.rEq, SATURN.rPole, SATURN.rEq);
+  saturn.add(planet);
+  // cincin: satu geometri berisi annulus per pita, di bidang ekuator (XZ lokal)
+  const seg = 256, verts = [], rgba = [], idx = [];
+  for (const b of RINGS) {
+    const base = verts.length / 3;
+    for (let i = 0; i <= seg; i++) {
+      const a = (i / seg) * TAU, c = Math.cos(a), s = Math.sin(a);
+      verts.push(b.r0 * c, 0, b.r0 * s, b.r1 * c, 0, b.r1 * s);
+      rgba.push(...b.c, b.a, ...b.c, b.a);
+    }
+    for (let i = 0; i < seg; i++) { const k = base + i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+  }
+  const rg = new THREE.BufferGeometry();
+  rg.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  rg.setAttribute('color', new THREE.Float32BufferAttribute(rgba, 4));
+  rg.setIndex(idx);
+  saturn.add(new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, side: THREE.DoubleSide, depthWrite: false })));
+}
+{
+  // bintang: 4.000 titik, 1 draw call; Matahari: 1 titik terang
+  const n = 4000, p = new Float32Array(n * 3), c = new Float32Array(n * 3);
+  let seed = 12345; const rnd = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < n; i++) {
+    const u = rnd() * 2 - 1, a = rnd() * TAU, s = Math.sqrt(1 - u * u);
+    p.set([s * Math.cos(a) * 9000, s * Math.sin(a) * 9000, u * 9000], i * 3);
+    const m = Math.pow(rnd(), 3) * 0.9 + 0.1, warm = rnd();
+    c.set([m * (0.85 + 0.15 * warm), m * 0.9, m * (1.0 - 0.2 * warm)], i * 3);
+  }
+  const sg = new THREE.BufferGeometry();
+  sg.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  sg.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  farScene.add(new THREE.Points(sg, new THREE.PointsMaterial({ size: 2, sizeAttenuation: false, vertexColors: true })));
+  const sunG = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(SUN_DIR.clone().multiplyScalar(9000).toArray()), 3));
+  farScene.add(new THREE.Points(sunG, new THREE.PointsMaterial({ size: 9, sizeAttenuation: false, color: 0xfff3dc })));
+}
+const clock = { sim: 0, orbit: 0, orbitScale: 1 };               // sim = waktu fisika (s); orbit = waktu orbit (s, bisa dipercepat)
+const _qSt = new THREE.Quaternion(), _zAxis = new THREE.Vector3(0, 0, 1);
+function orbitPhase() { return ORBIT.phi0 + TAU * clock.orbit / T_ORB; }
+function updateFar() {
+  const phi = orbitPhase();
+  saturn.position.set(-ORBIT.r * Math.cos(phi), -ORBIT.r * Math.sin(phi), 0);
+  _qSt.setFromAxisAngle(_zAxis, OMEGA * clock.sim);
+  farCam.quaternion.copy(_qSt).multiply(camera.quaternion);
+}
+// Arah Saturnus di kerangka stasiun (untuk HUD dan uji)
+function saturnDirStation(out) {
+  const phi = orbitPhase();
+  out.set(-Math.cos(phi), -Math.sin(phi), 0);
+  const c = Math.cos(OMEGA * clock.sim), s = Math.sin(OMEGA * clock.sim);
+  return out.set(out.x * c + out.y * s, -out.x * s + out.y * c, 0);   // rotasi -omega*t
+}
+
 
 /* =====================================================================
    WORLD (gray-box): permukaan silinder, end cap, tiang penanda, sumbu
@@ -282,12 +385,47 @@ const groundMat = new THREE.ShaderMaterial({
 });
 
 // Permukaan dalam silinder: open-ended, 512 segmen keliling (sagitta 1,9 cm), 32 segmen panjang.
-// Sumbu silinder = Z dunia.
-const groundGeo = new THREE.CylinderGeometry(CONFIG.R, CONFIG.R, CONFIG.L, 512, 32, true);
+// Sumbu silinder = Z dunia. Ada celah untuk strip jendela Skyway (lebar 30 m) di theta = WIN.theta.
+// Catatan: CylinderGeometry memakai sudut thetaC dengan x = sin, z = cos; setelah rotateX(90 derajat)
+// sudut kita theta = thetaC - 90 derajat.
+const WIN = { theta: Math.PI, width: 30 };
+const WIN_GAP = WIN.width / CONFIG.R;
+const groundGeo = new THREE.CylinderGeometry(CONFIG.R, CONFIG.R, CONFIG.L, 512, 32, true,
+  WIN.theta + Math.PI / 2 + WIN_GAP / 2, TAU - WIN_GAP);
 groundGeo.rotateX(Math.PI / 2);
 const ground = new THREE.Mesh(groundGeo, groundMat);
 ground.frustumCulled = false;
 scene.add(ground);
+
+// Kaca Skyway: dari dekat hampir bening, dari jauh tertutup kabut udara (alpha naik mengikuti kabut)
+const glassMat = new THREE.ShaderMaterial({
+  fog: true, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog]),
+  vertexShader: /* glsl */`
+    #include <fog_pars_vertex>
+    void main() {
+      vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }`,
+  fragmentShader: /* glsl */`
+    #include <fog_pars_fragment>
+    void main() {
+      float f = 0.0;
+      #ifdef FOG_EXP2
+        f = 1.0 - exp(-fogDensity * fogDensity * vFogDepth * vFogDepth);
+      #endif
+      gl_FragColor = vec4(fogColor, mix(0.06, 0.97, f));
+      #include <colorspace_fragment>
+    }`,
+});
+const glassGeo = new THREE.CylinderGeometry(CONFIG.R, CONFIG.R, CONFIG.L, 4, 32, true,
+  WIN.theta + Math.PI / 2 - WIN_GAP / 2, WIN_GAP);
+glassGeo.rotateX(Math.PI / 2);
+const glass = new THREE.Mesh(glassGeo, glassMat);
+glass.frustumCulled = false;
+glass.renderOrder = 10;
+scene.add(glass);
 
 // End cap: cincin konsentris tiap 100 m, 8 jari-jari
 const capMat = new THREE.ShaderMaterial({
@@ -412,6 +550,27 @@ const hub = new THREE.Mesh(new THREE.CylinderGeometry(HUB.r, HUB.r, HUB.zaMax - 
   new THREE.MeshBasicMaterial({ color: 0x8fb3d9, wireframe: true, fog: false }));
 hub.position.z = -HALF_L + (HUB.zaMin + HUB.zaMax) / 2;
 scene.add(hub);
+
+
+// Rangka jendela: 2 rel tepi + balok melintang tiap 50 m, 1 InstancedMesh dari kotak satuan
+{
+  const nCross = Math.floor(CONFIG.L / 50) + 1;
+  const beams = new THREE.InstancedMesh(bakeShade(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)),
+    new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x5d6570 }), nCross + 2);
+  const m = new THREE.Matrix4(), sc = new THREE.Vector3();
+  let k = 0;
+  for (const side of [-1, 1]) {
+    surfaceMatrix(m, WIN.theta + side * (WIN_GAP / 2 + 0.6 / R), HALF_L, 0);
+    beams.setMatrixAt(k++, m.scale(sc.set(1.2, 0.35, CONFIG.L)));
+  }
+  for (let i = 0; i < nCross; i++) {
+    surfaceMatrix(m, WIN.theta, Math.min(CONFIG.L - 1, Math.max(1, i * 50)), 0);
+    beams.setMatrixAt(k++, m.scale(sc.set(WIN.width + 1, 0.25, 0.6)));
+  }
+  beams.instanceMatrix.needsUpdate = true;
+  beams.frustumCulled = false;
+  scene.add(beams);
+}
 
 // Bola (1 InstancedMesh, diameter visual 1 m agar terlihat dari jauh), penanda (1 InstancedMesh), lintasan (1 Line)
 const MAX_BALLS = 24, MAX_MARKS = 48, MAX_TRAIL = 4000;
@@ -644,6 +803,8 @@ function stepFloat(dt) {
 }
 
 function physicsStep(dt) {
+  clock.sim += dt;
+  clock.orbit += dt * clock.orbitScale;
   switch (player.state) {
     case 'ground': stepGround(dt); break;
     case 'air': stepAir(dt); break;
@@ -815,6 +976,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyB') throwBall();
   if (e.code === 'KeyG') dropBall();
   if (e.code === 'KeyL') enterLift();
+  if (e.code === 'KeyT') cycleOrbitSpeed();
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -889,6 +1051,8 @@ function setLabText(t) { document.getElementById('labResult').textContent = t; }
 on('labThrow', () => throwBall());
 on('labDrop', () => dropBall());
 on('labLift', () => enterLift());
+on('labOrbit', () => cycleOrbitSpeed());
+on('labWin', () => { if (player.state !== 'ground') return; player.theta = WIN.theta; player.pitch = -70 * DEG; });
 on('labTest', () => {
   const rows = runSelfTest();
   const pass = rows.filter((r) => r.ok).length;
@@ -903,8 +1067,8 @@ on('labTest', () => {
 });
 
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
+  camera.aspect = farCam.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix(); farCam.updateProjectionMatrix();
   applyPixelRatio();
   renderer.setSize(window.innerWidth, window.innerHeight, false);
 });
@@ -914,7 +1078,7 @@ window.addEventListener('resize', () => {
    ===================================================================== */
 const hud = document.getElementById('hud');
 hud.innerHTML = `
-  <div class="title">Tahap 2 · fisika rotasi</div>
+  <div class="title">Tahap 3 · langit luar</div>
   <span class="k">FPS</span><span class="v" id="hFps">-</span>
   <span class="k wide">Frame</span><span class="v wide" id="hMs">-</span>
   <span class="k">Draw call</span><span class="v" id="hCalls">-</span>
@@ -931,11 +1095,17 @@ hud.innerHTML = `
   <div class="sep"></div>
   <span class="k">g lokal</span><span class="v" id="hG">-</span>
   <span class="k">Rotasi</span><span class="v">${RPM.toFixed(3)} rpm</span>
-  <span class="k wide">Periode</span><span class="v wide">${PERIOD.toFixed(1)} s</span>`;
+  <span class="k wide">Periode</span><span class="v wide">${PERIOD.toFixed(1)} s</span>
+  <div class="sep"></div>
+  <span class="k">Saturnus</span><span class="v" id="hSat">-</span>
+  <span class="k wide">Fase orbit</span><span class="v wide" id="hOrb">-</span>
+  <span class="k">Orbit x</span><span class="v" id="hOrbX">-</span>`;
 const H = (id) => document.getElementById(id);
-const hEl = { fps: H('hFps'), ms: H('hMs'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
+const hEl = { sat: H('hSat'), orb: H('hOrb'), orbX: H('hOrbX'), fps: H('hFps'), ms: H('hMs'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
   theta: H('hTheta'), z: H('hZ'), h: H('hH'), head: H('hHead'), dist: H('hDist'), mode: H('hMode'), g: H('hG') };
-const _tmpV2 = new THREE.Vector2();
+const _tmpV2 = new THREE.Vector2(), _satDir = new THREE.Vector3();
+const ORBIT_SPEEDS = [1, 100, 1000, 10000];
+function cycleOrbitSpeed() { clock.orbitScale = ORBIT_SPEEDS[(ORBIT_SPEEDS.indexOf(clock.orbitScale) + 1) % ORBIT_SPEEDS.length]; }
 
 // g lokal = omega^2 * r / g, r = jarak kaki ke sumbu. Di udara pemain jatuh bebas (tidak merasakan berat).
 function localG() {
@@ -971,6 +1141,12 @@ function updateStats(dt) {
   hEl.dist.textContent = player.distance >= 1000 ? (player.distance / 1000).toFixed(2) + ' km' : player.distance.toFixed(0) + ' m';
   const st = player.state === 'ground' ? player.mode + (input.auto ? ' · otomatis' : '') : player.state === 'air' ? 'di udara' : player.mode;
   hEl.mode.textContent = st;
+  // sudut antara arah Saturnus dan "atas" pemain (0 derajat = tepat di atas kepala, 180 = tepat di bawah kaki)
+  saturnDirStation(_satDir);
+  const upNow = player.state === 'float' ? player.float.up : upAt(player.theta, _up);
+  hEl.sat.textContent = `${(Math.acos(Math.max(-1, Math.min(1, _satDir.dot(upNow)))) / DEG).toFixed(0)}° dari zenit`;
+  hEl.orb.textContent = `${(((orbitPhase() / DEG) % 360 + 360) % 360).toFixed(1)}° · ${(T_ORB / 3600).toFixed(2)} j`;
+  hEl.orbX.textContent = clock.orbitScale + 'x';
   hEl.g.textContent = player.state === 'air' ? `${localG().toFixed(3)} g (jatuh bebas)` : localG().toFixed(3) + ' g';
   stats.frames = 0; stats.time = 0;
 }
@@ -988,6 +1164,11 @@ function frame(now) {
   while (acc >= STEP && n < CONFIG.maxSubSteps) { physicsStep(STEP); acc -= STEP; n++; }
   if (n === CONFIG.maxSubSteps) acc = 0;           // cegah spiral lambat
   updateCamera();
+  updateFar();
+  renderer.info.reset();
+  renderer.clear();
+  renderer.render(farScene, farCam);
+  renderer.clearDepth();
   renderer.render(scene, camera);
   updateStats(dt);
   requestAnimationFrame(frame);
@@ -997,7 +1178,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed };
 requestAnimationFrame(frame);
 </script>
 </body>
