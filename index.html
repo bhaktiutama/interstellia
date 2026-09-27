@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lazarus: Menu Utama</title>
+<style>
+  :root { --ink: #dfe3ea; --muted: #8a919c; --line: rgba(255,255,255,0.10); --accent: #f0a45a; --card: rgba(14,16,22,0.72); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: #000; color: var(--ink);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  canvas#sky { position: fixed; inset: 0; width: 100%; height: 100%; display: block; z-index: 0; }
+  main { position: relative; z-index: 1; max-width: 1080px; margin: 0 auto; padding: 56px 16px 40px; }
+  header h1 { margin: 0; font-weight: 300; letter-spacing: 0.42em; text-transform: uppercase; font-size: clamp(30px, 7vw, 58px); }
+  header p { margin: 8px 0 0; color: var(--muted); letter-spacing: 0.08em; }
+  .grid { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .card { display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; color: inherit; text-decoration: none; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    transition: transform .2s, border-color .2s; }
+  a.card:hover, a.card:focus-visible { transform: translateY(-3px); border-color: rgba(240,164,90,0.6); outline: none; }
+  .thumb { aspect-ratio: 16 / 9; background: #07080b center / cover no-repeat; position: relative; }
+  .thumb.soon { background: radial-gradient(circle at 60% 40%, #1d2330, #07080b 70%); }
+  .tag { position: absolute; top: 10px; left: 10px; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 99px; background: rgba(0,0,0,0.6); border: 1px solid var(--line); }
+  .tag.live { color: #9be39b; border-color: rgba(155,227,155,0.4); }
+  .body { padding: 14px 16px 16px; }
+  .body h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
+  .body p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .card.disabled { opacity: 0.55; }
+  footer { margin-top: 36px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<main>
+  <header>
+    <h1 id="appName">Lazarus</h1>
+    <p id="tagline">Perjalanan dari Saturnus sampai tepi lubang hitam</p>
+  </header>
+  <section class="grid" id="grid"></section>
+  <footer>Proyek penggemar untuk belajar fisika dan grafis 3D. Tidak berafiliasi dengan studio film mana pun. Semua model, musik, dan desain dibuat sendiri.</footer>
+</main>
+<script>
+  // Nama aplikasi dan daftar experience: ubah di sini saja.
+  const APP = { name: 'Lazarus', tagline: 'Perjalanan dari Saturnus sampai tepi lubang hitam' };
+  const EXPERIENCES = [
+    { id: 'cooper-station', title: 'Stasiun Cooper', desc: 'Silinder O\'Neill 8 km di orbit Saturnus. Berjalan di kota, naik trem, lift ke sumbu nol-g, terbangkan shuttle.', ready: true },
+    { id: 'gargantua', title: 'Gargantua', desc: 'Lubang hitam supermasif berputar dengan piringan akresi dan pembelokan cahaya.', ready: true },
+    { id: 'miller', title: 'Planet Ombak', desc: 'Dunia air di dekat lubang hitam: gelombang raksasa dan waktu yang melambat.', ready: false },
+    { id: 'shuttle', title: 'Penerbangan Kestrel', desc: 'Terbangkan shuttle KS-07 dari dermaga ke cincin Saturnus.', ready: false },
+  ];
+  document.title = `${APP.name}: Menu Utama`;
+  document.getElementById('appName').textContent = APP.name;
+  document.getElementById('tagline').textContent = APP.tagline;
+  const grid = document.getElementById('grid');
+  for (const e of EXPERIENCES) {
+    const el = document.createElement(e.ready ? 'a' : 'div');
+    el.className = 'card' + (e.ready ? '' : ' disabled');
+    if (e.ready) el.href = `experiences/${e.id}/index.html`;
+    el.innerHTML = `<div class="thumb${e.ready ? '' : ' soon'}"${e.ready ? ` style="background-image:url('experiences/${e.id}/preview.jpg')"` : ''}>
+        <span class="tag${e.ready ? ' live' : ''}">${e.ready ? 'Siap' : 'Segera'}</span></div>
+      <div class="body"><h2></h2><p></p></div>`;
+    el.querySelector('h2').textContent = e.title; el.querySelector('p').textContent = e.desc;
+    grid.appendChild(el);
+  }
+  // latar bintang pelan
+  const cv = document.getElementById('sky'), g = cv.getContext('2d');
+  let W = 0, H = 0, stars = [];
+  function resize() {
+    const d = Math.min(2, window.devicePixelRatio || 1);
+    W = cv.width = Math.floor(innerWidth * d); H = cv.height = Math.floor(innerHeight * d);
+    stars = Array.from({ length: Math.floor(W * H / 5000) }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.2 * d + 0.2, a: Math.random(), s: 0.2 + Math.random() }));
+  }
+  function draw(t) {
+    const grd = g.createRadialGradient(W * 0.75, H * 0.2, 0, W * 0.75, H * 0.2, Math.max(W, H) * 0.8);
+    grd.addColorStop(0, '#1a1410'); grd.addColorStop(0.4, '#07080c'); grd.addColorStop(1, '#000');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    for (const s of stars) {
+      const tw = 0.55 + 0.45 * Math.sin(t * 0.001 * s.s + s.a * 6.28);
+      g.globalAlpha = tw; g.fillStyle = '#fff'; g.beginPath(); g.arc((s.x + t * 0.004 * s.s) % W, s.y, s.r, 0, 6.2832); g.fill();
+    }
+    g.globalAlpha = 1;
+    requestAnimationFrame(draw);
+  }
+  addEventListener('resize', resize); resize(); requestAnimationFrame(draw);
+</script>
+</body>
+</html>
