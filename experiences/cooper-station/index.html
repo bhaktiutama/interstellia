@@ -162,6 +162,7 @@
         <button id="labLeaf" type="button">Suasana daun: Campur</button>
         <button id="labFall" type="button">Daun jatuh: nyala</button>
         <button id="labPeds" type="button">Pejalan kaki: nyala</button>
+        <button id="labBirds" type="button">Burung: nyala</button>
         <label class="chk"><input id="inShadow" type="checkbox" checked> Bayangan</label>
       </div>
     </details>
@@ -179,7 +180,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 12b-3 · pejalan kaki (menyeberang saat lampu hijau, duduk di bangku, menunggu di halte) · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 12b-4 · burung: kawanan, formasi V, merpati di plaza · 12b-3: pejalan kaki · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -3482,6 +3483,7 @@ on('labRays', () => toggleRays());
 on('labLeaf', () => cycleLeafMode());
 on('labFall', () => toggleLeafFall());
 on('labPeds', () => cyclePeds());
+on('labBirds', () => toggleBirds());
 function updateTimeLabels() {
   const tr = TIME_RATES.find((x) => x[0] === clock.hourRate); const b = document.getElementById('labTime'); if (b && tr) b.innerHTML = `<kbd>Z</kbd>Waktu: ${tr[1]}`;
   const o = document.getElementById('labOrbit'); if (o) o.innerHTML = `<kbd>T</kbd>Orbit Saturnus: ${clock.orbitScale.toLocaleString('id-ID')}x`;
@@ -4438,7 +4440,7 @@ function cornPlantGeo() {
     const L = (0.26 + 0.12 * Math.sin(Math.PI * (l + 1) / (nLeaf + 1))) * (0.9 + 0.2 * r()), W = 0.034 * (0.85 + 0.3 * r());
     const dx = Math.cos(az), dz = Math.sin(az), px = -dz, pz = dx, rise = 0.5 + 0.3 * r(), droop = 0.9 + 0.5 * r();
     const segs = 5, v0 = pos.length / 3;
-    const base = l < 2 ? [0.55, 0.52, 0.28] : [0.24 + r() * 0.06, 0.42 + r() * 0.08, 0.14];
+    const base = l < 2 ? [0.42, 0.38, 0.2] : [0.24 + r() * 0.06, 0.42 + r() * 0.08, 0.14];
     for (let k = 0; k <= segs; k++) {
       const t = k / segs, reach = L * t, yy = y0 + L * (rise * t - droop * t * t);
       const w = W * Math.sin(Math.PI * (0.12 + 0.88 * t)) * (k === segs ? 0 : 1), fold = w * 0.25;
@@ -4456,7 +4458,7 @@ function cornPlantGeo() {
   }
   // tongkol berkelobot: kerucut ganda miring
   {
-    const c = [0.5, 0.58, 0.3], y = 0.5, tilt = 0.45, v0 = pos.length / 3, n = 5, len = 0.09, rad = 0.018;
+    const c = [0.3, 0.36, 0.15], y = 0.5, tilt = 0.45, v0 = pos.length / 3, n = 5, len = 0.09, rad = 0.018;   // 12b: warna dulu [0.5, 0.58, 0.3], menyala oleh bloom di siang terang
     const ax = Math.sin(tilt), ay = Math.cos(tilt);
     addV(0.006, y, 0, c);
     for (let k = 0; k < n; k++) { const a = k / n * TAU; addV(0.006 + ax * len * 0.45 + Math.cos(a) * rad * ay, y + ay * len * 0.45 - Math.cos(a) * rad * ax, Math.sin(a) * rad, c); }
@@ -4883,6 +4885,9 @@ const TREES = { templates: [], list: [], lodD: 130, lastS: 1e9, lastZ: 1e9, last
     else if (t.za < 3200) t.tpl = h < 0.2 ? 6 + v : h < 0.34 ? 8 + v : h < 0.44 ? 10 + v : h < 0.52 ? 14 + v : t.tpl;
     else t.tpl = h < 0.2 ? 6 + v : h < 0.3 ? 8 + v : h < 0.4 ? 10 + v : t.tpl;
   });
+  // skala per jenis baru: template maple dan pohon bunga pendek (8,4 dan 6,4 m), di kota dikali 0,72 jadi seperti tanaman hias
+  const KSCALE = { maple: 2.0, bunga: 1.7, willow: 1.15 };
+  TREES.list.forEach((t, i) => { if (i >= keep0 && i < keep1) return; const f = KSCALE[TREES.templates[t.tpl].kind]; if (f) t.sc *= f; });
   // bayangan tajuk dari sunline (tepat di bawah), 2 m per piksel, seluruh stasiun
   const W = 3142, Hh = 4000, px = CIRC / W, data = new Uint8Array(W * Hh);
   for (const t of TREES.list) {
@@ -5025,7 +5030,7 @@ function updateWind(dt) {
   VU.uWind.value.set(Math.cos(WIND.ang) * sp, Math.sin(WIND.ang) * sp, WIND.gust);
 }
 // --- daun jatuh ---
-const FALL = { max: 2000, n: 0, NS: 48, nextSrc: 0 };
+const FALL = { max: 3000, n: 0, NS: 48, nextSrc: 0 };
 {
   const base = new THREE.PlaneGeometry(1, 0.7), g = new THREE.InstancedBufferGeometry();
   g.index = base.index; g.setAttribute('position', base.attributes.position); g.setAttribute('uv', base.attributes.uv);
@@ -5043,7 +5048,7 @@ const FALL = { max: 2000, n: 0, NS: 48, nextSrc: 0 };
       int slot = gl_InstanceID - (gl_InstanceID / ${FALL.NS}) * ${FALL.NS};
       vec4 S = uSrc[slot], C = uSrcC[slot];
       if (C.a < 0.5) { ${CLIP_AWAY} }
-      const float LIFE = 16.0;
+      const float LIFE = 45.0;                                         // 12b-4 revisi: jatuh sekitar 5-15 s, lalu diam menumpuk di tanah
       float ph = uTime / LIFE + aSeed, cyc = floor(ph), age = fract(ph) * LIFE;
       float h1 = hash2(vec2(aSeed * 977.0, cyc + 3.0)), h2 = hash2(vec2(cyc + 11.0, aSeed * 631.0)), h3 = hash2(vec2(aSeed * 311.0 + cyc, 7.0));
       float a = h1 * 6.2832, rr = sqrt(h2) * S.w * 0.85;
@@ -5053,13 +5058,12 @@ const FALL = { max: 2000, n: 0, NS: 48, nextSrc: 0 };
         + vec2(-2.0 * uOmega * vf * vf / 9.81, 0.0) * tf                                     // Coriolis dalam udara yang ikut berputar
         + vec2(sin(age * 1.7 + h1 * 6.0), cos(age * 1.3 + h2 * 6.0)) * 0.7 * min(tf, 1.5);   // melayang zig-zag
       vec2 Pp = P0 + drift;
-      if (age > tFall) Pp += uWind.xy * uWind.z * uWind.z * 0.35 * (age - tFall);           // tergeser hembusan kuat di tanah
-      float hgt = max(0.02, z0 - vf * age);
-      float fade = 1.0 - smoothstep(LIFE - 3.0, LIFE, age);
+      float hgt = age < tFall ? z0 - vf * age : 0.02 + 0.012 * h3;      // di tanah: rebah, sedikit berlapis
+      float fade = 1.0 - smoothstep(LIFE - 4.0, LIFE, age);           // daun tertua hilang pelan (jumlah partikel tetap)
       vec3 up, tS; vec3 base = groundFrame(Pp, hgt, up, tS);
       if (distance(base, uEye) > 110.0) { ${CLIP_AWAY} }
       vec3 tZ = vec3(0.0, 0.0, 1.0), ax1, ax2;
-      float spin = age * (2.0 + 3.0 * h2) + h1 * 6.28;
+      float spin = tf * (2.0 + 3.0 * h2) + h1 * 6.28;                   // berhenti berputar setelah menyentuh tanah
       ax1 = normalize(tS * cos(spin) + tZ * sin(spin));
       ax2 = age < tFall ? normalize(up * cos(spin * 0.7) + cross(ax1, up) * sin(spin * 0.7)) : normalize(cross(up, ax1));
       vec3 p3 = base + (ax1 * position.x + ax2 * position.y) * 0.16 * fade;
@@ -5965,7 +5969,7 @@ function applyPreset(i) {
   POST.mode = P.post; const bp = document.getElementById('labPost'); if (bp) bp.textContent = `Efek layar: ${POST.names[POST.mode]} (P)`;
   SHADOW.enabled = P.shadow; const cb = document.getElementById('inShadow'); if (cb) cb.checked = P.shadow;
   TRAFFIC.U.uTraffic.value = P.traffic;
-  LEAF.presetN = [2000, 1500, 1000, 600, 0][i]; applyFall();                  // 12b-2: daun jatuh per preset (Hemat: mati)
+  LEAF.presetN = [3000, 2200, 1500, 900, 0][i]; applyFall();                  // 12b-2: daun jatuh per preset (Hemat: mati)
   for (const f of PRESET_HOOKS) f(i);                                            // 12b-3: fitur yang didefinisikan belakangan (pejalan kaki)
   RAYS.n = [16, 10, 0, 0, 0][i]; toggleRays(); toggleRays();
   const b = document.getElementById('labPreset'); if (b) b.textContent = `Preset: ${P.name}${PRESET.auto ? ' (otomatis)' : ''} (Q)`;
@@ -7106,6 +7110,197 @@ function cyclePeds() {
 PRESET_HOOKS.push(applyPedsPreset); applyPedsPreset(PRESET.idx);
 for (let k = 0; k < 100; k++) stepPeds(0.2, -20 + k * 0.2);          // awal muat: orang sudah tersebar dan menunggu lampu dengan wajar
 
+/* =====================================================================
+   TAHAP 12b-4: BURUNG
+   - Kawanan terbang (boids sederhana di CPU): kohesi, separasi, keselarasan arah, menuju titik tujuan yang berpindah-pindah,
+     menjaga ketinggian (taman/ladang 18-45 m, kota 70-100 m di atas gedung). Kawanan yang terlalu jauh dari pemain
+     dipindah ke dekat pemain. Sayap mengepak di shader, sesekali meluncur.
+   - Formasi V burung besar (bentang sayap sekitar 1,8 m): 7-15 ekor terbang lurus 150-250 m di atas tanah (di bawah awan
+     yang ada di sekitar 300 m, jadi terlihat berlatar awan dari tanah), kepak lambat bergantian dari depan ke belakang.
+   - Merpati di plaza: mematuk di tanah, terbang serentak bila pemain mendekat 6 m, hinggap lagi di dekatnya setelah beberapa detik.
+   - Siklus hari: aktif 6:00-18:30. Menjelang senja kawanan terbang ke pohon terdekat lalu hilang; malam tidak ada.
+   - Udara ikut berputar dengan stasiun, jadi tidak ada efek Coriolis yang terlihat pada terbang burung.
+   ===================================================================== */
+const BIRDS = { flocks: [], pigeons: [], groups: [], vees: [], nVee: 2, max: 400, n: 0, nFlock: 5, pigeonsOn: true, user: true };
+try { const sv = JSON.parse(localStorage.getItem('cooperStation.birds') || 'null'); if (sv && sv.user === false) BIRDS.user = false; } catch (e) { /* abaikan */ }
+{
+  // model: badan + kepala + ekor + 2 sayap (aWing: 0 badan, -1 kiri, 1 kanan); maju = +z, atas = +y
+  const pos = [], wing = [], idx = [];
+  const tri = (a, b, c, w) => { const v = pos.length / 3; pos.push(...a, ...b, ...c); wing.push(w, w, w); idx.push(v, v + 1, v + 2); };
+  const body = [[0, 0, 0.16], [0.045, 0, 0], [0, 0.04, 0], [-0.045, 0, 0], [0, -0.035, 0], [0, 0, -0.12]];
+  for (const [a, b] of [[1, 2], [2, 3], [3, 4], [4, 1]]) { tri(body[0], body[a], body[b], 0); tri(body[5], body[b], body[a], 0); }
+  tri([0, 0.005, -0.1], [0.06, 0, -0.22], [-0.06, 0, -0.22], 0);                          // ekor
+  for (const sg of [-1, 1]) { tri([sg * 0.03, 0.01, 0.07], [sg * 0.3, 0.0, -0.02], [sg * 0.03, 0.01, -0.06], sg); tri([sg * 0.3, 0.0, -0.02], [sg * 0.03, 0.01, 0.07], [sg * 0.26, 0.0, 0.03], sg); }
+  const g = new THREE.InstancedBufferGeometry();
+  g.setIndex(idx); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aWing', new THREE.Float32BufferAttribute(wing, 1));
+  for (const nm of ['aB', 'aC']) g.setAttribute(nm, new THREE.InstancedBufferAttribute(new Float32Array(BIRDS.max * 4), 4).setUsage(THREE.DynamicDrawUsage));
+  g.instanceCount = 0;
+  const VS = /* glsl */`
+    attribute float aWing;
+    attribute vec4 aB, aC;                                   // aB: s, za, tinggi, arah; aC: kepak (rad), pitch, skala, warna (0 gelap, 1 merpati)
+    varying vec3 vCol;
+    void main() {
+      vec3 p = position;
+      float a = aWing * aC.x;                                // sayap berputar di pangkal
+      if (aWing != 0.0) { float x = p.x - aWing * 0.03; p.x = aWing * 0.03 + x * cos(a); p.y += abs(x) * sin(aC.x); }
+      float cp = cos(aC.y), sp = sin(aC.y); p = vec3(p.x, p.y * cp + p.z * sp, -p.y * sp + p.z * cp);
+      p *= aC.z;
+      vec3 up, tS; vec3 base = groundFrame(aB.xy, aB.z, up, tS);
+      vec3 F = tS * sin(aB.w) + vec3(0.0, 0.0, 1.0) * cos(aB.w), Rt = cross(up, F);
+      vec3 p3 = base + Rt * p.x + up * p.y + F * p.z;
+      #ifndef DEPTH_ONLY
+      vec3 c = aC.w > 0.5 ? (position.z > 0.12 ? vec3(0.2, 0.24, 0.27) : vec3(0.28, 0.29, 0.32)) : vec3(0.07, 0.065, 0.06);
+      vCol = c * vegLight(p3, up, aB.xy, 0.5);
+      #endif
+      vec4 mvPosition = viewMatrix * vec4(p3, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #ifndef DEPTH_ONLY
+      #include <fog_vertex>
+      #endif
+    }`;
+  const FS = /* glsl */`
+    varying vec3 vCol;
+    void main() { gl_FragColor = vec4(vCol, 1.0);
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`;
+  BIRDS.mesh = new THREE.Mesh(g, vegMaterial({ vertex: VS, fragment: FS }));
+  BIRDS.mesh.frustumCulled = false; BIRDS.mesh.userData.noLight = true;
+  realGroup.add(BIRDS.mesh);
+  // tempat merpati: plaza kota, plaza spaceport, taman besar dekat lapangan baseball
+  const spots = parkBlocks.filter((b) => b[4]).map(([s0, z0, s1, z1]) => [(s0 + s1) / 2, (z0 + z1) / 2]);
+  spots.push([TERM.s + 14, TERM.za + 33], [TERM.s - 26, TERM.za + 33],   // trotoar antara pintu selatan terminal dan jalan (jalan mulai za + 42)
+     [FIELD.s - 60, FIELD.za - 70]);
+  let sd = 91357; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  for (const [s0, z0] of spots) {
+    const G = { s: s0, za: z0, birds: [], flushT: -1e9 };
+    const n = 5 + Math.floor(r() * 6);
+    for (let k = 0; k < n; k++) G.birds.push({ s: s0 + (r() - 0.5) * 8, za: z0 + (r() - 0.5) * 8, h: 0, hd: r() * TAU, vs: 0, vz: 0, vh: 0, fly: false, ph: r() * TAU, seed: r() });
+    BIRDS.groups.push(G);
+  }
+}
+function birdDay(h) { return h > 6 && h < 18.5; }
+function spawnFlock(F, eS, eZ, r = Math.random) {
+  const ang = r() * TAU, d = 150 + r() * 150, s = eS + Math.sin(ang) * d, za = Math.max(200, Math.min(7800, eZ + Math.cos(ang) * d));
+  const city = za > CITY.za0 && za < CITY.za1 + 50;
+  F.alt = city ? 70 + r() * 30 : 18 + r() * 27; F.goal = null; F.roost = null; F.members = [];
+  const n = 15 + Math.floor(r() * 26), hd = r() * TAU;
+  for (let k = 0; k < n; k++) F.members.push({ p: [s + (r() - 0.5) * 12, za + (r() - 0.5) * 12, F.alt + (r() - 0.5) * 6], v: [Math.sin(hd) * 9, Math.cos(hd) * 9, 0], ph: r() * TAU, glide: 0, gone: false });
+}
+function stepBirds(dt) {
+  if (dt <= 0 || ext.active) return;
+  const eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, h = clock.hour, day = birdDay(h), dusk = h > 17.8 && h < 18.5;
+  const nF = BIRDS.user ? BIRDS.nFlock : 0;
+  while (BIRDS.flocks.length < nF) { const F = {}; BIRDS.flocks.push(F); F.dead = true; }
+  BIRDS.flocks.length = Math.min(BIRDS.flocks.length, nF);
+  for (const F of BIRDS.flocks) {
+    if (F.dead || !F.members.length) { if (day && !dusk) { spawnFlock(F, eS, eZ); F.dead = false; } else continue; }
+    let cs = 0, cz = 0, ch = 0, vs = 0, vz = 0, n = 0;
+    for (const b of F.members) if (!b.gone) { cs += b.p[0]; cz += b.p[1]; ch += b.p[2]; vs += b.v[0]; vz += b.v[1]; n++; }
+    if (!n) { F.dead = true; continue; }
+    cs /= n; cz /= n; ch /= n; vs /= n; vz /= n;
+    if (Math.hypot(wrapS(cs - eS), cz - eZ) > 480 && !dusk) { spawnFlock(F, eS, eZ); continue; }   // terlalu jauh: pindah ke dekat pemain
+    if (dusk && !F.roost) {                                       // senja: menuju pohon terdekat
+      let best = null, bd = 1e9; const cS = Math.floor(modS(cs) / TREES.cell), cZ = Math.floor(cz / TREES.cell), nCS = Math.ceil(CIRC / TREES.cell);
+      for (let a = -3; a <= 3; a++) for (let q = -3; q <= 3; q++) { const arr = TREES.grid.get((((cS + a) % nCS) + nCS) % nCS * 1000 + cZ + q); if (arr) for (const t of arr) { const d = Math.hypot(wrapS(t.s - cs), t.za - cz); if (d < bd) { bd = d; best = t; } } }
+      F.roost = best ? [cs + wrapS(best.s - cs), best.za, TREES.templates[best.tpl].height * best.sc * 0.7] : [cs, cz, 0];
+    }
+    if (!day && !dusk) { F.dead = true; F.members = []; continue; }
+    if (!F.goal || Math.hypot(wrapS(F.goal[0] - cs), F.goal[1] - cz) < 25) {   // tujuan baru dalam 250 m dari pemain
+      const a = Math.random() * TAU, d = 60 + Math.random() * 190;
+      F.goal = [eS + Math.sin(a) * d, Math.max(200, Math.min(7800, eZ + Math.cos(a) * d))];
+    }
+    const tgt = F.roost || [F.goal[0], F.goal[1], F.alt];
+    for (const b of F.members) {
+      if (b.gone) continue;
+      const p = b.p, v = b.v; let as = 0, az = 0, ah = 0;
+      as += (cs - p[0]) * 0.08 + (vs - v[0]) * 0.4; az += (cz - p[1]) * 0.08 + (vz - v[1]) * 0.4; ah += (ch - p[2]) * 0.08;   // kohesi + keselarasan
+      for (const o of F.members) { if (o === b || o.gone) continue; const ds = p[0] - o.p[0], dz = p[1] - o.p[1], dh = p[2] - o.p[2], d2 = ds * ds + dz * dz + dh * dh; if (d2 < 4 && d2 > 1e-4) { as += ds / d2 * 6; az += dz / d2 * 6; ah += dh / d2 * 6; } }   // separasi 2 m
+      const gs = wrapS(tgt[0] - p[0]), gz = tgt[1] - p[1], gd = Math.hypot(gs, gz) || 1;
+      as += gs / gd * 3; az += gz / gd * 3; ah += ((F.roost ? tgt[2] : F.alt) - p[2]) * (F.roost ? 0.4 : 0.15);
+      v[0] += as * dt; v[1] += az * dt; v[2] += ah * dt;
+      const sp = Math.hypot(v[0], v[1]), vmax = F.roost && gd < 40 ? 5 : 12, vmin = 6;
+      if (sp > vmax) { v[0] *= vmax / sp; v[1] *= vmax / sp; } else if (sp < vmin && !(F.roost && gd < 12)) { v[0] *= vmin / Math.max(sp, 0.1); v[1] *= vmin / Math.max(sp, 0.1); }
+      v[2] = Math.max(-3, Math.min(3, v[2]));
+      p[0] += v[0] * dt; p[1] += v[1] * dt; p[2] = Math.max(3, p[2] + v[2] * dt);
+      b.glide = Math.max(0, b.glide - dt); if (!b.glide && Math.random() < dt * 0.15) b.glide = 1 + Math.random() * 1.5;   // sesekali meluncur
+      b.ph += (b.glide ? 0 : 15) * dt;
+      if (F.roost && gd < 4) b.gone = true;                          // hinggap di pohon, tidak digambar lagi
+    }
+  }
+  // formasi V: pemimpin terbang lurus, pengikut di dua lengan V (sudut 35 derajat, jarak 4,5 m), sedikit bergoyang
+  const nV = BIRDS.user && day ? BIRDS.nVee : 0;
+  while (BIRDS.vees.length < nV) BIRDS.vees.push({ dead: true });
+  BIRDS.vees.length = Math.min(BIRDS.vees.length, nV);
+  for (const V of BIRDS.vees) {
+    if (V.dead || Math.hypot(wrapS(V.s - eS), V.za - eZ) > 1300) {    // mulai dari 700-1.000 m, melintas di dekat pemain
+      const a = Math.random() * TAU, d = 700 + Math.random() * 300, off = (Math.random() - 0.5) * 500;
+      V.s = eS + Math.sin(a) * d + Math.cos(a) * off; V.za = Math.max(300, Math.min(7700, eZ + Math.cos(a) * d - Math.sin(a) * off));
+      V.hd = a + Math.PI + (Math.random() - 0.5) * 0.3; V.h = 150 + Math.random() * 100; V.n = 7 + Math.floor(Math.random() * 9); V.dead = false; V.t = 0;
+      V.ph = Array.from({ length: V.n }, () => Math.random() * 0.4);
+    }
+    V.t += dt; V.hd += Math.sin(V.t * 0.07) * 0.004 * dt;
+    V.s += Math.sin(V.hd) * 13 * dt; V.za += Math.cos(V.hd) * 13 * dt;
+    if (V.za < 150 || V.za > 7850) V.dead = true;
+  }
+  // merpati
+  for (const G of BIRDS.groups) {
+    const pS = player.theta * R, pZ = player.za, t = clock.sim;
+    if (Math.hypot(wrapS(G.s - pS), G.za - pZ) > 160 || !BIRDS.pigeonsOn) continue;
+    for (const b of G.birds) {
+      if (!b.fly) {
+        if (Math.hypot(wrapS(b.s - pS), b.za - pZ) < 6 && player.state === 'ground') {   // terkejut: seluruh kelompok terbang
+          for (const o of G.birds) { const a = Math.atan2(wrapS(o.s - pS), o.za - pZ) + (Math.random() - 0.5) * 0.8; o.fly = true; o.vs = Math.sin(a) * 6; o.vz = Math.cos(a) * 6; o.vh = 4 + Math.random() * 2; o.t0 = t; o.hd = a; }
+          break;
+        }
+        b.ph += dt * (1 + b.seed); if (Math.random() < dt * 0.3) b.hd += (Math.random() - 0.5) * 1.2;   // mematuk, berbalik sesekali
+        const w = 0.25 * dt; b.s += Math.sin(b.hd) * w; b.za += Math.cos(b.hd) * w;                     // berjalan pelan
+      } else {
+        const age = t - b.t0;
+        if (age < 4) { b.vh -= 1.5 * dt; } else { b.vh = -1.2; b.vs *= 0.98; b.vz *= 0.98; }
+        b.s += b.vs * dt; b.za += b.vz * dt; b.h = Math.max(0, b.h + b.vh * dt); b.ph += 16 * dt;
+        if (age > 4 && b.h <= 0.01) { b.fly = false; b.h = 0; }
+        if (Math.hypot(wrapS(b.s - G.s), b.za - G.za) > 25 && age > 4) { b.vs += wrapS(G.s - b.s) * 0.02; b.vz += (G.za - b.za) * 0.02; }   // kembali ke plaza
+      }
+    }
+  }
+}
+function updateBirds() {
+  const g = BIRDS.mesh.geometry;
+  if (ext.active || !BIRDS.user) { g.instanceCount = BIRDS.n = 0; return; }
+  const eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, B = g.attributes.aB.array, C = g.attributes.aC.array; let n = 0;
+  const put = (s, za, h, hd, flap, pitch, sc, col) => { if (n >= BIRDS.max) return; const o = n * 4; B[o] = eS + wrapS(s - eS); B[o + 1] = za; B[o + 2] = h; B[o + 3] = hd; C[o] = flap; C[o + 1] = pitch; C[o + 2] = sc; C[o + 3] = col; n++; };
+  for (const F of BIRDS.flocks) if (!F.dead && F.members) for (const b of F.members) {
+    if (b.gone) continue;
+    const sp = Math.hypot(b.v[0], b.v[1]);
+    put(b.p[0], b.p[1], b.p[2], Math.atan2(b.v[0], b.v[1]), b.glide ? 0.12 : 0.75 * Math.sin(b.ph), -Math.atan2(b.v[2], sp) * 0.7, 1.8, 0);
+  }
+  for (const V of BIRDS.vees) if (!V.dead) {
+    const fs = Math.sin(V.hd), fz = Math.cos(V.hd), T = clock.sim;
+    for (let k = 0; k < V.n; k++) {
+      const rank = Math.ceil(k / 2), side = k % 2 ? 1 : -1, back = rank * 4.5 * Math.cos(0.61), lat = side * rank * 4.5 * Math.sin(0.61);
+      const wob = Math.sin(T * 0.5 + k) * 0.6, ph = T * 5.5 - rank * 0.5 + V.ph[k];
+      const glide = Math.sin(T * 0.21 + V.t * 0.01) > 0.6;           // seluruh formasi sesekali meluncur
+      put(V.s - fs * back + fz * (lat + wob), V.za - fz * back - fs * (lat + wob), V.h + Math.sin(T * 0.3 + k) * 0.8, V.hd, glide ? 0.08 : 0.55 * Math.sin(ph), 0, 3.0, 0);
+    }
+  }
+  if (birdDay(clock.hour) && BIRDS.pigeonsOn) for (const G of BIRDS.groups) {
+    if (Math.hypot(wrapS(G.s - eS), G.za - eZ) > 160) continue;
+    for (const b of G.birds) put(b.s, b.za, b.h + (b.fly ? 0 : 0.1), b.hd, b.fly ? 0.8 * Math.sin(b.ph) : 0.05, b.fly ? -0.2 : 0.25 + 0.2 * Math.max(0, Math.sin(b.ph * 3)), 1.15, 1);
+  }
+  for (const nm of ['aB', 'aC']) { const a = g.attributes[nm]; a.clearUpdateRanges(); a.addUpdateRange(0, n * 4); a.needsUpdate = true; }
+  g.instanceCount = BIRDS.n = n;
+}
+function applyBirdsPreset(i) {
+  BIRDS.nFlock = [5, 4, 3, 2, 1][i]; BIRDS.pigeonsOn = i < 4; BIRDS.nVee = [2, 2, 1, 1, 1][i];
+  const b = document.getElementById('labBirds'); if (b) b.textContent = `Burung: ${BIRDS.user ? 'nyala' : 'mati'}`;
+}
+function toggleBirds() {
+  BIRDS.user = !BIRDS.user; applyBirdsPreset(PRESET.idx);
+  try { localStorage.setItem('cooperStation.birds', JSON.stringify({ user: BIRDS.user })); } catch (e) { /* abaikan */ }
+}
+PRESET_HOOKS.push(applyBirdsPreset); applyBirdsPreset(PRESET.idx);
+
 // --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
 hub.userData.noLight = true;
 ballMesh.userData.noShadow = true; markMesh.userData.noShadow = true;
@@ -7134,6 +7329,7 @@ function frame(now) {
   updatePortVisual();
   updateReal();
   updatePeds();                                    // 12b-3
+  stepBirds(Math.min(0.1, dt)); updateBirds();     // 12b-4
   updateFar();
   updateClouds(dt);
   updateWind(dt);                                  // 12b-2
@@ -7162,7 +7358,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

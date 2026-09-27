@@ -29,6 +29,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari satu menu
 | `tools/uji_lalu_lintas.py` | Uji lalu lintas Cooper Station (lampu, perlintasan trem) |
 | `tools/uji_pohon.py` | Uji pohon dan suasana daun Cooper Station |
 | `tools/uji_pejalan_kaki.py` | Uji pejalan kaki Cooper Station |
+| `tools/uji_burung.py` | Uji burung Cooper Station |
 | `CLAUDE.md` | Konteks proyek untuk Claude Code |
 
 Riwayat Cooper Station per tahap ada di git log.

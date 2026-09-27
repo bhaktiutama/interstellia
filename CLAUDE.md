@@ -17,6 +17,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_lalu_lintas.py` | Uji Cooper Station 12b-1: peron trem, lalu lintas 30 menit tanpa tabrakan |
 | `tools/uji_pohon.py` | Uji Cooper Station 12b-2: jenis pohon, suasana daun, daun jatuh per preset |
 | `tools/uji_pejalan_kaki.py` | Uji Cooper Station 12b-3: pejalan kaki menyeberang hanya saat lampu jalan, biaya CPU, preset Hemat |
+| `tools/uji_burung.py` | Uji Cooper Station 12b-4: kawanan burung, merpati terbang saat didekati, siklus hari |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
 ## Aturan aplikasi
@@ -63,6 +64,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Vegetasi | `VEG_COMMON`, `TREES` (LOD + impostor, 16 template: oak, elm, poplar, maple, birch, pine, willow, bunga), `TREE_KINDS`, `GRASS`, `CORN` |
 | Suasana daun (12b-2) | `LEAF` (mode Hijau/Campur/Gugur), `leafColorFor()`, `applyLeafMode()`, atribut `aLeafC` + `LEAF_RECOLOR`, `WIND` + `updateWind()` (uniform `uWind`), `FALL` (daun jatuh GPU) + `updateFallSources()`, `uLitterTex` (serakan daun) |
 | Pejalan kaki (12b-3) | `PEDS` (list, walk, near), `stepPeds()` (simulasi CPU, jauh bergiliran), `updatePeds()` (pilih dalam radius, atribut aP/aI/aJ), `pedAct()` (kepadatan per jam), `sigQ()`, `applyPedsPreset()` lewat `PRESET_HOOKS`, `cyclePeds()` |
+| Burung (12b-4) | `BIRDS` (flocks boids, vees formasi V, groups merpati), `stepBirds()`, `updateBirds()`, `applyBirdsPreset()`, `toggleBirds()` |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
 | Kolisi | `COL`, `addCollider(s, za, hs, hz)` (AABB di bidang s-za), `LATE_COLLIDERS` |
 | Awan/cuaca (11a) | `WEATHER` (mode auto/cerah/berawan/mendung, cover, ov), `CLOUD`, `updateClouds(dt)`, `cycleWeather()` (N) |
@@ -103,5 +105,6 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 12b-1 | Halte trem pindah dari simpang, lampu lalu lintas merah-kuning-hijau, mobil antre (simulasi CPU), perlintasan trem berpalang dan bel, preset Hemat |
 | 12b-2 | 8 jenis pohon, suasana daun Hijau/Campur/Gugur, daun jatuh tertiup angin, serakan daun, angin global |
 | 12b-3 | Pejalan kaki: trotoar, taman, terminal, halte, bangku; menyeberang di zebra saat lampu jalan |
+| 12b-4 | Burung: kawanan boids, formasi V di bawah awan, merpati di plaza; revisi tongkol jagung, daun jatuh diam di tanah, pohon baru lebih tinggi |
 
 Rencana berikutnya: `docs/cooper-station/rencana-tahap-12b-cooper-station.md` (12b-2 sampai 12b-5), lalu `rencana-tahap-12-cooper-station.md` (12c, 12d).

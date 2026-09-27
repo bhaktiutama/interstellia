@@ -1,6 +1,6 @@
 # Rencana Tahap 12b: Kota hidup dan suasana (Cooper Station)
 
-Status: 12b-1, 12b-2, 12b-3 selesai (lihat bagian "Hasil" masing-masing). 12b-4 dan 12b-5 belum dikerjakan. Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
+Status: 12b-1 sampai 12b-4 selesai (lihat bagian "Hasil" masing-masing). 12b-5 belum dikerjakan. Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
 
 ## Catatan pemilik (sebelum dikerjakan)
 
@@ -126,6 +126,26 @@ Uji: `tools/uji_pejalan_kaki.py`. Simulasi 10 menit: 0 sampel orang di jalan saa
 | B3b | Merpati di plaza | Kelompok burung di tanah (plaza spaceport, alun-alun, taman) yang mematuk-matuk, lalu terbang serentak saat pemain mendekat 6 m, dan hinggap lagi setelah beberapa detik | Rendah |
 | B3c | Siklus hari | Aktif pagi sampai sore, pulang ke pohon saat senja (terbang ke pohon terdekat lalu hilang), malam tidak ada. Kicau yang sudah ada disesuaikan dengan lokasi kawanan (panning stereo) | Rendah |
 | B3d | Catatan fisika | Burung terbang di udara yang ikut berputar, jadi tidak ada efek Coriolis yang terlihat pada kecepatan burung. Burung tidak terbang ke atas 300 m (batas awan) | - |
+
+### Hasil 12b-4 (selesai)
+
+| No | Status | Yang dikerjakan |
+| --- | --- | --- |
+| B3a | Selesai | 5 kawanan burung kecil (15-40 ekor) dengan boids di CPU: kohesi, separasi 2 m, keselarasan, tujuan berpindah dalam 250 m dari pemain. Ketinggian taman/ladang 18-45 m, kota 70-100 m. Sayap mengepak, sesekali meluncur |
+| B3a+ | Tambahan (permintaan pemilik) | Formasi V burung besar (bentang sayap sekitar 1,8 m, 7-15 ekor), terbang lurus 13 m/s di 150-250 m, di bawah lapisan awan (sekitar 300 m) sehingga dari tanah terlihat berlatar awan. Mulai 700-1.000 m dari pemain lalu melintas |
+| B3b | Selesai | 11 kelompok merpati (5-10 ekor) di plaza kota, trotoar depan terminal, dan taman dekat lapangan baseball. Mematuk dan berjalan pelan; terbang serentak bila pemain mendekat 6 m, hinggap lagi setelah sekitar 4-8 s |
+| B3c | Selesai sebagian | Aktif 6:00-18:30; mulai 17:48 kawanan terbang ke pohon terdekat lalu hilang, malam tidak ada. Penyesuaian arah suara kicau ke kawanan belum dibuat |
+| M2 | Selesai | Saklar "Burung: nyala/mati" di panel Grafik. Preset: Ultra 5 kawanan + 2 formasi V, Tinggi 4 + 2, Sedang 3 + 1, Rendah 2 + 1, Hemat 1 kawanan + 1 formasi tanpa merpati |
+
+Uji: `tools/uji_burung.py` (siang 141-147 burung terbang, merpati 9 dari 9 terbang saat didekati lalu semua hinggap lagi, malam 0). Biaya CPU sekitar 0,2 ms per langkah.
+
+### Revisi setelah uji pemilik (bersamaan dengan 12b-4)
+
+| Masalah | Penyebab | Perbaikan |
+| --- | --- | --- |
+| Titik-titik menyala di bawah tanaman jagung | Tongkol jagung (sudah ada sejak tahap 6) berwarna dasar [0,5, 0,58, 0,3], sekitar 2 kali lebih terang dari daun jagung, jadi di siang terang menyala oleh bloom. Bukan kunang-kunang atau fitur 12b | Warna tongkol [0,3, 0,36, 0,15], daun kering bawah [0,42, 0,38, 0,2] |
+| Daun yang sudah jatuh berputar-putar seperti tikus | Putaran daun terus dihitung dari umur daun, juga setelah di tanah, dan daun di tanah digeser hembusan | Daun berhenti berputar dan diam setelah menyentuh tanah. Siklus daun 45 s (dulu 16 s), jadi daun menumpuk; jumlah partikel tetap, daun tertua hilang pelan. Jumlah per preset: Ultra 3.000, Tinggi 2.200, Sedang 1.500, Rendah 900, Hemat 0 |
+| Pohon baru berdaun warna terlalu pendek, seperti tanaman hias | Template maple 8,4 m dan pohon bunga 6,4 m, di kota dikali skala 0,72 | Skala per jenis: maple x2,0, pohon bunga x1,7, willow x1,15. Tinggi sekarang (persentil 10 / median / 90): maple 9,6 / 11,6 / 18,1 m, bunga 6,2 / 7,4 / 9,9 m, willow 8,4 / 11,1 / 15,8 m (elm 8,6 / 10,7 / 15,2 m sebagai pembanding) |
 
 ## 12b-5. Suasana (vibe)
 

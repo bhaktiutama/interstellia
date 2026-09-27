@@ -16,7 +16,7 @@ UJI = r"""
   const H = st.PRESETS.findIndex((p) => p.name === 'Hemat'), fu = st.LEAF.fallUser;
   st.LEAF.fallUser = null; st.applyPreset(H); out['Hemat: daun jatuh mati'] = st.FALL.n === 0;
   st.LEAF.fallUser = true; st.applyPreset(H); out['Hemat + nyala manual: daun jatuh ada'] = st.FALL.n > 0;
-  st.LEAF.fallUser = fu; st.applyPreset(0); out['Ultra: 2000 daun jatuh'] = st.FALL.n === 2000 || fu === false;
+  st.LEAF.fallUser = fu; st.applyPreset(0); out['Ultra: 3000 daun jatuh'] = st.FALL.n === 3000 || fu === false;
   return out;
 })()
 """
