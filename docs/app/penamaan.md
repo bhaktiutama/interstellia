@@ -15,7 +15,7 @@ Catatan: ini bukan nasihat hukum. Prinsipnya: logo, huruf judul, cuplikan gambar
 | Asli (film) | Nama di aplikasi | Dipakai di | Catatan |
 | --- | --- | --- | --- |
 | Interstellar | Interstellia | Nama aplikasi (menu utama, README), nama repo | Pilihan pemilik. Catatan risiko: plesetan yang hanya beda beberapa huruf dari judul lebih mudah dianggap mirip; usulan sebelumnya adalah Lazarus |
-| Cooper Station | Copper Corn Station | Judul experience di menu, layar awal, judul tab, dokumen | Hanya teks. Folder dan URL tetap `experiences/cooper-station/`, nama variabel kode tetap |
+| Cooper Station | Copper Corn Station | Judul experience di menu, layar awal, judul tab, dokumen, papan skor baseball | Hanya teks. Folder dan URL tetap `experiences/cooper-station/`, nama variabel kode tetap |
 | Miller's Planet | Millar's World | Kartu rencana di menu (id `millar`) | Sebelumnya "Planet Ombak" |
 | Gargantua | Gargantua Black Hole | Judul experience di menu, judul halaman, panel | Gargantua dari novel Rabelais (1534), domain publik |
 | Ranger | (tidak dipakai) | - | Shuttle tetap Kestrel KS-07 |
@@ -25,7 +25,7 @@ Nama yang tetap:
 
 | Nama | Alasan |
 | --- | --- |
-| Rumah Cooper (lokasi tombol 1, tur, peta) | Pilihan pemilik; "Cooper" nama umum |
+| Rumah Cooper (lokasi tombol 1, tur, peta) dan plakat museumnya | Pilihan pemilik; "Cooper" nama umum |
 | Penerbangan Kestrel, shuttle KS-07 | Orisinal |
 | Nama variabel kode (`COOPER`, `cooperStation.preset` di localStorage) | Internal; mengganti kunci localStorage akan menghapus preset yang tersimpan |
 
