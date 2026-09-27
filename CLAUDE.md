@@ -21,6 +21,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_suasana.py` | Uji Copper Corn Station 12b-5: kafe, lampu untaian, bendera, suara kota, tidak ada normal nol (NaN) |
 | `tools/uji_hujan.py` | Uji Copper Corn Station 12c: angka fisika hujan dan air mancur Coriolis, hujan, tanah basah, angin |
 | `tools/uji_rel_trem.py` | Uji Copper Corn Station 13a: koridor rel trem bebas tiang, pohon, collider |
+| `tools/uji_skyway.py` | Uji Copper Corn Station 13b-13c: mobil melintasi jembatan Skyway, akuaduk, tombol 5 di atas kaca |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
@@ -75,6 +76,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Hujan dan Coriolis (12c) | `RAIN` (k kekuatan, wet, vlat), `updateRain()`, `rainSheltered()`, uniform `uWet` di `groundMat`, `FOUNT` (air mancur, `FOUNT_TEXT`), `SPOTS.fountain` (tombol 9), `WIND.base` mengikuti `WEATHER.ov` |
 | Ladang, foto, tur (12d) | `wheatStage()` (VEG_COMMON dan shader tanah), `uCropT`, `clock.totalH`, `f.per`, `farmStage(f)`, `FARM` + `updateFarm()` (mesin panen, traktor, debu); `PHOTO` + `togglePhoto()` / `savePhoto()` / `applyPhoto()`, DOF di `compMat` (uDof, uFocus); `TOUR` + `tourKeys()` / `startTour()` / `stepTour()` / `stopTour()`, `player.state` 'tour' |
 | Baseball | `BALLPARK`, `FIELD` (home plate), `ballparkModel()` (dibangun datar lalu ditekuk ke lengkung silinder), `BASEBALL` + `stepBaseball()` (pemain dan penonton disisipkan ke buffer `PEDS` di `updatePeds()`, bola) |
+| Rel dan Skyway (13a-c) | `inTramCorridor()`, `treeSkipped` (pohon yang ditolak tetap memakai angka acak), `RING_LAMP_S`, `SKY_ROADS`, `onSkyRoad()`, `SKYX` (akuaduk, `flow`), lantai kaca jendela `glass` / `glassMat` |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
 | Kolisi | `COL`, `addCollider(s, za, hs, hz)` (AABB di bidang s-za), `LATE_COLLIDERS` |
 | Awan/cuaca (11a) | `WEATHER` (mode auto/cerah/berawan/mendung, cover, ov), `CLOUD`, `updateClouds(dt)`, `cycleWeather()` (N) |

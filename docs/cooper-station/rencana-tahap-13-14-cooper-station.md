@@ -1,6 +1,6 @@
 # Rencana Tahap 13-14 Copper Corn Station
 
-Status: disetujui pemilik. 13a selesai. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
+Status: disetujui pemilik. 13a, 13b, 13c selesai. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
 
 ## Ringkasan
 
@@ -34,6 +34,18 @@ Status: disetujui pemilik. 13a selesai. Titik awal: tahap 12d+ dan M1-M4 (menu, 
 | 3 pohon di atau dekat rel (za 3.930, 4.087, 7.120) dari penahan angin dan pinggir danau | Semua penanaman pohon lewat `tree()` menolak koridor rel 8 m (`inTramCorridor`). Urutan angka acak dijaga, jadi kota dan ladang tidak bergeser (uji suasana: 33 kafe, 946 bohlam, 50 bendera, sama seperti sebelumnya) |
 
 Uji `tools/uji_rel_trem.py`: 0 benda di koridor rel (dalam 2,4 m dari as rel, lebih tinggi dari 0,3 m), 0 pohon dalam 7 m, 0 collider di atas rel.
+
+### Hasil 13b dan 13c (selesai)
+
+| Item | Hasil |
+| --- | --- |
+| Temuan tambahan | Jendela Skyway ternyata sudah lantai kaca yang bisa diinjak (tanpa penghalang). Jadi jembatan pejalan kaki terpisah tidak diperlukan; masalahnya hanya titik lokasi yang berdiri di lantai beton dan memandang landai |
+| Tombol 5 dan tur | Pemain berdiri di atas kaca (2 m dari garis tengah jendela, za 1.400), memandang ke bawah 62 derajat: bintang dan Saturnus langsung terlihat di bawah kaki |
+| Jembatan jalan | 8 jalan melingkar kota (za 250, 500, 750, 1.250, 1.500, 1.750, 2.250, 2.500) kini melintasi promenade dan jendela. Dek aspal dengan marka tengah, tepi beton, pagar kaca dan pegangan baja; dibuat per ruas 5 m mengikuti lengkung silinder. Pohon promenade yang jatuh di jalan baru dibuang (urutan acak dijaga) |
+| Mobil | Lajur melingkar kini satu keliling penuh (6.283 m); mobil melintasi jembatan, tidak hilang lagi. Terukur: 80 lintasan dalam 60 s simulasi. Uji lalu lintas 30 menit tetap lulus (0 tumpang tindih, 0 konflik di simpang) |
+| Akuaduk sungai | Sungai memotong jendela di za sekitar 2.382. Air tembus pandang dengan alur mengalir searah keliling di atas bintang, dinding kaca dan rangka tepi |
+
+Uji `tools/uji_skyway.py`.
 
 ## Tahap 14: dunia dan visual
 

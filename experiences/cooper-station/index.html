@@ -2164,6 +2164,53 @@ lstripS(SKY_S - 24, 4, 150, 7850, PAL.path); lstripS(SKY_S + 24, 4, 150, 7850, P
 const RINGS_Z = [1000, 2000, 3000, 4000, 5000, 6000, 7000];
 const nearRing = (za, m = 14) => RINGS_Z.some((z) => Math.abs(za - z) < m);   // pita struktur: bebas tanaman, pohon, dan lalu lintas
 for (const z of RINGS_Z) { lband(z, ROAD.ring + 4, PAL.ringEdge); lband(z, ROAD.ring, PAL.ring); }
+// 13c: jalan melingkar kota melintasi promenade dan jendela Skyway lewat jembatan (sebelumnya terputus, mobil hilang)
+const SKY_ROADS = []; for (let m = 1; m <= 10; m++) if (!nearRing(m * ART_Z, 1)) SKY_ROADS.push(m * ART_Z);
+const onSkyRoad = (s, za, m = 0) => Math.abs(wrapS(s - SKY_S)) < 45 + m && SKY_ROADS.some((z) => Math.abs(za - z) < ROAD.art / 2 + m);
+for (const zc of SKY_ROADS) lrect(SKY_S - 45, zc - ROAD.art / 2, SKY_S + 45, zc + ROAD.art / 2, PAL.art);
+// Dek jembatan dan akuaduk: ruas 5 m yang masing-masing menyinggung silinder (lengkung 30 m = 0,11 m, jadi tidak ada celah)
+const SKYX = { riverZ: riverZ(SKY_S), flow: null };
+{
+  const seg = 5, half = WIN.width / 2 + 2, n = Math.round(2 * half / seg);
+  const solid = [], glassP = [];                                     // [s, za, sx, sy, sz, h, warna]
+  for (const zc of SKY_ROADS) for (let i = 0; i < n; i++) {
+    const sc = SKY_S - half + (i + 0.5) * seg;
+    solid.push([sc, zc, seg + 0.03, 0.08, ROAD.art, -0.06, 0x3b3f45]);                          // dek aspal (atas 2 cm di atas kaca)
+    if (i % 2 === 0) solid.push([sc, zc, 3, 0.012, 0.18, 0.02, 0xe8e6de]);                       // marka tengah putus-putus
+    for (const e of [-1, 1]) {
+      solid.push([sc, zc + e * (ROAD.art / 2 + 0.3), seg + 0.03, 0.3, 0.6, -0.06, 0x9aa0a6]);   // tepi beton
+      solid.push([sc, zc + e * (ROAD.art / 2 + 0.3), seg + 0.03, 0.06, 0.08, 1.05, 0x8d949b]);  // pegangan baja
+      glassP.push([sc, zc + e * (ROAD.art / 2 + 0.3), seg + 0.03, 0.8, 0.04, 0.24, 0xcfe3ec]);  // pagar kaca
+    }
+  }
+  const rz = SKYX.riverZ, rw = RIVER.width;
+  for (let i = 0; i < n; i++) {                                       // akuaduk: dasar kaca tipis, dinding kaca, rangka tepi
+    const sc = SKY_S - half + (i + 0.5) * seg;
+    solid.push([sc, rz - rw / 2 - 0.5, seg + 0.03, 1.3, 0.25, -0.2, 0x7d858d], [sc, rz + rw / 2 + 0.5, seg + 0.03, 1.3, 0.25, -0.2, 0x7d858d]);
+    glassP.push([sc, rz - rw / 2 - 0.5, seg + 0.03, 0.7, 0.05, 1.1, 0xcfe3ec], [sc, rz + rw / 2 + 0.5, seg + 0.03, 0.7, 0.05, 1.1, 0xcfe3ec]);
+  }
+  const unit = bakeShade(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)), m4 = new THREE.Matrix4(), sv = new THREE.Vector3(), col = new THREE.Color();
+  const inst = (list, mat) => {
+    const im = new THREE.InstancedMesh(unit, mat, list.length);
+    list.forEach(([ss, za, sx, sy, sz, h, c], i) => { surfaceMatrix(m4, ss / R, za, h); m4.scale(sv.set(sx, sy, sz)); im.setMatrixAt(i, m4); im.setColorAt(i, col.setHex(c)); });
+    im.frustumCulled = false; scene.add(im); return im;
+  };
+  inst(solid, new THREE.MeshBasicMaterial({ vertexColors: true }));
+  const gm = inst(glassP, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.28, depthWrite: false }));
+  gm.userData.noShadow = true; gm.renderOrder = 11;
+  // air akuaduk: bidang tembus pandang dengan alur mengalir searah keliling (bintang tetap terlihat di bawahnya)
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 256; const g = cv.getContext('2d');
+  g.fillStyle = '#3f6f86'; g.fillRect(0, 0, 64, 256);
+  for (let k = 0; k < 140; k++) { g.fillStyle = `rgba(210,235,245,${0.05 + Math.random() * 0.18})`; g.fillRect(Math.random() * 64, Math.random() * 256, 1 + Math.random() * 3, 8 + Math.random() * 30); }
+  const tx = new THREE.CanvasTexture(cv); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.colorSpace = THREE.SRGBColorSpace; tx.repeat.set(rw / 16, seg / 32);
+  const wm = new THREE.MeshBasicMaterial({ map: tx, transparent: true, opacity: 0.72, depthWrite: false });
+  const wg = new THREE.PlaneGeometry(rw, seg + 0.03).rotateX(-Math.PI / 2).rotateY(Math.PI / 2);   // lebar sungai searah za, ruas 5 m searah s; alur tekstur searah s
+  for (let i = 0; i < n; i++) {
+    const w = new THREE.Mesh(wg, wm); w.matrixAutoUpdate = false; surfaceMatrix(w.matrix, (SKY_S - half + (i + 0.5) * seg) / R, rz, 0.03);
+    w.userData.noShadow = true; w.renderOrder = 11; w.frustumCulled = false; scene.add(w);
+  }
+  SKYX.flow = tx;
+}
 
 // 8) lapangan baseball (versi kasar untuk dilihat dari jauh; dari dekat ditutup decal detail)
 {
@@ -2742,9 +2789,9 @@ const treeGeo = mergeSimple([
 const treeList = [];
 // 13a: koridor rel trem (as rel s = TRAM.s; peron sampai +6,2 m). Tidak boleh ada pohon, tiang, perabot di dalamnya.
 const inTramCorridor = (s, m = 0) => Math.abs(wrapS(s - TRAM.s)) < 7 + m;
-let tramSkipped = 0;
+let treeSkipped = 0;
 function tree(s, za, k) {
-  if (inTramCorridor(s, 1)) { tramSkipped++; return; }           // 13a
+  if (inTramCorridor(s, 1) || onSkyRoad(s, za, 3)) { treeSkipped++; return; }   // 13a rel trem, 13c jalan Skyway
   if (inWater(s, za, 3) || inRiver(s, za, 3)) return;
   if (inReal(s, za, 3)) return;                                   // area uji memakai pohon prosedural sendiri
   if (inBallpark(s, za, 1)) return;
@@ -2778,7 +2825,7 @@ for (const L of LAKES) for (let a = 0; a < TAU; a += 0.09) if (rnd() < 0.5) tree
 // tahap 6b: pohon kerucut gray-box diganti pohon prosedural (lihat modul realisme); di sini hanya kolisi.
 // rnd() tetap dipanggil 3x per pohon supaya urutan acak sesudahnya tidak berubah.
 treeList.forEach(([s, za, k]) => { rnd(); rnd(); rnd(); if (!nearRing(za)) addCollider(s, za, 0.4 * k, 0.4 * k); });
-for (let q = 0; q < tramSkipped * 3; q++) rnd();                  // 13a: pohon yang dibuang dari rel tetap memakai 3 angka acak
+for (let q = 0; q < treeSkipped * 3; q++) rnd();                  // 13a/13c: pohon yang dibuang tetap memakai 3 angka acak
 // kanvas lahan diperbarui setelah taman/plaza ditambahkan
 landTex.needsUpdate = true;
 
@@ -5828,7 +5875,7 @@ const SPOTS = {
   hill: { s: HILLS[0].s, za: HILLS[0].za, heading: Math.atan2(COOPER.s - HILLS[0].s, COOPER.za - HILLS[0].za) / DEG, pitch: -4, name: 'Puncak bukit' },
   corn: { s: CORN_SPOT.s, za: CORN_SPOT.za, heading: 0, pitch: 2, name: 'Tengah ladang jagung' },
   wheat: { s: WHEAT_SPOT.s, za: WHEAT_SPOT.za, heading: WHEAT_SPOT.heading, pitch: 3, name: 'Ladang gandum dekat bukit' },
-  skyway: { s: SKY_S + WIN.width / 2 + 3, za: 1400, heading: -90, pitch: -40, name: 'Skyway (jendela ke angkasa)' },
+  skyway: { s: SKY_S + 2, za: 1400, heading: 0, pitch: -62, name: 'Skyway (jendela ke angkasa)' },   // 13b: berdiri di lantai kaca, memandang ke bawah
   baseball: { s: FIELD.s - 7, za: FIELD.za, heading: 90, pitch: 1, name: 'Lapangan baseball' },
 };
 function teleport(key) {
@@ -5905,7 +5952,7 @@ const TRAFFIC = {};
     for (const dir of [1, -1]) for (const lat of [3.2, 7.0]) add(0, k * ART, lat, dir, 160, 3030, lat < 5 ? 110 : 190);
   }
   for (let k = 1; k <= 10; k++) if (!nearRing(k * 250, 1)) for (const dir of [1, -1]) for (const lat of [3.2, 7.0])   // arteri melingkar kota (bukan di cincin)
-    add(1, k * 250, lat, dir, SKY_S + 30, CIRC - 60, lat < 5 ? 130 : 230);
+    add(1, k * 250, lat, dir, SKY_S + 30, CIRC, lat < 5 ? 130 : 230);   // 13c: satu keliling penuh lewat jembatan Skyway
   // cincin struktur bukan jalan: tidak ada mobil di atasnya
   const n = lanes.length / 4, ig = new THREE.InstancedBufferGeometry();
   ig.index = g.index; for (const k of Object.keys(g.attributes)) ig.setAttribute(k, g.attributes[k]);
@@ -8824,6 +8871,7 @@ function frame(now) {
   updateVibe();                                    // 12b-5
   updateRain(Math.min(0.1, dt));                   // 12c
   updateFarm(Math.min(0.1, dt));                   // 12d
+  SKYX.flow.offset.y -= Math.min(0.1, dt) * 0.12;   // 13c: air akuaduk Skyway mengalir
   updateFar();
   updateClouds(dt);
   updateWind(dt);                                  // 12b-2
@@ -8875,7 +8923,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
