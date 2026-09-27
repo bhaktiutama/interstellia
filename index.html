@@ -141,7 +141,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 6b · bukit, rumput, ladang (jagung, gandum, kedelai, sorgum) dan pohon prosedural di seluruh stasiun · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 7 · Saturnus dan cincin versi shader (data NASA), tepi end cap bercahaya · tahap 6b: bukit, ladang, pohon di seluruh stasiun · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -357,38 +357,194 @@ saturn.quaternion.copy(Q_ORBIT).multiply(new THREE.Quaternion().setFromAxisAngle
   .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2));
 farScene.add(saturn);
 {
-  // planet: pita lintang sederhana di vertex color
-  const g = new THREE.SphereGeometry(1, 96, 64);
-  const pos = g.attributes.position, cols = new Float32Array(pos.count * 3);
-  for (let i = 0; i < pos.count; i++) {
-    const lat = Math.asin(Math.max(-1, Math.min(1, pos.getY(i))));
-    const band = 0.5 + 0.5 * Math.sin(lat * 14.0) * Math.cos(lat * 3.0);
-    const polar = Math.pow(Math.abs(Math.sin(lat)), 6);
-    const k = 0.86 + 0.14 * band;
-    cols[i * 3] = (0.86 * k) * (1 - 0.35 * polar);
-    cols[i * 3 + 1] = (0.76 * k) * (1 - 0.25 * polar);
-    cols[i * 3 + 2] = (0.56 * k) * (1 + 0.10 * polar);
+  // =====================================================================
+  // TAHAP 7: Saturnus dan cincin versi shader (koordinat lokal Saturnus: +Y = kutub utara, cincin di bidang XZ)
+  // - planet: pita lintang dari tabel warna, turbulensi noise 3D, jet ekuator (sekitar 4% lebih cepat dari rotasi),
+  //   heksagon kutub utara di lintang sekitar 78 derajat, gelap tepi (Minnaert), bayangan cincin analitik
+  // - cincin: profil kedalaman optik per radius (NASA: C 0,05-0,35, B 0,4-2,5, A 0,4-1,0, celah Cassini, Encke, Keeler),
+  //   hamburan tunggal lapisan tipis: sisi terang memantul, sisi gelap meneruskan cahaya; bayangan planet di cincin
+  // =====================================================================
+  const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const h1 = (i) => { const x = Math.sin(i * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const n1 = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return h1(i) * (1 - u) + h1(i + 1) * u; };
+  const fbm1 = (x) => 0.5 * n1(x) + 0.3 * n1(x * 2.7 + 13) + 0.2 * n1(x * 7.3 + 71);
+  // --- profil cincin: 4096 sampel dari 66.900 sampai 141.000 km (sekitar 18 km per sampel) ---
+  const RN = 4096, RR0 = 66.9, RR1 = 141.0, TAU_MAX = 2.5, ringData = new Uint8Array(RN * 4);
+  for (let k = 0; k < RN; k++) {
+    const r = RR0 + (k + 0.5) / RN * (RR1 - RR0);
+    let tau = 0, alb = 0.3, c = [0.8, 0.75, 0.7];
+    if (r < 74.51) { tau = 1e-5; }                                                   // D: praktis tak terlihat
+    else if (r >= 74.658 && r < 91.975) {                                            // C
+      tau = 0.05 + 0.09 * fbm1(r * 9) + (fbm1(r * 1.3 + 5) > 0.68 ? 0.2 : 0);        // "plateau" C
+      if (Math.abs(r - 77.871) < 0.025) tau = 0.35;                                  // ringlet Titan
+      if (r > 87.34 && r < 87.61) tau = Math.abs(r - 87.491) < 0.03 ? 0.35 : 0.005;   // celah Maxwell + ringlet
+      alb = 0.16 + 0.12 * fbm1(r * 3); c = [0.78, 0.72, 0.66];
+    } else if (r >= 91.975 && r < 117.507) {                                         // B
+      const x = (r - 91.975) / (117.507 - 91.975);
+      const base = x < 0.27 ? 0.8 + 0.7 * x / 0.27 : x < 0.72 ? 2.5 : 1.8;
+      tau = Math.min(2.5, Math.max(0.4, base * (0.72 + 0.56 * fbm1(r * 14))));
+      alb = 0.42 + 0.16 * fbm1(r * 5 + 2); c = [1.0, 0.9, 0.76];
+    } else if (r >= 117.507 && r < 122.34) {                                         // celah Cassini (dengan celah Huygens)
+      tau = r < 117.8 ? 0.004 : 0.06 + 0.1 * fbm1(r * 20);
+      alb = 0.22; c = [0.74, 0.7, 0.66];
+    } else if (r >= 122.34 && r < 136.78) {                                          // A
+      const x = (r - 122.34) / (136.78 - 122.34);
+      tau = Math.min(1.0, Math.max(0.4, (1.0 - 0.45 * x) * (0.85 + 0.3 * fbm1(r * 12))));
+      if (r > 133.41 && r < 133.735) tau = 0.01;                                     // celah Encke (sekitar 325 km)
+      if (r > 136.487 && r < 136.529) tau = 0.01;                                    // celah Keeler (sekitar 42 km)
+      alb = 0.47 + 0.08 * fbm1(r * 4); c = [0.96, 0.88, 0.78];
+    } else if (Math.abs(r - 139.826) < 0.25) {                                       // F: diperlebar agar terlihat
+      tau = 0.1 * Math.exp(-(((r - 139.826) / 0.08) ** 2)); alb = 0.6; c = [0.95, 0.92, 0.88];
+    }
+    const k4 = k * 4, b = Math.min(1, alb * 1.7);
+    ringData[k4] = Math.round(255 * c[0] * b); ringData[k4 + 1] = Math.round(255 * c[1] * b); ringData[k4 + 2] = Math.round(255 * c[2] * b);
+    ringData[k4 + 3] = Math.round(255 * Math.sqrt(Math.min(1, tau / TAU_MAX)));     // sqrt: presisi lebih baik di tau kecil
   }
-  g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-  const planet = new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const ringTex = new THREE.DataTexture(ringData, RN, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+  ringTex.generateMipmaps = true; ringTex.minFilter = THREE.LinearMipmapLinearFilter; ringTex.magFilter = THREE.LinearFilter;
+  ringTex.wrapS = ringTex.wrapT = THREE.ClampToEdgeWrapping; ringTex.needsUpdate = true;
+  // --- tabel warna pita lintang (1024 sampel, -90 sampai +90 derajat), warna linear ---
+  const BANDS = [   // [lintang atas (derajat), warna sRGB]: zona terang dan sabuk gelap, kontras rendah khas Saturnus
+    [-78, '#9c8c6e'], [-62, '#b39a73'], [-52, '#c9ae80'], [-40, '#d6bf8e'], [-30, '#c4a372'], [-20, '#e0c996'],
+    [-9, '#c8a676'], [9, '#ecdcb2'], [20, '#c9a878'], [30, '#e2cc98'], [40, '#c6a574'], [52, '#d5bd8c'],
+    [62, '#b59d74'], [76, '#a3a192'], [91, '#8e979b'],
+  ];
+  const BN = 1024, bandData = new Uint8Array(BN * 4), cA = new THREE.Color(), cB = new THREE.Color();
+  for (let k = 0; k < BN; k++) {
+    const lat = -90 + (k + 0.5) / BN * 180;
+    let i = BANDS.findIndex((b) => lat < b[0]); if (i < 0) i = BANDS.length - 1;
+    cA.set(BANDS[i][1]);
+    const lo = i > 0 ? BANDS[i - 1][0] : -90, hi = BANDS[i][0];
+    if (i > 0 && lat - lo < 2) { cB.set(BANDS[i - 1][1]); cA.lerp(cB, 0.5 * (1 - sm(0, 2, lat - lo))); }   // transisi lembut 2 derajat
+    if (i < BANDS.length - 1 && hi - lat < 2) { cB.set(BANDS[i + 1][1]); cA.lerp(cB, 0.5 * (1 - sm(0, 2, hi - lat))); }
+    const fine = 0.94 + 0.12 * fbm1(lat * 1.9 + 40);                                 // pita halus tambahan
+    bandData.set([cA.r * fine * 255, cA.g * fine * 255, cA.b * fine * 255, 255].map((v) => Math.min(255, Math.round(v))), k * 4);
+  }
+  const bandTex = new THREE.DataTexture(bandData, BN, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+  bandTex.generateMipmaps = true; bandTex.minFilter = THREE.LinearMipmapLinearFilter; bandTex.magFilter = THREE.LinearFilter; bandTex.needsUpdate = true;
+
+  const SAT_U = {
+    uRingTex: { value: ringTex }, uBands: { value: bandTex },
+    uSunL: { value: new THREE.Vector3() }, uCamL: { value: new THREE.Vector3() },
+    uScale: { value: new THREE.Vector3(SATURN.rEq, SATURN.rPole, SATURN.rEq) },
+    uRing: { value: new THREE.Vector3(RR0, RR1, TAU_MAX) }, uSpin: { value: 0 }, uSunI: { value: 0.95 },
+  };
+  SAT_U.uSunL.value.copy(SUN_DIR).applyQuaternion(saturn.quaternion.clone().invert());   // tetap: orientasi Saturnus dan arah Matahari tidak berubah
+  saturn.userData.U = SAT_U;
+  const SAT_COMMON = /* glsl */`
+    uniform sampler2D uRingTex, uBands;
+    uniform vec3 uSunL, uCamL, uScale, uRing;
+    uniform float uSpin, uSunI;
+    const float PI = 3.141592653589793;
+    float ringTau(float r, float lod) {
+      float u = (r - uRing.x) / (uRing.y - uRing.x);
+      if (u <= 0.0 || u >= 1.0) return 0.0;
+      float a = textureLod(uRingTex, vec2(u, 0.5), lod).a;
+      return a * a * uRing.z;
+    }
+  `;
+  const planetMat = new THREE.ShaderMaterial({
+    uniforms: SAT_U,
+    vertexShader: /* glsl */`
+      varying vec3 vP, vL;
+      void main() { vP = position; vL = position * ${'vec3(' + SATURN.rEq + ',' + SATURN.rPole + ',' + SATURN.rEq + ')'}; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`
+      ${SAT_COMMON}
+      varying vec3 vP, vL;
+      float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+      float noise3(vec3 x) {
+        vec3 i = floor(x), f = fract(x), u = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(h3(i), h3(i + vec3(1, 0, 0)), u.x), mix(h3(i + vec3(0, 1, 0)), h3(i + vec3(1, 1, 0)), u.x), u.y),
+                   mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), u.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), u.x), u.y), u.z);
+      }
+      void main() {
+        vec3 p = normalize(vP);
+        float lat = asin(clamp(p.y, -1.0, 1.0));
+        float spin = uSpin * (1.0 + 0.04 * exp(-pow(lat / 0.3, 2.0)));             // jet ekuator
+        float c = cos(spin), s = sin(spin);
+        vec3 q = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
+        // turbulensi: batas pita bergelombang + garis halus memanjang
+        float wob = (noise3(q * vec3(3.0, 16.0, 3.0)) - 0.5) * 0.012 + (noise3(q * vec3(11.0, 60.0, 11.0) + 7.0) - 0.5) * 0.004;
+        float latP = lat + wob;
+        vec3 col = texture2D(uBands, vec2(latP / PI + 0.5, 0.5)).rgb;
+        col *= 0.95 + 0.08 * noise3(q * vec3(2.5, 140.0, 2.5)) + 0.04 * (noise3(q * vec3(22.0, 90.0, 22.0)) - 0.5);
+        // heksagon kutub utara (apotema 12 derajat dari kutub, berputar bersama planet)
+        if (lat > 1.1) {
+          float lon = atan(q.z, q.x), colat = PI * 0.5 - lat;
+          float R6 = 0.2094 / cos(mod(lon, PI / 3.0) - PI / 6.0);
+          float inside = 1.0 - smoothstep(R6 - 0.006, R6 + 0.006, colat);
+          col = mix(col, vec3(0.30, 0.34, 0.38), inside * 0.55);
+          col *= 1.0 - 0.25 * exp(-pow((colat - R6) / 0.008, 2.0));              // jet tepi heksagon
+          col *= 1.0 - 0.4 * exp(-pow(colat / 0.03, 2.0));                         // pusaran kutub
+        }
+        // cahaya: Minnaert (gelap tepi), terminator lembut, bayangan cincin
+        vec3 n = normalize(vP / uScale);
+        vec3 V = normalize(uCamL - vL);
+        float mu0 = dot(n, uSunL), mu = max(dot(n, V), 1e-3);
+        float k = 0.9;
+        float I = pow(max(mu0, 0.0), k) * pow(mu, k - 1.0) * smoothstep(-0.02, 0.06, mu0);
+        if (vL.y * uSunL.y < 0.0) {
+          float t = -vL.y / uSunL.y;
+          vec3 hit = vL + t * uSunL;
+          I *= exp(-ringTau(length(hit.xz), 2.0) / max(abs(uSunL.y), 0.02));
+        }
+        vec3 outc = col * I * uSunI + col * 0.012;                                   // sisi malam: pantulan cincin samar
+        outc += col * vec3(1.0, 0.95, 0.85) * 0.06 * pow(1.0 - mu, 4.0) * max(mu0, 0.0);   // kabut atas di tepi
+        gl_FragColor = vec4(outc, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const planet = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), planetMat);
   planet.scale.set(SATURN.rEq, SATURN.rPole, SATURN.rEq);
   saturn.add(planet);
-  // cincin: satu geometri berisi annulus per pita, di bidang ekuator (XZ lokal)
-  const seg = 256, verts = [], rgba = [], idx = [];
-  for (const b of RINGS) {
-    const base = verts.length / 3;
-    for (let i = 0; i <= seg; i++) {
-      const a = (i / seg) * TAU, c = Math.cos(a), s = Math.sin(a);
-      verts.push(b.r0 * c, 0, b.r0 * s, b.r1 * c, 0, b.r1 * s);
-      rgba.push(...b.c, b.a, ...b.c, b.a);
-    }
-    for (let i = 0; i < seg; i++) { const k = base + i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
-  }
-  const rg = new THREE.BufferGeometry();
-  rg.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
-  rg.setAttribute('color', new THREE.Float32BufferAttribute(rgba, 4));
-  rg.setIndex(idx);
-  saturn.add(new THREE.Mesh(rg, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, side: THREE.DoubleSide, depthWrite: false })));
+  const ringMat = new THREE.ShaderMaterial({
+    uniforms: SAT_U, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    vertexShader: /* glsl */`
+      varying vec3 vL;
+      void main() { vL = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`
+      ${SAT_COMMON}
+      varying vec3 vL;
+      void main() {
+        float r = length(vL.xz);
+        float u = (r - uRing.x) / (uRing.y - uRing.x);
+        if (u <= 0.0 || u >= 1.0) discard;
+        vec4 tx = texture2D(uRingTex, vec2(u, 0.5));
+        float tau = tx.a * tx.a * uRing.z;
+        if (tau < 1e-3) discard;
+        vec3 V = normalize(uCamL - vL);
+        float mu = max(abs(V.y), 0.02), mu0 = max(abs(uSunL.y), 0.02);
+        float I;
+        if (V.y * uSunL.y > 0.0) I = 2.0 * mu0 / (mu0 + mu) * (1.0 - exp(-tau * (1.0 / mu0 + 1.0 / mu)));   // sisi terang: pantulan
+        else {                                                                        // sisi gelap: cahaya diteruskan
+          float d = mu0 - mu;
+          I = abs(d) < 1e-3 ? 2.0 * (tau / mu) * exp(-tau / mu) : 2.0 * mu0 / d * (exp(-tau / mu0) - exp(-tau / mu));
+        }
+        // bayangan planet (elipsoid) di cincin
+        vec3 q0 = vL / uScale, dd = uSunL / uScale;
+        float tc = -dot(q0, dd) / dot(dd, dd), sh = 1.0;
+        if (tc > 0.0) sh = smoothstep(0.99, 1.01, length(q0 + tc * dd));
+        float alpha = 1.0 - exp(-tau / mu);
+        gl_FragColor = vec4(tx.rgb * I * sh * uSunI, alpha);                         // premultiplied: latar dikali (1 - alpha)
+        #include <colorspace_fragment>
+      }`,
+  });
+  const rg = new THREE.RingGeometry(RR0, RR1, 720, 1).rotateX(-Math.PI / 2);
+  const rings = new THREE.Mesh(rg, ringMat);
+  rings.renderOrder = 2;
+  saturn.add(rings);
+  // Matahari: silau lembut (1 titik, additive); ukuran sebenarnya dari Saturnus hanya sekitar 3,4 menit busur
+  const glareMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uPx: { value: 1 } },
+    vertexShader: /* glsl */`uniform float uPx; void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 150.0 * uPx; }`,
+    fragmentShader: /* glsl */`void main() { vec2 d = gl_PointCoord - 0.5; float r = length(d) * 2.0; if (r > 1.0) discard;
+      float g = exp(-r * 9.0) * 1.6 + exp(-r * 3.0) * 0.18; gl_FragColor = vec4(vec3(1.0, 0.95, 0.85) * g, 1.0); }`,
+  });
+  const glareG = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(SUN_DIR.clone().multiplyScalar(9000).toArray()), 3));
+  const glare = new THREE.Points(glareG, glareMat); glare.renderOrder = 3; glare.frustumCulled = false;
+  farScene.add(glare);
+  saturn.userData.glareMat = glareMat;
 }
 {
   // bintang: 4.000 titik, 1 draw call; Matahari: 1 titik terang
@@ -414,8 +570,14 @@ function saturnDirInertial(out) {
   const phi = orbitPhase();
   return out.set(-Math.cos(phi), -Math.sin(phi), 0).applyQuaternion(Q_ORBIT);
 }
+const SAT_SPIN = 38018;                                           // periode rotasi Saturnus sekitar 10,56 jam (s)
+const _qSatInv = new THREE.Quaternion();
 function updateFar() {
   saturnDirInertial(saturn.position).multiplyScalar(ORBIT.r);
+  const SU = saturn.userData.U;
+  SU.uCamL.value.copy(saturn.position).negate().applyQuaternion(_qSatInv.copy(saturn.quaternion).invert());   // kamera jauh di titik asal
+  SU.uSpin.value = (TAU * clock.orbit / SAT_SPIN) % (TAU * 25);
+  saturn.userData.glareMat.uniforms.uPx.value = renderer.getPixelRatio();
   if (ext.active) { farCam.quaternion.copy(camera.quaternion); return; }   // kamera luar sudah di kerangka inersia
   _qSt.setFromAxisAngle(_zAxis, OMEGA * clock.sim);
   farCam.quaternion.copy(_qSt).multiply(camera.quaternion);
@@ -2390,6 +2552,41 @@ for (const sgn of [-1, 1]) {
   ring.position.z = sgn * (HALF_L + 9); ring.userData.noLight = true;
   scene.add(ring);
 }
+// tahap 7: tepi end cap bercahaya + halo lampu (additive, tanpa kabut; kesan silau sebelum bloom di tahap 9)
+const capGlowMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
+  uniforms: { uCol: { value: new THREE.Vector3(1.0, 0.72, 0.38) }, uI: { value: 0.5 } },
+  vertexShader: /* glsl */`
+    varying vec3 vN; varying vec3 vV;
+    void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: /* glsl */`
+    uniform vec3 uCol; uniform float uI;
+    varying vec3 vN; varying vec3 vV;
+    void main() { float f = pow(max(dot(normalize(vN), normalize(vV)), 0.0), 2.5); gl_FragColor = vec4(uCol * f * uI * 0.5, 1.0); }`,
+});
+const capRimMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, side: THREE.DoubleSide,
+  uniforms: { uCol: capGlowMat.uniforms.uCol, uI: capGlowMat.uniforms.uI, uR: { value: CONFIG.R } },
+  vertexShader: /* glsl */`
+    varying vec3 vP;
+    void main() { vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform vec3 uCol; uniform float uI, uR;
+    varying vec3 vP;
+    void main() {
+      float r = length(vP.xy) / uR;
+      float g = exp(-pow((r - 0.985) / 0.012, 2.0)) + 0.35 * exp(-pow((r - 0.96) / 0.04, 2.0));   // pita lampu tepi + pendar
+      float seg = 0.75 + 0.25 * cos(atan(vP.y, vP.x) * 96.0);                                       // 96 segmen rangka tepi
+      gl_FragColor = vec4(uCol * g * seg * uI * 0.9, 1.0);
+    }`,
+});
+for (const sgn of [-1, 1]) {
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(CAP_RING_R, 55, 16, 192), capGlowMat);
+  halo.position.z = sgn * (HALF_L + 9); halo.userData.noLight = true; halo.renderOrder = 11;
+  const rim = new THREE.Mesh(new THREE.RingGeometry(0.9 * CONFIG.R, CONFIG.R, 384, 1), capRimMat);
+  rim.position.z = sgn * (HALF_L - 1.5); rim.userData.noLight = true; rim.renderOrder = 11;
+  scene.add(halo, rim);
+}
 
 // --- awan: billboard lembut, 1 draw call --------------------------------
 const cloudTex = (() => {
@@ -2528,6 +2725,7 @@ function updateLighting() {
   sunCore.material.color.setRGB(0.25 + 1.2 * I, 0.24 + 1.15 * I * (1 - 0.1 * golden), 0.22 + 1.05 * I * (1 - 0.3 * golden));
   glowMat.uniforms.uI.value = 0.15 + 1.1 * I;
   capRingMat.color.setRGB(0.3 + 1.6 * U.uL_CapI.value, 0.2 + 1.0 * U.uL_CapI.value, 0.08 + 0.45 * U.uL_CapI.value);
+  capGlowMat.uniforms.uI.value = 0.15 + 0.85 * U.uL_CapI.value;
   const cc = U.uL_SunlineCol.value;
   cloudMat.uniforms.uCol.value.set(cc.x * (0.25 + 0.9 * I) + amb[0] + 0.25 * golden, cc.y * (0.25 + 0.9 * I) + amb[1] + 0.12 * golden, cc.z * (0.25 + 0.9 * I) + amb[2]);
   cloudMat.uniforms.uFogCol.value.set(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b);
