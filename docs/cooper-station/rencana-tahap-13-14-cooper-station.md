@@ -1,6 +1,6 @@
 # Rencana Tahap 13-14 Copper Corn Station
 
-Status: rencana, menunggu persetujuan pemilik. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
+Status: disetujui pemilik. 13a selesai. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
 
 ## Ringkasan
 
@@ -25,6 +25,15 @@ Status: rencana, menunggu persetujuan pemilik. Titik awal: tahap 12d+ dan M1-M4 
 | 13b | Skyway: jembatan kaca pandang | Jembatan pejalan kaki berlantai kaca melintang jendela (di Skyway kota dan satu di area taman), pagar kaca. Tombol 5 dan titik tur dipindah ke tengah jembatan, memandang ke bawah, sehingga bintang dan Saturnus melintas langsung di bawah kaki | Tombol 5 dan tur memperlihatkan luar angkasa; bisa berjalan melintas tanpa jatuh |
 | 13c | Jembatan jalan dan akuaduk | Tiap jalan melingkar yang memotong Skyway mendapat jembatan 30 m: dek tipis, pagar kaca, rangka ramping supaya pandangan jendela tetap terbuka. Mobil melintas tanpa hilang (jalur jadi lingkaran utuh). Sungai menyeberang lewat akuaduk kaca: air terlihat mengalir di atas bintang | Uji lalu lintas lama tetap lulus; mobil melintasi Skyway; tidak ada tabrakan |
 | 13d | Peta besar (M) | Hampir layar penuh, mendatar (sumbu 8 km ke samping, keliling ke bawah). Lapisan: zona, kota, ladang, sungai, jalan, rel dan halte, Skyway dan jembatan, cincin struktur. Penanda bernomor sesuai tombol 1-9 dan 0 (hutan), plus lift, terminal, air mancur, baseball, rumah Cooper. Posisi dan arah pemain, posisi trem langsung. Zoom (roda / cubit), geser (seret), klik penanda = pindah ke sana. Legenda dua bahasa | Peta terbuka, klik penanda memindah pemain, uji bahasa lulus |
+
+### Hasil 13a (selesai)
+
+| Temuan audit | Perbaikan |
+| --- | --- |
+| Tiang lampu cincin 9 m tepat di as rel di tiap cincin struktur (7 tiang, za 1.008 sampai 7.008) beserta kepala lampunya | Tiang di as rel dipindah 9 m ke sisi tanpa peron (daftar posisi `RING_LAMP_S` dipakai bersama oleh tiang dan kepala lampu) |
+| 3 pohon di atau dekat rel (za 3.930, 4.087, 7.120) dari penahan angin dan pinggir danau | Semua penanaman pohon lewat `tree()` menolak koridor rel 8 m (`inTramCorridor`). Urutan angka acak dijaga, jadi kota dan ladang tidak bergeser (uji suasana: 33 kafe, 946 bohlam, 50 bendera, sama seperti sebelumnya) |
+
+Uji `tools/uji_rel_trem.py`: 0 benda di koridor rel (dalam 2,4 m dari as rel, lebih tinggi dari 0,3 m), 0 pohon dalam 7 m, 0 collider di atas rel.
 
 ## Tahap 14: dunia dan visual
 

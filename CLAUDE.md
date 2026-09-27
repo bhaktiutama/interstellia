@@ -20,6 +20,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_burung.py` | Uji Copper Corn Station 12b-4: kawanan burung, merpati terbang saat didekati, siklus hari |
 | `tools/uji_suasana.py` | Uji Copper Corn Station 12b-5: kafe, lampu untaian, bendera, suara kota, tidak ada normal nol (NaN) |
 | `tools/uji_hujan.py` | Uji Copper Corn Station 12c: angka fisika hujan dan air mancur Coriolis, hujan, tanah basah, angin |
+| `tools/uji_rel_trem.py` | Uji Copper Corn Station 13a: koridor rel trem bebas tiang, pohon, collider |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |

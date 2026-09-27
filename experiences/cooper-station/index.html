@@ -2740,7 +2740,11 @@ const treeGeo = mergeSimple([
   for (let i = 0; i < p.length; i += 3) { const k = 0.8 + 0.2 * Math.sign(p[i]) * Math.min(1, Math.abs(p[i]) / 2); c[i] *= k; c[i + 1] *= k; c[i + 2] *= k; }
 }
 const treeList = [];
+// 13a: koridor rel trem (as rel s = TRAM.s; peron sampai +6,2 m). Tidak boleh ada pohon, tiang, perabot di dalamnya.
+const inTramCorridor = (s, m = 0) => Math.abs(wrapS(s - TRAM.s)) < 7 + m;
+let tramSkipped = 0;
 function tree(s, za, k) {
+  if (inTramCorridor(s, 1)) { tramSkipped++; return; }           // 13a
   if (inWater(s, za, 3) || inRiver(s, za, 3)) return;
   if (inReal(s, za, 3)) return;                                   // area uji memakai pohon prosedural sendiri
   if (inBallpark(s, za, 1)) return;
@@ -2774,6 +2778,7 @@ for (const L of LAKES) for (let a = 0; a < TAU; a += 0.09) if (rnd() < 0.5) tree
 // tahap 6b: pohon kerucut gray-box diganti pohon prosedural (lihat modul realisme); di sini hanya kolisi.
 // rnd() tetap dipanggil 3x per pohon supaya urutan acak sesudahnya tidak berubah.
 treeList.forEach(([s, za, k]) => { rnd(); rnd(); rnd(); if (!nearRing(za)) addCollider(s, za, 0.4 * k, 0.4 * k); });
+for (let q = 0; q < tramSkipped * 3; q++) rnd();                  // 13a: pohon yang dibuang dari rel tetap memakai 3 angka acak
 // kanvas lahan diperbarui setelah taman/plaza ditambahkan
 landTex.needsUpdate = true;
 
@@ -2795,8 +2800,10 @@ for (const st of TRAM.stops) {                                  // peron setingg
   prop(s + 2, za + 1, 2, 0.8, 1.2, 0, '#8a6a4a', true);                             // meja
   prop(s + 3, za - d / 2 - 4, 1.2, 1.4, 0.2, 0, '#2f3640');                         // plakat
 }
-for (const z of RINGS_Z) for (let s = 0; s < CIRC - 20; s += 40) {                  // tiang lampu di tepi cincin
-  if (Math.abs(wrapS(s - SKY_S)) < 20) continue;
+// tiang lampu di tepi cincin tiap 40 m; 13a: tiang di as rel trem dipindah 9 m ke sisi tanpa peron
+const RING_LAMP_S = [];
+for (let s = 0; s < CIRC - 20; s += 40) { if (Math.abs(wrapS(s - SKY_S)) < 20) continue; RING_LAMP_S.push(inTramCorridor(s) ? modS(TRAM.s - 9) : s); }
+for (const z of RINGS_Z) for (const s of RING_LAMP_S) {
   prop(s, z + ROAD.ring / 2 + 1, 0.4, 9, 0.4, 0, '#c9ced4');
 }
 const props = new THREE.InstancedMesh(bakeShade(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)),
@@ -6011,15 +6018,14 @@ const TRAFFIC = {};
     poles.setMatrixAt(i, m4); heads.setMatrixAt(i, m4);
   });
   let hi = lamps.length;                                             // kepala lampu untuk tiang cincin struktur (sudah ada sejak tahap 4)
-  for (const z of RINGS_Z) for (let s = 0; s < CIRC - 20; s += 40) {
-    if (Math.abs(wrapS(s - SKY_S)) < 20) continue;
+  for (const z of RINGS_Z) for (const s of RING_LAMP_S) {
     surfaceMatrix(m4, s / R, z + ROAD.ring / 2 + 1, 0); m4.multiply(rot.makeTranslation(0, 9.08 - 7.77, -1.5)); heads.setMatrixAt(hi++, m4);
   }
   heads.count = hi;
   for (const m of [poles, heads]) { m.instanceMatrix.needsUpdate = true; m.frustumCulled = false; scene.add(m); }
   heads.userData.noLight = true; heads.userData.noShadow = true; poles.userData.noShadow = true;
   TRAFFIC.heads = heads; TRAFFIC.lamps = lamps.length;
-  function propRingLampCount() { let c = 0; for (const z of RINGS_Z) for (let s = 0; s < CIRC - 20; s += 40) if (Math.abs(wrapS(s - SKY_S)) >= 20) c++; return c; }
+  function propRingLampCount() { return RINGS_Z.length * RING_LAMP_S.length; }
 }
 // 12b-1: langkah simulasi mobil (IDM). Penghalang: mobil di depan pada lajur yang sama, dan garis henti bila lampu
 // merah/kuning (kuning: tetap jalan bila tidak bisa berhenti nyaman) atau perlintasan trem tertutup.

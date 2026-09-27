@@ -32,6 +32,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari satu menu
 | `tools/uji_burung.py` | Uji burung Copper Corn Station |
 | `tools/uji_suasana.py` | Uji suasana Copper Corn Station |
 | `tools/uji_hujan.py` | Uji hujan dan air mancur Coriolis |
+| `tools/uji_rel_trem.py` | Uji koridor rel trem bersih |
 | `tools/uji_bahasa.py` | Uji kelengkapan kamus bahasa dan ganti bahasa |
 | `tools/uji_ladang_foto_tur.py` | Uji siklus tanam, mesin ladang, mode foto, tur sinematik |
 | `CLAUDE.md` | Konteks proyek untuk Claude Code |
