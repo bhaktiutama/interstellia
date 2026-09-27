@@ -1,10 +1,10 @@
-# Konsep Simulasi Cooper Station
+# Konsep Simulasi Copper Corn Station
 
 Per 26 September 2026 · Bhakti
 
 ## Ringkasan
 
-Cooper Station disimulasikan sebagai silinder O'Neill berjari-jari 1 km dan panjang 8 km. Silinder berputar 0,946 rpm untuk menghasilkan gravitasi 1 g dan dijelajahi first-person dengan berjalan kaki di browser (three.js).
+Copper Corn Station disimulasikan sebagai silinder O'Neill berjari-jari 1 km dan panjang 8 km. Silinder berputar 0,946 rpm untuk menghasilkan gravitasi 1 g dan dijelajahi first-person dengan berjalan kaki di browser (three.js).
 
 - **Skala walkable sebagai default:** keliling 6,28 km (sekitar 75 menit jalan kaki). Ada preset alternatif skala O'Neill Island Three (radius 4 km, panjang 32 km) lewat satu parameter.
 - **Fisika rotasi yang terasa:** gravitasi buatan, Coriolis saat melompat atau melempar bola, dan gravitasi yang melemah menuju sumbu (0 g di pusat). Bukan sekadar gravitasi ke bawah biasa.
@@ -261,7 +261,7 @@ Empat keputusan perlu dijawab sebelum implementasi. Default di dokumen ini sudah
 | Performa jatuh karena ladang jagung dan kota di sisi seberang | Tinggi | Instancing hanya dekat pemain, impostor dan tekstur untuk jarak jauh |
 | Cahaya dari sumbu tanpa bayangan terlihat datar | Sedang | AO yang di-bake, SSAO, variasi warna material |
 | File HTML tunggal menjadi sangat besar | Sedang | Modul dipisah rapi di dalam file, lebih mengandalkan generator prosedural daripada data |
-| Detail Cooper Station di film minim, hasil bisa terasa beda dari ingatan penonton | Rendah | Fokus pada landmark kanon: tanah melengkung, rumah Cooper, baseball |
+| Detail stasiun di film minim, hasil bisa terasa beda dari ingatan penonton | Rendah | Fokus pada landmark kanon: tanah melengkung, rumah Cooper, baseball |
 
 ## Sumber
 

@@ -1,4 +1,4 @@
-"""Uji tahap 12b-3 (Cooper Station): pejalan kaki menyeberang hanya saat lampu "jalan" (tidak ada orang di jalan
+"""Uji tahap 12b-3 (Copper Corn Station): pejalan kaki menyeberang hanya saat lampu "jalan" (tidak ada orang di jalan
 saat lampu mobil yang melintas hijau), biaya CPU simulasi, preset Hemat mengecilkan radius dan kepadatan.
 Pakai: python tools/uji_pejalan_kaki.py   (butuh: pip install playwright && playwright install chromium)"""
 import asyncio, json, pathlib

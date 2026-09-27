@@ -1,4 +1,4 @@
-"""Uji tahap 12b-2 (Cooper Station): 8 jenis pohon, persentase pohon berwarna per suasana daun,
+"""Uji tahap 12b-2 (Copper Corn Station): 8 jenis pohon, persentase pohon berwarna per suasana daun,
 daun jatuh mati di preset Hemat dan bisa dinyalakan manual.
 Pakai: python tools/uji_pohon.py   (butuh: pip install playwright && playwright install chromium)"""
 import asyncio, pathlib

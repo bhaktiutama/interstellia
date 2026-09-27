@@ -1,4 +1,4 @@
-# Tahapan Implementasi Cooper Station
+# Tahapan Implementasi Copper Corn Station
 
 Per 26 September 2026 · Bhakti · skala R = 1 km, L = 8 km
 

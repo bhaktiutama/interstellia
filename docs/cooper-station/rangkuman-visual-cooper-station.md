@@ -1,4 +1,4 @@
-# Rangkuman Visual Cooper Station (dari 4 referensi)
+# Rangkuman Visual Copper Corn Station (dari 4 referensi)
 
 Per 26 September 2026 · Bhakti · untuk disepakati sebelum tahap mempercantik (tahap 5 dan seterusnya)
 

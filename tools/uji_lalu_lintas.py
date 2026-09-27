@@ -1,4 +1,4 @@
-"""Uji tahap 12b-1 (Cooper Station): peron trem tidak di jalan, lalu lintas 30 menit tanpa tabrakan mobil-trem,
+"""Uji tahap 12b-1 (Copper Corn Station): peron trem tidak di jalan, lalu lintas 30 menit tanpa tabrakan mobil-trem,
 tanpa mobil tumpang tindih, tanpa mobil dari dua arah di dalam simpang yang sama.
 Pakai: python tools/uji_lalu_lintas.py   (butuh: pip install playwright && playwright install chromium)
 Simulasi dijalankan langsung (stepTram + stepTraffic tiap 0,1 s), jadi hasil tidak bergantung FPS."""

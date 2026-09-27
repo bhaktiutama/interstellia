@@ -1,4 +1,4 @@
-"""Uji tahap 12d (Cooper Station): siklus tanam gandum dan mesin ladang, mode foto (FOV, blur, simpan PNG,
+"""Uji tahap 12d (Copper Corn Station): siklus tanam gandum dan mesin ladang, mode foto (FOV, blur, simpan PNG,
 semua dikembalikan saat keluar), tur sinematik (9 titik, tanpa NaN, tidak melewati sumbu, kembali ke posisi awal).
 Pakai: python tools/uji_ladang_foto_tur.py   (butuh: pip install playwright && playwright install chromium)"""
 import asyncio, pathlib

@@ -1,4 +1,4 @@
-# CLAUDE.md - Aplikasi multi-experience (nama kerja: Lazarus)
+# CLAUDE.md - Aplikasi multi-experience (nama: Interstellia)
 
 Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utama (`index.html`). Proyek penggemar, tidak berafiliasi dengan studio film mana pun. Pemilik proyek: Bhakti; diuji di PC GTX 1060 dan MacBook M1.
 
@@ -13,31 +13,31 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `docs/app/` | Dokumen tingkat aplikasi (penamaan, arsitektur) |
 | `docs/<id>/` | Konsep dan rencana per experience |
 | `tools/qc_load.py` | Cek halaman termuat tanpa error |
-| `tools/uji_spaceport.py` | Uji Cooper Station 12a: pintu terminal, gerbang B1 ke kokpit, sandar otomatis |
-| `tools/uji_lalu_lintas.py` | Uji Cooper Station 12b-1: peron trem, lalu lintas 30 menit tanpa tabrakan |
-| `tools/uji_pohon.py` | Uji Cooper Station 12b-2: jenis pohon, suasana daun, daun jatuh per preset |
-| `tools/uji_pejalan_kaki.py` | Uji Cooper Station 12b-3: pejalan kaki menyeberang hanya saat lampu jalan, biaya CPU, preset Hemat |
-| `tools/uji_burung.py` | Uji Cooper Station 12b-4: kawanan burung, merpati terbang saat didekati, siklus hari |
-| `tools/uji_suasana.py` | Uji Cooper Station 12b-5: kafe, lampu untaian, bendera, suara kota, tidak ada normal nol (NaN) |
-| `tools/uji_hujan.py` | Uji Cooper Station 12c: angka fisika hujan dan air mancur Coriolis, hujan, tanah basah, angin |
-| `tools/uji_ladang_foto_tur.py` | Uji Cooper Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
+| `tools/uji_spaceport.py` | Uji Copper Corn Station 12a: pintu terminal, gerbang B1 ke kokpit, sandar otomatis |
+| `tools/uji_lalu_lintas.py` | Uji Copper Corn Station 12b-1: peron trem, lalu lintas 30 menit tanpa tabrakan |
+| `tools/uji_pohon.py` | Uji Copper Corn Station 12b-2: jenis pohon, suasana daun, daun jatuh per preset |
+| `tools/uji_pejalan_kaki.py` | Uji Copper Corn Station 12b-3: pejalan kaki menyeberang hanya saat lampu jalan, biaya CPU, preset Hemat |
+| `tools/uji_burung.py` | Uji Copper Corn Station 12b-4: kawanan burung, merpati terbang saat didekati, siklus hari |
+| `tools/uji_suasana.py` | Uji Copper Corn Station 12b-5: kafe, lampu untaian, bendera, suara kota, tidak ada normal nol (NaN) |
+| `tools/uji_hujan.py` | Uji Copper Corn Station 12c: angka fisika hujan dan air mancur Coriolis, hujan, tanah basah, angin |
+| `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
 ## Aturan aplikasi
 
 - Menambah experience: buat `experiences/<id>/index.html` + `preview.jpg`, lalu tambahkan entri di `EXPERIENCES` (ready: true). Tiap experience wajib punya tautan kembali ke `../../index.html`.
-- Tiap experience tetap halaman terpisah (memori GPU bersih saat pindah). Kode bersama dipindah ke `shared/` bertahap, jangan membongkar Cooper Station sekaligus.
-- Rencana experience berikutnya: Planet Ombak (dunia air, dilatasi waktu), Penerbangan Kestrel (shuttle KS-07 dari Cooper Station). Usulan nama: `docs/app/penamaan.md`.
+- Tiap experience tetap halaman terpisah (memori GPU bersih saat pindah). Kode bersama dipindah ke `shared/` bertahap, jangan membongkar Copper Corn Station sekaligus.
+- Rencana experience berikutnya: Millar's World (dunia air, dilatasi waktu), Penerbangan Kestrel (shuttle KS-07 dari Copper Corn Station). Usulan nama: `docs/app/penamaan.md`.
 - Jangan memakai judul film, logo, huruf judul, musik, cuplikan, atau desain kendaraan film.
 
-# Experience: Cooper Station
+# Experience: Copper Corn Station
 
 Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/cooper-station/index.html`), three.js, bisa dijelajahi berjalan kaki. Dibangun bertahap.
 
 ## Aturan kerja
 
 - Bahasa: Indonesia untuk teks UI, komentar kode, dokumen, dan balasan.
-- Satu file: semua kode Cooper Station ada di `experiences/cooper-station/index.html` (CSS + JS modul). Tidak ada build step, tidak ada addon three.js.
+- Satu file: semua kode Copper Corn Station ada di `experiences/cooper-station/index.html` (CSS + JS modul). Tidak ada build step, tidak ada addon three.js.
 - three.js 0.186.1 dari importmap `https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js`.
 - "Pertahankan yang ada": fitur lama tidak boleh hilang atau berubah tanpa diminta.
 - Uji: pemilik proyek yang menguji visual dan FPS. Cukup cek halaman termuat tanpa error (lihat `tools/`). Jangan menghabiskan waktu dengan screenshot berulang.

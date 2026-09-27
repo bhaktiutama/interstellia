@@ -1,4 +1,4 @@
-"""Uji tahap 12a (Cooper Station): pintu terminal bisa dilewati, gerbang B1 membawa ke kokpit, sandar otomatis selesai.
+"""Uji tahap 12a (Copper Corn Station): pintu terminal bisa dilewati, gerbang B1 membawa ke kokpit, sandar otomatis selesai.
 Pakai: python tools/uji_spaceport.py   (butuh: pip install playwright && playwright install chromium)
 Fisika dijalankan langsung lewat window.__station.physicsStep, jadi hasil tidak bergantung FPS (SwiftShader lambat)."""
 import asyncio, json, pathlib

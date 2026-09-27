@@ -1,12 +1,12 @@
 # Rencana: tata letak menu, layar mulai, dan pilihan bahasa
 
-Status: rencana, belum dikerjakan. Berlaku untuk seluruh aplikasi, contoh utama Cooper Station.
+Status: rencana, belum dikerjakan. Berlaku untuk seluruh aplikasi, contoh utama Copper Corn Station.
 
 ## Ringkasan
 
-- Panel kontrol Cooper Station diubah dari daftar lipat yang memanjang ke bawah menjadi panel bertab: satu kelompok tampil sekaligus, tanpa gulir panjang.
+- Panel kontrol Copper Corn Station diubah dari daftar lipat yang memanjang ke bawah menjadi panel bertab: satu kelompok tampil sekaligus, tanpa gulir panjang.
 - Saat dibuka, halaman menampilkan layar muat dengan progres lalu tombol Mulai. Bantuan tidak lagi tampil otomatis; dibuka lewat tombol ? atau F1 sebagai jendela bertab.
-- Empat bahasa: Indonesia (awal), English, 日本語, 中文 (简体). Pilihan disimpan dan berlaku di menu utama, Cooper Station, dan Gargantua.
+- Empat bahasa: Indonesia (awal), English, 日本語, 中文 (简体). Pilihan disimpan dan berlaku di menu utama, Copper Corn Station, dan Gargantua.
 
 ## Masalah sekarang
 
@@ -82,11 +82,11 @@ Cakupan teks (perkiraan, jumlah pasti dihitung saat ekstraksi):
 | Halaman | Perkiraan jumlah teks |
 | --- | --- |
 | Menu utama | 15 |
-| Cooper Station: panel, HUD, bantuan, foto, tur | 150-200 |
-| Cooper Station: pesan, prompt aksi, plakat, papan terminal | 100-150 |
+| Copper Corn Station: panel, HUD, bantuan, foto, tur | 150-200 |
+| Copper Corn Station: pesan, prompt aksi, plakat, papan terminal | 100-150 |
 | Gargantua | 15-20 |
 
-Yang tidak diterjemahkan: komentar kode dan dokumen (tetap bahasa Indonesia sesuai aturan kerja), nama tempat orisinal (Cooper Station, Kestrel KS-07), tulisan di dalam dunia 3D seperti papan nama halte dan plakat gedung (tekstur kanvas; bisa menyusul sebagai tahap terpisah).
+Yang tidak diterjemahkan: komentar kode dan dokumen (tetap bahasa Indonesia sesuai aturan kerja), nama tempat orisinal (Copper Corn Station, Kestrel KS-07), tulisan di dalam dunia 3D seperti papan nama halte dan plakat gedung (tekstur kanvas; bisa menyusul sebagai tahap terpisah).
 
 Kualitas terjemahan: teks Inggris, Jepang, dan Mandarin dibuat oleh Claude. Keterangan fisika (tur, plakat air mancur) sebaiknya dibaca ulang oleh penutur asli; daftar teks per bahasa akan disiapkan dalam satu tabel agar mudah diperiksa.
 
@@ -105,7 +105,7 @@ Uji otomatis baru `tools/uji_menu_bahasa.py`: progres dan tombol Mulai, semua ta
 
 | No | Pertanyaan | Usulan awal |
 | --- | --- | --- |
-| 1 | "Menu yang ke bawah terus" = Panel kontrol di kanan atas Cooper Station (dan kartu bantuan)? | Ya, keduanya |
+| 1 | "Menu yang ke bawah terus" = Panel kontrol di kanan atas Copper Corn Station (dan kartu bantuan)? | Ya, keduanya |
 | 2 | Mandarin: aksara sederhana (简体) atau tradisional (繁體)? | Sederhana |
 | 3 | Pilih preset grafik di layar mulai? | Ya, dengan preset terakhir sudah terpilih |
 | 4 | Aturan CLAUDE.md "bahasa Indonesia untuk teks UI" diubah menjadi "Indonesia sebagai bahasa sumber, UI 4 bahasa lewat kamus" | Ya, diubah saat M3 |

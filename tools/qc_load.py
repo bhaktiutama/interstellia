@@ -1,5 +1,5 @@
 """Cek cepat: buka index.html di Chromium headless, tunggu siap, cetak error.
-Pakai: python tools/qc_load.py [experiences/cooper-station/index.html]   (default: Cooper Station; butuh: pip install playwright && playwright install chromium)
+Pakai: python tools/qc_load.py [experiences/cooper-station/index.html]   (default: Copper Corn Station; butuh: pip install playwright && playwright install chromium)
 Bila tidak ada GPU, pakai SwiftShader (lambat tapi cukup untuk cek error)."""
 import asyncio, pathlib, sys
 from playwright.async_api import async_playwright
@@ -14,7 +14,7 @@ async def main():
         pg.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))
         pg.on('console', lambda m: errs.append(m.type + ': ' + m.text[:300]) if m.type in ('error', 'warning') else None)
         await pg.goto(page_url)
-        if 'cooper-station' in rel:                                   # Cooper Station punya penanda siap
+        if 'cooper-station' in rel:                                   # Copper Corn Station punya penanda siap
             await pg.wait_for_function('window.__stationReady === true', timeout=120000)
         await pg.wait_for_timeout(5000)
         print('halaman:', rel)

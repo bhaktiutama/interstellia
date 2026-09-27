@@ -1,4 +1,4 @@
-"""Uji tahap 12b-4 (Cooper Station): kawanan burung siang, merpati terbang saat didekati lalu hinggap lagi,
+"""Uji tahap 12b-4 (Copper Corn Station): kawanan burung siang, merpati terbang saat didekati lalu hinggap lagi,
 burung pulang saat senja dan tidak ada di malam hari.
 Pakai: python tools/uji_burung.py   (butuh: pip install playwright && playwright install chromium)"""
 import asyncio, json, pathlib

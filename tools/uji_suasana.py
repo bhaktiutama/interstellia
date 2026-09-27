@@ -1,4 +1,4 @@
-"""Uji tahap 12b-5 (Cooper Station): kafe, lampu untaian, bendera, sepeda, orang duduk di kafe, suara kota berjalan
+"""Uji tahap 12b-5 (Copper Corn Station): kafe, lampu untaian, bendera, sepeda, orang duduk di kafe, suara kota berjalan
 tanpa error, dan tidak ada normal nol di geometri (normal nol = NaN di sebagian GPU, tampil sebagai titik putih menyala).
 Pakai: python tools/uji_suasana.py   (butuh: pip install playwright && playwright install chromium)"""
 import asyncio, pathlib

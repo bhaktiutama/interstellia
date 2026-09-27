@@ -1,4 +1,4 @@
-"""Uji tahap 12c (Cooper Station): angka fisika hujan dan air mancur Coriolis, hujan muncul saat mendung,
+"""Uji tahap 12c (Copper Corn Station): angka fisika hujan dan air mancur Coriolis, hujan muncul saat mendung,
 tanah basah, angin menguat, tidak ada hujan di dalam terminal.
 Pakai: python tools/uji_hujan.py   (butuh: pip install playwright && playwright install chromium)"""
 import asyncio, math, pathlib

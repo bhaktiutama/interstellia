@@ -1,4 +1,4 @@
-# Rencana Tahap 12: Cooper Station
+# Rencana Tahap 12: Copper Corn Station
 
 Status: 12a selesai (lihat bagian 12a). 12b selesai (lihat `rencana-tahap-12b-cooper-station.md`). 12c selesai (lihat bagian 12c). 12d selesai (lihat bagian 12d). Tahap 12 selesai; sisa ada di Cadangan. Titik awal = tahap 11d (artifact versi 24). Semua yang sudah ada tetap dipertahankan.
 

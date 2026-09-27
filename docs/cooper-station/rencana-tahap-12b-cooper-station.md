@@ -1,4 +1,4 @@
-# Rencana Tahap 12b: Kota hidup dan suasana (Cooper Station)
+# Rencana Tahap 12b: Kota hidup dan suasana (Copper Corn Station)
 
 Status: 12b selesai (12b-1 sampai 12b-5, lihat bagian "Hasil" masing-masing). Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
 

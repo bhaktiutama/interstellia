@@ -1,4 +1,4 @@
-# Rencana Tahap 11: Cooper Station
+# Rencana Tahap 11: Copper Corn Station
 
 Status: usulan, belum dikerjakan. Semua yang sudah ada tetap dipertahankan.
 
