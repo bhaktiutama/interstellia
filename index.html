@@ -130,6 +130,11 @@
       <button id="labCorn" type="button"><kbd>3</kbd>Ladang jagung</button>
       <button id="labWheat" type="button"><kbd>4</kbd>Ladang gandum</button>
       <button id="labVeg" type="button">Vegetasi: Tinggi (K)</button>
+      <button id="labPost" type="button">Efek layar: Tinggi (P)</button>
+      <button id="labSound" type="button">Suara: nyala (U)</button>
+      <button id="labMusic" type="button">Musik: generatif (J)</button>
+      <button id="labMusicFile" type="button">Pilih file musik...</button>
+      <input id="inMusicFile" type="file" accept="audio/*" hidden>
       <label class="chk"><input id="inShadow" type="checkbox" checked> Bayangan</label>
     </div>
     <div id="labResult">Lempar ke arah hadap, dengan sudut elevasi dari slider. Tiang biru = titik lepas, tiang merah = titik mendarat.</div>
@@ -141,7 +146,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 8 · detail fasad semua bangunan (jendela, pintu, balkon, atap, lampu malam) dan rumah Cooper lengkap · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 9 · bloom, SSAO, tone mapping ACES, FXAA, audio lingkungan dan musik generatif · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -154,7 +159,8 @@
       <tr class="desk-only"><td>[ · ]</td><td>Jam stasiun mundur / maju 1 jam (siklus siang-malam)</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
       <tr class="desk-only"><td>1 · 2 · 3 · 4</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum dekat bukit</td></tr>
-      <tr class="desk-only"><td>K</td><td>Kualitas vegetasi: Tinggi, Sedang, Rendah</td></tr>
+      <tr class="desk-only"><td>K · P</td><td>Kualitas vegetasi · efek layar (bloom, SSAO, tone mapping): Tinggi, Sedang, Rendah/Mati</td></tr>
+      <tr class="desk-only"><td>U · J</td><td>Suara nyala/mati · musik: generatif, file sendiri (pilih di panel Uji), mati</td></tr>
       <tr class="desk-only"><td>? (atau F1)</td><td>Tampilkan / tutup bantuan ini</td></tr>
       <tr class="desk-only"><td>O</td><td>Jalan otomatis ke depan</td></tr>
       <tr class="desk-only"><td>X</td><td>Turbo 50 m/s (debug)</td></tr>
@@ -539,7 +545,9 @@ farScene.add(saturn);
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uPx: { value: 1 } },
     vertexShader: /* glsl */`uniform float uPx; void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 150.0 * uPx; }`,
     fragmentShader: /* glsl */`void main() { vec2 d = gl_PointCoord - 0.5; float r = length(d) * 2.0; if (r > 1.0) discard;
-      float g = exp(-r * 9.0) * 1.6 + exp(-r * 3.0) * 0.18; gl_FragColor = vec4(vec3(1.0, 0.95, 0.85) * g, 1.0); }`,
+      float g = exp(-r * 9.0) * 1.6 + exp(-r * 3.0) * 0.18; gl_FragColor = vec4(pow(max(vec3(1.0, 0.95, 0.85) * g, vec3(0.0)), vec3(2.2)), 1.0);
+      #include <colorspace_fragment>
+    }`,
   });
   const glareG = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(SUN_DIR.clone().multiplyScalar(9000).toArray()), 3));
   const glare = new THREE.Points(glareG, glareMat); glare.renderOrder = 3; glare.frustumCulled = false;
@@ -2757,7 +2765,7 @@ function lockPointer() {
   if (ext.active || isTouch || document.pointerLockElement || !canvas.requestPointerLock) return;
   try { const p = canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* drag-to-look tetap jalan */ }
 }
-document.getElementById('go').addEventListener('click', () => { startEl.hidden = true; lockPointer(); });
+document.getElementById('go').addEventListener('click', () => { startEl.hidden = true; startAudio(); lockPointer(); });
 function toggleHelp() {                                           // tombol ? (atau F1): tampilkan / tutup bantuan
   startEl.hidden = !startEl.hidden;
   document.getElementById('go').textContent = 'Lanjut';
@@ -2789,6 +2797,7 @@ canvas.addEventListener('wheel', (e) => {
 window.addEventListener('keydown', (e) => {
   if (e.target && (e.target.tagName === 'INPUT')) return;
   keys.add(e.code);
+  if (!AUDIO.started) startAudio();                                  // audio butuh interaksi pengguna
   if (e.repeat) return;
   if (e.code === 'KeyO') input.auto = !input.auto;
   if (e.code === 'KeyX') input.turbo = !input.turbo;
@@ -2807,6 +2816,9 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit3') teleport('corn');
   if (e.code === 'Digit4') teleport('wheat');
   if (e.code === 'KeyK') cycleVegQuality();
+  if (e.code === 'KeyP') cyclePost();
+  if (e.code === 'KeyU') toggleSound();
+  if (e.code === 'KeyJ') { startAudio(); cycleMusic(); }
   if (e.code === 'Slash' || e.code === 'F1') { e.preventDefault(); toggleHelp(); }
   if (e.code === 'BracketLeft') shiftHour(-1);
   if (e.code === 'BracketRight') shiftHour(1);
@@ -2895,6 +2907,11 @@ on('labHill', () => teleport('hill'));
 on('labCorn', () => teleport('corn'));
 on('labWheat', () => teleport('wheat'));
 on('labVeg', () => cycleVegQuality());
+on('labPost', () => cyclePost());
+on('labSound', () => toggleSound());
+on('labMusic', () => { startAudio(); cycleMusic(); });
+on('labMusicFile', () => document.getElementById('inMusicFile').click());
+document.getElementById('inMusicFile').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) loadMusicFile(f); e.target.value = ''; });
 const inHour = document.getElementById('inHour'), inHourV = document.getElementById('inHourV');
 inHour.addEventListener('input', () => { clock.hour = +inHour.value; inHourV.textContent = fmtHour(clock.hour); });
 inHour.addEventListener('change', () => inHour.blur());
@@ -3027,7 +3044,9 @@ const glowMat = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */`
     uniform vec3 uCol; uniform float uI;
     varying vec3 vN; varying vec3 vV;
-    void main() { float f = pow(max(dot(normalize(vN), normalize(vV)), 0.0), 3.0); gl_FragColor = vec4(uCol * f * uI * 0.55, 1.0); }`,
+    void main() { float f = pow(max(dot(normalize(vN), normalize(vV)), 0.0), 3.0); gl_FragColor = vec4(pow(max(uCol * f * uI * 0.55, vec3(0.0)), vec3(2.2)), 1.0);
+      #include <colorspace_fragment>
+    }`,
 });
 const sunGlow = new THREE.Mesh(new THREE.CylinderGeometry(38, 38, SPINE.z1 - SPINE.z0, 32, 1, true).rotateX(Math.PI / 2), glowMat);
 sunGlow.renderOrder = 5;
@@ -3060,7 +3079,9 @@ const capGlowMat = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */`
     uniform vec3 uCol; uniform float uI;
     varying vec3 vN; varying vec3 vV;
-    void main() { float f = pow(max(dot(normalize(vN), normalize(vV)), 0.0), 2.5); gl_FragColor = vec4(uCol * f * uI * 0.5, 1.0); }`,
+    void main() { float f = pow(max(dot(normalize(vN), normalize(vV)), 0.0), 2.5); gl_FragColor = vec4(pow(max(uCol * f * uI * 0.5, vec3(0.0)), vec3(2.2)), 1.0);
+      #include <colorspace_fragment>
+    }`,
 });
 const capRimMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, side: THREE.DoubleSide,
@@ -3075,7 +3096,8 @@ const capRimMat = new THREE.ShaderMaterial({
       float r = length(vP.xy) / uR;
       float g = exp(-pow((r - 0.985) / 0.012, 2.0)) + 0.35 * exp(-pow((r - 0.96) / 0.04, 2.0));   // pita lampu tepi + pendar
       float seg = 0.75 + 0.25 * cos(atan(vP.y, vP.x) * 96.0);                                       // 96 segmen rangka tepi
-      gl_FragColor = vec4(uCol * g * seg * uI * 0.9, 1.0);
+      gl_FragColor = vec4(pow(max(uCol * g * seg * uI * 0.9, vec3(0.0)), vec3(2.2)), 1.0);
+      #include <colorspace_fragment>
     }`,
 });
 for (const sgn of [-1, 1]) {
@@ -4215,6 +4237,370 @@ function teleport(key) {
 }
 
 
+/* =====================================================================
+   TAHAP 9: POST-PROCESSING (tanpa addon)
+   Scene dirender ke target HDR (half float) -> SSAO setengah resolusi -> bloom berantai (mip 6 tingkat)
+   -> komposit: exposure + tone mapping ACES + sRGB + vignette + grain -> FXAA ke layar.
+   Kualitas (tombol P): Tinggi = semua, Sedang = tanpa SSAO, Mati = render langsung seperti tahap 8.
+   ===================================================================== */
+const POST = { mode: 0, names: ['Tinggi', 'Sedang', 'Mati'], exposure: 1.45, bloom: 0.5, bloomThr: 1.15, ao: 0.55, grain: 0.012, vignette: 0.2 };
+const POST_R = {};
+{
+  const hf = { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, generateMipmaps: false };
+  POST_R.hdr = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: true, generateMipmaps: false });
+  POST_R.hdr.depthTexture = new THREE.DepthTexture(4, 4);
+  POST_R.ldr = new THREE.WebGLRenderTarget(4, 4, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
+  POST_R.ao = [0, 1].map(() => new THREE.WebGLRenderTarget(4, 4, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }));
+  POST_R.down = [0, 1, 2, 3, 4, 5].map(() => new THREE.WebGLRenderTarget(4, 4, hf));
+  POST_R.up = [0, 1, 2, 3, 4].map(() => new THREE.WebGLRenderTarget(4, 4, hf));
+  POST_R.w = 0; POST_R.h = 0;
+}
+const fsScene = new THREE.Scene(), fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); fsQuad.frustumCulled = false; fsScene.add(fsQuad);
+const FS_VS = /* glsl */`varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+const fsMat = (frag, uniforms) => new THREE.ShaderMaterial({ vertexShader: FS_VS, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false });
+function fsPass(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target); renderer.render(fsScene, fsCam); }
+// --- SSAO: 8 sampel hemisfer, radius 1 m, memudar sampai 150 m ---
+const AO_KERNEL = [];
+{ let sd = 4711; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 8; i++) { const v = new THREE.Vector3(r() * 2 - 1, r() * 2 - 1, r()).normalize(); const s = 0.25 + 0.75 * ((i + 1) / 8) ** 2; AO_KERNEL.push(v.multiplyScalar(s)); } }
+const aoMat = fsMat(/* glsl */`
+  uniform sampler2D tDepth; uniform mat4 uProj, uProjInv; uniform vec2 uTexel; uniform vec3 uKernel[8]; uniform float uRadius;
+  varying vec2 vUv;
+  vec3 vpos(vec2 uv) { float d = texture2D(tDepth, uv).r; vec4 v = uProjInv * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return v.xyz / v.w; }
+  float ign(vec2 p) { return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y)); }
+  void main() {
+    float d0 = texture2D(tDepth, vUv).r;
+    if (d0 >= 0.99999) { gl_FragColor = vec4(1.0); return; }
+    vec3 P = vpos(vUv);
+    float dist = -P.z;
+    float fade = 1.0 - smoothstep(60.0, 150.0, dist);
+    if (fade <= 0.0) { gl_FragColor = vec4(1.0); return; }
+    vec3 pr = vpos(vUv + vec2(uTexel.x, 0.0)), pl = vpos(vUv - vec2(uTexel.x, 0.0)), pu = vpos(vUv + vec2(0.0, uTexel.y)), pd = vpos(vUv - vec2(0.0, uTexel.y));
+    vec3 dx = abs(pr.z - P.z) < abs(P.z - pl.z) ? pr - P : P - pl;
+    vec3 dy = abs(pu.z - P.z) < abs(P.z - pd.z) ? pu - P : P - pd;
+    vec3 N = normalize(cross(dx, dy));
+    if (dot(N, -P) < 0.0) N = -N;
+    float a = ign(gl_FragCoord.xy) * 6.2831853;
+    vec3 rv = vec3(cos(a), sin(a), 0.0);
+    vec3 T = normalize(rv - N * dot(rv, N)), B = cross(N, T);
+    float R = uRadius * (1.0 + dist * 0.01), occ = 0.0;
+    for (int i = 0; i < 8; i++) {
+      vec3 S = P + (T * uKernel[i].x + B * uKernel[i].y + N * uKernel[i].z) * R;
+      vec4 c = uProj * vec4(S, 1.0);
+      vec2 suv = c.xy / c.w * 0.5 + 0.5;
+      if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) continue;
+      float sz = vpos(suv).z;
+      float range = smoothstep(0.0, 1.0, R / max(abs(P.z - sz), 1e-3));
+      occ += step(S.z + 0.03 * R, sz) * range;
+    }
+    gl_FragColor = vec4(vec3(1.0 - occ / 8.0 * fade), 1.0);
+  }`, { tDepth: { value: null }, uProj: { value: new THREE.Matrix4() }, uProjInv: { value: new THREE.Matrix4() }, uTexel: { value: new THREE.Vector2() },
+  uKernel: { value: AO_KERNEL }, uRadius: { value: 1.0 } });
+const aoBlurMat = fsMat(/* glsl */`
+  uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
+  void main() { float s = 0.0; for (int i = -2; i < 2; i++) for (int j = -2; j < 2; j++) s += texture2D(tSrc, vUv + (vec2(float(i), float(j)) + 0.5) * uTexel).r;
+    gl_FragColor = vec4(vec3(s / 16.0), 1.0); }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
+// --- bloom: turun (dengan ambang lembut di tingkat pertama) lalu naik (filter tenda) ---
+const downMat = fsMat(/* glsl */`
+  uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uFirst, uThr, uKnee; varying vec2 vUv;
+  void main() {
+    vec3 c = vec3(0.0); float ws = 0.0;
+    for (int k = 0; k < 4; k++) {
+      vec2 o = vec2(k == 0 || k == 2 ? -1.0 : 1.0, k < 2 ? -1.0 : 1.0);
+      vec3 t = texture2D(tSrc, vUv + o * uTexel).rgb;
+      float w = uFirst > 0.5 ? 1.0 / (1.0 + dot(t, vec3(0.2126, 0.7152, 0.0722))) : 1.0;   // rata-rata Karis: redam titik terang tunggal
+      c += t * w; ws += w;
+    }
+    c /= ws;
+    if (uFirst > 0.5) {
+      float br = max(c.r, max(c.g, c.b));
+      float rq = clamp(br - uThr + uKnee, 0.0, 2.0 * uKnee); rq = rq * rq / (4.0 * uKnee + 1e-4);
+      c *= max(rq, br - uThr) / max(br, 1e-4);
+      c = min(c, vec3(30.0));
+    }
+    gl_FragColor = vec4(c, 1.0);
+  }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uFirst: { value: 0 }, uThr: { value: 1 }, uKnee: { value: 0.4 } });
+const upMat = fsMat(/* glsl */`
+  uniform sampler2D tLow, tHigh; uniform vec2 uTexel; varying vec2 vUv;
+  void main() {
+    vec3 s = texture2D(tLow, vUv).rgb * 4.0;
+    s += (texture2D(tLow, vUv + vec2(uTexel.x, 0.0)).rgb + texture2D(tLow, vUv - vec2(uTexel.x, 0.0)).rgb + texture2D(tLow, vUv + vec2(0.0, uTexel.y)).rgb + texture2D(tLow, vUv - vec2(0.0, uTexel.y)).rgb) * 2.0;
+    s += texture2D(tLow, vUv + uTexel).rgb + texture2D(tLow, vUv - uTexel).rgb + texture2D(tLow, vUv + vec2(uTexel.x, -uTexel.y)).rgb + texture2D(tLow, vUv + vec2(-uTexel.x, uTexel.y)).rgb;
+    gl_FragColor = vec4(texture2D(tHigh, vUv).rgb + s / 16.0, 1.0);
+  }`, { tLow: { value: null }, tHigh: { value: null }, uTexel: { value: new THREE.Vector2() } });
+// --- komposit: AO, bloom, exposure, ACES, sRGB, vignette, grain ---
+const compMat = fsMat(/* glsl */`
+  uniform sampler2D tHdr, tBloom, tAO; uniform float uExp, uBloom, uAO, uUseAO, uGrain, uVig, uTime; varying vec2 vUv;
+  vec3 aces(vec3 x) {                                              // ACES fitted (Stephen Hill)
+    const mat3 m1 = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
+    const mat3 m2 = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
+    vec3 v = m1 * x; vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
+    return clamp(m2 * (a / b), 0.0, 1.0);
+  }
+  vec3 toSRGB(vec3 c) { return mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)); }
+  float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+  void main() {
+    vec3 c = texture2D(tHdr, vUv).rgb;
+    if (uUseAO > 0.5) c *= mix(1.0, texture2D(tAO, vUv).r, uAO);
+    c += texture2D(tBloom, vUv).rgb * uBloom;
+    c = aces(c * uExp);
+    vec2 q = vUv - 0.5; c *= 1.0 - uVig * dot(q, q) * 2.2;
+    c = toSRGB(c);
+    c += (h(vUv * 1000.0 + uTime) - 0.5) * uGrain;
+    gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));
+  }`, { tHdr: { value: null }, tBloom: { value: null }, tAO: { value: null }, uExp: { value: 1 }, uBloom: { value: 0.5 }, uAO: { value: 0.5 }, uUseAO: { value: 1 },
+  uGrain: { value: 0.01 }, uVig: { value: 0.2 }, uTime: { value: 0 } });
+// --- FXAA (versi ringkas, luma di kanal alfa) ---
+const fxaaMat = fsMat(/* glsl */`
+  uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
+  void main() {
+    vec4 cM = texture2D(tSrc, vUv);
+    float lNW = texture2D(tSrc, vUv + vec2(-1.0, -1.0) * uTexel).a, lNE = texture2D(tSrc, vUv + vec2(1.0, -1.0) * uTexel).a;
+    float lSW = texture2D(tSrc, vUv + vec2(-1.0, 1.0) * uTexel).a, lSE = texture2D(tSrc, vUv + vec2(1.0, 1.0) * uTexel).a, lM = cM.a;
+    float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE))), lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+    vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), ((lNW + lSW) - (lNE + lSE)));
+    float red = max((lNW + lNE + lSW + lSE) * 0.25 * 0.125, 1.0 / 128.0);
+    dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + red), vec2(-8.0), vec2(8.0)) * uTexel;
+    vec3 a = 0.5 * (texture2D(tSrc, vUv + dir * (1.0 / 3.0 - 0.5)).rgb + texture2D(tSrc, vUv + dir * (2.0 / 3.0 - 0.5)).rgb);
+    vec3 b = a * 0.5 + 0.25 * (texture2D(tSrc, vUv - dir * 0.5).rgb + texture2D(tSrc, vUv + dir * 0.5).rgb);
+    float lB = dot(b, vec3(0.299, 0.587, 0.114));
+    gl_FragColor = vec4((lB < lMin || lB > lMax) ? a : b, 1.0);
+  }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
+const _dbs = new THREE.Vector2();
+function postBegin() {                                            // dipanggil sebelum render scene
+  if (POST.mode === 2) return false;
+  renderer.getDrawingBufferSize(_dbs);
+  const w = Math.max(4, Math.floor(_dbs.x)), h = Math.max(4, Math.floor(_dbs.y));
+  if (w !== POST_R.w || h !== POST_R.h) {
+    POST_R.w = w; POST_R.h = h;
+    POST_R.hdr.setSize(w, h); POST_R.ldr.setSize(w, h);
+    for (const t of POST_R.ao) t.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
+    POST_R.down.forEach((t, i) => t.setSize(Math.max(2, w >> (i + 1)), Math.max(2, h >> (i + 1))));
+    POST_R.up.forEach((t, i) => t.setSize(Math.max(2, w >> (i + 1)), Math.max(2, h >> (i + 1))));
+  }
+  renderer.setRenderTarget(POST_R.hdr);
+  return true;
+}
+function postEnd() {
+  const R0 = POST_R, useAO = POST.mode === 0 && !ext.active;
+  if (useAO) {
+    const U = aoMat.uniforms;
+    U.tDepth.value = R0.hdr.depthTexture; U.uProj.value.copy(camera.projectionMatrix); U.uProjInv.value.copy(camera.projectionMatrixInverse);
+    U.uTexel.value.set(1 / R0.w, 1 / R0.h);
+    fsPass(aoMat, R0.ao[0]);
+    aoBlurMat.uniforms.tSrc.value = R0.ao[0].texture; aoBlurMat.uniforms.uTexel.value.set(2 / R0.w, 2 / R0.h);
+    fsPass(aoBlurMat, R0.ao[1]);
+  }
+  // bloom turun
+  let src = R0.hdr.texture, sw = R0.w, sh = R0.h;
+  R0.down.forEach((t, i) => {
+    const U = downMat.uniforms; U.tSrc.value = src; U.uTexel.value.set(1 / sw, 1 / sh); U.uFirst.value = i === 0 ? 1 : 0;
+    U.uThr.value = POST.bloomThr; fsPass(downMat, t);
+    src = t.texture; sw = t.width; sh = t.height;
+  });
+  // bloom naik: up[i] = down[i] + tenda(up[i+1] atau down[5])
+  for (let i = R0.up.length - 1; i >= 0; i--) {
+    const low = i === R0.up.length - 1 ? R0.down[i + 1] : R0.up[i + 1];
+    const U = upMat.uniforms; U.tLow.value = low.texture; U.tHigh.value = R0.down[i].texture; U.uTexel.value.set(1 / low.width, 1 / low.height);
+    fsPass(upMat, R0.up[i]);
+  }
+  const C = compMat.uniforms;
+  C.tHdr.value = R0.hdr.texture; C.tBloom.value = R0.up[0].texture; C.tAO.value = R0.ao[1].texture; C.uUseAO.value = useAO ? 1 : 0;
+  C.uExp.value = POST.exposure; C.uBloom.value = POST.bloom / 6; C.uAO.value = POST.ao; C.uGrain.value = POST.grain; C.uVig.value = POST.vignette; C.uTime.value = (clock.sim % 100);
+  fsPass(compMat, R0.ldr);
+  fxaaMat.uniforms.tSrc.value = R0.ldr.texture; fxaaMat.uniforms.uTexel.value.set(1 / R0.w, 1 / R0.h);
+  fsPass(fxaaMat, null);
+}
+function cyclePost() {
+  POST.mode = (POST.mode + 1) % POST.names.length;
+  const b = document.getElementById('labPost'); if (b) b.textContent = `Efek layar: ${POST.names[POST.mode]} (P)`;
+}
+
+/* =====================================================================
+   TAHAP 9: AUDIO (Web Audio API, semua suara disintesis, tanpa file)
+   - ambience: desis udara + angin, dengung mesin stasiun, gemuruh kota, burung siang, jangkrik malam
+   - langkah kaki sesuai permukaan (rumput, aspal/beton, tanah, kayu), bunyi mendarat
+   - musik: komposisi generatif orisinal (organ + pad + nada piano jarang, gema panjang), atau file musik milik pengguna
+   - kamera luar: suara lingkungan hilang (ruang hampa), musik tetap
+   ===================================================================== */
+const AUDIO = { ctx: null, on: true, music: 'gen', started: false, stepAcc: 0, lastDist: 0, lastState: 'ground', nextChirp: 0, nextCricket: 0, nextNote: 0,
+  chordIdx: 0, nextChord: 0, gust: 0.5, land: null };
+function startAudio() {
+  if (AUDIO.ctx) { if (AUDIO.ctx.state === 'suspended') AUDIO.ctx.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  const ctx = new AC(); AUDIO.ctx = ctx;
+  const master = ctx.createGain(); master.gain.value = AUDIO.on ? 0.9 : 0;
+  const comp = ctx.createDynamicsCompressor(); comp.threshold.value = -14; comp.ratio.value = 3;
+  master.connect(comp).connect(ctx.destination); AUDIO.master = master;
+  // gema: respons impuls dari noise yang meluruh 4,5 s (stereo)
+  const irLen = Math.floor(ctx.sampleRate * 4.5), ir = ctx.createBuffer(2, irLen, ctx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < irLen; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, 3.2); }
+  const verb = ctx.createConvolver(); verb.buffer = ir; const verbGain = ctx.createGain(); verbGain.gain.value = 0.55; verb.connect(verbGain).connect(master); AUDIO.verb = verb;
+  // noise dasar: putih, pink, cokelat (2 detik, diulang)
+  const mkNoise = (kind) => {
+    const len = ctx.sampleRate * 2, b = ctx.createBuffer(1, len, ctx.sampleRate), d = b.getChannelData(0);
+    let b0 = 0, b1 = 0, b2 = 0, last = 0;
+    for (let i = 0; i < len; i++) {
+      const w = Math.random() * 2 - 1;
+      if (kind === 'pink') { b0 = 0.99765 * b0 + w * 0.099046; b1 = 0.963 * b1 + w * 0.2965164; b2 = 0.57 * b2 + w * 1.0526913; d[i] = (b0 + b1 + b2 + w * 0.1848) * 0.2; }
+      else if (kind === 'brown') { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; }
+      else d[i] = w;
+    }
+    return b;
+  };
+  AUDIO.white = mkNoise('white');
+  const loop = (buf, filterType, freq, q, gain) => {
+    const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
+    const f = ctx.createBiquadFilter(); f.type = filterType; f.frequency.value = freq; f.Q.value = q;
+    const g = ctx.createGain(); g.gain.value = gain;
+    src.connect(f).connect(g).connect(master); src.start();
+    return { f, g };
+  };
+  AUDIO.air = loop(mkNoise('pink'), 'bandpass', 500, 0.4, 0.0);
+  AUDIO.city = loop(mkNoise('brown'), 'lowpass', 260, 0.7, 0.0);
+  // dengung mesin: 50 Hz dan harmonik, sangat pelan
+  const humG = ctx.createGain(); humG.gain.value = 0; humG.connect(master); AUDIO.hum = humG;
+  for (const [f, a] of [[50, 0.6], [100, 0.3], [150, 0.12]]) { const o = ctx.createOscillator(); o.frequency.value = f; const g = ctx.createGain(); g.gain.value = a; o.connect(g).connect(humG); o.start(); }
+  // bus efek (langkah, burung, jangkrik) dan musik
+  AUDIO.sfx = ctx.createGain(); AUDIO.sfx.gain.value = 1; AUDIO.sfx.connect(master);
+  AUDIO.musicBus = ctx.createGain(); AUDIO.musicBus.gain.value = 0.45; AUDIO.musicBus.connect(master); AUDIO.musicBus.connect(verb);
+  // data permukaan untuk langkah kaki (dibaca sekali dari kanvas lahan)
+  try { AUDIO.land = landCanvas.getContext('2d').getImageData(0, 0, LAND_W, LAND_H).data; } catch (e) { AUDIO.land = null; }
+  AUDIO.started = true;
+  if (AUDIO.fileEl) AUDIO.fileEl.play().catch(() => {});
+}
+// --- langkah kaki -----------------------------------------------------------
+function surfaceAt(s, za) {
+  if (Math.abs(wrapS(s - COOPER.s)) < 9.7 && za > COOPER.za - 8.6 && za < COOPER.za + 5.2) return 'wood';   // rumah + beranda Cooper
+  if (!AUDIO.land) return 'grass';
+  const x = Math.min(LAND_W - 1, Math.max(0, Math.floor(LX(modS(s))))), y = Math.min(LAND_H - 1, Math.max(0, Math.floor(LY(za))));
+  const i = (y * LAND_W + x) * 4, r = AUDIO.land[i] / 255, g = AUDIO.land[i + 1] / 255, b = AUDIO.land[i + 2] / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), sat = (mx - mn) / Math.max(mx, 1e-3);
+  if (sat < 0.15) return 'hard';
+  if (r > g && sat > 0.3) return 'dirt';
+  return 'grass';
+}
+function playStep(kind, loud = 1) {
+  const ctx = AUDIO.ctx, t = ctx.currentTime;
+  const src = ctx.createBufferSource(); src.buffer = AUDIO.white; src.playbackRate.value = 0.8 + Math.random() * 0.4;
+  const f = ctx.createBiquadFilter(), g = ctx.createGain();
+  const P = { grass: ['lowpass', 1600, 0.12, 0.09], hard: ['bandpass', 900, 0.07, 0.11], dirt: ['lowpass', 900, 0.1, 0.1], wood: ['bandpass', 380, 0.09, 0.16] }[kind];
+  f.type = P[0]; f.frequency.value = P[1] * (0.85 + Math.random() * 0.3); f.Q.value = kind === 'wood' ? 3 : 0.8;
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(P[3] * loud, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0005, t + P[2]);
+  src.connect(f).connect(g).connect(AUDIO.sfx); src.start(t, Math.random() * 1.5, P[2] + 0.05);
+  if (kind === 'wood') {                                            // resonansi papan kayu
+    const o = ctx.createOscillator(), og = ctx.createGain(); o.frequency.value = 140 + Math.random() * 30;
+    og.gain.setValueAtTime(0.06 * loud, t); og.gain.exponentialRampToValueAtTime(0.0005, t + 0.12);
+    o.connect(og).connect(AUDIO.sfx); o.start(t); o.stop(t + 0.15);
+  }
+}
+// --- burung dan jangkrik (disintesis, pola acak) ------------------------------
+function chirp(t, pan) {
+  const ctx = AUDIO.ctx, n = 2 + Math.floor(Math.random() * 4), base = 2600 + Math.random() * 2200;
+  const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (p) { p.pan.value = pan; p.connect(AUDIO.sfx); }
+  for (let k = 0; k < n; k++) {
+    const t0 = t + k * (0.09 + Math.random() * 0.06), o = ctx.createOscillator(), g = ctx.createGain();
+    o.frequency.setValueAtTime(base * (0.9 + Math.random() * 0.2), t0); o.frequency.exponentialRampToValueAtTime(base * (1.2 + Math.random() * 0.4), t0 + 0.06);
+    g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.018, t0 + 0.01); g.gain.exponentialRampToValueAtTime(0.0003, t0 + 0.08);
+    o.connect(g).connect(p || AUDIO.sfx); o.start(t0); o.stop(t0 + 0.1);
+  }
+}
+function cricket(t, pan, amt) {
+  const ctx = AUDIO.ctx, o = ctx.createOscillator(), g = ctx.createGain(), f = 4300 + Math.random() * 500;
+  const p = ctx.createStereoPanner ? ctx.createStereoPanner() : null; if (p) { p.pan.value = pan; p.connect(AUDIO.sfx); }
+  o.frequency.value = f; g.gain.value = 0;
+  for (let k = 0; k < 4; k++) { const t0 = t + k * 0.045; g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.008 * amt, t0 + 0.01); g.gain.linearRampToValueAtTime(0, t0 + 0.03); }
+  o.connect(g).connect(p || AUDIO.sfx); o.start(t); o.stop(t + 0.22);
+}
+// --- musik generatif orisinal: progresi akor lambat (organ + pad), nada piano jarang dari skala yang sama ---
+const MUSIC = {
+  chords: [[50, 57, 62, 66, 69, 76], [47, 54, 59, 62, 66, 73], [43, 50, 55, 59, 62, 69, 73], [45, 52, 57, 62, 64, 71], [42, 49, 54, 57, 61, 66], [43, 50, 55, 59, 66, 71]],
+  scale: [62, 64, 66, 69, 71, 74, 76, 78, 81],
+};
+const midiHz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+function playChord(t, notes, dur) {
+  const ctx = AUDIO.ctx;
+  for (const m of notes) {
+    const g = ctx.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.028, t + 3.5); g.gain.setValueAtTime(0.028, t + dur - 3.5); g.gain.linearRampToValueAtTime(0, t + dur + 0.5);
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800; lp.connect(g); g.connect(AUDIO.musicBus);
+    for (const [h, a] of [[1, 1], [2, 0.45], [3, 0.22], [4, 0.12], [8, 0.04]]) {   // warna organ: harmonik
+      const o = ctx.createOscillator(), og = ctx.createGain(); o.frequency.value = midiHz(m) * h * (1 + (Math.random() - 0.5) * 0.0012); og.gain.value = a;
+      o.connect(og).connect(lp); o.start(t); o.stop(t + dur + 0.6);
+    }
+  }
+}
+function playNote(t, m) {
+  const ctx = AUDIO.ctx, o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain();
+  o.frequency.value = midiHz(m); o2.frequency.value = midiHz(m) * 2.005; o2.type = 'sine';
+  g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(0.05, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0005, t + 3.2);
+  const g2 = ctx.createGain(); g2.gain.value = 0.25; o.connect(g); o2.connect(g2).connect(g); g.connect(AUDIO.musicBus);
+  o.start(t); o2.start(t); o.stop(t + 3.3); o2.stop(t + 3.3);
+}
+function setMusic(mode) {
+  AUDIO.music = mode;
+  if (AUDIO.fileEl) { if (mode === 'file') AUDIO.fileEl.play().catch(() => {}); else AUDIO.fileEl.pause(); }
+  const b = document.getElementById('labMusic'); if (b) b.textContent = `Musik: ${mode === 'gen' ? 'generatif' : mode === 'file' ? 'file sendiri' : 'mati'} (J)`;
+}
+function cycleMusic() { setMusic(AUDIO.music === 'gen' ? (AUDIO.fileEl ? 'file' : 'off') : AUDIO.music === 'file' ? 'off' : 'gen'); }
+function loadMusicFile(file) {                                    // file musik milik pengguna (MP3, OGG, WAV, dll.), diputar berulang
+  startAudio(); if (!AUDIO.ctx) return;
+  if (AUDIO.fileEl) { AUDIO.fileEl.pause(); URL.revokeObjectURL(AUDIO.fileEl.src); }
+  const el = new Audio(URL.createObjectURL(file)); el.loop = true; el.crossOrigin = 'anonymous';
+  if (!AUDIO.fileNode) { AUDIO.fileGain = AUDIO.ctx.createGain(); AUDIO.fileGain.gain.value = 0.8; AUDIO.fileGain.connect(AUDIO.master); }
+  AUDIO.fileNode = AUDIO.ctx.createMediaElementSource(el); AUDIO.fileNode.connect(AUDIO.fileGain);
+  AUDIO.fileEl = el; setMusic('file');
+  setLabText(`Musik: ${file.name}`);
+}
+function toggleSound() {
+  AUDIO.on = !AUDIO.on; startAudio();
+  if (AUDIO.master) AUDIO.master.gain.setTargetAtTime(AUDIO.on ? 0.9 : 0, AUDIO.ctx.currentTime, 0.1);
+  const b = document.getElementById('labSound'); if (b) b.textContent = `Suara: ${AUDIO.on ? 'nyala' : 'mati'} (U)`;
+}
+function updateAudio(dt) {
+  if (!AUDIO.started || !AUDIO.ctx || AUDIO.ctx.state !== 'running') return;
+  const ctx = AUDIO.ctx, t = ctx.currentTime, h = clock.hour;
+  const day = sstep(5.5, 7.5, h) * (1 - sstep(17.5, 19.5, h));
+  const inside = !ext.active && player.state !== 'float';
+  const s = player.theta * R, za = player.za;
+  const city = za < 2700 ? Math.min(1, 0.4 + cityDensity(s, Math.min(za, 2500))) * (1 - sstep(2500, 2800, za)) : 0;
+  const nature = za > 2550 && !(za > UTIL.za0 && za < UTIL.za1) ? 1 : 0.25;
+  AUDIO.gust += (Math.random() - 0.5) * dt * 0.4; AUDIO.gust = Math.min(1, Math.max(0, AUDIO.gust));
+  const k = inside ? 1 : 0, tc = 0.8;
+  AUDIO.air.g.gain.setTargetAtTime(k * (0.05 + 0.08 * AUDIO.gust), t, tc);
+  AUDIO.air.f.frequency.setTargetAtTime(350 + 500 * AUDIO.gust, t, tc);
+  AUDIO.city.g.gain.setTargetAtTime(k * city * (0.05 + 0.07 * day), t, tc);
+  AUDIO.hum.gain.setTargetAtTime(k * (0.004 + (player.state === 'float' ? 0.02 : 0) + (za < 150 || za > 7850 || (za > UTIL.za0 && za < UTIL.za1) ? 0.012 : 0)), t, tc);
+  AUDIO.sfx.gain.setTargetAtTime(k, t, 0.2);
+  if (inside && nature > 0.5) {
+    if (day > 0.3 && t > AUDIO.nextChirp) { chirp(t + 0.05, Math.random() * 1.6 - 0.8); AUDIO.nextChirp = t + 1.5 + Math.random() * 5 / day; }
+    if (day < 0.4 && t > AUDIO.nextCricket) { cricket(t + 0.02, Math.random() * 1.6 - 0.8, 1 - day); AUDIO.nextCricket = t + 0.25 + Math.random() * 0.6; }
+  }
+  // langkah kaki
+  if (player.state === 'ground' && inside) {
+    const dd = player.distance - AUDIO.lastDist;
+    if (dd > 0 && dd < 5) {
+      AUDIO.stepAcc += dd;
+      const stride = Math.hypot(player.vA, player.vT) > 3 ? 1.3 : 0.72;
+      if (AUDIO.stepAcc >= stride) { AUDIO.stepAcc = 0; playStep(surfaceAt(s, za), Math.hypot(player.vA, player.vT) > 3 ? 1.3 : 1); }
+    }
+    if (AUDIO.lastState === 'air') playStep(surfaceAt(s, za), 2.2);             // mendarat
+  }
+  AUDIO.lastDist = player.distance; AUDIO.lastState = player.state;
+  // musik generatif: jadwalkan akor dan nada sedikit di depan waktu sekarang
+  if (AUDIO.music === 'gen') {
+    if (t > AUDIO.nextChord - 4) {
+      const start = Math.max(t + 0.1, AUDIO.nextChord - 3.5), dur = 14;
+      playChord(start, MUSIC.chords[AUDIO.chordIdx % MUSIC.chords.length], dur);
+      AUDIO.chordIdx++; AUDIO.nextChord = start + dur;
+    }
+    if (t > AUDIO.nextNote) {
+      if (Math.random() < 0.7) playNote(t + 0.05, MUSIC.scale[Math.floor(Math.random() * MUSIC.scale.length)] + (Math.random() < 0.2 ? 12 : 0));
+      AUDIO.nextNote = t + 2.2 + Math.random() * 5.5;
+    }
+  } else { AUDIO.nextChord = 0; }
+}
+
 // --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
 hub.userData.noLight = true;
 ballMesh.userData.noShadow = true; markMesh.userData.noShadow = true;
@@ -4244,10 +4630,13 @@ function frame(now) {
   groundMat.uniforms.uTime.value = clock.sim % 3600;
   renderer.info.reset();
   shadowPass();
+  const post = postBegin();                        // tahap 9: render ke target HDR bila efek layar aktif
   renderer.clear();
   renderer.render(farScene, farCam);
   renderer.clearDepth();
   renderer.render(scene, camera);
+  if (post) postEnd();
+  updateAudio(dt);
   if (window.__captureCb) { const cb = window.__captureCb; window.__captureCb = null; cb(canvas.toDataURL('image/png')); }   // hook uji
   updateStats(dt);
   updatePrompt();
@@ -4259,7 +4648,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, POST, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
