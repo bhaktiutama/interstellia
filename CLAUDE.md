@@ -23,6 +23,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_rel_trem.py` | Uji Copper Corn Station 13a: koridor rel trem bebas tiang, pohon, collider |
 | `tools/uji_skyway.py` | Uji Copper Corn Station 13b-13c: mobil melintasi jembatan Skyway, akuaduk, tombol 5 di atas kaca |
 | `tools/uji_peta.py` | Uji Copper Corn Station 13d: peta besar, penanda, zoom, klik = pindah, legenda dua bahasa |
+| `tools/uji_hutan.py` | Uji Copper Corn Station 14a: hutan lebat (jumlah, tinggi, jalan setapak, tombol 0, pakis per preset, biaya) |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
@@ -79,6 +80,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Baseball | `BALLPARK`, `FIELD` (home plate), `ballparkModel()` (dibangun datar lalu ditekuk ke lengkung silinder), `BASEBALL` + `stepBaseball()` (pemain dan penonton disisipkan ke buffer `PEDS` di `updatePeds()`, bola) |
 | Rel dan Skyway (13a-c) | `inTramCorridor()`, `treeSkipped` (pohon yang ditolak tetap memakai angka acak), `RING_LAMP_S`, `SKY_ROADS`, `onSkyRoad()`, `SKYX` (akuaduk, `flow`), lantai kaca jendela `glass` / `glassMat` |
 | Peta (13d) | `MAPV` (zoom, cx = za, cy = s), `MAP_MARKS` (key, name, at, go), `drawMapStatic()` (latar 4000 x 3142), `drawMap()` (vektor tiap frame), `mapZoomAt()`, `mapCenterMe()`, `mapGo()`, `buildMapLegend()` |
+| Hutan (14a) | `FOREST` (s0, s1, z0, z1, trailW, k, fernR, list, mesh), `forestTrail(za)`, `inForest()`, pohon `t.forest` (langkah 4 di blok TREES, RNG sendiri), `TREES.forestLod` + uniform `uLodF` / `uForest` (impostor lebih dekat), `updateForest()` (kabut, pakis), `applyForestPreset()`, `SPOTS.forest` (tombol 0) |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
 | Kolisi | `COL`, `addCollider(s, za, hs, hz)` (AABB di bidang s-za), `LATE_COLLIDERS` |
 | Awan/cuaca (11a) | `WEATHER` (mode auto/cerah/berawan/mendung, cover, ov), `CLOUD`, `updateClouds(dt)`, `cycleWeather()` (N) |
@@ -92,7 +94,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Lalu lintas | `TRAFFIC` (gambar di GPU, posisi dari simulasi CPU `stepTraffic()` model IDM, atribut `aSim`), `SIG` + `sigState(k, m, axis, t)` (lampu lalu lintas), `XING` + `updateCrossings()` + `XVIS` (perlintasan trem, palang, bel), `LAMP` |
 | Trem | `TRAM`, `TRAM_CAR`, `TRAM_SEATS`, `tram` |
 | Lift/hub | `LIFT`, `HUB`, `CABIN`, `enterLift()`, `stepFloat()` |
-| Lokasi | `SPOTS` + `teleport(key)`: cooper, hill, corn, wheat, skyway, baseball, spaceport, fountain |
+| Lokasi | `SPOTS` + `teleport(key)`: cooper, hill, corn, wheat, skyway, baseball, spaceport, fountain, forest |
 | Panel dan HUD (M2) | `labEl`, `toggleLab()`, `labTab(id)` (data-ltab / data-lpane), `LABUI`, `setLabText()` (juga notifikasi `#toast`), `setHudMode(compact)` (kelas `x` = baris HUD lengkap) |
 | Bahasa (M3) | `LANGS`, `LANG` (cur, labels, hooks), `t(src, vars)`, `fmtN()`, `fmtInt()`, `uiLabel(id, fn, html)`, `translateDom()`, `setLang(c)`, kamus `I18N.en` (kunci = teks Indonesia persis), pilihan di `.langPick`, `?lang=en`, localStorage `lazarus.lang` |
 | Layar muat dan bantuan (M1) | `BOOT`, `BOOT_W` (bobot progres terukur), `bootStep(frac, label)`, `startEl`, `helpEl` + `toggleHelp()` / `helpTab()`, `showHint()`, pilihan preset `#presetPick` |
@@ -104,7 +106,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 
 ## Tombol
 
-W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 1-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis), K, Q, P, U, J, F (mode foto, Enter simpan PNG), Y (tur sinematik), ` (panel kontrol), / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
+W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 0-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis, 0 = hutan lebat), K, Q, P, U, J, F (mode foto, Enter simpan PNG), Y (tur sinematik), ` (panel kontrol), / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
 
 ## Riwayat tahap
 
@@ -128,6 +130,7 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 12d | Siklus tanam gandum 96 jam, mesin panen dan traktor dengan debu, mode foto (F, DOF, simpan PNG), tur sinematik dengan penjelasan fisika (Y) |
 | 12d+ | Pertandingan baseball siang, pagar dan papan skor lapangan mengikuti lengkung silinder, perbaikan NaN layang-layang (kilau seperti komet), klik mouse = kunci / lepas kursor |
 | 13a-13d | Rel trem bersih, jembatan jalan dan akuaduk di Skyway (mobil satu keliling penuh), tombol 5 di atas lantai kaca, peta besar M dengan penanda dan klik = pindah |
+| 14a | Hutan lebat 5.222 pohon 22-35 m dengan jalan setapak, semak dan pakis, kabut hutan, tombol 0, penanda peta, titik tur |
 
 Tahap 12 selesai. Rencana berikutnya: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md` (13: rel trem bersih, jembatan Skyway, peta besar; 14: hutan, rumput tinggi bukit, interior jendela). Cadangan lain di rencana tahap 12.
 

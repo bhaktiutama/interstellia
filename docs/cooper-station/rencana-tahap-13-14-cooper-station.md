@@ -1,6 +1,6 @@
 # Rencana Tahap 13-14 Copper Corn Station
 
-Status: disetujui pemilik. Tahap 13 selesai (13a-13d). Berikutnya 14a. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
+Status: disetujui pemilik. Tahap 13 selesai (13a-13d), 14a selesai. Berikutnya 14b. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
 
 ## Ringkasan
 
@@ -67,6 +67,21 @@ Uji `tools/uji_peta.py`.
 | 14a | Hutan lebat | Blok hutan sekitar 600 x 450 m di pertanian tengah (za sekitar 4.300-4.900), beberapa ladang diganti. Pohon tinggi 22-35 m (pinus, ek, birch, elm) berjarak 6-9 m, semak dan pakis di bawah, tanah gelap berserasah, kabut tipis, berkas cahaya matahari di sela pohon. Tombol 0 (lokasi baru) dan masuk tur sinematik. Kepadatan per preset (Hemat lebih jarang) | FPS di GTX 1060 dan M1, jumlah pohon per preset |
 | 14b | Rumput tinggi di bukit | Padang rumput bukit mendapat rumput setinggi 0,6-1,1 m, rapat, gelap di pangkal dan terang di ujung, berkilau saat searah matahari. Gelombang angin besar terlihat berjalan di atas padang (mengikuti angin global), rumput menunduk di sekitar pemain. Di kejauhan tanah meniru warna dan gelombang yang sama, jadi tidak ada batas tajam. Radius per preset | Tidak ada titik NaN (aturan GPU), FPS per preset |
 | 14c | Interior jendela | Dari luar, tiap jendela memperlihatkan ruangan dengan kedalaman (lantai, plafon, dinding, perabot sederhana, tirai di sebagian jendela) yang ikut bergeser saat kamera bergerak (interior mapping). Malam hari sebagian ruangan menyala. Hanya untuk gedung dekat; gedung jauh tetap seperti sekarang. Mati di preset Hemat | Tidak ada NaN, tampilan siang dan malam, FPS |
+
+
+### Hasil 14a (selesai)
+
+| Item | Hasil |
+| --- | --- |
+| Lokasi | Blok pertanian s 2.425-2.892, za 4.260-4.940 (sekitar 470 x 680 m), antara jalan tanah k = 10 dan k = 12. Blok rencana awal (k = 8) ternyata berisi bukit dan danau, jadi dipilih blok sebelahnya yang bersih (0 rumah, 0 bukit, 0 air, dicek dengan pindai). Tata letak kota dan ladang lain tidak bergeser |
+| Pohon | 5.222 pohon setinggi 22-35 m: pinus 2.400, elm 1.024, ek 980, birch 818. Jarak sekitar 7 m, 10% sel dibiarkan kosong (celah cahaya), batang ber-collider. Ikut suasana daun (Campur/Gugur) seperti pohon lain |
+| Lantai hutan | Tanah gelap berserasah, jalan setapak tanah berkelok membelah hutan dari ujung ke ujung. 27.634 posisi semak dan pakis (kartu silang bergoyang angin); yang digambar hanya di sekitar pemain: Ultra 60 m, Hemat tidak ada. Ladang di dalam blok tidak ditanami dan tidak didatangi mesin ladang |
+| Suasana | Di dalam hutan kabut lebih rapat dan kehijauan, kicau burung lebih sering (berubah halus saat masuk dan keluar) |
+| Akses | Tombol 0 (berdiri di jalan setapak tengah hutan), tombol "0 Hutan lebat" di tab Lokasi, penanda 0 di peta, baris bantuan. Tur sinematik mendapat titik ke-11 "Hutan lebat": di pucuk pohon 30 m gravitasi 0,97 g |
+| Biaya | Pohon hutan memakai mesh penuh hanya dalam radius per preset (Ultra 70 m sampai Hemat 25 m), di luar itu impostor. Terukur di tengah hutan: Ultra 256 pohon mesh penuh, 4,06 juta segitiga (titik awal kota: 3,80 juta); Hemat 28 pohon, 1,37 juta segitiga (kota: 1,88 juta) |
+| Muat | Sekitar 4,1 s di sandbox; bobot garis progres diukur ulang |
+
+Uji `tools/uji_hutan.py`. Uji lama tetap lulus (suasana, rel, bahasa, peta 11 penanda, ladang/foto/tur 11 titik, pohon, Skyway).
 
 ## Urutan kerja
 
