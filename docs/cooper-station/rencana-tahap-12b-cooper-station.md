@@ -1,6 +1,6 @@
 # Rencana Tahap 12b: Kota hidup dan suasana (Cooper Station)
 
-Status: 12b-1 sampai 12b-4 selesai (lihat bagian "Hasil" masing-masing). 12b-5 belum dikerjakan. Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
+Status: 12b selesai (12b-1 sampai 12b-5, lihat bagian "Hasil" masing-masing). Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
 
 ## Catatan pemilik (sebelum dikerjakan)
 
@@ -170,6 +170,26 @@ Semua fitur 12b bisa dikecilkan atau dimatikan. Tujuannya M1 tetap lancar tanpa 
 | M4 | Turun otomatis | Aturan lama tetap (FPS < 30 selama 4 s, preset turun satu tingkat) dan sekarang bisa sampai Hemat. Pesan di layar menyebut preset yang dipakai |
 
 Angka di atas masih rencana. Setelah tiap sub-tahap, pemilik mengukur FPS di M1 dengan preset Hemat, lalu angkanya disesuaikan.
+
+### Hasil 12b-5 (selesai)
+
+| No | Status | Yang dikerjakan |
+| --- | --- | --- |
+| V1 | Selesai | Gumam keramaian (mengikuti jumlah pejalan kaki dalam 25 m), desis ban dan dengung mobil terdekat (dalam 70 m, mengikuti kecepatan), bunyi penyeberangan di simpang (tik cepat saat lampu jalan, tik lambat saat menunggu). Bel trem dan perlintasan sudah ada dari 12b-1. Semua lewat bus efek, jadi mati di luar stasiun. Langkah orang lewat belum dibuat |
+| V2 | Selesai | 33 meja kafe (66 kursi) dalam deret 3-5 meja di trotoar pusat kota, 18,6 m dari as jalan, hanya di tempat tanpa gedung dan tidak di depan pintu terminal. Payung 4 warna, 30 orang duduk (siang), bohlam hangat di bawah payung saat malam |
+| V3 | Selesai | 6 bendera di depan terminal (arah mengikuti angin) dan 44 umbul-umbul di tiang lampu pusat kota, berkibar di shader mengikuti `WIND`. 4 desain bendera distrik stasiun yang orisinal, masing-masing dengan lambang cincin (desain awal sempat mirip bendera Indonesia dan Irlandia, sudah diganti) |
+| V4 | Selesai | Lampu untaian keliling plaza kota: 132 tiang, 946 bohlam melengkung, menyala saat senja sampai subuh |
+| V5 | Selesai sebagian | Rak sepeda berisi 21 sepeda di ujung peron halte, 2 layang-layang di taman besar pada siang hari (mengikuti arah angin). Orang bersepeda dan gelembung sabun belum dibuat |
+| V6 | Selesai | Jam emas sudah ada sejak tahap 11 (cahaya dan kabut keemasan sekitar 18:00 dan 06:30). Ditambah kabut tipis pagi (sekitar 06:00-07:30, cuaca tidak mendung) |
+
+Uji: `tools/uji_suasana.py` (7 cek). Waktu muat di sandbox sekitar 6,4-6,7 s.
+
+### Revisi setelah uji pemilik (bersamaan dengan 12b-5)
+
+| Masalah | Penyebab sebenarnya | Perbaikan |
+| --- | --- | --- |
+| Titik putih menyala di setiap tanaman jagung | Ujung daun jagung (10 per tanaman) hanya dimiliki segitiga berluas nol, jadi normalnya (0,0,0). `normalize(0)` menghasilkan NaN di sebagian GPU (terlihat di MacBook M1), lalu bloom menyebarkan NaN jadi titik putih. Diagnosis di 12b-4 (warna tongkol) salah: sandbox tanpa GPU tidak menampilkan NaN | Normal nol di model jagung diganti arah atas, dan shader jagung tidak lagi menormalkan vektor nol. Uji `uji_suasana.py` memeriksa tidak ada normal nol di seluruh scene |
+| Daun di tanah masih bergerak seperti tikus | Zig-zag dihitung dari umur daun (terus bertambah setelah mendarat), dan hanyut angin memakai angin saat itu (berubah tiap hembusan) | Zig-zag dihitung dari waktu jatuh (berhenti saat mendarat), hanyut memakai angin rata-rata yang dihaluskan 2 menit, jadi daun di tanah praktis diam |
 
 ## Urutan kerja dan uji
 

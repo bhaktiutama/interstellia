@@ -180,7 +180,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 12b-4 · burung: kawanan, formasi V, merpati di plaza · 12b-3: pejalan kaki · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 12b-5 · suasana: kafe trotoar, lampu untaian, bendera, suara kota · 12b-4: burung · 12b-3: pejalan kaki · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -3940,7 +3940,8 @@ function updateLighting() {
   let fog = mixV(mixV([0.05, 0.06, 0.09], [0.68, 0.76, 0.86], day), [0.86, 0.66, 0.46], Math.min(1, golden * 0.75) * (1 - 0.5 * ov));
   fog = mixV(fog, [0.08 + 0.5 * day, 0.085 + 0.52 * day, 0.1 + 0.53 * day], 0.7 * ov);          // mendung: kabut abu-abu, lebih tebal
   scene.fog.color.setRGB(fog[0], fog[1], fog[2], THREE.SRGBColorSpace);
-  if (!ext.active) scene.fog.density = CONFIG.fogDensity * (1 + 0.25 * cov + 0.9 * ov);
+  const mist = Math.exp(-(((h - 6.6) / 0.9) ** 2)) * (1 - ov);        // 12b-5: kabut tipis pagi
+  if (!ext.active) scene.fog.density = CONFIG.fogDensity * (1 + 0.25 * cov + 0.9 * ov + 1.2 * mist);
   // visual sunline, cincin lampu, awan
   const I = 0.04 + 0.9 * day;                                        // sunline sendiri tidak meredup, hanya cahaya yang sampai ke tanah
   sunCore.material.color.setRGB(0.25 + 1.2 * I, 0.24 + 1.15 * I * (1 - 0.1 * golden), 0.22 + 1.05 * I * (1 - 0.3 * golden));
@@ -4468,6 +4469,9 @@ function cornPlantGeo() {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
   g.setIndex(idx); g.computeVertexNormals();
+  // 12b-5: ujung daun (lebar 0) hanya ada di segitiga berluas nol, normalnya (0,0,0). normalize(0) = NaN di sebagian GPU
+  // (terlihat di MacBook M1), lalu bloom menyebarkan NaN jadi titik putih menyala di setiap ujung daun. Normal nol diganti arah atas.
+  { const n = g.attributes.normal.array; for (let i = 0; i < n.length; i += 3) if (Math.hypot(n[i], n[i + 1], n[i + 2]) < 1e-6) { n[i] = 0; n[i + 1] = 1; n[i + 2] = 0; } }
   return g;
 }
 const CORN_NEAR_VS = /* glsl */`
@@ -4496,7 +4500,8 @@ const CORN_NEAR_VS = /* glsl */`
     vec3 p = base + tS * (xz.x + bend.x) + vec3(0.0, 0.0, xz.y + bend.y) + up * lp.y;
     #ifndef DEPTH_ONLY
     vec2 nxz = vec2(ca * normal.x - sa * normal.z, sa * normal.x + ca * normal.z);
-    vec3 n = normalize(tS * nxz.x + vec3(0.0, 0.0, nxz.y) + up * normal.y);
+    vec3 n = tS * nxz.x + vec3(0.0, 0.0, nxz.y) + up * normal.y;
+    n = dot(n, n) > 1e-10 ? normalize(n) : up;                       // jaga-jaga: jangan normalize vektor nol (NaN)
     if (dot(n, up) < 0.0) n = -n;
     float ao = mix(0.22, 1.0, pow(t, 0.8));                         // bagian bawah ladang jagung gelap
     vCol = color * (0.88 + 0.24 * h2) * ao * vegLight(p, n, P, 1.0 - 0.6 * t);
@@ -5028,6 +5033,10 @@ function updateWind(dt) {
   WIND.gust = Math.min(1, Math.max(0, WIND.gust + (Math.random() - 0.5) * dt * 0.4));
   const sp = WIND.base * (0.5 + 1.0 * WIND.gust);
   VU.uWind.value.set(Math.cos(WIND.ang) * sp, Math.sin(WIND.ang) * sp, WIND.gust);
+  {                                                                    // angin rata-rata untuk daun jatuh (konstanta waktu 120 s)
+    const k = Math.min(1, dt / 120), w = FALL.U.uWindAvg.value, b = WIND.base;
+    w.x += (Math.cos(WIND.ang) * b - w.x) * k; w.y += (Math.sin(WIND.ang) * b - w.y) * k;
+  }
 }
 // --- daun jatuh ---
 const FALL = { max: 3000, n: 0, NS: 48, nextSrc: 0 };
@@ -5036,11 +5045,12 @@ const FALL = { max: 3000, n: 0, NS: 48, nextSrc: 0 };
   g.index = base.index; g.setAttribute('position', base.attributes.position); g.setAttribute('uv', base.attributes.uv);
   const seed = new Float32Array(FALL.max); for (let i = 0; i < FALL.max; i++) seed[i] = (i * 0.6180339 + Math.floor(i / FALL.NS) * 0.1307) % 1;
   g.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 1)); g.instanceCount = 0;
-  const U = { uSrc: { value: Array.from({ length: FALL.NS }, () => new THREE.Vector4()) }, uSrcC: { value: Array.from({ length: FALL.NS }, () => new THREE.Vector4()) }, uOmega: { value: OMEGA } };
+  const U = { uSrc: { value: Array.from({ length: FALL.NS }, () => new THREE.Vector4()) }, uSrcC: { value: Array.from({ length: FALL.NS }, () => new THREE.Vector4()) }, uOmega: { value: OMEGA }, uWindAvg: { value: new THREE.Vector2(1, 0.3) } };
   const VS = /* glsl */`
     attribute float aSeed;
     uniform vec4 uSrc[${FALL.NS}], uSrcC[${FALL.NS}];
     uniform float uOmega;
+    uniform vec2 uWindAvg;
     varying vec3 vCol;
     varying vec2 vUv;
     void main() {
@@ -5054,9 +5064,10 @@ const FALL = { max: 3000, n: 0, NS: 48, nextSrc: 0 };
       float a = h1 * 6.2832, rr = sqrt(h2) * S.w * 0.85;
       vec2 P0 = S.xy + vec2(cos(a), sin(a)) * rr;
       float z0 = max(1.0, S.z + (h3 - 0.35) * S.w * 0.7), vf = 0.8 + 0.6 * h3, tFall = z0 / vf, tf = min(age, tFall);
-      vec2 drift = uWind.xy * (0.5 + 0.8 * uWind.z) * tf                                   // terbawa angin
+      // angin rata-rata (dihaluskan 2 menit) dan zig-zag dari waktu jatuh tf: setelah mendarat posisi daun tidak berubah lagi
+      vec2 drift = uWindAvg * tf                                                              // terbawa angin
         + vec2(-2.0 * uOmega * vf * vf / 9.81, 0.0) * tf                                     // Coriolis dalam udara yang ikut berputar
-        + vec2(sin(age * 1.7 + h1 * 6.0), cos(age * 1.3 + h2 * 6.0)) * 0.7 * min(tf, 1.5);   // melayang zig-zag
+        + vec2(sin(tf * 1.7 + h1 * 6.0), cos(tf * 1.3 + h2 * 6.0)) * 0.7 * min(tf, 1.5);     // melayang zig-zag
       vec2 Pp = P0 + drift;
       float hgt = age < tFall ? z0 - vf * age : 0.02 + 0.012 * h3;      // di tanah: rebah, sedikit berlapis
       float fade = 1.0 - smoothstep(LIFE - 4.0, LIFE, age);           // daun tertua hilang pelan (jumlah partikel tetap)
@@ -5761,6 +5772,10 @@ function startAudio() {
   AUDIO.engOsc = [[38, 'sawtooth', 1], [57.3, 'triangle', 0.6]].map(([f, type, a]) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; const g = ctx.createGain(); g.gain.value = a; o.connect(g).connect(engLp); o.start(); return o; });
   AUDIO.rcs = loop(AUDIO.white, 'highpass', 2600, 0.7, 0, ship);
   AUDIO.cab = loop(pink, 'bandpass', 900, 0.5, 0, ship);
+  // 12b-5: suara kota berlapis (lewat bus sfx, jadi mati di luar stasiun): gumam keramaian dan desis ban mobil lewat
+  AUDIO.crowd = loop(pink, 'bandpass', 650, 0.7, 0, AUDIO.sfx);
+  AUDIO.car = loop(AUDIO.white, 'bandpass', 850, 0.6, 0, AUDIO.sfx);
+  AUDIO.carHum = loop(brown, 'lowpass', 140, 0.7, 0, AUDIO.sfx);
   AUDIO.cabHum = ctx.createGain(); AUDIO.cabHum.gain.value = 0; AUDIO.cabHum.connect(ship);
   for (const [f, a] of [[120, 1], [240, 0.35], [1830, 0.04]]) { const o = ctx.createOscillator(); o.frequency.value = f; const g = ctx.createGain(); g.gain.value = a; o.connect(g).connect(AUDIO.cabHum); o.start(); }
   AUDIO.musicBus = ctx.createGain(); AUDIO.musicBus.gain.value = 0.45; AUDIO.musicBus.connect(master); AUDIO.musicBus.connect(verb);
@@ -5918,6 +5933,30 @@ function updateAudio(dt) {
     if (AUDIO.lastState === 'air') playStep(surfaceAt(s, za), 2.2);             // mendarat
   }
   AUDIO.lastDist = player.distance; AUDIO.lastState = player.state;
+  // 12b-5: keramaian, mobil lewat, bunyi penyeberangan (dihitung tiap 0,25 s)
+  if (AUDIO.crowd && t > (AUDIO.nextCity || 0)) {
+    AUDIO.nextCity = t + 0.25;
+    let crowd = 0, dCar = 1e9, vCar = 0;
+    if (inside && player.state === 'ground') {
+      const act = pedAct(h, 0) * PEDS.user * PEDS.dens;
+      for (const p of PEDS.near) if (p.thr < act && Math.abs(wrapS(p.s - s)) < 25 && Math.abs(p.za - za) < 25) crowd++;
+      if (za < CITY.za1 + 700) for (const c of TRAFFIC.carList) {
+        if (!c.on) continue; const ln = c.ln, al = ln.seg0 + (ln.dir > 0 ? c.u : ln.L - c.u);
+        const cs = ln.type === 0 ? ln.line : al, cz = ln.type === 0 ? al : ln.line, d = Math.hypot(wrapS(cs - s), cz - za);
+        if (d < dCar) { dCar = d; vCar = c.v; }
+      }
+    }
+    AUDIO.crowd.g.gain.setTargetAtTime(0.02 * Math.min(1, crowd / 12), t, 0.6);
+    const kc = Math.max(0, 1 - dCar / 70) ** 2 * Math.min(1, vCar / 12);
+    AUDIO.car.g.gain.setTargetAtTime(0.05 * kc, t, 0.15); AUDIO.car.f.frequency.setTargetAtTime(600 + 40 * vCar, t, 0.2);
+    AUDIO.carHum.g.gain.setTargetAtTime(0.05 * kc, t, 0.15);
+    // penyeberangan: tik cepat saat lampu jalan pejalan kaki, tik lambat saat menunggu
+    const k = Math.round(s / ART), m = Math.round(za / ART_Z);
+    if (inside && player.state === 'ground' && k >= 1 && k <= 25 && k !== 13 && m >= 1 && m <= 10 && !nearRing(m * ART_Z, 1) && Math.hypot(wrapS(s - k * ART), za - m * ART_Z) < 26) {
+      const walk = sigQ(k, m, 0, clock.sim) < 12 || sigQ(k, m, 1, clock.sim) < 12;
+      if (t > (AUDIO.nextTick || 0)) { ding(t + 0.01, walk ? 2900 : 1700, 0.012, 0.05); AUDIO.nextTick = t + (walk ? 0.28 : 1.1); }
+    }
+  }
   // 12b-1: bel perlintasan (bila ada perlintasan tertutup dalam 150 m) dan bel trem saat berangkat dari halte
   if (inside) {
     let dMin = 1e9; XING.ms.forEach((m, j) => { if (XING.closed[j]) dMin = Math.min(dMin, Math.hypot(wrapS(s - TRAM.s), za - m * ART_Z)); });
@@ -6868,6 +6907,206 @@ function portPrompt() {
 SPOTS.spaceport = { s: TERM.s, za: TERM.za + 22, heading: 180, pitch: 4, name: 'Terminal spaceport' };
 
 /* =====================================================================
+   TAHAP 12b-5: SUASANA
+   - Kafe trotoar di pusat kota: deretan meja bulat, kursi, payung warna-warni (18,6 m dari as jalan, di belakang jalur
+     pejalan kaki, hanya di tempat yang tidak bertabrakan dengan gedung). Malam: lampu hangat di bawah payung.
+   - Lampu untaian di plaza kota: tiang tiap 10 m, bohlam tiap 1,25 m melengkung, menyala saat senja sampai subuh.
+   - Rak sepeda berisi sepeda di ujung peron halte trem.
+   - Bendera (desain orisinal, bukan bendera negara) di depan terminal dan umbul-umbul di tiang lampu pusat kota,
+     berkibar di shader mengikuti angin global WIND. Dua layang-layang di taman besar pada siang hari.
+   Semua perabot memakai sistem LOD FURN (hanya instance dalam radius yang dikirim ke GPU).
+   ===================================================================== */
+const VIBE = { cafeSeats: [], bulbMat: null, cafeBulbMat: null, kites: [] };
+{
+  const g = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
+  const cyl = (r0, r1, h, y, seg = 10) => new THREE.CylinderGeometry(r0, r1, h, seg).translate(0, y, 0);
+  const IRON = [0.18, 0.19, 0.2], WOOD = [0.5, 0.35, 0.22];
+  const GEO = {
+    cafeTable: mergeSimple([{ geo: cyl(0.42, 0.42, 0.04, 0.74, 16), color: [0.85, 0.84, 0.8] }, { geo: cyl(0.03, 0.03, 0.72, 0.36), color: IRON }, { geo: cyl(0.25, 0.25, 0.03, 0.015, 12), color: IRON }]),
+    cafeChair: mergeSimple([                                          // menghadap +z
+      { geo: g(0.42, 0.04, 0.42, 0, 0.45, 0), color: WOOD }, { geo: g(0.42, 0.42, 0.04, 0, 0.68, -0.2), color: WOOD },
+      ...[[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]].map(([x, z]) => ({ geo: g(0.03, 0.45, 0.03, x, 0.225, z), color: IRON }))]),
+    cafePole: mergeSimple([{ geo: cyl(0.025, 0.025, 2.3, 1.15, 6), color: [0.9, 0.9, 0.88] }]),
+    bulbPole: mergeSimple([{ geo: cyl(0.04, 0.05, 3.3, 1.65, 6), color: IRON }]),
+    bike: mergeSimple([
+      ...[-0.52, 0.52].map((z) => ({ geo: new THREE.TorusGeometry(0.33, 0.025, 5, 16).rotateY(Math.PI / 2).translate(0, 0.35, z), color: [0.1, 0.1, 0.1] })),
+      { geo: g(0.04, 0.04, 0.62, 0, 0.62, 0.02), color: [0.2, 0.35, 0.6] }, { geo: g(0.04, 0.42, 0.04, 0, 0.55, -0.18), color: [0.2, 0.35, 0.6] },
+      { geo: g(0.04, 0.4, 0.04, 0, 0.6, 0.36).rotateX(-0.3), color: [0.2, 0.35, 0.6] }, { geo: g(0.46, 0.04, 0.04, 0, 0.98, 0.42), color: IRON },
+      { geo: g(0.1, 0.05, 0.24, 0, 0.8, -0.2), color: [0.1, 0.1, 0.1] }]),
+    bikeRack: mergeSimple([...[-1.2, -0.4, 0.4, 1.2].map((x) => ({ geo: new THREE.TorusGeometry(0.35, 0.025, 5, 12, Math.PI).translate(x, 0, 0), color: [0.6, 0.62, 0.64] }))]),
+  };
+  const umbrella = (col) => mergeSimple([{ geo: new THREE.ConeGeometry(1.15, 0.45, 12, 1, true).translate(0, 2.35, 0), color: col }, { geo: cyl(0.04, 0.04, 0.08, 2.6, 6), color: col }]);
+  const UMB = [[0.72, 0.16, 0.14], [0.13, 0.36, 0.55], [0.86, 0.62, 0.16], [0.2, 0.45, 0.28]];
+  UMB.forEach((c, i) => { GEO['umb' + i] = umbrella(c); });
+  GEO.cafeBulb = new THREE.SphereGeometry(0.08, 8, 6).translate(0, 2.05, 0);
+  GEO.bulb = new THREE.SphereGeometry(0.09, 6, 4);
+  const list = {}; for (const k of Object.keys(GEO)) list[k] = [];
+  const free = (s, za, r) => {                                      // tidak bertumpuk dengan kolider (gedung, perabot)
+    const cs = ((Math.floor(s / COL.cell) % 1000) + 1000) % 1000, cz = Math.floor(za / COL.cell);
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
+      const arr = COL.grid.get((((cs + a) % 1000) + 1000) % 1000 * 1000 + cz + b); if (!arr) continue;
+      for (const i of arr) { const [cS, cZ, hs, hz] = COL.items[i]; if (Math.abs(wrapS(s - cS)) < hs + r && Math.abs(za - cZ) < hz + r) return false; }
+    }
+    return !inWater(s, za, 3) && !inRiver(s, za, 4);
+  };
+  let sd = 5151; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  // 1) kafe trotoar: deret 3-5 meja sepanjang jalan, 18,6 m dari as jalan arteri
+  const OFF = ROAD.art / 2 + 6.6;
+  const cafeRow = (alongZ, fixC, a0, side) => {
+    const n = 3 + Math.floor(r() * 3), pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = a0 + i * 3.2, s = alongZ ? fixC : a, za = alongZ ? a : fixC;
+      if (!free(s, za, 1.5) || (Math.abs(wrapS(s - TERM.s)) < TERM.w / 2 + 12 && za < CITY.za0)) return;   // jangan menutup jalan masuk terminal
+      pts.push([s, za]);
+    }
+    const col = Math.floor(r() * UMB.length);
+    for (const [s, za] of pts) {
+      list.cafeTable.push([s, za, 0]); list.cafePole.push([s, za, 0]); list['umb' + col].push([s, za, r() * TAU]); list.cafeBulb.push([s, za, 0]);
+      for (const sg of [-1, 1]) {                                     // kursi di kedua sisi meja, menghadap meja (tegak lurus jalan)
+        const cs = alongZ ? s + sg * 0.72 : s, cz = alongZ ? za : za + sg * 0.72, hd = alongZ ? (sg > 0 ? -Math.PI / 2 : Math.PI / 2) : (sg > 0 ? Math.PI : 0);
+        list.cafeChair.push([cs, cz, hd]); VIBE.cafeSeats.push([cs, cz, hd]);
+      }
+      addCollider(modS(s), za, 0.45, 0.45);
+    }
+  };
+  for (let k = 1; k < 26; k++) { if (k === 13) continue; for (const side of [-1, 1]) for (let z = CITY.za0 + 40; z < CITY.za1 - 40; z += 55) {
+    const dz = Math.abs(z - Math.round(z / ART_Z) * ART_Z), s = k * ART + side * OFF;
+    if (dz < 40 || cityDensity(s, z) < 0.72 || r() > 0.4) continue; cafeRow(true, s, z, side); } }
+  for (let m = 1; m <= 10; m++) { if (nearRing(m * ART_Z, 1)) continue; for (const side of [-1, 1]) for (let s = 40; s < CIRC - 40; s += 55) {
+    const ds = Math.abs(wrapS(s - Math.round(s / ART) * ART)), za = m * ART_Z + side * OFF;
+    if (ds < 40 || Math.abs(wrapS(s - SKY_S)) < 60 || Math.abs(wrapS(s)) < 40 || cityDensity(s, za) < 0.72 || r() > 0.4) continue; cafeRow(false, za, s, side); } }
+  // 2) lampu untaian keliling plaza kota
+  for (const [s0, z0, s1, z1, plaza] of parkBlocks) {
+    if (!plaza || inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) continue;
+    const c = [[s0 + 1.5, z0 + 1.5], [s1 - 1.5, z0 + 1.5], [s1 - 1.5, z1 - 1.5], [s0 + 1.5, z1 - 1.5]];
+    for (let e = 0; e < 4; e++) {
+      const [a, b] = [c[e], c[(e + 1) % 4]], L = Math.hypot(b[0] - a[0], b[1] - a[1]), nSpan = Math.max(1, Math.round(L / 10));
+      for (let q = 0; q < nSpan; q++) {
+        const t0 = q / nSpan, t1 = (q + 1) / nSpan, P0 = [a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0];
+        list.bulbPole.push([P0[0], P0[1], 0]);
+        const nb = Math.round(L / nSpan / 1.25);
+        for (let j = 1; j < nb; j++) { const u = j / nb, t = t0 + (t1 - t0) * u; list.bulb.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, 0, 3.15 - 0.45 * 4 * u * (1 - u)]); }
+      }
+    }
+  }
+  // 3) rak sepeda di ujung peron halte
+  for (const st of TRAM.stops) {
+    const za = st.za + 15.5, s = TRAM.s + 5.4;
+    list.bikeRack.push([s, za, Math.PI / 2]);
+    for (let q = 0; q < 3; q++) if (r() < 0.8) list.bike.push([s - 0.1, za - 1.2 + q * 0.8, 0]);
+  }
+  // mesh + daftarkan ke LOD FURN
+  VIBE.bulbMat = new THREE.MeshBasicMaterial({ color: 0x222018 }); VIBE.cafeBulbMat = new THREE.MeshBasicMaterial({ color: 0x222018 });
+  const RANGE = { cafeTable: 260, cafeChair: 220, cafePole: 260, bulbPole: 350, bulb: 450, cafeBulb: 350, bike: 200, bikeRack: 200 };
+  for (const [kind, geo] of Object.entries(GEO)) {
+    const items = list[kind], n = items.length; if (!n) continue;
+    const glow = kind === 'bulb' || kind === 'cafeBulb';
+    const mesh = new THREE.InstancedMesh(geo, glow ? (kind === 'bulb' ? VIBE.bulbMat : VIBE.cafeBulbMat) : new THREE.MeshBasicMaterial({ vertexColors: true, side: kind.startsWith('umb') ? THREE.DoubleSide : THREE.FrontSide }), n);
+    const mats = new Float32Array(n * 16), m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), ps = new Float32Array(n), pz = new Float32Array(n);
+    items.forEach(([s, za, a, h], i) => { surfaceMatrix(m4, modS(s) / R, za, groundH(s, za) + (h || 0)); m4.multiply(rot.makeRotationY(a)); m4.toArray(mats, i * 16); ps[i] = modS(s); pz[i] = za; });
+    mesh.count = 0; mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (glow) { mesh.userData.noLight = true; mesh.userData.noShadow = true; }
+    scene.add(mesh);
+    FURN.kinds[kind] = { mesh, mats, ps, pz, n, range: RANGE[kind] || 260, idx: null };
+    FURN.total += n;
+  }
+  VIBE.counts = Object.fromEntries(Object.entries(list).map(([k, v]) => [k, v.length]));
+  FURN.lastS = 1e9;
+}
+// --- bendera dan umbul-umbul (kain berkibar di shader) ---
+{
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 512; const c = cv.getContext('2d');
+  // 4 bendera distrik stasiun (orisinal, sengaja bukan pola bendera negara: tanpa triwarna polos, selalu ada lambang cincin)
+  const ring = (x, y, r, col, w) => { c.strokeStyle = col; c.lineWidth = w; c.beginPath(); c.arc(x, y, r, 0, TAU); c.stroke(); };
+  c.fillStyle = '#1b2f4a'; c.fillRect(0, 0, 256, 128); ring(84, 64, 30, '#e08a2c', 10); c.fillStyle = '#e08a2c'; c.fillRect(150, 58, 90, 12);   // biru malam, cincin jingga
+  c.fillStyle = '#1f6b6b'; c.fillRect(0, 128, 256, 128); c.fillStyle = '#e3d3a8'; c.beginPath(); c.moveTo(0, 256); c.lineTo(70, 256); c.lineTo(256, 150); c.lineTo(256, 128); c.lineTo(190, 128); c.closePath(); c.fill(); ring(60, 170, 20, '#e3d3a8', 7);
+  c.fillStyle = '#e9e2cf'; c.fillRect(0, 256, 256, 128); c.strokeStyle = '#7a2a34'; c.lineWidth = 14; c.strokeRect(7, 263, 242, 114); ring(128, 320, 26, '#23406b', 9);
+  c.fillStyle = '#d8a93a'; c.fillRect(0, 384, 256, 128); c.fillStyle = '#26305c'; c.beginPath(); c.moveTo(0, 384); c.lineTo(110, 448); c.lineTo(0, 512); c.closePath(); c.fill(); ring(180, 448, 24, '#26305c', 8);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const F = [];                                                       // [s, za, tinggi atas, arah tetap (-99 = ikut angin), lebar, tinggi, desain, jenis]
+  for (const x of [-26, -20, -14, 14, 20, 26]) F.push([TERM.s + x, TERM.za + 37, 9, -99, 2.4, 1.5, Math.abs(x) % 4, 0]);
+  for (let k = 1; k < 26; k++) { if (k === 13) continue; for (const side of [-1, 1]) for (let z = LAMP.z0 + (side > 0 ? 0 : LAMP.spacing / 2), q = 0; z < LAMP.z1; z += LAMP.spacing, q++) {
+    const s = k * ART + side * LAMP.off, dz = Math.abs(z - Math.round(z / ART_Z) * ART_Z);
+    if (dz < 16 || q % 2 || cityDensity(s, z) < 0.65 || inWater(s, z, 2) || inRiver(k * ART, z, 6)) continue;
+    F.push([s - side * 0.12, z, 6.6, side > 0 ? -Math.PI / 2 : Math.PI / 2, 0.7, 1.9, (k + q) % 4, 1]);
+  } }
+  const base = new THREE.PlaneGeometry(1, 1, 12, 6).translate(0.5, 0.5, 0), g = new THREE.InstancedBufferGeometry();
+  g.index = base.index; g.setAttribute('position', base.attributes.position); g.setAttribute('uv', base.attributes.uv);
+  g.setAttribute('aF', new THREE.InstancedBufferAttribute(new Float32Array(F.flatMap((f) => f.slice(0, 4))), 4));
+  g.setAttribute('aG', new THREE.InstancedBufferAttribute(new Float32Array(F.flatMap((f) => f.slice(4, 8))), 4));
+  g.instanceCount = F.length;
+  const VS = /* glsl */`
+    attribute vec4 aF, aG;                                   // aF: s, za, tinggi atas, arah; aG: lebar, tinggi, desain, jenis (0 bendera, 1 umbul-umbul)
+    varying vec2 vUv; varying vec3 vLight;
+    void main() {
+      vec3 up, tS; vec3 base = groundFrame(aF.xy, aF.z, up, tS);
+      if (distance(base, uEye) > 420.0) { ${CLIP_AWAY} }
+      float g = uWind.z, x = position.x, y = position.y, ph = aF.x * 0.37 + aF.y * 0.11;
+      float hd = aF.w < -90.0 ? atan(uWind.x, uWind.y) : aF.w;
+      vec3 F = tS * sin(hd) + vec3(0.0, 0.0, 1.0) * cos(hd), Rt = cross(up, F);
+      vec3 p;
+      if (aG.w < 0.5) {                                      // bendera: memanjang searah angin dari tiang, gelombang makin besar ke ujung
+        float w = sin(x * 9.0 - uTime * (4.0 + 6.0 * g) + ph) * (0.06 + 0.22 * g) * x * aG.x;
+        p = base + F * (x * aG.x) + up * ((y - 1.0) * aG.y - 0.12 * (1.0 - g) * x) + Rt * w;
+      } else {                                               // umbul-umbul: tergantung di lengan lampu, bawahnya bergoyang
+        float w = sin(y * 3.0 - uTime * (2.5 + 3.0 * g) + ph) * (0.04 + 0.12 * g) * (1.0 - y);
+        p = base + Rt * ((x - 0.5) * aG.x) + up * ((y - 1.0) * aG.y) + F * w;
+      }
+      vUv = vec2(uv.x, (aG.z + uv.y) * 0.25);
+      #ifndef DEPTH_ONLY
+      vLight = vegLight(p, up, aF.xy, 1.0);
+      #endif
+      vec4 mvPosition = viewMatrix * vec4(p, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #ifndef DEPTH_ONLY
+      #include <fog_vertex>
+      #endif
+    }`;
+  const FS = /* glsl */`
+    uniform sampler2D uFlagTex;
+    varying vec2 vUv; varying vec3 vLight;
+    void main() { gl_FragColor = vec4(texture2D(uFlagTex, vec2(vUv.x, 1.0 - vUv.y)).rgb * vLight * 0.85, 1.0);
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`;
+  VIBE.flags = new THREE.Mesh(g, vegMaterial({ vertex: VS, fragment: FS, uniforms: { uFlagTex: { value: tex } } }));
+  VIBE.flags.frustumCulled = false; VIBE.flags.userData.noLight = true; realGroup.add(VIBE.flags);
+  VIBE.nFlags = F.length;
+  // tiang bendera depan terminal
+  const pole = new THREE.CylinderGeometry(0.06, 0.08, 9.2, 8).translate(0, 4.6, 0), pm = new THREE.InstancedMesh(pole, new THREE.MeshBasicMaterial({ color: 0xd8dadc }), 6), m4 = new THREE.Matrix4();
+  F.slice(0, 6).forEach(([s, za], i) => { surfaceMatrix(m4, s / R, za, groundH(s, za)); pm.setMatrixAt(i, m4); });
+  pm.frustumCulled = false; scene.add(pm);
+  addCollider(TERM.s - 20, TERM.za + 37, 6.2, 0.15); addCollider(TERM.s + 20, TERM.za + 37, 6.2, 0.15);
+}
+// --- layang-layang di taman besar (siang) ---
+{
+  for (const [s, za, col] of [[FIELD.s + 140, FIELD.za - 40, 0xd8452e], [FIELD.s - 220, FIELD.za + 90, 0x2e6fd8]]) {
+    const k = new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.6, 0), new THREE.Vector3(-0.45, 0, 0), new THREE.Vector3(0, -0.8, 0), new THREE.Vector3(0.45, 0, 0)]).setIndex([0, 1, 2, 0, 2, 3]), new THREE.MeshBasicMaterial({ color: col, side: THREE.DoubleSide }));
+    const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6), 3));
+    const line = new THREE.Line(lg, new THREE.LineBasicMaterial({ color: 0xdddddd, transparent: true, opacity: 0.6 }));
+    k.userData.noShadow = true; k.matrixAutoUpdate = false; line.frustumCulled = false; scene.add(k, line);
+    VIBE.kites.push({ s, za, mesh: k, line, ph: Math.random() * 10 });
+  }
+}
+const _kv = new THREE.Vector3(), _ku = new THREE.Vector3(), _kt = new THREE.Vector3(), _km = new THREE.Matrix4();
+function updateVibe() {
+  const nt = BUILD_U.uNight.value, h = clock.hour, T = clock.sim;
+  VIBE.bulbMat.color.setRGB(0.12 + 4.5 * nt, 0.1 + 3.2 * nt, 0.06 + 1.5 * nt);
+  VIBE.cafeBulbMat.color.setRGB(0.12 + 2.6 * nt, 0.1 + 1.8 * nt, 0.06 + 0.8 * nt);
+  const day = h > 7.5 && h < 18 && !ext.active, W = VU.uWind.value;
+  for (const K of VIBE.kites) {
+    K.mesh.visible = K.line.visible = day; if (!day) continue;
+    const wl = Math.hypot(W.x, W.y) || 1, ks = K.s + W.x / wl * 22 + Math.sin(T * 0.4 + K.ph) * 2.5, kz = K.za + W.y / wl * 22 + Math.cos(T * 0.33 + K.ph) * 2.5;
+    const kh = groundH(K.s, K.za) + 26 + 3 * W.z + Math.sin(T * 0.7 + K.ph) * 1.5;
+    groundPoint(ks / R, kz, kh, _kv); upAt(ks / R, _ku); tanAt(ks / R, _kt);
+    _km.makeBasis(_kt, _ku, _kt.clone().cross(_ku)).setPosition(_kv); _km.multiply(new THREE.Matrix4().makeRotationZ(Math.sin(T * 1.3 + K.ph) * 0.3)).scale(_ku.set(1.6, 1.6, 1.6));
+    K.mesh.matrix.copy(_km); K.mesh.matrixWorldNeedsUpdate = true;
+    const a = K.line.geometry.attributes.position; groundPoint(K.s / R, K.za, groundH(K.s, K.za) + 1.3, _kt);
+    a.setXYZ(0, _kt.x, _kt.y, _kt.z); a.setXYZ(1, _kv.x, _kv.y, _kv.z); a.needsUpdate = true;
+  }
+}
+
+/* =====================================================================
    TAHAP 12b-3: PEJALAN KAKI
    - Model orang low-poly (14 bagian kotak, sekitar 170 segitiga), satu InstancedMesh (1 draw call).
      Animasi langkah dan pose duduk di vertex shader (paha, betis, lengan diputar di sendi), warna dari palet.
@@ -6940,6 +7179,8 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     const two = pr < 0.08, fs = Math.sin(ang), fz = Math.cos(ang);
     for (const off of two ? [-0.45, 0.45] : [(r() - 0.5) * 0.8]) still({ pose: 2, s: s0 + fz * off + fs * 0.05, za: za - fs * off + fz * 0.05, hd: ang, zone: cls });
   }
+  // 5b) duduk di kursi kafe trotoar (12b-5)
+  for (const [cs, cz, hd] of VIBE.cafeSeats) if (r() < 0.45) still({ pose: 2, s: cs, za: cz, hd, zone: 0 });
   // 6) terminal: duduk di kursi ruang tunggu, berjalan di aula
   for (const [x, z] of TERM.seats) if (r() < 0.25) still({ pose: 2, s: TERM.s + x, za: TERM.za + z, hd: Math.PI, elev: 0.05, zone: 2 });
   for (const z of [-6, -3, 4, 8, 24, 27]) for (let q = 0; q < 5; q++) {
@@ -7330,6 +7571,7 @@ function frame(now) {
   updateReal();
   updatePeds();                                    // 12b-3
   stepBirds(Math.min(0.1, dt)); updateBirds();     // 12b-4
+  updateVibe();                                    // 12b-5
   updateFar();
   updateClouds(dt);
   updateWind(dt);                                  // 12b-2
@@ -7358,7 +7600,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
