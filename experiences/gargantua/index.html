@@ -48,6 +48,7 @@
   button:hover, select:hover { border-color: rgba(240,164,90,0.5); }
   .btns { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 8px; }
   .btns button { padding: 5px 4px; }
+  .btns button.on { border-color: rgba(240,164,90,0.8); color: #fff; }
   .btns button kbd { color: var(--muted); font: inherit; margin-right: 4px; }
   #readout { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--panel-border); color: var(--muted);
     display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; font-variant-numeric: tabular-nums; }
@@ -432,6 +433,44 @@ void main() {
    GL SETUP
    ===================================================================== */
 const $ = (s) => document.querySelector(s);
+/* Bahasa: sumber teks di halaman ini English; kamus Indonesia di ID. Pilihan dibagi dengan menu utama dan
+   Copper Corn Station lewat localStorage 'lazarus.lang' atau alamat ?lang=id|en. */
+const LANGS = [['id', 'Bahasa Indonesia'], ['en', 'English']];
+let LANG = 'en';
+{
+  const ok = (c) => LANGS.some((x) => x[0] === c); let c = null;
+  try { c = new URLSearchParams(location.search).get('lang'); } catch (e) { /* abaikan */ }
+  if (!ok(c)) try { c = localStorage.getItem('lazarus.lang'); } catch (e) { c = null; }
+  if (!ok(c)) c = (navigator.language || 'id').slice(0, 2).toLowerCase();
+  LANG = ok(c) ? c : 'id';
+}
+const ID = {
+  'Gargantua Black Hole · Schwarzschild ray-traced approximation': 'Gargantua Black Hole · pendekatan ray tracing Schwarzschild',
+  'drag: orbit · wheel/pinch: zoom · 1-4: presets · H: hide UI': 'seret: putar · roda/cubit: zoom · 1-4: sudut pandang · H: sembunyikan UI',
+  'Quality': 'Kualitas', 'Preset': 'Preset', 'Low': 'Rendah', 'Medium': 'Sedang', 'High': 'Tinggi', 'Ultra': 'Ultra',
+  'Adaptive resolution': 'Resolusi adaptif', 'Accretion disk': 'Piringan akresi', 'Inner radius (rs)': 'Radius dalam (rs)',
+  'Outer radius (rs)': 'Radius luar (rs)', 'Brightness': 'Kecerahan', 'Turbulence': 'Turbulensi', 'Rotation speed': 'Kecepatan putar',
+  'Physics': 'Fisika', 'Film mode (no Doppler)': 'Mode sinematik (tanpa Doppler)', 'Doppler beaming': 'Doppler beaming',
+  'Gravitational redshift': 'Pergeseran merah gravitasi', 'Spin (approx.)': 'Putaran (perkiraan)', 'Post': 'Efek layar',
+  'Exposure': 'Eksposur', 'Bloom': 'Bloom', 'Anamorphic streak': 'Garis anamorfik', 'Grain': 'Butiran film', 'Stars': 'Bintang',
+  'Camera': 'Kamera', 'FOV (deg)': 'Sudut pandang (derajat)', 'Auto-orbit': 'Putar otomatis', 'Pause time (Space)': 'Hentikan waktu (Space)',
+  'Film': 'Sinematik', 'Edge-on': 'Dari samping', 'Top-down': 'Dari atas', 'Close approach': 'Mendekat', 'Reset': 'Atur ulang', 'Screenshot': 'Tangkap layar',
+  'FPS': 'FPS', 'Resolution': 'Resolusi', 'Max steps': 'Langkah maks', 'Distance': 'Jarak', 'Buffer': 'Buffer',
+  'Space pause · H hide UI · F fullscreen · P screenshot · R reset': 'Space jeda · H sembunyikan UI · F layar penuh · P tangkap layar · R atur ulang',
+  'Language': 'Bahasa', '< MENU': '< MENU',
+  'WebGL2 is not available in this browser or on this GPU.\n\nThis simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). Check that hardware acceleration is enabled in your browser settings.':
+    'WebGL2 tidak tersedia di browser atau GPU ini.\n\nSimulasi ini butuh WebGL2 (Chrome, Edge, Firefox, Safari 15+). Pastikan akselerasi hardware aktif di pengaturan browser.',
+  'WebGL context lost. Reload the page to restart.': 'Konteks WebGL hilang. Muat ulang halaman untuk memulai lagi.',
+};
+const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
+function applyStaticLang() {
+  document.documentElement.lang = LANG;
+  $('#caption').textContent = txt('Gargantua Black Hole · Schwarzschild ray-traced approximation');
+  $('#hint').textContent = txt('drag: orbit · wheel/pinch: zoom · 1-4: presets · H: hide UI');
+  const m = $('#menuLink'); if (m) m.href = `../../index.html?lang=${LANG}`;
+}
+applyStaticLang();
+document.addEventListener('DOMContentLoaded', applyStaticLang);   // tautan menu ada setelah skrip
 const errBox = $('#err');
 function showError(msg) { errBox.hidden = false; errBox.textContent = msg; }
 
@@ -440,12 +479,10 @@ function main() {
   const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false,
     premultipliedAlpha: false, powerPreference: 'high-performance' });
   if (!gl) {
-    showError('WebGL2 is not available in this browser or on this GPU.\n\n' +
-      'This simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). ' +
-      'Check that hardware acceleration is enabled in your browser settings.');
+    showError(txt('WebGL2 is not available in this browser or on this GPU.\n\nThis simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). Check that hardware acceleration is enabled in your browser settings.'));
     return;
   }
-  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); showError('WebGL context lost. Reload the page to restart.'); });
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); showError(txt('WebGL context lost. Reload the page to restart.')); });
 
   // ---------- shader compile with readable errors ----------
   function compile(type, src, name) {
@@ -661,12 +698,12 @@ function main() {
   function buildUI() {
     const body = $('#uiBody');
     for (const c of UI) {
-      if (c.sec) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = c.sec; body.appendChild(d); continue; }
+      if (c.sec) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = txt(c.sec); body.appendChild(d); continue; }
       const get = c.get || (() => c.obj[c.key]);
       const set = c.set || ((v) => { c.obj[c.key] = v; });
       if (c.type === 'range') {
         const row = document.createElement('div'); row.className = 'row';
-        const lab = document.createElement('label'); lab.textContent = c.label;
+        const lab = document.createElement('label'); lab.textContent = txt(c.label);
         const val = document.createElement('span'); val.className = 'val';
         const inp = document.createElement('input'); Object.assign(inp, { type: 'range', min: c.min, max: c.max, step: c.step });
         const dec = String(c.step).includes('.') ? String(c.step).split('.')[1].length : 0;
@@ -679,12 +716,12 @@ function main() {
         const inp = document.createElement('input'); inp.type = 'checkbox';
         const sync = () => { inp.checked = !!get(); };
         inp.addEventListener('change', () => { set(inp.checked); inp.blur(); });
-        lab.append(inp, document.createTextNode(c.label)); body.appendChild(lab); syncers.push(sync);
+        lab.append(inp, document.createTextNode(txt(c.label))); body.appendChild(lab); syncers.push(sync);
       } else if (c.type === 'select') {
         const row = document.createElement('div'); row.className = 'row';
-        const lab = document.createElement('label'); lab.textContent = c.label;
+        const lab = document.createElement('label'); lab.textContent = txt(c.label);
         const sel = document.createElement('select');
-        for (const o of c.options) { const op = document.createElement('option'); op.value = o; op.textContent = o[0].toUpperCase() + o.slice(1); sel.appendChild(op); }
+        for (const o of c.options) { const op = document.createElement('option'); op.value = o; op.textContent = txt(o[0].toUpperCase() + o.slice(1)); sel.appendChild(op); }
         const sync = () => { sel.value = get(); };
         sel.addEventListener('change', () => { set(sel.value); sel.blur(); });
         row.append(lab, sel); body.appendChild(row); syncers.push(sync);
@@ -694,22 +731,30 @@ function main() {
                       ['3', 'Top-down', () => setPreset('top')], ['4', 'Close approach', () => setPreset('close')],
                       ['R', 'Reset', resetCamera], ['P', 'Screenshot', () => { state.shot = true; }]];
         for (const [k, t, fn] of defs) {
-          const b = document.createElement('button'); b.innerHTML = `<kbd>${k}</kbd>${t}`;
+          const b = document.createElement('button'); b.innerHTML = `<kbd>${k}</kbd>${txt(t)}`;
           b.addEventListener('click', () => { fn(); b.blur(); }); box.appendChild(b);
         }
         body.appendChild(box);
       }
     }
     const ro = document.createElement('div'); ro.id = 'readout';
-    ro.innerHTML = 'FPS<b id="rFps">-</b>Resolution<b id="rRes">-</b>Max steps<b id="rSteps">-</b>Distance<b id="rDist">-</b>Buffer<b id="rFmt">-</b>';
+    ro.innerHTML = `${txt('FPS')}<b id="rFps">-</b>${txt('Resolution')}<b id="rRes">-</b>${txt('Max steps')}<b id="rSteps">-</b>${txt('Distance')}<b id="rDist">-</b>${txt('Buffer')}<b id="rFmt">-</b>`;
     body.appendChild(ro);
     const keys = document.createElement('div'); keys.className = 'keys';
-    keys.textContent = 'Space pause · H hide UI · F fullscreen · P screenshot · R reset';
+    keys.textContent = txt('Space pause · H hide UI · F fullscreen · P screenshot · R reset');
     body.appendChild(keys);
-    $('#uiHeader').addEventListener('click', () => $('#ui').classList.toggle('collapsed'));
-    if (innerWidth < 640) $('#ui').classList.add('collapsed');
+    const lr = document.createElement('div'); lr.className = 'sec'; lr.textContent = txt('Language'); body.appendChild(lr);
+    const lb = document.createElement('div'); lb.className = 'btns';
+    for (const [c, name] of LANGS) {                                 // pilih bahasa: bangun ulang panel
+      const b = document.createElement('button'); b.textContent = name; if (c === LANG) b.classList.add('on');
+      b.addEventListener('click', () => { LANG = c; try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ } applyStaticLang(); body.innerHTML = ''; syncers.length = 0; buildUI(); });
+      lb.appendChild(b);
+    }
+    body.appendChild(lb);
     syncUI();
   }
+  $('#uiHeader').addEventListener('click', () => $('#ui').classList.toggle('collapsed'));
+  if (innerWidth < 640) $('#ui').classList.add('collapsed');
   function syncUI() { syncers.forEach((s) => s()); }
   buildUI();
 
@@ -863,6 +908,6 @@ function main() {
 
 try { main(); } catch (e) { showError(String(e && e.message || e)); }
 </script>
-<a href="../../index.html" style="position:fixed;left:16px;top:16px;z-index:20;padding:6px 10px;border-radius:8px;background:rgba(10,11,15,0.62);border:1px solid rgba(255,255,255,0.09);color:#cfd3da;font:11px ui-monospace,monospace;text-decoration:none;letter-spacing:.1em">&lt; MENU</a>
+<a id="menuLink" href="../../index.html" style="position:fixed;left:16px;top:16px;z-index:20;padding:6px 10px;border-radius:8px;background:rgba(10,11,15,0.62);border:1px solid rgba(255,255,255,0.09);color:#cfd3da;font:11px ui-monospace,monospace;text-decoration:none;letter-spacing:.1em">&lt; MENU</a>
 </body>
 </html>

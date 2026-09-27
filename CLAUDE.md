@@ -30,6 +30,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 - Tiap experience tetap halaman terpisah (memori GPU bersih saat pindah). Kode bersama dipindah ke `shared/` bertahap, jangan membongkar Copper Corn Station sekaligus.
 - Rencana experience berikutnya: Millar's World (dunia air, dilatasi waktu), Penerbangan Kestrel (shuttle KS-07 dari Copper Corn Station). Usulan nama: `docs/app/penamaan.md`.
 - Jangan memakai judul film, logo, huruf judul, musik, cuplikan, atau desain kendaraan film.
+- Bahasa aplikasi: Indonesia dan English (Jepang dan Mandarin ditunda). Semua halaman berbagi pilihan lewat localStorage `lazarus.lang` dan `?lang=id|en`, dan tautan antarhalaman meneruskan `?lang=`. Menu utama: teks di `APP`, `EXPERIENCES` (field `en`) dan `TXT`. Gargantua: sumber English, kamus `ID`, fungsi `txt()`.
 
 # Experience: Copper Corn Station
 

@@ -27,42 +27,78 @@
   .body h2 { margin: 0 0 4px; font-size: 18px; font-weight: 600; }
   .body p { margin: 0; color: var(--muted); font-size: 13.5px; }
   .card.disabled { opacity: 0.55; }
+  .lang { position: absolute; top: 16px; right: 16px; display: flex; gap: 6px; z-index: 2; }
+  .lang button { font: inherit; font-size: 12px; color: var(--ink); background: rgba(14,16,22,0.72); border: 1px solid var(--line); border-radius: 99px; padding: 5px 12px; cursor: pointer; }
+  .lang button.on { border-color: rgba(240,164,90,0.7); color: #fff; }
   footer { margin-top: 36px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
 </style>
 </head>
 <body>
 <canvas id="sky"></canvas>
 <main>
+  <div class="lang" id="lang"></div>
   <header>
     <h1 id="appName">Interstellia</h1>
     <p id="tagline">Perjalanan dari Saturnus sampai tepi lubang hitam</p>
   </header>
   <section class="grid" id="grid"></section>
-  <footer>Proyek penggemar untuk belajar fisika dan grafis 3D. Tidak berafiliasi dengan studio film mana pun. Semua model, musik, dan desain dibuat sendiri.</footer>
+  <footer id="footer"></footer>
 </main>
 <script>
-  // Nama aplikasi dan daftar experience: ubah di sini saja.
-  const APP = { name: 'Interstellia', tagline: 'Perjalanan dari Saturnus sampai tepi lubang hitam' };
+  // Nama aplikasi dan daftar experience: ubah di sini saja. Teks Indonesia = sumber; terjemahan English di field en.
+  const APP = { name: 'Interstellia', tagline: 'Perjalanan dari Saturnus sampai tepi lubang hitam', en: { tagline: 'A journey from Saturn to the edge of a black hole' } };
   const EXPERIENCES = [
-    { id: 'cooper-station', title: 'Copper Corn Station', desc: 'Silinder O\'Neill 8 km di orbit Saturnus. Berjalan di kota, naik trem, lift ke sumbu nol-g, terbangkan shuttle.', ready: true },
-    { id: 'gargantua', title: 'Gargantua Black Hole', desc: 'Lubang hitam supermasif berputar dengan piringan akresi dan pembelokan cahaya.', ready: true },
-    { id: 'millar', title: 'Millar\'s World', desc: 'Dunia air di dekat lubang hitam: gelombang raksasa dan waktu yang melambat.', ready: false },
-    { id: 'shuttle', title: 'Penerbangan Kestrel', desc: 'Terbangkan shuttle KS-07 dari dermaga ke cincin Saturnus.', ready: false },
+    { id: 'cooper-station', title: 'Copper Corn Station', desc: 'Silinder O\'Neill 8 km di orbit Saturnus. Berjalan di kota, naik trem, lift ke sumbu nol-g, terbangkan shuttle.', ready: true,
+      en: { desc: 'An 8 km O\'Neill cylinder orbiting Saturn. Walk the city, ride the tram, take the lift to the zero-g axis, fly the shuttle.' } },
+    { id: 'gargantua', title: 'Gargantua Black Hole', desc: 'Lubang hitam supermasif berputar dengan piringan akresi dan pembelokan cahaya.', ready: true,
+      en: { desc: 'A spinning supermassive black hole with an accretion disk and bent light.' } },
+    { id: 'millar', title: 'Millar\'s World', desc: 'Dunia air di dekat lubang hitam: gelombang raksasa dan waktu yang melambat.', ready: false,
+      en: { desc: 'A water world near a black hole: giant waves and slowed time.' } },
+    { id: 'shuttle', title: 'Penerbangan Kestrel', desc: 'Terbangkan shuttle KS-07 dari dermaga ke cincin Saturnus.', ready: false,
+      en: { title: 'Kestrel Flight', desc: 'Fly shuttle KS-07 from the dock to the rings of Saturn.' } },
   ];
-  document.title = `${APP.name}: Menu Utama`;
-  document.getElementById('appName').textContent = APP.name;
-  document.getElementById('tagline').textContent = APP.tagline;
-  const grid = document.getElementById('grid');
-  for (const e of EXPERIENCES) {
-    const el = document.createElement(e.ready ? 'a' : 'div');
-    el.className = 'card' + (e.ready ? '' : ' disabled');
-    if (e.ready) el.href = `experiences/${e.id}/index.html`;
-    el.innerHTML = `<div class="thumb${e.ready ? '' : ' soon'}"${e.ready ? ` style="background-image:url('experiences/${e.id}/preview.jpg')"` : ''}>
-        <span class="tag${e.ready ? ' live' : ''}">${e.ready ? 'Siap' : 'Segera'}</span></div>
-      <div class="body"><h2></h2><p></p></div>`;
-    el.querySelector('h2').textContent = e.title; el.querySelector('p').textContent = e.desc;
-    grid.appendChild(el);
+  const TXT = {
+    id: { menu: 'Menu Utama', ready: 'Siap', soon: 'Segera', footer: 'Proyek penggemar untuk belajar fisika dan grafis 3D. Tidak berafiliasi dengan studio film mana pun. Semua model, musik, dan desain dibuat sendiri.' },
+    en: { menu: 'Main Menu', ready: 'Ready', soon: 'Coming soon', footer: 'A fan project for learning physics and 3D graphics. Not affiliated with any film studio. All models, music and designs are original.' },
+  };
+  // Bahasa: dibagi dengan semua experience lewat localStorage 'lazarus.lang' dan diteruskan di alamat (?lang=)
+  const LANGS = [['id', 'Bahasa Indonesia'], ['en', 'English']];
+  let LANG = 'id';
+  {
+    const ok = (c) => LANGS.some((x) => x[0] === c); let c = null;
+    try { c = new URLSearchParams(location.search).get('lang'); } catch (e) { /* abaikan */ }
+    if (!ok(c)) try { c = localStorage.getItem('lazarus.lang'); } catch (e) { c = null; }
+    if (!ok(c)) c = (navigator.language || 'id').slice(0, 2).toLowerCase();
+    LANG = ok(c) ? c : 'id';
   }
+  const tr = (o, k) => (LANG !== 'id' && o[LANG] && o[LANG][k] !== undefined ? o[LANG][k] : o[k]);
+  const grid = document.getElementById('grid'), langBox = document.getElementById('lang');
+  function render() {
+    const X = TXT[LANG];
+    document.documentElement.lang = LANG;
+    document.title = `${APP.name}: ${X.menu}`;
+    document.getElementById('appName').textContent = APP.name;
+    document.getElementById('tagline').textContent = tr(APP, 'tagline');
+    document.getElementById('footer').textContent = X.footer;
+    grid.textContent = '';
+    for (const e of EXPERIENCES) {
+      const el = document.createElement(e.ready ? 'a' : 'div');
+      el.className = 'card' + (e.ready ? '' : ' disabled');
+      if (e.ready) el.href = `experiences/${e.id}/index.html?lang=${LANG}`;
+      el.innerHTML = `<div class="thumb${e.ready ? '' : ' soon'}"${e.ready ? ` style="background-image:url('experiences/${e.id}/preview.jpg')"` : ''}>
+          <span class="tag${e.ready ? ' live' : ''}">${e.ready ? X.ready : X.soon}</span></div>
+        <div class="body"><h2></h2><p></p></div>`;
+      el.querySelector('h2').textContent = tr(e, 'title'); el.querySelector('p').textContent = tr(e, 'desc');
+      grid.appendChild(el);
+    }
+    langBox.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
+  }
+  for (const [c, name] of LANGS) {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.lang = c; b.textContent = name;
+    b.addEventListener('click', () => { LANG = c; try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ } render(); });
+    langBox.appendChild(b);
+  }
+  render();
   // latar bintang pelan
   const cv = document.getElementById('sky'), g = cv.getContext('2d');
   let W = 0, H = 0, stars = [];

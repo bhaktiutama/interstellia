@@ -1,6 +1,6 @@
 # Rencana: tata letak menu, layar mulai, dan pilihan bahasa
 
-Status: M1, M2, M3 selesai (lihat bagian Hasil). M4 belum. Keputusan: Mandarin aksara sederhana, preset dipilih di layar mulai. Berlaku untuk seluruh aplikasi, contoh utama Copper Corn Station.
+Status: M1, M2, M3 selesai. M4 sebagian: menu utama dan Gargantua Black Hole sudah dua bahasa; 日本語 dan 中文 ditunda atas keputusan pemilik (rencana tetap disimpan). Keputusan: Mandarin aksara sederhana, preset dipilih di layar mulai. Berlaku untuk seluruh aplikasi, contoh utama Copper Corn Station.
 
 ## Ringkasan
 
@@ -114,6 +114,16 @@ Belum di M1: pilihan bahasa di layar mulai (M3).
 | Notifikasi | Pesan panel (hasil lempar, cuaca, preset turun otomatis, pindah lokasi) juga tampil 4 s di atas tengah layar bila tab Fisika tidak terlihat. Teks dan tabel hasil tetap di tab Fisika |
 | HUD | Mode ringkas (FPS, status, zona, g lokal, jam stasiun) dan lengkap (semua baris lama). Awal: ringkas. Klik judul HUD untuk berganti; pilihan diingat. Judul HUD kini "Copper Corn Station" (sebelumnya "Tahap 5 · cahaya") |
 
+## Hasil M4 bagian 1: menu utama dan Gargantua (selesai)
+
+| Halaman | Hasil |
+| --- | --- |
+| Menu utama | Tombol Bahasa Indonesia / English di kanan atas. Judul tab, tagline, label Siap/Segera, deskripsi kartu, footer ikut bahasa. Nama experience tetap (Copper Corn Station, Gargantua Black Hole, Millar's World); "Penerbangan Kestrel" menjadi "Kestrel Flight" di English |
+| Gargantua Black Hole | Sumber teks di halaman ini English (seperti aslinya), kamus Indonesia kecil (sekitar 45 entri): panel (bagian, slider, kotak centang, pilihan kualitas, tombol sudut pandang), angka baca, petunjuk tombol, keterangan bawah, pesan error WebGL. Bagian "Bahasa" baru di panel; ganti bahasa membangun ulang panel tanpa memuat ulang |
+| Berbagi pilihan | Ketiga halaman membaca `?lang=`, lalu localStorage `lazarus.lang`, lalu bahasa browser. Tautan kartu menu, tautan "< MENU" Gargantua, dan "Kembali ke menu utama" di stasiun meneruskan `?lang=` (aman juga saat dibuka sebagai file lokal) |
+
+Ditunda: 日本語 dan 中文 (aksara sederhana), font cadangan CJK. Struktur kamus sudah siap: tambah entri `LANGS` dan kamus per halaman.
+
 ## Hasil M3 (selesai)
 
 | Item | Hasil |
@@ -136,7 +146,7 @@ Tidak diterjemahkan (sesuai rencana): tulisan di dalam dunia 3D (papan halte, pa
 | M1 | Layar muat dengan progres, tombol Mulai, bantuan tidak otomatis, jendela bantuan bertab | Rendah | Halaman termuat, progres naik sampai 100%, tombol Mulai muncul, bantuan tertutup |
 | M2 | Panel kontrol bertab (desktop dan lembar bawah ponsel), HUD ringkas, notifikasi | Sedang | Semua tombol lama masih ada dan berfungsi (uji lama tetap lulus), tab berpindah, tidak ada gulir halaman |
 | M3 | Infrastruktur bahasa dan ekstraksi semua teks, Indonesia + English | Sedang | Tidak ada kunci kosong, ganti bahasa tanpa memuat ulang, tidak ada teks meluber |
-| M4 | 日本語 dan 中文, font cadangan CJK, menu utama dan Gargantua | Rendah-sedang | Sama dengan M3 untuk 4 bahasa |
+| M4 | Menu utama dan Gargantua (selesai); 日本語 dan 中文, font cadangan CJK (ditunda) | Rendah-sedang | Sama dengan M3 untuk 4 bahasa |
 
 Uji otomatis baru `tools/uji_menu_bahasa.py`: progres dan tombol Mulai, semua tab panel, kelengkapan kamus (setiap kunci ada di 4 bahasa), elemen dengan teks lebih lebar dari wadahnya per bahasa. Skrip uji lama yang mencari teks Indonesia akan dipastikan tetap lulus (bahasa awal di uji = id).
 
