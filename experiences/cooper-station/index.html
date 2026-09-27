@@ -180,7 +180,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 12b-5 · suasana: kafe trotoar, lampu untaian, bendera, suara kota · 12b-4: burung · 12b-3: pejalan kaki · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 12c · hujan dengan fisika Coriolis, angin mengikuti cuaca, air mancur Coriolis (9) · 12b-5: suasana kota · 12b-4: burung · 12b-3: pejalan kaki · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -191,9 +191,9 @@
       <tr class="desk-only"><td>E · M</td><td>Aksi (naik trem dan duduk di kursi jendela, turun di halte, baca plakat, lift) · peta</td></tr>
       <tr class="desk-only"><td>V</td><td>Kamera luar: seret / WASD putar, scroll / + - zoom, C orbit otomatis, 1-4 fokus</td></tr>
       <tr class="desk-only"><td>[ · ] · Z</td><td>Jam stasiun mundur / maju 1 jam · kecepatan waktu (1 menit = 1 jam, 10 s, 1 s, berhenti)</td></tr>
-      <tr class="desk-only"><td>N</td><td>Cuaca: otomatis (berganti cerah, berawan, mendung), atau tetap cerah / berawan / mendung</td></tr>
+      <tr class="desk-only"><td>N</td><td>Cuaca: otomatis (berganti cerah, berawan, mendung), atau tetap cerah / berawan / mendung. Mendung tebal = hujan (miring sekitar 8 derajat karena Coriolis), tanah basah dan genangan</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
-      <tr class="desk-only"><td>1 - 8</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum · Skyway · lapangan baseball · terminal spaceport · kokpit shuttle</td></tr>
+      <tr class="desk-only"><td>1 - 9</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum · Skyway · lapangan baseball · terminal spaceport · kokpit shuttle · air mancur Coriolis (E di plakat)</td></tr>
       <tr class="desk-only"><td>Spaceport</td><td>Terminal (7): E di gerbang B1 (dinding utara, ikuti papan jingga) = lift, hub, terowongan, kokpit otomatis (E lagi = langsung ke kokpit). Atau manual: lift (L) ke hub nol-g, E di pintu ujung hub = kapsul terowongan ke dermaga</td></tr>
       <tr class="desk-only"><td>Shuttle</td><td>E lepas sandar / sandar otomatis (kotak target hijau = bisa sandar: jarak &lt; 400 m, kecepatan &lt; 30 m/s; layar kokpit: jarak, kecepatan mendekat/geser, penunjuk arah berth) · W/S dorong · A/D geser · R/F naik-turun · Z/C guling · mouse arah · Shift boost 10x · X rem · V kokpit/kamera belakang · L keluar (saat sandar)</td></tr>
       <tr class="desk-only"><td>Q</td><td>Preset kualitas: Ultra, Tinggi, Sedang, Rendah, Hemat (untuk MacBook M1). Awal: pilihan terakhir (atau Ultra), turun otomatis bila FPS di bawah 30. Bisa juga lewat alamat: index.html?preset=hemat</td></tr>
@@ -691,7 +691,7 @@ const groundMat = new THREE.ShaderMaterial({
     uFieldTex: { value: null }, uCloudTex: { value: null }, uTime: { value: 0 }, uArt: { value: TAU * CONFIG.R / 26 },
     uCloudK: { value: 0.2 }, uFieldZ: { value: new THREE.Vector2(3200, 7850) }, uCityZ: { value: new THREE.Vector2(250, 2500) },
     uReal: { value: new THREE.Vector4(-1e9, -1e9, -1e9, -1e9) }, uShadeTex: { value: null }, uGrassR: { value: 0 }, uCornR: { value: 0 }, uGapHalf: { value: 0 }, uNight: { value: 0 },
-    uLitterTex: { value: null },
+    uLitterTex: { value: null }, uWet: { value: 0 },
   }, LIGHT.uniforms]),
   vertexShader: /* glsl */`
     #include <fog_pars_vertex>
@@ -713,7 +713,7 @@ const groundMat = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */`
     #include <fog_pars_fragment>
     uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex, uLitterTex;
-    uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf, uNight;
+    uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf, uNight, uWet;
     // tahap 10: kolam cahaya lampu jalan (posisi sama dengan tiang lampu di JS)
     float lampPool(float s, float za) {
       const float SP = 45.0, OFF = 13.5, RR = 81.0, CIRC = 6283.185307;
@@ -923,6 +923,14 @@ const groundMat = new THREE.ShaderMaterial({
           col = mix(col, lc, smoothstep(0.3, 0.7, n1 * 0.55 + lt * 0.7) * min(1.0, lt * 1.5));
         }
       }
+      float puddle = 0.0;                                         // 12c: tanah basah dan genangan
+      if (uWet > 0.01 && waterM < 0.5) {
+        float mx = max(col.r, max(col.g, col.b)), sat = (mx - min(col.r, min(col.g, col.b))) / max(mx, 1e-3);
+        float hard = 1.0 - smoothstep(0.12, 0.3, sat);                // aspal, beton, paving
+        col *= 1.0 - uWet * (0.18 + 0.27 * hard);
+        puddle = hard * uWet * smoothstep(0.58, 0.72, vnoise(P * 0.22) * 0.7 + vnoise(P * 0.9 + 13.0) * 0.3);
+        col = mix(col, col * 0.55, puddle);
+      }
       float rw = length(vWorld.xy);
       vec3 up = vec3(-vWorld.xy / rw, 0.0);
       #ifdef TERRAIN
@@ -939,6 +947,7 @@ const groundMat = new THREE.ShaderMaterial({
       float cshadow = textureLod(uCloudTex, uv, 0.0).r;           // bayangan awan (sunline terhalang sebagian)
       light -= uL_SunlineCol * uL_Sunline * uCloudK * cshadow;
       col *= max(light, vec3(0.0));
+      if (puddle > 0.0) col += fogColor * (0.35 * puddle + 0.06 * uWet);   // genangan memantulkan langit (warna kabut)
 
       // ---- air: riak gelombang, fresnel, pantulan atmosfer dan kilau sunline ----
       if (waterM > 0.01) {
@@ -3203,6 +3212,7 @@ function availableAction() {
   if (player.state !== 'ground') return null;
   if (tram.dwell > 0 && nearDist(TRAM.s, tram.za) < 14) return { key: 'board', label: `Naik trem (berikutnya: ${TRAM.stops[tram.target].name})` };
   if (nearDist(PLAQUE_POS.s, PLAQUE_POS.za) < 4) return { key: 'plaque', label: 'Baca plakat' };
+  if (nearDist(FOUNT.plaque.s, FOUNT.plaque.za) < 3.5) return { key: 'fount', label: 'Baca plakat air mancur Coriolis' };
   if (nearDist(LIFT.theta * R, LIFT.za) < 8) return { key: 'lift', label: 'Naik lift ke sumbu' };
   if (nearDist(TERM.gate.s, TERM.gate.za) < 4 && player.za > TERM.za - TERM.d / 2) return { key: 'gate', label: 'Gerbang B1: lift ke hub, terowongan, lalu kokpit shuttle KS-07 (otomatis)' };
   return null;
@@ -3222,6 +3232,7 @@ function doAction() {
   }
   else if (a.key === 'alight') { const z = TRAM_SEATS[player.seat || 0][1]; player.state = 'ground'; player.theta = ((TRAM.s + 3.6) / R) % TAU; player.za = tram.za + Math.max(-11, Math.min(11, z)); player.h = 0; }
   else if (a.key === 'plaque') { plaqueEl.querySelector('p').textContent = PLAQUE_TEXT; plaqueEl.hidden = false; }
+  else if (a.key === 'fount') { plaqueEl.querySelector('p').textContent = FOUNT_TEXT; plaqueEl.hidden = false; }
   else if (a.key === 'lift') enterLift();
   else if (a.key === 'port') portEnterPod(-1);
   else if (a.key === 'gate') portStartTrip();
@@ -3388,6 +3399,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit6') teleport('baseball');
   if (e.code === 'Digit7') teleport('spaceport');
   if (e.code === 'Digit8') portBoard();
+  if (e.code === 'Digit9') teleport('fountain');                     // 12c
   if (e.code === 'KeyQ') cyclePreset();
   if (e.code === 'KeyZ') cycleTimeRate();
   if (e.code === 'KeyN') cycleWeather();
@@ -4377,7 +4389,7 @@ const GRASS_VS = /* glsl */`
     vec2 xz = vec2(ca * lp.x - sa * lp.z, sa * lp.x + ca * lp.z) * (aHead > 0.5 ? 1.0 : wmul);
     float t = lp.y;
     float gust = windAt(P);
-    float sway = ((0.2 + 0.8 * gust) * 0.45 + 0.08 * sin(uTime * 2.3 + h1 * 6.28)) * (kind == 0 ? 1.0 : 0.45);
+    float sway = ((0.2 + 0.8 * gust) * 0.45 + 0.08 * sin(uTime * 2.3 + h1 * 6.28)) * (kind == 0 ? 1.0 : 0.45) * (0.7 + 0.22 * length(uWind.xy));
     vec2 bend = vec2(0.6, 0.8) * sway * t * t * hgt;
     vec3 p = base + tS * (xz.x + bend.x) + vec3(0.0, 0.0, xz.y + bend.y) + up * (t * hgt * (1.0 - 0.2 * sway * t));
     #ifndef DEPTH_ONLY
@@ -4495,7 +4507,7 @@ const CORN_NEAR_VS = /* glsl */`
     vec3 lp = position * H;
     vec2 xz = vec2(ca * lp.x - sa * lp.z, sa * lp.x + ca * lp.z);
     float t = position.y;
-    float sway = (0.3 + 0.7 * windAt(P)) * 0.18 + 0.03 * sin(uTime * 1.9 + h1 * 6.28);
+    float sway = ((0.3 + 0.7 * windAt(P)) * 0.18 + 0.03 * sin(uTime * 1.9 + h1 * 6.28)) * (0.7 + 0.22 * length(uWind.xy));   // 12c: angin cuaca
     vec2 bend = vec2(0.6, 0.8) * sway * t * t;
     vec3 p = base + tS * (xz.x + bend.x) + vec3(0.0, 0.0, xz.y + bend.y) + up * lp.y;
     #ifndef DEPTH_ONLY
@@ -4554,7 +4566,7 @@ const CORN_CARD_VS = /* glsl */`
     float H = (2.2 + 0.4 * h3) * (0.92 + 0.16 * vnoise(P / 18.0)) * shrink;
     vec3 up, tS;
     vec3 base = groundFrame(P, 0.0, up, tS);
-    float sway = (0.3 + 0.7 * windAt(P)) * 0.18;
+    float sway = (0.3 + 0.7 * windAt(P)) * 0.18 * (0.7 + 0.22 * length(uWind.xy));
     float t = position.y;
     vec3 p = base + tS * (position.x + 0.6 * sway * t * t) + vec3(0.0, 0.0, position.z + 0.8 * sway * t * t) + up * (t * H);
     vUv = vec2(uv.x * (h2 > 0.5 ? 1.0 : -1.0) + h1, uv.y);
@@ -5779,6 +5791,8 @@ function startAudio() {
   AUDIO.crowd = loop(pink, 'bandpass', 650, 0.7, 0, AUDIO.sfx);
   AUDIO.car = loop(AUDIO.white, 'bandpass', 850, 0.6, 0, AUDIO.sfx);
   AUDIO.carHum = loop(brown, 'lowpass', 140, 0.7, 0, AUDIO.sfx);
+  AUDIO.rain = loop(AUDIO.white, 'bandpass', 2600, 0.35, 0);            // 12c: hujan (desis) + gemuruh rendah
+  AUDIO.rainLow = loop(pink, 'lowpass', 500, 0.6, 0);
   AUDIO.cabHum = ctx.createGain(); AUDIO.cabHum.gain.value = 0; AUDIO.cabHum.connect(ship);
   for (const [f, a] of [[120, 1], [240, 0.35], [1830, 0.04]]) { const o = ctx.createOscillator(); o.frequency.value = f; const g = ctx.createGain(); g.gain.value = a; o.connect(g).connect(AUDIO.cabHum); o.start(); }
   AUDIO.musicBus = ctx.createGain(); AUDIO.musicBus.gain.value = 0.45; AUDIO.musicBus.connect(master); AUDIO.musicBus.connect(verb);
@@ -5936,6 +5950,12 @@ function updateAudio(dt) {
     if (AUDIO.lastState === 'air') playStep(surfaceAt(s, za), 2.2);             // mendarat
   }
   AUDIO.lastDist = player.distance; AUDIO.lastState = player.state;
+  // 12c: suara hujan (teredam di dalam terminal, trem, lift; tidak ada di luar stasiun)
+  if (AUDIO.rain) {
+    const rk = ext.active ? 0 : RAIN.k, sh = rainSheltered();
+    AUDIO.rain.g.gain.setTargetAtTime(0.05 * rk * (sh ? 0.25 : 1), t, 0.5); AUDIO.rain.f.frequency.setTargetAtTime(sh ? 900 : 2600, t, 0.5);
+    AUDIO.rainLow.g.gain.setTargetAtTime(0.03 * rk, t, 0.5);
+  }
   // 12b-5: keramaian, mobil lewat, bunyi penyeberangan (dihitung tiap 0,25 s)
   if (AUDIO.crowd && t > (AUDIO.nextCity || 0)) {
     AUDIO.nextCity = t + 0.25;
@@ -7433,7 +7453,7 @@ function spawnFlock(F, eS, eZ, r = Math.random) {
 }
 function stepBirds(dt) {
   if (dt <= 0 || ext.active) return;
-  const eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, h = clock.hour, day = birdDay(h), dusk = h > 17.8 && h < 18.5;
+  const eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, h = clock.hour, day = birdDay(h) && RAIN.k < 0.3, dusk = h > 17.8 && h < 18.5;   // 12c: burung berteduh saat hujan
   const nF = BIRDS.user ? BIRDS.nFlock : 0;
   while (BIRDS.flocks.length < nF) { const F = {}; BIRDS.flocks.push(F); F.dead = true; }
   BIRDS.flocks.length = Math.min(BIRDS.flocks.length, nF);
@@ -7545,6 +7565,150 @@ function toggleBirds() {
 }
 PRESET_HOOKS.push(applyBirdsPreset); applyBirdsPreset(PRESET.idx);
 
+/* =====================================================================
+   TAHAP 12c: HUJAN DENGAN FISIKA CORIOLIS, ANGIN MENGIKUTI CUACA, AIR MANCUR CORIOLIS
+   - Hujan muncul saat mendung (WEATHER.ov > 0,6). Tetes jatuh dengan kecepatan terminal sekitar 7 m/s (dikali akar g
+     setempat) di udara yang ikut berputar. Coriolis -2 omega x v diimbangi hambatan udara, jadi tetes bergerak menyamping
+     melawan arah putaran dengan kecepatan tetap 2 omega vt0^2 / g0 = sekitar 0,99 m/s: hujan miring sekitar 8 derajat
+     walau tanpa angin, dan tetes dari awan (sekitar 300 m) hanyut sekitar 40-45 m sebelum menyentuh tanah.
+   - Partikel garis di kotak 70 x 70 x 45 m di sekitar kamera (jumlah per preset), tanah basah gelap dan genangan
+     memantulkan langit, suara hujan. Tidak ada hujan di dalam terminal, trem, lift, hub, dan kapsul.
+   - Angin: kekuatan dasar naik saat mendung (1,4 sampai 3,5 m/s), goyang rumput dan jagung ikut kuat.
+   - Air mancur Coriolis di plaza pusat kota: semburan tegak 10 m/s setinggi 5,1 m mendarat 1,37 m searah putaran
+     ((4/3) omega v0^3 / g^2), semburan kecil 6 m/s bergeser 0,30 m. Plakat menjelaskan (E).
+   ===================================================================== */
+const RAIN = { k: 0, wet: 0, max: 12000, presetN: 12000, vt0: 7.0 };
+RAIN.vlat = 2 * OMEGA * RAIN.vt0 * RAIN.vt0 / CONFIG.g;              // sekitar 0,99 m/s melawan arah putaran
+{
+  const base = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0), g = new THREE.InstancedBufferGeometry();
+  g.index = base.index; g.setAttribute('position', base.attributes.position);
+  let sd = 777; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const seed = new Float32Array(RAIN.max * 4); for (let i = 0; i < seed.length; i++) seed[i] = r();
+  g.setAttribute('aSeed', new THREE.InstancedBufferAttribute(seed, 4)); g.instanceCount = 0;
+  const U = { uRain: { value: new THREE.Vector4() }, uVlat: { value: RAIN.vlat } };   // uRain: kekuatan, eyeS, eyeZ, -
+  const VS = /* glsl */`
+    attribute vec4 aSeed;
+    uniform vec4 uRain;
+    uniform float uVlat;
+    varying float vA;
+    void main() {
+      const float W = 70.0, H = 45.0;
+      float vt = 7.0 * (0.85 + 0.3 * aSeed.w);
+      vec2 v2 = vec2(-uVlat, 0.0) + uWind.xy;                  // Coriolis (melawan putaran = -s) + angin
+      float t = uTime;
+      vec2 P0 = aSeed.xy * W + v2 * t;
+      vec2 P = uRain.yz + mod(P0 - uRain.yz + W * 0.5, W) - W * 0.5;
+      float h = mod(aSeed.z * H - vt * t, H) + 0.05;
+      vec3 up, tS; vec3 base = groundFrame(P, h, up, tS);
+      vec3 vel = tS * v2.x + vec3(0.0, 0.0, v2.y) - up * vt;
+      vec3 ax = vel / max(length(vel), 1e-3);
+      vec3 toE = uEye - base, sd = cross(ax, toE);
+      sd = dot(sd, sd) > 1e-8 ? normalize(sd) : tS;
+      float len = vt * 0.035, dist = length(toE);
+      vec3 p = base + ax * (position.y * len) + sd * (position.x * (0.012 + dist * 0.0006));
+      vA = 0.35 * uRain.x * (1.0 - smoothstep(20.0, 34.0, length(P - uEyeSZ)));
+      vec4 mvPosition = viewMatrix * vec4(p, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #ifndef DEPTH_ONLY
+      #include <fog_vertex>
+      #endif
+    }`;
+  const FS = /* glsl */`
+    varying float vA;
+    void main() { gl_FragColor = vec4(vec3(0.72, 0.76, 0.82), vA);
+      #include <fog_fragment>
+    }`;
+  const mat = vegMaterial({ vertex: VS, fragment: FS, uniforms: U });
+  mat.transparent = true; mat.depthWrite = false;
+  RAIN.mesh = new THREE.Mesh(g, mat); RAIN.mesh.frustumCulled = false; RAIN.mesh.userData.noLight = true; RAIN.mesh.renderOrder = 8;
+  realGroup.add(RAIN.mesh); RAIN.U = U;
+}
+function rainSheltered() {
+  if (player.state === 'tram' || player.state === 'lift' || player.state === 'float' || player.state === 'pod' || player.state === 'ship') return true;
+  const s = player.theta * R, za = player.za;
+  return Math.abs(wrapS(s - TERM.s)) < TERM.w / 2 && Math.abs(za - TERM.za) < TERM.d / 2;   // di dalam terminal
+}
+function updateRain(dt) {
+  const k = sstep(0.6, 0.85, WEATHER.ov);
+  RAIN.k += (k - RAIN.k) * Math.min(1, dt / 8);
+  RAIN.wet += (RAIN.k > 0.05 ? (RAIN.k - RAIN.wet) / 60 : -RAIN.wet / 300) * dt;   // basah dalam sekitar 1 menit, kering sekitar 5 menit
+  RAIN.wet = Math.max(0, Math.min(1, RAIN.wet));
+  groundMat.uniforms.uWet.value = RAIN.wet;
+  const show = RAIN.k > 0.02 && !ext.active && !rainSheltered();
+  RAIN.mesh.geometry.instanceCount = show ? Math.round(RAIN.presetN * Math.min(1, RAIN.k * 1.2)) : 0;
+  RAIN.U.uRain.value.set(RAIN.k, VU.uEyeSZ.value.x, VU.uEyeSZ.value.y, 0);
+  WIND.base = 1.4 + 2.1 * WEATHER.ov;                                  // B5: angin menguat saat mendung
+}
+PRESET_HOOKS.push((i) => { RAIN.presetN = [12000, 9000, 6000, 3000, 1500][i]; });
+RAIN.presetN = [12000, 9000, 6000, 3000, 1500][PRESET.idx];
+// --- air mancur Coriolis ---
+const FOUNT = { jets: [], plaque: null };
+{
+  let best = null, bd = 1e9;
+  for (const [s0, z0, s1, z1, plaza] of parkBlocks) { if (!plaza) continue; const cs = (s0 + s1) / 2, cz = (z0 + z1) / 2, d = Math.hypot(wrapS(cs - 14), cz - 625); if (d < bd) { bd = d; best = [cs, cz]; } }
+  if (!best) best = [60, 700];
+  const [S, Z] = best; FOUNT.s = S; FOUNT.za = Z; FOUNT.h = groundH(S, Z);
+  const m4 = new THREE.Matrix4(), G = new THREE.Group(); surfaceMatrix(m4, S / R, Z, FOUNT.h); G.matrixAutoUpdate = false; G.matrix.copy(m4);
+  const STONE = [0.72, 0.7, 0.66];
+  const basin = new THREE.Mesh(mergeSimple([
+    { geo: new THREE.CylinderGeometry(4.6, 4.8, 0.55, 40, 1, true).translate(0, 0.275, 0), color: STONE },
+    { geo: new THREE.CylinderGeometry(4.2, 4.2, 0.55, 40, 1, true).translate(0, 0.275, 0), color: STONE },
+    { geo: new THREE.RingGeometry(4.2, 4.6, 40).rotateX(-Math.PI / 2).translate(0, 0.55, 0), color: [0.8, 0.78, 0.74] },
+    { geo: new THREE.CylinderGeometry(0.5, 0.7, 0.9, 16).translate(0, 0.45, 0), color: STONE },
+    { geo: new THREE.BoxGeometry(0.9, 1.1, 0.12).translate(0, 0.55, 5.6), color: [0.3, 0.32, 0.34] },   // plakat di sisi +za
+  ]), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
+  const water = new THREE.Mesh(new THREE.CircleGeometry(4.2, 40).rotateX(-Math.PI / 2).translate(0, 0.42, 0), new THREE.MeshBasicMaterial({ color: 0x3f6f86 }));
+  G.add(basin, water); scene.add(G);
+  addCollider(modS(S), Z, 4.6, 4.6);
+  FOUNT.plaque = { s: S, za: Z + 6.4 };
+  // tetes semburan: lintasan analitik di kerangka berputar (pendekatan orde pertama omega), x = searah putaran (+s)
+  const jets = [[0, 0, 10, 0.9]];                                    // [dx, dz, v0, tinggi nosel]
+  for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; jets.push([Math.sin(a) * 2.6, Math.cos(a) * 2.6, 6, 0.45]); }
+  const N = 3600, per = N / jets.length, aJ = new Float32Array(N * 4);
+  for (let i = 0; i < N; i++) { const j = jets[Math.floor(i / per)]; aJ.set([j[0], j[1], j[2], (i % per) / per], i * 4); }
+  const base = new THREE.PlaneGeometry(0.06, 0.06), g = new THREE.InstancedBufferGeometry();
+  g.index = base.index; g.setAttribute('position', base.attributes.position); g.setAttribute('aJet', new THREE.InstancedBufferAttribute(aJ, 4)); g.instanceCount = N;
+  const VS = /* glsl */`
+    attribute vec4 aJet;                                           // dx, dz, v0, fase
+    uniform vec3 uF;                                               // s, za pusat, omega
+    varying float vA;
+    void main() {
+      float v0 = aJet.z, g = 9.81, om = uF.z, T = 2.0 * v0 / g;
+      float ph = aJet.w, noz = v0 > 8.0 ? 0.9 : 0.45;                // tinggi nosel
+      float t = fract(ph + uTime / T) * T;
+      float hh = v0 * t - 0.5 * g * t * t;                          // tinggi
+      float xs = om * (v0 * t * t - g * t * t * t / 3.0);           // Coriolis: bergeser searah putaran
+      float jit = (fract(ph * 97.3) - 0.5) * 0.12;
+      vec2 P = uF.xy + vec2(aJet.x + xs + jit, aJet.y + (fract(ph * 51.7) - 0.5) * 0.12);
+      vec3 up, tS; vec3 base = groundFrame(P, noz + max(hh, 0.0), up, tS);
+      if (distance(base, uEye) > 250.0) { ${CLIP_AWAY} }
+      vec3 toE = normalize(uEye - base + vec3(1e-4)), sd = cross(up, toE);
+      sd = dot(sd, sd) > 1e-8 ? normalize(sd) : tS;
+      vec3 p = base + sd * position.x + up * position.y;
+      vA = 0.55;
+      vec4 mvPosition = viewMatrix * vec4(p, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #ifndef DEPTH_ONLY
+      #include <fog_vertex>
+      #endif
+    }`;
+  const FS = /* glsl */`
+    varying float vA;
+    void main() { gl_FragColor = vec4(vec3(0.78, 0.86, 0.92), vA);
+      #include <fog_fragment>
+    }`;
+  const mat = vegMaterial({ vertex: VS, fragment: FS, uniforms: { uF: { value: new THREE.Vector3(S, Z, OMEGA) } } });
+  mat.transparent = true; mat.depthWrite = false;
+  FOUNT.mesh = new THREE.Mesh(g, mat); FOUNT.mesh.frustumCulled = false; FOUNT.mesh.userData.noLight = true;
+  realGroup.add(FOUNT.mesh);
+  FOUNT.shift10 = 4 / 3 * OMEGA * 1000 / (CONFIG.g * CONFIG.g); FOUNT.shift6 = 4 / 3 * OMEGA * 216 / (CONFIG.g * CONFIG.g);
+}
+SPOTS.fountain = { s: FOUNT.s, za: FOUNT.za + 12, heading: 180, pitch: 8, name: 'Air mancur Coriolis' };
+const FOUNT_TEXT = `Air Mancur Coriolis\n\nSemburan tengah naik lurus 10 m/s sampai sekitar 5,1 m, tetapi mendarat sekitar ${FOUNT.shift10.toFixed(2).replace('.', ',')} m searah putaran stasiun (semburan kecil 6 m/s: ${FOUNT.shift6.toFixed(2).replace('.', ',')} m).\n\n` +
+  `Saat air naik menuju sumbu, jaraknya ke sumbu mengecil. Momentum sudutnya tetap, jadi air sedikit mendahului lantai yang berputar di bawahnya (gaya Coriolis). Besarnya: (4/3) x omega x v^3 / g^2.\n\n` +
+  `Di Bumi efek yang sama hanya beberapa milimeter. Di sini putaran stasiun (satu kali tiap 63 detik) membuatnya terlihat.\n\n` +
+  `Hujan di stasiun juga miring sekitar 8 derajat melawan arah putaran walau tanpa angin: tetes jatuh menjauhi sumbu dan tertinggal.`;
+
 // --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
 hub.userData.noLight = true;
 ballMesh.userData.noShadow = true; markMesh.userData.noShadow = true;
@@ -7575,6 +7739,7 @@ function frame(now) {
   updatePeds();                                    // 12b-3
   stepBirds(Math.min(0.1, dt)); updateBirds();     // 12b-4
   updateVibe();                                    // 12b-5
+  updateRain(Math.min(0.1, dt));                   // 12c
   updateFar();
   updateClouds(dt);
   updateWind(dt);                                  // 12b-2
@@ -7603,7 +7768,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

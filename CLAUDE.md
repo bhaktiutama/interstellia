@@ -19,6 +19,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_pejalan_kaki.py` | Uji Cooper Station 12b-3: pejalan kaki menyeberang hanya saat lampu jalan, biaya CPU, preset Hemat |
 | `tools/uji_burung.py` | Uji Cooper Station 12b-4: kawanan burung, merpati terbang saat didekati, siklus hari |
 | `tools/uji_suasana.py` | Uji Cooper Station 12b-5: kafe, lampu untaian, bendera, suara kota, tidak ada normal nol (NaN) |
+| `tools/uji_hujan.py` | Uji Cooper Station 12c: angka fisika hujan dan air mancur Coriolis, hujan, tanah basah, angin |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
 ## Aturan aplikasi
@@ -67,6 +68,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Pejalan kaki (12b-3) | `PEDS` (list, walk, near), `stepPeds()` (simulasi CPU, jauh bergiliran), `updatePeds()` (pilih dalam radius, atribut aP/aI/aJ), `pedAct()` (kepadatan per jam), `sigQ()`, `applyPedsPreset()` lewat `PRESET_HOOKS`, `cyclePeds()` |
 | Burung (12b-4) | `BIRDS` (flocks boids, vees formasi V, groups merpati), `stepBirds()`, `updateBirds()`, `applyBirdsPreset()`, `toggleBirds()` |
 | Suasana (12b-5) | `VIBE` (kafe, lampu untaian, sepeda terdaftar sebagai kind di `FURN`; bendera `VIBE.flags`; layang-layang), `updateVibe()`, audio `AUDIO.crowd` / `AUDIO.car` / `AUDIO.carHum`, kabut pagi di `updateLighting()` |
+| Hujan dan Coriolis (12c) | `RAIN` (k kekuatan, wet, vlat), `updateRain()`, `rainSheltered()`, uniform `uWet` di `groundMat`, `FOUNT` (air mancur, `FOUNT_TEXT`), `SPOTS.fountain` (tombol 9), `WIND.base` mengikuti `WEATHER.ov` |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
 | Kolisi | `COL`, `addCollider(s, za, hs, hz)` (AABB di bidang s-za), `LATE_COLLIDERS` |
 | Awan/cuaca (11a) | `WEATHER` (mode auto/cerah/berawan/mendung, cover, ov), `CLOUD`, `updateClouds(dt)`, `cycleWeather()` (N) |
@@ -80,7 +82,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Lalu lintas | `TRAFFIC` (gambar di GPU, posisi dari simulasi CPU `stepTraffic()` model IDM, atribut `aSim`), `SIG` + `sigState(k, m, axis, t)` (lampu lalu lintas), `XING` + `updateCrossings()` + `XVIS` (perlintasan trem, palang, bel), `LAMP` |
 | Trem | `TRAM`, `TRAM_CAR`, `TRAM_SEATS`, `tram` |
 | Lift/hub | `LIFT`, `HUB`, `CABIN`, `enterLift()`, `stepFloat()` |
-| Lokasi | `SPOTS` + `teleport(key)`: cooper, hill, corn, wheat, skyway, baseball, spaceport |
+| Lokasi | `SPOTS` + `teleport(key)`: cooper, hill, corn, wheat, skyway, baseball, spaceport, fountain |
 | Uji | `window.__station` mengekspor objek penting untuk skrip uji |
 
 ## Status pemain (`player.state`)
@@ -89,7 +91,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 
 ## Tombol
 
-W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 1-8 (lokasi; 8 = kokpit shuttle), K, Q, P, U, J, / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
+W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 1-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis), K, Q, P, U, J, / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
 
 ## Riwayat tahap
 
@@ -109,7 +111,8 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 12b-3 | Pejalan kaki: trotoar, taman, terminal, halte, bangku; menyeberang di zebra saat lampu jalan |
 | 12b-4 | Burung: kawanan boids, formasi V di bawah awan, merpati di plaza; revisi tongkol jagung, daun jatuh diam di tanah, pohon baru lebih tinggi |
 | 12b-5 | Suasana: kafe trotoar, lampu untaian plaza, bendera dan umbul-umbul, sepeda, layang-layang, suara kota, kabut pagi; perbaikan NaN normal di ujung daun jagung (titik menyala) |
+| 12c | Hujan miring 8 derajat oleh Coriolis, tanah basah dan genangan, suara hujan, angin mengikuti cuaca, air mancur Coriolis dengan plakat |
 
-Rencana berikutnya: `docs/cooper-station/rencana-tahap-12-cooper-station.md` (12c hujan dan Coriolis, 12d ladang, foto, tur).
+Rencana berikutnya: `docs/cooper-station/rencana-tahap-12-cooper-station.md` (12d ladang, foto, tur).
 
 Catatan GPU: di shader jangan `normalize()` vektor yang bisa nol, jangan `pow()` bilangan yang bisa negatif, jangan `sqrt()`/`asin()` di luar rentang (NaN di Apple M1 disebar bloom jadi titik putih berkedip). Sandbox uji (SwiftShader) tidak memperlihatkan NaN.

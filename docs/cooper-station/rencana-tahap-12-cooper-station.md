@@ -1,6 +1,6 @@
 # Rencana Tahap 12: Cooper Station
 
-Status: 12a selesai (lihat bagian 12a). 12b selesai (lihat `rencana-tahap-12b-cooper-station.md`). 12c dan 12d belum dikerjakan. Titik awal = tahap 11d (artifact versi 24). Semua yang sudah ada tetap dipertahankan.
+Status: 12a selesai (lihat bagian 12a). 12b selesai (lihat `rencana-tahap-12b-cooper-station.md`). 12c selesai (lihat bagian 12c). 12d belum dikerjakan. Titik awal = tahap 11d (artifact versi 24). Semua yang sudah ada tetap dipertahankan.
 
 ## Ringkasan
 
@@ -55,6 +55,16 @@ Rencana detail (diperluas: perlintasan trem, pohon beragam, daun kuning, suasana
 | B2 | Hujan | Muncul saat mendung. Tetes jatuh dari ketinggian awan (sekitar 300 m) dan lintasannya melengkung karena Coriolis (meleset beberapa meter berlawanan arah putaran). Tanah basah mengilap, genangan, suara hujan | Sedang |
 | B5 | Angin mengikuti cuaca | Pohon, jagung, rumput bergoyang lebih kuat saat mendung; suara angin naik | Rendah |
 | B6 | Air mancur Coriolis | Air mancur di taman kota yang semburannya melengkung, dengan plakat penjelasan | Rendah |
+
+### Hasil 12c (selesai)
+
+| No | Status | Yang dikerjakan |
+| --- | --- | --- |
+| B2 | Selesai | Hujan saat mendung tebal (awan > 0,6, penuh pada 0,85). Fisika: tetes jatuh dengan kecepatan terminal sekitar 7 m/s di udara yang ikut berputar; Coriolis diimbangi hambatan udara sehingga tetes bergerak menyamping 2 omega vt^2 / g = 0,989 m/s melawan arah putaran. Hujan miring 8,0 derajat walau tanpa angin (plus angin). Rencana awal menyebut "meleset beberapa meter"; hitungan sebenarnya: dari awan 300 m tetes hanyut sekitar 40-45 m. Partikel garis di kotak 70 x 70 x 45 m sekitar kamera: Ultra 12.000, Tinggi 9.000, Sedang 6.000, Rendah 3.000, Hemat 1.500. Tanah basah (gelap, basah penuh sekitar 1 menit, kering sekitar 5 menit), genangan di aspal dan paving memantulkan warna langit. Suara hujan (teredam di dalam terminal, trem, lift). Tidak ada hujan di dalam terminal, trem, lift, hub, kapsul. Burung berteduh saat hujan |
+| B5 | Selesai | Angin dasar naik dari 1,4 m/s (cerah) sampai 3,5 m/s (mendung penuh). Goyang rumput, jagung, dan tajuk ikut kuat; suara angin mengikuti hembusan (12b-2) |
+| B6 | Selesai | Air mancur di plaza pusat kota terdekat dari titik awal (tombol 9). Semburan tengah 10 m/s setinggi 5,1 m mendarat 1,37 m searah putaran, 8 semburan kecil 6 m/s bergeser 0,30 m. Lintasan memakai rumus orde pertama (4/3) omega v^3 / g^2; dibandingkan hitungan eksak di kerangka inersia (1,352 m dan 0,292 m) selisihnya sekitar 1,5%. Plakat di depan kolam (E) menjelaskan Coriolis dan hujan miring |
+
+Uji: `tools/uji_hujan.py` (7 cek). Waktu muat di sandbox sekitar 6,6 s. Belum dibuat: percikan tetes di tanah, tirai hujan di kejauhan (diwakili kabut mendung yang sudah ada).
 
 ## 12d. Ladang, foto, tur
 
