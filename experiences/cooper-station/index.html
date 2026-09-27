@@ -138,9 +138,21 @@
   #plaque .card, #map .card { background: #14171c; border: 1px solid var(--line); border-radius: 10px; padding: 16px; max-width: 420px; }
   #plaque p { white-space: pre-wrap; margin: 0 0 12px; color: #fff; line-height: 1.55; }
   #plaque button, #map button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
-  #map .mhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; color: var(--accent); }
-  #map canvas { display: block; border-radius: 4px; max-width: 100%; }
+  #map { padding: 12px; display: flex; justify-content: center; align-items: stretch; }
+  #map .mcard { width: min(1500px, 100%); height: 100%; display: flex; flex-direction: column; background: #14171c; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  #map .mhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; color: var(--accent); flex-wrap: wrap; }
+  #map .mbtns { display: flex; gap: 6px; flex-wrap: wrap; }
+  #map .mbody { flex: 1; min-height: 0; display: flex; gap: 12px; }
+  #map canvas { display: block; flex: 1; min-width: 0; width: 100%; height: 100%; border-radius: 6px; background: #0b0d11; cursor: grab; touch-action: none; }
+  #map canvas.drag { cursor: grabbing; }
+  #mapLegend { width: 220px; overflow: auto; font-size: 12px; }
+  #mapLegend .lh { color: var(--accent); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; margin: 8px 0 4px; }
+  #mapLegend button { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; margin-bottom: 4px; }
+  #mapLegend button b { display: inline-grid; place-items: center; min-width: 20px; height: 20px; border-radius: 50%; background: #e8b765; color: #14171c; font-size: 11px; }
+  #mapLegend .sw { display: flex; gap: 8px; align-items: center; margin-bottom: 3px; color: var(--ink); }
+  #mapLegend .sw i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
   #map .mnote { color: var(--muted); font-size: 10.5px; margin-top: 6px; }
+  @media (max-width: 760px) { #map .mbody { flex-direction: column; } #mapLegend { width: auto; max-height: 28vh; } }
   /* 12d: mode foto dan tur sinematik */
   body.photo #hud, body.photo #cross, body.photo #lab, body.photo #touchbtns, body.photo #prompt,
   body.tour #hud, body.tour #cross, body.tour #lab, body.tour #touchbtns, body.tour #prompt { display: none !important; }
@@ -182,7 +194,11 @@
 </div>
 <div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><button id="tourStop" type="button">Berhenti (Y)</button></div></div>
 <div id="plaque" hidden><div class="card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
-<div id="map" hidden><div class="card"><div class="mhead"><span>Peta silinder (dibuka)</span><button id="mapClose" type="button">Tutup (M)</button></div><canvas id="mapCanvas"></canvas><div class="mnote">Kiri-kanan = keliling 6,28 km · bawah-atas = sumbu 8 km dari end cap A</div></div></div>
+<div id="map" hidden><div class="mcard">
+  <div class="mhead"><span>Peta silinder (dibuka)</span><span class="mbtns"><button id="mapZoomIn" type="button">+</button><button id="mapZoomOut" type="button">-</button><button id="mapMe" type="button">Posisi saya</button><button id="mapClose" type="button">Tutup (M)</button></span></div>
+  <div class="mbody"><canvas id="mapCanvas"></canvas><div id="mapLegend"></div></div>
+  <div class="mnote">Kiri-kanan = sumbu 8 km dari end cap A · atas-bawah = keliling 6,28 km (tengah = rel trem, tepi atas dan bawah = Skyway) · roda atau cubit = zoom, seret = geser, klik penanda = pindah ke sana</div>
+</div></div>
 <div id="lab">
   <div id="labHead"><span>Panel kontrol</span><span class="chev">&#9662;</span></div>
   <div class="body">
@@ -562,6 +578,16 @@ Object.assign(I18N.en, {
   "Tutup (E)": "Close (E)",
   "Peta silinder (dibuka)": "Cylinder map (unrolled)",
   "Tutup (M)": "Close (M)",
+  "Posisi saya": "My position",
+  "Lokasi (klik = pindah)": "Places (click = go there)",
+  "Zona": "Zones",
+  "Tanda": "Legend",
+  "Anda": "You",
+  "Rel trem dan halte": "Tram line and stops",
+  "Skyway (jendela kaca)": "Skyway (glass window)",
+  "Jembatan jalan": "Road bridges",
+  "Sungai dan akuaduk": "River and aqueduct",
+  "Kiri-kanan = sumbu 8 km dari end cap A · atas-bawah = keliling 6,28 km (tengah = rel trem, tepi atas dan bawah = Skyway) · roda atau cubit = zoom, seret = geser, klik penanda = pindah ke sana": "Left-right = the 8 km axis from end cap A · top-bottom = the 6.28 km circumference (middle = tram line, top and bottom edges = Skyway) · wheel or pinch = zoom, drag = pan, click a marker = go there",
   "Kiri-kanan = keliling 6,28 km · bawah-atas = sumbu 8 km dari end cap A": "Left-right = circumference 6.28 km · bottom-top = 8 km along the axis from end cap A",
   "Panel kontrol": "Control panel",
   "Lokasi": "Places",
@@ -3834,46 +3860,129 @@ function stepTramRider() {
   player.mode = 'duduk di trem';
 }
 
-const mapEl = document.getElementById('map'), mapCv = document.getElementById('mapCanvas');
-const mapStatic = document.createElement('canvas');
-function drawMapStatic() {
-  const W = mapCv.width, H = mapCv.height, g = mapStatic.getContext('2d');
-  mapStatic.width = W; mapStatic.height = H;
-  const X = (s) => (s / CIRC) * W, Y = (za) => H - (za / CONFIG.L) * H;
+/* 13d: PETA BESAR (M). Mendatar: x = za (0 di kiri, 8 km di kanan), y = keliling relatif rel trem (tengah = rel, tepi atas
+   dan bawah = Skyway). Latar = kanvas tanah + rumah, digambar sekali; garis, penanda, label, pemain, trem digambar vektor
+   tiap frame (tajam saat zoom). Zoom roda / cubit / tombol, geser seret (keliling berulang tanpa ujung), klik penanda = pindah. */
+const mapEl = document.getElementById('map'), mapCv = document.getElementById('mapCanvas'), mapLegend = document.getElementById('mapLegend');
+const MAPV = { zoom: 1, cx: CONFIG.L / 2, cy: 0, k: 1, W: 1, H: 1, dpr: 1, hover: -1, drag: null, pts: new Map(), static: null };
+const MAP_MARKS = [
+  { key: '1', name: 'Rumah Cooper', at: () => SPOTS.cooper, go: () => teleport('cooper') },
+  { key: '2', name: 'Puncak bukit', at: () => SPOTS.hill, go: () => teleport('hill') },
+  { key: '3', name: 'Ladang jagung', at: () => SPOTS.corn, go: () => teleport('corn') },
+  { key: '4', name: 'Ladang gandum', at: () => SPOTS.wheat, go: () => teleport('wheat') },
+  { key: '5', name: 'Skyway', at: () => SPOTS.skyway, go: () => teleport('skyway') },
+  { key: '6', name: 'Lapangan baseball', at: () => SPOTS.baseball, go: () => teleport('baseball') },
+  { key: '7', name: 'Terminal spaceport', at: () => SPOTS.spaceport, go: () => teleport('spaceport') },
+  { key: '8', name: 'Kokpit shuttle', at: () => ({ s: TERM.s, za: TERM.za - 44 }), go: () => portBoard() },
+  { key: '9', name: 'Air mancur Coriolis', at: () => SPOTS.fountain, go: () => teleport('fountain') },
+  { key: 'L', name: 'Lift ke sumbu', at: () => ({ s: LIFT.theta * R, za: LIFT.za + 14 }), go: () => enterLift() },
+];
+function drawMapStatic() {                                          // latar sekali: 1 px = 2 m
+  const MW = 4000, MH = Math.round(CIRC / 2), c = MAPV.static || (MAPV.static = document.createElement('canvas'));
+  c.width = MW; c.height = MH; const g = c.getContext('2d');
   g.imageSmoothingQuality = 'high';
-  g.drawImage(landCanvas, 0, 0, W, H);
-  g.fillStyle = 'rgba(40,40,45,0.55)';
-  for (const [s, za, w, d] of houseList) g.fillRect(X(s - w / 2), Y(za + d / 2), Math.max(1, X(w)), Math.max(1, Y(0) - Y(d)));
-  g.fillStyle = '#10141c'; g.fillRect(X(WIN.theta * R - WIN.width / 2), 0, Math.max(2, X(WIN.width)), H);
-  g.font = '10px ui-monospace, monospace'; g.textBaseline = 'middle';
-  for (const st of TRAM.stops) { g.fillStyle = '#fff'; g.fillRect(X(TRAM.s) - 3, Y(st.za) - 1.5, 6, 3); }
-  const label = (s, za, t) => { g.fillStyle = '#111'; g.fillText(t, X(s) + 5, Y(za) + 0.5); g.fillStyle = '#fff'; g.fillText(t, X(s) + 4, Y(za)); };
-  label(COOPER.s, COOPER.za, t('Rumah Cooper')); label(FIELD.s, FIELD.za + 40, 'Baseball'); label(LIFT.theta * R, 60, t('Lift'));
-  label(WIN.theta * R + 16, CONFIG.L * 0.5, 'Skyway'); label(10, 605, t('Pusat kota'));
-  for (const z of CONFIG.zones) if (z.to - z.from > 400) { g.fillStyle = 'rgba(0,0,0,0.6)'; g.fillText(t(z.name), W * 0.62, Y((z.from + z.to) / 2)); }
-}
-LANG.hooks.push(() => drawMapStatic());
-function drawMap() {
-  if (mapEl.hidden) return;
-  const W = mapCv.width, H = mapCv.height, g = mapCv.getContext('2d');
-  g.drawImage(mapStatic, 0, 0);
-  const X = (s) => (s / CIRC) * W, Y = (za) => H - (za / CONFIG.L) * H;
-  g.fillStyle = '#d8a24a'; g.fillRect(X(TRAM.s) - 3, Y(tram.za + 9), 6, Math.max(3, Y(0) - Y(18)));
-  const px = X(player.theta * R), py = Y(player.za);
-  // heading 0 = +za (ke atas di peta), 90 derajat = +s (ke kanan)
-  const hx = Math.sin(player.heading), hy = -Math.cos(player.heading);
-  g.strokeStyle = '#000'; g.fillStyle = '#ff5a3c'; g.lineWidth = 1;
-  g.beginPath(); g.arc(px, py, 4, 0, TAU); g.fill(); g.stroke();
-  g.strokeStyle = '#ff5a3c'; g.lineWidth = 2; g.beginPath(); g.moveTo(px, py); g.lineTo(px + hx * 12, py + hy * 12); g.stroke();
+  for (const f of [MH / 2, -MH / 2]) { g.setTransform(0, MH / LAND_W, -MW / LAND_H, 0, MW, f); g.drawImage(landCanvas, 0, 0); }
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  const x = (za) => za / CONFIG.L * MW, y = (s) => (wrapS(s) + CIRC / 2) / CIRC * MH;
+  g.fillStyle = 'rgba(40,40,45,0.6)';
+  for (const [hs, za, w, d] of houseList) g.fillRect(x(za - d / 2), y(hs - w / 2), Math.max(1, d * MW / CONFIG.L), Math.max(1, w * MH / CIRC));
 }
 function sizeMap() {
-  const w = Math.min(window.innerWidth - 32, 340), h = Math.round(w * CONFIG.L / CIRC);
-  const hMax = window.innerHeight - 120;
-  const scale = h > hMax ? hMax / h : 1;
-  mapCv.width = Math.round(w * scale); mapCv.height = Math.round(h * scale);
-  drawMapStatic();
+  const r = mapCv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
+  MAPV.W = Math.max(50, Math.round(r.width * dpr)); MAPV.H = Math.max(50, Math.round(r.height * dpr)); MAPV.dpr = dpr;
+  mapCv.width = MAPV.W; mapCv.height = MAPV.H;
+  if (!MAPV.static) drawMapStatic();
 }
-function toggleMap() { mapEl.hidden = !mapEl.hidden; if (!mapEl.hidden) { sizeMap(); drawMap(); } }
+const mapK = () => Math.min(MAPV.W / CONFIG.L, MAPV.H / CIRC) * MAPV.zoom;
+const mapX = (za) => MAPV.W / 2 + (za - MAPV.cx) * MAPV.k, mapY = (s) => MAPV.H / 2 + wrapS(s - MAPV.cy) * MAPV.k;
+function mapWorld(px, py) { return { za: MAPV.cx + (px - MAPV.W / 2) / MAPV.k, s: modS(MAPV.cy + (py - MAPV.H / 2) / MAPV.k) }; }
+function mapZoomAt(f, px = MAPV.W / 2, py = MAPV.H / 2) {
+  const w = mapWorld(px, py); MAPV.zoom = Math.max(1, Math.min(10, MAPV.zoom * f)); MAPV.k = mapK();
+  MAPV.cx = w.za - (px - MAPV.W / 2) / MAPV.k; MAPV.cy = modS(w.s - (py - MAPV.H / 2) / MAPV.k); mapClamp();
+}
+function mapClamp() { const half = MAPV.W / 2 / MAPV.k; MAPV.cx = CONFIG.L <= 2 * half ? CONFIG.L / 2 : Math.max(half, Math.min(CONFIG.L - half, MAPV.cx)); }
+function drawMap() {
+  if (mapEl.hidden) return;
+  const g = mapCv.getContext('2d'), W = MAPV.W, H = MAPV.H, d = MAPV.dpr; MAPV.k = mapK(); const k = MAPV.k;
+  g.fillStyle = '#0b0d11'; g.fillRect(0, 0, W, H);
+  const x0 = mapX(0), top = MAPV.H / 2 + (-CIRC / 2 - wrapS(MAPV.cy)) * k;   // latar statis mulai dari s = -keliling/2
+  g.imageSmoothingEnabled = true;
+  for (const n of [-1, 0, 1]) g.drawImage(MAPV.static, x0, top + n * CIRC * k, CONFIG.L * k, CIRC * k);
+  const band = (s, w, col) => { g.fillStyle = col; for (const n of [-1, 0, 1]) { const yy = mapY(s) + n * CIRC * k; g.fillRect(x0, yy - w * k / 2, CONFIG.L * k, Math.max(1, w * k)); } };
+  band(SKY_S, WIN.width, '#10141c');                                  // Skyway (jendela)
+  g.fillStyle = '#6d7680'; for (const zc of SKY_ROADS) for (const n of [-1, 0, 1]) g.fillRect(mapX(zc) - ROAD.art * k / 2, mapY(SKY_S) + n * CIRC * k - WIN.width * k / 2, Math.max(1, ROAD.art * k), WIN.width * k);   // jembatan
+  g.fillStyle = '#4c7d96'; for (const n of [-1, 0, 1]) g.fillRect(mapX(SKYX.riverZ) - RIVER.width * k / 2, mapY(SKY_S) + n * CIRC * k - WIN.width * k / 2, RIVER.width * k, WIN.width * k);   // akuaduk
+  const ry = mapY(TRAM.s);                                             // rel trem + halte
+  g.strokeStyle = '#d8a24a'; g.lineWidth = 2 * d; g.beginPath(); g.moveTo(mapX(30), ry); g.lineTo(mapX(CONFIG.L - 30), ry); g.stroke();
+  g.font = `${11 * d}px system-ui, sans-serif`; g.textBaseline = 'middle';
+  const text = (tx, px, py, col = '#fff', al = 'left') => { g.textAlign = al; g.fillStyle = 'rgba(0,0,0,0.75)'; g.fillText(tx, px + d, py + d); g.fillStyle = col; g.fillText(tx, px, py); };
+  for (const st of TRAM.stops) { const px = mapX(st.za); g.fillStyle = '#fff'; g.fillRect(px - 3 * d, ry - 3 * d, 6 * d, 6 * d); if (MAPV.zoom >= 1.8) text(t(st.name), px, ry + 12 * d, '#f2e3c4', 'center'); }
+  g.fillStyle = '#ffcf6a'; g.fillRect(mapX(tram.za) - 9 * k - 2 * d, ry - 4 * d, 18 * k + 4 * d, 8 * d);   // trem
+  g.font = `600 ${12 * d}px system-ui, sans-serif`;
+  for (const z of CONFIG.zones) if ((z.to - z.from) * k > 60 * d) text(t(z.name), mapX((z.from + z.to) / 2), 14 * d, '#e8e2d0', 'center');
+  // penanda lokasi
+  g.font = `700 ${11 * d}px system-ui, sans-serif`;
+  MAP_MARKS.forEach((m, i) => {
+    const p = m.at(), r = (i === MAPV.hover ? 12 : 10) * d, px = mapX(p.za), py = Math.max(r + 2 * d, Math.min(H - r - 2 * d, mapY(p.s))); m.px = px; m.py = py;   // Skyway ada di tepi: tetap di dalam bingkai
+    g.fillStyle = i === MAPV.hover ? '#fff' : '#e8b765'; g.strokeStyle = '#14171c'; g.lineWidth = 2 * d;
+    g.beginPath(); g.arc(px, py, r, 0, TAU); g.fill(); g.stroke();
+    g.fillStyle = '#14171c'; g.textAlign = 'center'; g.fillText(m.key, px, py + 0.5 * d);
+    if (MAPV.zoom >= 1.3 || i === MAPV.hover) { g.font = `600 ${11 * d}px system-ui, sans-serif`; text(t(m.name), px + r + 4 * d, py); g.font = `700 ${11 * d}px system-ui, sans-serif`; }
+  });
+  // pemain: heading 0 = +za (kanan), 90 derajat = +s (bawah)
+  const px = mapX(player.za), py = mapY(player.theta * R), hx = Math.cos(player.heading), hy = Math.sin(player.heading);
+  g.fillStyle = '#ff5a3c'; g.strokeStyle = '#fff'; g.lineWidth = 1.5 * d;
+  g.beginPath(); g.moveTo(px + hx * 12 * d, py + hy * 12 * d); g.lineTo(px - hx * 7 * d - hy * 7 * d, py - hy * 7 * d + hx * 7 * d); g.lineTo(px - hx * 7 * d + hy * 7 * d, py - hy * 7 * d - hx * 7 * d); g.closePath(); g.fill(); g.stroke();
+  // skala 1 km
+  const L1 = 1000 * k, sx = 16 * d, sy = H - 16 * d;
+  g.strokeStyle = '#fff'; g.lineWidth = 2 * d; g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + L1, sy); g.moveTo(sx, sy - 4 * d); g.lineTo(sx, sy + 4 * d); g.moveTo(sx + L1, sy - 4 * d); g.lineTo(sx + L1, sy + 4 * d); g.stroke();
+  g.font = `${11 * d}px system-ui, sans-serif`; text('1 km', sx + L1 / 2, sy - 10 * d, '#fff', 'center');
+}
+function buildMapLegend() {
+  mapLegend.textContent = '';
+  const h = (tx) => { const d = document.createElement('div'); d.className = 'lh'; d.textContent = tx; mapLegend.appendChild(d); };
+  h(t('Lokasi (klik = pindah)'));
+  MAP_MARKS.forEach((m) => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<b>${m.key}</b>`; b.appendChild(document.createTextNode(t(m.name))); b.addEventListener('click', () => mapGo(m)); mapLegend.appendChild(b); });
+  h(t('Zona'));
+  for (const z of CONFIG.zones) { const d = document.createElement('div'); d.className = 'sw'; d.innerHTML = `<i style="background:${z.color}"></i>`; d.appendChild(document.createTextNode(t(z.name))); mapLegend.appendChild(d); }
+  h(t('Tanda'));
+  for (const [c, tx] of [['#ff5a3c', 'Anda'], ['#d8a24a', 'Rel trem dan halte'], ['#ffcf6a', 'Trem'], ['#10141c', 'Skyway (jendela kaca)'], ['#6d7680', 'Jembatan jalan'], ['#4c7d96', 'Sungai dan akuaduk']]) {
+    const d = document.createElement('div'); d.className = 'sw'; d.innerHTML = `<i style="background:${c};border:1px solid #555"></i>`; d.appendChild(document.createTextNode(t(tx))); mapLegend.appendChild(d);
+  }
+}
+LANG.hooks.push(() => { if (!mapEl.hidden) buildMapLegend(); });
+function mapGo(m) { toggleMap(); m.go(); }
+function mapCenterMe() { MAPV.zoom = 4; MAPV.k = mapK(); MAPV.cx = player.za; MAPV.cy = player.theta * R; mapClamp(); }
+function toggleMap() {
+  mapEl.hidden = !mapEl.hidden;
+  if (!mapEl.hidden) { if (document.pointerLockElement) document.exitPointerLock(); sizeMap(); MAPV.k = mapK(); mapClamp(); buildMapLegend(); drawMap(); }
+}
+window.addEventListener('resize', () => { if (!mapEl.hidden) sizeMap(); });
+mapCv.addEventListener('wheel', (e) => { e.preventDefault(); const r = mapCv.getBoundingClientRect(); mapZoomAt(Math.exp(-e.deltaY * 0.0015), (e.clientX - r.left) * MAPV.dpr, (e.clientY - r.top) * MAPV.dpr); }, { passive: false });
+const mapPt = (e) => { const r = mapCv.getBoundingClientRect(); return [(e.clientX - r.left) * MAPV.dpr, (e.clientY - r.top) * MAPV.dpr]; };
+const mapPick = (px, py) => { let best = -1, bd = 16 * MAPV.dpr; MAP_MARKS.forEach((m, i) => { const q = Math.hypot(m.px - px, m.py - py); if (q < bd) { bd = q; best = i; } }); return best; };
+mapCv.addEventListener('pointerdown', (e) => { mapCv.setPointerCapture(e.pointerId); const p = mapPt(e); MAPV.pts.set(e.pointerId, p); MAPV.drag = { p, moved: 0, pinch: MAPV.pts.size === 2 ? null : undefined }; mapCv.classList.add('drag'); });
+mapCv.addEventListener('pointermove', (e) => {
+  const p = mapPt(e);
+  if (!MAPV.pts.has(e.pointerId)) { const h = mapPick(p[0], p[1]); MAPV.hover = h; mapCv.style.cursor = h >= 0 ? 'pointer' : ''; return; }
+  const prev = MAPV.pts.get(e.pointerId); MAPV.pts.set(e.pointerId, p);
+  if (MAPV.pts.size === 2) {                                        // cubit: zoom di titik tengah dua jari
+    const [a, b] = [...MAPV.pts.values()], dist = Math.hypot(a[0] - b[0], a[1] - b[1]);
+    if (MAPV.pinchD) mapZoomAt(dist / MAPV.pinchD, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
+    MAPV.pinchD = dist; MAPV.drag.moved = 99; return;
+  }
+  const dx = p[0] - prev[0], dy = p[1] - prev[1]; MAPV.drag.moved += Math.abs(dx) + Math.abs(dy);
+  MAPV.cx -= dx / MAPV.k; MAPV.cy = modS(MAPV.cy - dy / MAPV.k); mapClamp();
+});
+const mapUp = (e) => {
+  if (!MAPV.pts.has(e.pointerId)) return;
+  const p = MAPV.pts.get(e.pointerId); MAPV.pts.delete(e.pointerId); MAPV.pinchD = 0;
+  if (!MAPV.pts.size) { mapCv.classList.remove('drag'); if (MAPV.drag && MAPV.drag.moved < 6 * MAPV.dpr) { const i = mapPick(p[0], p[1]); if (i >= 0) mapGo(MAP_MARKS[i]); } MAPV.drag = null; }
+};
+mapCv.addEventListener('pointerup', mapUp); mapCv.addEventListener('pointercancel', mapUp);
+document.getElementById('mapZoomIn').addEventListener('click', (e) => { mapZoomAt(1.6); e.currentTarget.blur(); });
+document.getElementById('mapZoomOut').addEventListener('click', (e) => { mapZoomAt(1 / 1.6); e.currentTarget.blur(); });
+document.getElementById('mapMe').addEventListener('click', (e) => { mapCenterMe(); e.currentTarget.blur(); });
 
 /* =====================================================================
    KAMERA
@@ -3990,6 +4099,9 @@ window.addEventListener('keydown', (e) => {
   if (!window.__stationReady) return;                                // M1: selama muat, fungsi di bagian bawah belum ada
   if (e.target && (e.target.tagName === 'INPUT')) return;
   if (!helpEl.hidden && (e.code === 'Escape' || e.code === 'Slash' || e.code === 'F1')) { e.preventDefault(); toggleHelp(); return; }
+  if (!mapEl.hidden && (e.code === 'Escape' || e.code === 'Equal' || e.code === 'NumpadAdd' || e.code === 'Minus' || e.code === 'NumpadSubtract')) {   // 13d: kendali peta
+    if (e.code === 'Escape') toggleMap(); else mapZoomAt(e.code === 'Equal' || e.code === 'NumpadAdd' ? 1.6 : 1 / 1.6); e.preventDefault(); return;
+  }
   keys.add(e.code);
   if (!AUDIO.started) startAudio();                                  // audio butuh interaksi pengguna
   if (e.repeat) return;
@@ -8923,7 +9035,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

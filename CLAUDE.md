@@ -22,6 +22,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_hujan.py` | Uji Copper Corn Station 12c: angka fisika hujan dan air mancur Coriolis, hujan, tanah basah, angin |
 | `tools/uji_rel_trem.py` | Uji Copper Corn Station 13a: koridor rel trem bebas tiang, pohon, collider |
 | `tools/uji_skyway.py` | Uji Copper Corn Station 13b-13c: mobil melintasi jembatan Skyway, akuaduk, tombol 5 di atas kaca |
+| `tools/uji_peta.py` | Uji Copper Corn Station 13d: peta besar, penanda, zoom, klik = pindah, legenda dua bahasa |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
@@ -77,6 +78,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Ladang, foto, tur (12d) | `wheatStage()` (VEG_COMMON dan shader tanah), `uCropT`, `clock.totalH`, `f.per`, `farmStage(f)`, `FARM` + `updateFarm()` (mesin panen, traktor, debu); `PHOTO` + `togglePhoto()` / `savePhoto()` / `applyPhoto()`, DOF di `compMat` (uDof, uFocus); `TOUR` + `tourKeys()` / `startTour()` / `stepTour()` / `stopTour()`, `player.state` 'tour' |
 | Baseball | `BALLPARK`, `FIELD` (home plate), `ballparkModel()` (dibangun datar lalu ditekuk ke lengkung silinder), `BASEBALL` + `stepBaseball()` (pemain dan penonton disisipkan ke buffer `PEDS` di `updatePeds()`, bola) |
 | Rel dan Skyway (13a-c) | `inTramCorridor()`, `treeSkipped` (pohon yang ditolak tetap memakai angka acak), `RING_LAMP_S`, `SKY_ROADS`, `onSkyRoad()`, `SKYX` (akuaduk, `flow`), lantai kaca jendela `glass` / `glassMat` |
+| Peta (13d) | `MAPV` (zoom, cx = za, cy = s), `MAP_MARKS` (key, name, at, go), `drawMapStatic()` (latar 4000 x 3142), `drawMap()` (vektor tiap frame), `mapZoomAt()`, `mapCenterMe()`, `mapGo()`, `buildMapLegend()` |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
 | Kolisi | `COL`, `addCollider(s, za, hs, hz)` (AABB di bidang s-za), `LATE_COLLIDERS` |
 | Awan/cuaca (11a) | `WEATHER` (mode auto/cerah/berawan/mendung, cover, ov), `CLOUD`, `updateClouds(dt)`, `cycleWeather()` (N) |
@@ -125,6 +127,7 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 12c | Hujan miring 8 derajat oleh Coriolis, tanah basah dan genangan, suara hujan, angin mengikuti cuaca, air mancur Coriolis dengan plakat |
 | 12d | Siklus tanam gandum 96 jam, mesin panen dan traktor dengan debu, mode foto (F, DOF, simpan PNG), tur sinematik dengan penjelasan fisika (Y) |
 | 12d+ | Pertandingan baseball siang, pagar dan papan skor lapangan mengikuti lengkung silinder, perbaikan NaN layang-layang (kilau seperti komet), klik mouse = kunci / lepas kursor |
+| 13a-13d | Rel trem bersih, jembatan jalan dan akuaduk di Skyway (mobil satu keliling penuh), tombol 5 di atas lantai kaca, peta besar M dengan penanda dan klik = pindah |
 
 Tahap 12 selesai. Rencana berikutnya: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md` (13: rel trem bersih, jembatan Skyway, peta besar; 14: hutan, rumput tinggi bukit, interior jendela). Cadangan lain di rencana tahap 12.
 

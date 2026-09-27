@@ -1,6 +1,6 @@
 # Rencana Tahap 13-14 Copper Corn Station
 
-Status: disetujui pemilik. 13a, 13b, 13c selesai. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
+Status: disetujui pemilik. Tahap 13 selesai (13a-13d). Berikutnya 14a. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
 
 ## Ringkasan
 
@@ -46,6 +46,19 @@ Uji `tools/uji_rel_trem.py`: 0 benda di koridor rel (dalam 2,4 m dari as rel, le
 | Akuaduk sungai | Sungai memotong jendela di za sekitar 2.382. Air tembus pandang dengan alur mengalir searah keliling di atas bintang, dinding kaca dan rangka tepi |
 
 Uji `tools/uji_skyway.py`.
+
+### Hasil 13d (selesai)
+
+| Item | Hasil |
+| --- | --- |
+| Ukuran | Hampir layar penuh (sebelumnya kartu 340 px). Ponsel: legenda pindah ke bawah |
+| Orientasi | Mendatar: kiri-kanan = sumbu 8 km, atas-bawah = keliling. Rel trem di tengah, Skyway di tepi atas dan bawah; geser atas-bawah berulang tanpa ujung (silinder) |
+| Isi | Latar tanah dan rumah (1 px = 2 m), rel dan halte (nama saat zoom), trem langsung, zona, Skyway dengan jembatan dan akuaduk, pemain berupa panah arah, skala 1 km |
+| Penanda | 10 lokasi bernomor sesuai tombol: 1-9 dan L (lift). Tombol 0 (hutan) ditambah di 14a |
+| Kendali | Roda atau cubit = zoom (1-10x), seret = geser, tombol + - dan "Posisi saya", klik penanda atau nama di legenda = pindah ke sana (peta tertutup). Keyboard: M atau Esc tutup, + - zoom |
+| Bahasa | Semua teks peta dan legenda dua bahasa |
+
+Uji `tools/uji_peta.py`.
 
 ## Tahap 14: dunia dan visual
 
