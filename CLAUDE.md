@@ -20,6 +20,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_burung.py` | Uji Cooper Station 12b-4: kawanan burung, merpati terbang saat didekati, siklus hari |
 | `tools/uji_suasana.py` | Uji Cooper Station 12b-5: kafe, lampu untaian, bendera, suara kota, tidak ada normal nol (NaN) |
 | `tools/uji_hujan.py` | Uji Cooper Station 12c: angka fisika hujan dan air mancur Coriolis, hujan, tanah basah, angin |
+| `tools/uji_ladang_foto_tur.py` | Uji Cooper Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
 ## Aturan aplikasi
@@ -69,6 +70,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Burung (12b-4) | `BIRDS` (flocks boids, vees formasi V, groups merpati), `stepBirds()`, `updateBirds()`, `applyBirdsPreset()`, `toggleBirds()` |
 | Suasana (12b-5) | `VIBE` (kafe, lampu untaian, sepeda terdaftar sebagai kind di `FURN`; bendera `VIBE.flags`; layang-layang), `updateVibe()`, audio `AUDIO.crowd` / `AUDIO.car` / `AUDIO.carHum`, kabut pagi di `updateLighting()` |
 | Hujan dan Coriolis (12c) | `RAIN` (k kekuatan, wet, vlat), `updateRain()`, `rainSheltered()`, uniform `uWet` di `groundMat`, `FOUNT` (air mancur, `FOUNT_TEXT`), `SPOTS.fountain` (tombol 9), `WIND.base` mengikuti `WEATHER.ov` |
+| Ladang, foto, tur (12d) | `wheatStage()` (VEG_COMMON dan shader tanah), `uCropT`, `clock.totalH`, `f.per`, `farmStage(f)`, `FARM` + `updateFarm()` (mesin panen, traktor, debu); `PHOTO` + `togglePhoto()` / `savePhoto()` / `applyPhoto()`, DOF di `compMat` (uDof, uFocus); `TOUR` + `tourKeys()` / `startTour()` / `stepTour()` / `stopTour()`, `player.state` 'tour' |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
 | Kolisi | `COL`, `addCollider(s, za, hs, hz)` (AABB di bidang s-za), `LATE_COLLIDERS` |
 | Awan/cuaca (11a) | `WEATHER` (mode auto/cerah/berawan/mendung, cover, ov), `CLOUD`, `updateClouds(dt)`, `cycleWeather()` (N) |
@@ -87,11 +89,11 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 
 ## Status pemain (`player.state`)
 
-`ground`, `air`, `lift`, `float` (hub nol-g), `tram`, `pod` (kapsul terowongan ke dermaga), `ship` (di shuttle; `ext.active` dan `ext.flight` true). `PORT.trip` true = sedang perjalanan otomatis dari gerbang B1 (lift dan kapsul 5x, E = langsung ke kokpit).
+`ground`, `air`, `lift`, `float` (hub nol-g), `tram`, `pod` (kapsul terowongan ke dermaga), `ship` (di shuttle; `ext.active` dan `ext.flight` true), `tour` (tur sinematik, pemain dibekukan). `PORT.trip` true = sedang perjalanan otomatis dari gerbang B1 (lift dan kapsul 5x, E = langsung ke kokpit).
 
 ## Tombol
 
-W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 1-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis), K, Q, P, U, J, / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
+W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 1-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis), K, Q, P, U, J, F (mode foto, Enter simpan PNG), Y (tur sinematik), / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
 
 ## Riwayat tahap
 
@@ -112,7 +114,8 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 12b-4 | Burung: kawanan boids, formasi V di bawah awan, merpati di plaza; revisi tongkol jagung, daun jatuh diam di tanah, pohon baru lebih tinggi |
 | 12b-5 | Suasana: kafe trotoar, lampu untaian plaza, bendera dan umbul-umbul, sepeda, layang-layang, suara kota, kabut pagi; perbaikan NaN normal di ujung daun jagung (titik menyala) |
 | 12c | Hujan miring 8 derajat oleh Coriolis, tanah basah dan genangan, suara hujan, angin mengikuti cuaca, air mancur Coriolis dengan plakat |
+| 12d | Siklus tanam gandum 96 jam, mesin panen dan traktor dengan debu, mode foto (F, DOF, simpan PNG), tur sinematik dengan penjelasan fisika (Y) |
 
-Rencana berikutnya: `docs/cooper-station/rencana-tahap-12-cooper-station.md` (12d ladang, foto, tur).
+Tahap 12 selesai. Sisa ide ada di bagian Cadangan `docs/cooper-station/rencana-tahap-12-cooper-station.md` (interior jendela, kabin shuttle, fisika orbit, simpan posisi).
 
 Catatan GPU: di shader jangan `normalize()` vektor yang bisa nol, jangan `pow()` bilangan yang bisa negatif, jangan `sqrt()`/`asin()` di luar rentang (NaN di Apple M1 disebar bloom jadi titik putih berkedip). Sandbox uji (SwiftShader) tidak memperlihatkan NaN.

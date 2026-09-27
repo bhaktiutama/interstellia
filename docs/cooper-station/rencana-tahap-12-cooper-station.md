@@ -1,6 +1,6 @@
 # Rencana Tahap 12: Cooper Station
 
-Status: 12a selesai (lihat bagian 12a). 12b selesai (lihat `rencana-tahap-12b-cooper-station.md`). 12c selesai (lihat bagian 12c). 12d belum dikerjakan. Titik awal = tahap 11d (artifact versi 24). Semua yang sudah ada tetap dipertahankan.
+Status: 12a selesai (lihat bagian 12a). 12b selesai (lihat `rencana-tahap-12b-cooper-station.md`). 12c selesai (lihat bagian 12c). 12d selesai (lihat bagian 12d). Tahap 12 selesai; sisa ada di Cadangan. Titik awal = tahap 11d (artifact versi 24). Semua yang sudah ada tetap dipertahankan.
 
 ## Ringkasan
 
@@ -84,6 +84,17 @@ Uji: `tools/uji_hujan.py` (7 cek). Waktu muat di sandbox sekitar 6,6 s.
 | B4 | Aktivitas ladang | Mesin panen dan traktor bergerak di petak, debu saat panen, warna tanaman berubah mengikuti siklus tanam | Sedang |
 | C2 | Mode foto | Sembunyikan HUD, atur jam dan cuaca, fokus kamera, tombol simpan gambar | Rendah |
 | C3 | Tur sinematik | Kamera otomatis berkeliling stasiun dengan teks penjelasan fisika (gravitasi buatan, Coriolis, despun) | Rendah-sedang |
+
+### Hasil 12d (selesai)
+
+| No | Status | Yang dikerjakan |
+| --- | --- | --- |
+| B4 | Selesai | Siklus tanam 96 jam stasiun (4 hari) per petak gandum, fase digeser per petak: tumbuh hijau (0-45%), menguning (45-72%), masak keemasan (72-82%), tunggul pucat (82-100%). Tinggi dan warna gandum 3D serta warna tanah ikut fase. Saat uji: 141 tumbuh, 78 menguning, 27 masak, 41 tunggul |
+| B4 | Selesai | Mesin ladang: sampai 10 mesin di petak terdekat (radius 900 m, dipilih ulang tiap 3 s). Mesin panen (2,2 m/s) di gandum yang masak, traktor (3,0 m/s) membajak petak kosong dan kedelai muda. Pola bolak-balik lajur 8 m dengan belokan setengah lingkaran, debu di belakang (maks 400 partikel) terbawa angin. Bekerja 06.30-18.30, berhenti saat hujan. Desain mesin orisinal (putih, teal, jingga) |
+| C2 | Selesai | Mode foto (F): HUD dan panel disembunyikan, panel kecil untuk jam, sudut pandang 15-100 derajat, jarak fokus 0,5-2.000 m, blur di luar fokus (kedalaman bidang 16 tap di shader komposit, bobot per tap agar tepi tajam tidak meleber), eksposur, hentikan waktu, cuaca (N). Enter atau Simpan = unduh PNG tanpa panel. Semua pengaturan kembali saat keluar. Bila efek layar Mati, blur menyalakan mode Sedang selama mode foto |
+| C3 | Selesai | Tur sinematik (Y, Esc atau tombol Berhenti): 9 titik, sekitar 2 menit. Boulevard (gravitasi dari putaran), di atas kota (ukuran), air mancur (Coriolis), Skyway (bintang berputar), 100 m dari sumbu (g = omega2 x r, 0,1 g), ladang (siklus tanam), rumah Cooper, kamera luar (kerangka inersia), dermaga despun. Terbang melengkung antar titik, tidak melewati sumbu. Malam hari jam dipindah ke 09.30. Selesai atau berhenti = kembali ke posisi semula |
+
+Uji: `tools/uji_ladang_foto_tur.py`. Belum dibuat: jejak panen di belakang mesin (petak berubah menjadi tunggul mengikuti fase, bukan mengikuti lintasan mesin).
 
 ## Cadangan (belum dijadwalkan)
 

@@ -105,6 +105,25 @@
   #map .mhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; color: var(--accent); }
   #map canvas { display: block; border-radius: 4px; max-width: 100%; }
   #map .mnote { color: var(--muted); font-size: 10.5px; margin-top: 6px; }
+  /* 12d: mode foto dan tur sinematik */
+  body.photo #hud, body.photo #cross, body.photo #lab, body.photo #touchbtns, body.photo #prompt,
+  body.tour #hud, body.tour #cross, body.tour #lab, body.tour #touchbtns, body.tour #prompt { display: none !important; }
+  #photo { position: fixed; top: 12px; right: 12px; width: 270px; max-width: calc(100vw - 32px); padding: 10px 12px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px; font-size: 12px; z-index: 4; }
+  .hidden-ui #photo { display: none; }
+  #photo .mhead { display: flex; justify-content: space-between; align-items: center; color: var(--accent); margin-bottom: 6px; }
+  #photo .row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin: 6px 0; }
+  #photo .row input[type=range] { grid-column: 1 / 3; width: 100%; }
+  #photo output { color: #fff; font-variant-numeric: tabular-nums; }
+  #photo .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  #photo button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
+  #photo .note { color: var(--muted); font-size: 10.5px; margin-top: 6px; }
+  #tourCap { position: fixed; left: 50%; bottom: calc(36px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(680px, calc(100vw - 32px));
+    padding: 12px 16px; background: rgba(10, 12, 16, 0.62); border-left: 3px solid var(--accent); border-radius: 6px; color: #fff; z-index: 4;
+    transition: opacity .6s; line-height: 1.5; }
+  #tourCap b { display: block; color: var(--accent); margin-bottom: 4px; }
+  #tourCap .tfoot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; color: var(--muted); font-size: 11px; }
+  #tourCap button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
 </style>
 </head>
 <body>
@@ -112,8 +131,20 @@
 <div id="cross"></div>
 <div id="hud"></div>
 <div id="joy" hidden><div id="knob"></div></div>
-<div id="touchbtns"><button id="btnHud" type="button">HUD</button><button id="btnLab" type="button">Uji</button><button id="btnRun" type="button">Lari</button><button id="btnAuto" type="button">Otomatis</button><button id="btnJump" type="button">Lompat</button><button id="btnThrow" type="button">Lempar</button><button id="btnAct" type="button">Aksi</button><button id="btnMap" type="button">Peta</button></div>
+<div id="touchbtns"><button id="btnHud" type="button">HUD</button><button id="btnLab" type="button">Uji</button><button id="btnRun" type="button">Lari</button><button id="btnAuto" type="button">Otomatis</button><button id="btnJump" type="button">Lompat</button><button id="btnThrow" type="button">Lempar</button><button id="btnAct" type="button">Aksi</button><button id="btnMap" type="button">Peta</button><button id="btnPhoto" type="button">Foto</button><button id="btnTour" type="button">Tur</button></div>
 <div id="prompt" hidden></div>
+<div id="photo" hidden>
+  <div class="mhead"><span>Mode foto</span><button id="photoClose" type="button">Tutup (F)</button></div>
+  <div class="row"><label for="phHour">Jam stasiun</label><output id="phHourV"></output><input id="phHour" type="range" min="0" max="23.9" step="0.05"></div>
+  <div class="row"><label for="phFov">Sudut pandang</label><output id="phFovV"></output><input id="phFov" type="range" min="15" max="100" step="1"></div>
+  <div class="row"><label for="phFocus">Jarak fokus</label><output id="phFocusV"></output><input id="phFocus" type="range" min="0" max="1" step="0.002"></div>
+  <div class="row"><label for="phBlur">Blur di luar fokus</label><output id="phBlurV"></output><input id="phBlur" type="range" min="0" max="1" step="0.01"></div>
+  <div class="row"><label for="phExp">Eksposur</label><output id="phExpV"></output><input id="phExp" type="range" min="0.6" max="3" step="0.05"></div>
+  <label class="chk" style="display:flex;gap:6px;align-items:center;margin-top:4px"><input id="phPause" type="checkbox"> Hentikan waktu (awan dan jam diam)</label>
+  <div class="btns"><button id="phWeather" type="button">Cuaca (N)</button><button id="phSave" type="button">Simpan PNG (Enter)</button></div>
+  <div class="note">WASD bergerak, seret mouse untuk melihat. H menyembunyikan panel ini. Gambar disimpan tanpa panel.</div>
+</div>
+<div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><button id="tourStop" type="button">Berhenti (Y)</button></div></div>
 <div id="plaque" hidden><div class="card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
 <div id="map" hidden><div class="card"><div class="mhead"><span>Peta silinder (dibuka)</span><button id="mapClose" type="button">Tutup (M)</button></div><canvas id="mapCanvas"></canvas><div class="mnote">Kiri-kanan = keliling 6,28 km · bawah-atas = sumbu 8 km dari end cap A</div></div></div>
 <div id="lab">
@@ -131,6 +162,12 @@
         <button id="labShip" type="button"><kbd>8</kbd>Kokpit shuttle</button>
         <button id="labLift" type="button"><kbd>L</kbd>Lift ke sumbu</button>
         <button id="labExt" type="button"><kbd>V</kbd>Kamera luar</button>
+      </div>
+    </details>
+    <details><summary>Foto dan tur</summary>
+      <div class="btns">
+        <button id="labPhoto" type="button"><kbd>F</kbd>Mode foto</button>
+        <button id="labTour" type="button"><kbd>Y</kbd>Tur sinematik</button>
       </div>
     </details>
     <details open><summary>Waktu dan simulasi</summary>
@@ -180,7 +217,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 12c · hujan dengan fisika Coriolis, angin mengikuti cuaca, air mancur Coriolis (9) · 12b-5: suasana kota · 12b-4: burung · 12b-3: pejalan kaki · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 12d · siklus tanam dan mesin panen di ladang, mode foto (F), tur sinematik (Y) · 12c: hujan dengan fisika Coriolis, air mancur Coriolis (9) · 12b-5: suasana kota · 12b-4: burung · 12b-3: pejalan kaki · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -192,6 +229,7 @@
       <tr class="desk-only"><td>V</td><td>Kamera luar: seret / WASD putar, scroll / + - zoom, C orbit otomatis, 1-4 fokus</td></tr>
       <tr class="desk-only"><td>[ · ] · Z</td><td>Jam stasiun mundur / maju 1 jam · kecepatan waktu (1 menit = 1 jam, 10 s, 1 s, berhenti)</td></tr>
       <tr class="desk-only"><td>N</td><td>Cuaca: otomatis (berganti cerah, berawan, mendung), atau tetap cerah / berawan / mendung. Mendung tebal = hujan (miring sekitar 8 derajat karena Coriolis), tanah basah dan genangan</td></tr>
+      <tr class="desk-only"><td>F · Y</td><td>Mode foto (jam, sudut pandang, fokus dan blur, eksposur, simpan PNG dengan Enter) · tur sinematik dengan penjelasan fisika (Y atau Esc = berhenti)</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
       <tr class="desk-only"><td>1 - 9</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum · Skyway · lapangan baseball · terminal spaceport · kokpit shuttle · air mancur Coriolis (E di plakat)</td></tr>
       <tr class="desk-only"><td>Spaceport</td><td>Terminal (7): E di gerbang B1 (dinding utara, ikuti papan jingga) = lift, hub, terowongan, kokpit otomatis (E lagi = langsung ke kokpit). Atau manual: lift (L) ke hub nol-g, E di pintu ujung hub = kapsul terowongan ke dermaga</td></tr>
@@ -205,7 +243,7 @@
       <tr class="desk-only"><td>R · H · Esc</td><td>Kembali ke titik awal · sembunyikan HUD · lepas kursor</td></tr>
       <tr class="touch-only"><td>Jempol kiri</td><td>Joystick untuk berjalan</td></tr>
       <tr class="touch-only"><td>Jempol kanan</td><td>Geser untuk melihat</td></tr>
-      <tr class="touch-only"><td>Tombol</td><td>Aksi, Peta, Lompat, Lempar, Uji (panel fisika, termasuk lift)</td></tr>
+      <tr class="touch-only"><td>Tombol</td><td>Aksi, Peta, Lompat, Lempar, Uji (panel fisika, termasuk lift), Foto, Tur</td></tr>
     </table>
     <button id="go" type="button">Mulai</button>
     <a href="../../index.html" style="display:block;margin-top:10px;text-align:center;color:#8b929c;font-size:12px;text-decoration:none">Kembali ke menu utama</a>
@@ -691,7 +729,7 @@ const groundMat = new THREE.ShaderMaterial({
     uFieldTex: { value: null }, uCloudTex: { value: null }, uTime: { value: 0 }, uArt: { value: TAU * CONFIG.R / 26 },
     uCloudK: { value: 0.2 }, uFieldZ: { value: new THREE.Vector2(3200, 7850) }, uCityZ: { value: new THREE.Vector2(250, 2500) },
     uReal: { value: new THREE.Vector4(-1e9, -1e9, -1e9, -1e9) }, uShadeTex: { value: null }, uGrassR: { value: 0 }, uCornR: { value: 0 }, uGapHalf: { value: 0 }, uNight: { value: 0 },
-    uLitterTex: { value: null }, uWet: { value: 0 }, uRainNow: { value: 0 },
+    uLitterTex: { value: null }, uWet: { value: 0 }, uRainNow: { value: 0 }, uCropT: { value: 0 },
   }, LIGHT.uniforms]),
   vertexShader: /* glsl */`
     #include <fog_pars_vertex>
@@ -713,7 +751,10 @@ const groundMat = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */`
     #include <fog_pars_fragment>
     uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex, uLitterTex;
-    uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf, uNight, uWet, uRainNow;
+    uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf, uNight, uWet, uRainNow, uCropT;
+    vec3 wheatStage(float g) { float ph = fract(uCropT + g);          // sama dengan VEG_COMMON (12d)
+      float grow = ph < 0.82 ? mix(0.3, 1.0, clamp(ph / 0.45, 0.0, 1.0)) : 0.14;
+      return vec3(grow, smoothstep(0.45, 0.72, ph), ph >= 0.82 ? 1.0 : 0.0); }
     // tahap 10: kolam cahaya lampu jalan (posisi sama dengan tiang lampu di JS)
     float lampPool(float s, float za) {
       const float SP = 45.0, OFF = 13.5, RR = 81.0, CIRC = 6283.185307;
@@ -836,6 +877,10 @@ const groundMat = new THREE.ShaderMaterial({
       vec4 fd = inFarm > 0.5 ? textureLod(uFieldTex, vec2(uv.x, (za - uFieldZ.x) / (uFieldZ.y - uFieldZ.x)), 0.0) : vec4(0.0);
       float fieldM = step(0.2, fd.b) * vegM;
       bool corn = abs(fd.b - 0.784) < 0.05;
+      if (fieldM > 0.5 && abs(fd.b - 0.627) < 0.03) {                // 12d: warna petak gandum mengikuti siklus tanam
+        vec3 ws = wheatStage(fd.g);
+        col *= ws.z > 0.5 ? vec3(0.95, 0.85, 0.68) : mix(vec3(0.6, 1.0, 0.5), vec3(1.0), ws.y);
+      }
 
       // ---- jalan dan ladang dari dekat ----
       float detail = 1.0 - smoothstep(1.2, 3.0, fp);
@@ -1693,7 +1738,7 @@ groundMat.uniforms.uLand.value = landTex;
     const plowed = f.crop === 'plow';                              // petak cokelat = tanah baru dibajak
     const r = rr();
     const ang = r < 0.45 ? 0.5 : r < 0.9 ? 0.0 : (r < 0.95 ? 0.25 : 0.75);   // baris sejajar sumbu, keliling, atau diagonal
-    const per = rr();
+    const per = rr(); f.per = Math.round(per * 255) / 255;           // 12d: fase siklus tanam per petak (sama dengan kanal hijau)
     const code = { plow: 128, wheat: 160, soy: 176, sorghum: 224 }[f.crop] || 255;   // kode jenis tanaman di kanal biru
     frect(f.s0 + 1, f.z0 + 1, f.s1 - 1, f.z1 - 1, `rgb(${Math.round(ang * 255)},${Math.round(per * 255)},${code})`);
   }
@@ -3071,6 +3116,7 @@ function stepFloat(dt) {
 function physicsStep(dt) {
   clock.sim += dt;
   if (clock.hourRate) clock.hour = (clock.hour + dt * clock.hourRate) % 24;
+  clock.totalH = (clock.totalH || 0) + dt * (clock.hourRate || 0);   // 12d: jam stasiun berjalan (untuk siklus tanam)
   clock.orbit += dt * clock.orbitScale;
   switch (player.state) {
     case 'ground': stepGround(dt); break;
@@ -3393,6 +3439,11 @@ window.addEventListener('keydown', (e) => {
   if (!AUDIO.started) startAudio();                                  // audio butuh interaksi pengguna
   if (e.repeat) return;
   if (ext.flight && portKey(e.code)) { e.preventDefault(); return; }   // tombol pesawat
+  if (TOUR.on) { if (e.code === 'KeyY' || e.code === 'Escape') stopTour(); else if (e.code === 'KeyH') document.body.classList.toggle('hidden-ui'); else if (e.code === 'KeyU') toggleSound(); e.preventDefault(); return; }   // 12d: saat tur hanya Y/Esc, H, U
+  if (e.code === 'KeyY') { startTour(); return; }
+  if (e.code === 'KeyF') { togglePhoto(); return; }
+  if (PHOTO.on && (e.code === 'Enter' || e.code === 'NumpadEnter')) { savePhoto(); return; }
+  if (PHOTO.on && e.code === 'Escape') { togglePhoto(false); return; }
   if (e.code === 'KeyO') input.auto = !input.auto;
   if (e.code === 'KeyX') input.turbo = !input.turbo;
   if (e.code === 'KeyR') respawn();
@@ -3417,7 +3468,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Digit9') teleport('fountain');                     // 12c
   if (e.code === 'KeyQ') cyclePreset();
   if (e.code === 'KeyZ') cycleTimeRate();
-  if (e.code === 'KeyN') cycleWeather();
+  if (e.code === 'KeyN') { cycleWeather(); if (PHOTO.on) syncPhotoUI(); }
   if (e.code === 'KeyK') cycleVegQuality();
   if (e.code === 'KeyP') cyclePost();
   if (e.code === 'KeyU') toggleSound();
@@ -4235,6 +4286,7 @@ const VU = {
   uFieldRect: { value: new THREE.Vector4(BALLPARK.s0, BALLPARK.z0, BALLPARK.s1, BALLPARK.z1) }, uHome: { value: new THREE.Vector2(FIELD.s, FIELD.za) },
   uLodD: { value: 130 },
   uWind: { value: new THREE.Vector3(1.2, 0.4, 0.4) },
+  uCropT: groundMat.uniforms.uCropT,
 };
 const VEG_COMMON = /* glsl */`
   #ifndef texture2D
@@ -4246,6 +4298,13 @@ const VEG_COMMON = /* glsl */`
   uniform vec4 uHM, uYard, uHouse, uFieldRect;
   uniform vec2 uHome;
   uniform vec3 uEye;
+  uniform float uCropT;                                            // 12d: siklus tanam (1 = 4 hari stasiun)
+  // 12d: fase gandum per petak (kanal hijau tekstur ladang = angka acak per petak): 0-0,45 tumbuh hijau,
+  // 0,45-0,72 menguning, 0,72-0,82 masak (mesin panen bekerja), 0,82-1 tunggul setelah panen
+  vec3 wheatStage(float g) { float ph = fract(uCropT + g);
+    float grow = ph < 0.82 ? mix(0.3, 1.0, clamp(ph / 0.45, 0.0, 1.0)) : 0.14;
+    float ripe = smoothstep(0.45, 0.72, ph);
+    return vec3(grow, ripe, ph >= 0.82 ? 1.0 : 0.0); }
   uniform vec3 uWind;                                              // 12b-2: angin global (xy = kecepatan di bidang s-za, m/s; z = hembusan 0..1)
   const float PI = 3.141592653589793;
   float hash2(vec2 p) {
@@ -4371,7 +4430,7 @@ const GRASS_VS = /* glsl */`
     if (k < 0.02) { ${CLIP_AWAY} }
     // jenis: 0 rumput, 1 gandum, 2 kedelai, 3 sorgum (dari kode petak ladang)
     vec3 land = textureLod(uLand, landUV(P), 0.0).rgb;
-    float code = fieldData(P).b;
+    vec4 fdat = fieldData(P); float code = fdat.b;
     int kind = 0;
     if (code > 0.2) {
       if (abs(code - 0.627) < 0.03) kind = 1; else if (abs(code - 0.690) < 0.03) kind = 2; else if (abs(code - 0.878) < 0.03) kind = 3;
@@ -4394,9 +4453,10 @@ const GRASS_VS = /* glsl */`
     }
     float hgt = kind == 1 ? mix(0.8, 1.0, h3) : kind == 2 ? mix(0.42, 0.56, h3) : kind == 3 ? mix(1.2, 1.5, h3)
       : yard ? mix(0.07, 0.16, h3) : mix(uHmin, uHmax, 0.7 * vnoise(P / 5.0) + 0.3 * h3);
-    hgt *= k;
+    vec3 wst = kind == 1 ? wheatStage(fdat.g) : vec3(1.0, 1.0, 0.0);
+    hgt *= k * wst.x;
     float wmul = kind == 2 ? 2.4 : kind == 1 ? 0.8 : kind == 3 ? 1.3 : 1.0;
-    bool headOn = kind == 1 || kind == 3;
+    bool headOn = kind == 3 || (kind == 1 && wst.z < 0.5 && wst.y > 0.15);
     vec3 lp = position;
     if (aHead > 0.5 && !headOn) lp = vec3(0.0);                      // bulir dikempiskan
     vec3 up, tS;
@@ -4416,6 +4476,7 @@ const GRASS_VS = /* glsl */`
       c = land * mix(vec3(0.95, 1.02, 0.85), vec3(1.25, 1.1, 0.7), dry * 0.6) * (0.85 + 0.3 * h2) * ao;
     } else if (kind == 1) {                                          // gandum masak: batang keemasan, bulir lebih terang
       c = land * (0.9 + 0.2 * h2) * (aHead > 0.5 ? 1.15 : ao);
+      c *= wst.z > 0.5 ? vec3(1.05, 0.95, 0.78) : mix(vec3(0.55, 1.0, 0.45), vec3(1.0), wst.y);   // hijau muda -> keemasan; tunggul pucat
     } else if (kind == 2) {                                          // kedelai: daun lebar hijau
       c = land * vec3(0.8, 0.95, 0.75) * (0.85 + 0.3 * h2) * ao;
     } else {                                                         // sorgum: batang hijau, malai merah bata
@@ -5631,10 +5692,25 @@ function toggleRays() {
 // --- komposit: AO, bloom, exposure, ACES, sRGB, vignette, grain ---
 const compMat = fsMat(/* glsl */`
   uniform sampler2D tHdr, tBloom, tAO, tRay, tDepth; uniform float uExp, uBloom, uAO, uUseAO, uGrain, uVig, uTime, uUseRay; uniform vec2 uRayTexel; uniform mat4 uProjInv; varying vec2 vUv;
+  uniform float uDof, uFocus; uniform vec2 uTexelF;                // 12d: kedalaman bidang untuk mode foto
+  float viewDist(vec2 uv) {                                        // jarak kamera ke piksel (m); langit = 6.000 m
+    float d = textureLod(tDepth, uv, 0.0).r;
+    vec4 v = uProjInv * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+    return d >= 0.99999 ? 6000.0 : length(v.xyz / v.w);
+  }
+  float cocAt(float dist) { return clamp(uDof * abs(dist - uFocus) / max(dist, 0.05), 0.0, 1.0); }
+  vec3 dof(vec3 c0, float coc) {                                   // 16 tap cakram sudut emas, bobot = coc tap (tepi tajam tidak meleber)
+    vec3 s = c0; float ws = 1.0;
+    for (int k = 0; k < 16; k++) {
+      float r = sqrt((float(k) + 0.5) / 16.0), a = float(k) * 2.39996;
+      vec2 uv = vUv + vec2(cos(a), sin(a)) * (r * coc * 14.0) * uTexelF;
+      float w = 0.15 + cocAt(viewDist(uv));
+      s += textureLod(tHdr, uv, 0.0).rgb * w; ws += w;
+    }
+    return s / ws;
+  }
   vec3 rays() {                                                    // upsample sadar kedalaman: tidak bocor ke tepi objek dekat
-    float d = textureLod(tDepth, vUv, 0.0).r;
-    vec4 v = uProjInv * vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
-    float dist = d >= 0.99999 ? 6000.0 : length(v.xyz / v.w);
+    float dist = viewDist(vUv);
     vec3 s = vec3(0.0); float ws = 0.0;
     for (int k = 0; k < 9; k++) {                                    // 3x3 tap: meratakan pola jitter ray-march
       vec2 o = vec2(float(k - (k / 3) * 3) - 1.0, float(k / 3) - 1.0) * 1.25 * uRayTexel;
@@ -5654,7 +5730,9 @@ const compMat = fsMat(/* glsl */`
   float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   void main() {
     vec3 c = texture2D(tHdr, vUv).rgb;
-    if (uUseAO > 0.5) c *= mix(1.0, texture2D(tAO, vUv).r, uAO);
+    float coc = uDof > 0.0 ? cocAt(viewDist(vUv)) : 0.0;
+    if (coc > 0.02) c = dof(c, coc);
+    if (uUseAO > 0.5) c *= mix(1.0, texture2D(tAO, vUv).r, uAO * (1.0 - coc));
     if (uUseRay > 0.5) c = max(c + rays(), vec3(0.0));
     c += texture2D(tBloom, vUv).rgb * uBloom;
     c = aces(c * uExp);
@@ -5664,7 +5742,8 @@ const compMat = fsMat(/* glsl */`
     gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));
   }`, { tHdr: { value: null }, tBloom: { value: null }, tAO: { value: null }, uExp: { value: 1 }, uBloom: { value: 0.5 }, uAO: { value: 0.5 }, uUseAO: { value: 1 },
   uGrain: { value: 0.01 }, uVig: { value: 0.2 }, uTime: { value: 0 },
-  tRay: { value: null }, tDepth: { value: null }, uUseRay: { value: 0 }, uRayTexel: { value: new THREE.Vector2() }, uProjInv: { value: new THREE.Matrix4() } });
+  tRay: { value: null }, tDepth: { value: null }, uUseRay: { value: 0 }, uRayTexel: { value: new THREE.Vector2() }, uProjInv: { value: new THREE.Matrix4() },
+  uDof: { value: 0 }, uFocus: { value: 20 }, uTexelF: { value: new THREE.Vector2() } });
 // --- FXAA (versi ringkas, luma di kanal alfa) ---
 const fxaaMat = fsMat(/* glsl */`
   uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
@@ -5735,6 +5814,7 @@ function postEnd() {
   const C = compMat.uniforms;
   C.uUseRay.value = useRay ? 1 : 0; C.tRay.value = R0.ray.texture; C.tDepth.value = R0.hdr.depthTexture;
   C.uRayTexel.value.set(1 / R0.ray.width, 1 / R0.ray.height); C.uProjInv.value.copy(camera.projectionMatrixInverse);
+  C.uTexelF.value.set(R0.h / 1080 / R0.w, 1 / 1080);                 // radius blur skala 1080p
   C.tHdr.value = R0.hdr.texture; C.tBloom.value = R0.up[0].texture; C.tAO.value = R0.ao[1].texture; C.uUseAO.value = useAO ? 1 : 0;
   C.uExp.value = POST.exposure; C.uBloom.value = POST.bloom / 6; C.uAO.value = POST.ao; C.uGrain.value = POST.grain; C.uVig.value = POST.vignette; C.uTime.value = (clock.sim % 100);
   fsPass(compMat, R0.ldr);
@@ -7747,6 +7827,125 @@ const FOUNT_TEXT = `Air Mancur Coriolis\n\nSemburan tengah naik lurus 10 m/s sam
   `Di Bumi efek yang sama hanya beberapa milimeter. Di sini putaran stasiun (satu kali tiap 63 detik) membuatnya terlihat.\n\n` +
   `Hujan di stasiun juga miring sekitar 8 derajat melawan arah putaran walau tanpa angin: tetes jatuh menjauhi sumbu dan tertinggal.`;
 
+
+/* =====================================================================
+   TAHAP 12d: AKTIVITAS LADANG
+   - Siklus tanam gandum per petak (lihat wheatStage di shader): tumbuh hijau, menguning, masak, dipanen, tunggul.
+     Satu siklus = 4 hari stasiun (96 jam), fase tiap petak berbeda.
+   - Mesin (desain netral berwarna stasiun, bukan meniru merek): mesin panen di petak gandum yang sedang masak,
+     traktor pembajak di petak tanah cokelat, traktor penyemprot di petak kedelai. Bergerak bolak-balik per lajur 8 m
+     dengan belokan setengah lingkaran, siang hari saja, berhenti saat hujan. Maksimal 10 mesin di dekat pemain.
+   - Debu di belakang mesin panen dan bajak (partikel CPU, 400).
+   ===================================================================== */
+const FARM = { machines: [], nextPick: 0, maxM: 10, dust: [], maxDust: 400 };
+{
+  const g = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
+  const wheel = (r, w, x, y, z) => new THREE.CylinderGeometry(r, r, w, 14).rotateZ(Math.PI / 2).translate(x, y, z);
+  const BODY = [0.86, 0.87, 0.85], TEAL = [0.12, 0.42, 0.45], ORNG = [0.86, 0.45, 0.12], DARK = [0.12, 0.12, 0.13], GLASS = [0.2, 0.28, 0.32];
+  const GEO = {
+    harvester: mergeSimple([                                        // maju = +z
+      { geo: g(3.0, 2.4, 6.5, 0, 2.3, -0.5), color: BODY }, { geo: g(3.02, 0.3, 6.52, 0, 1.4, -0.5), color: TEAL },
+      { geo: g(1.8, 1.4, 1.8, 0, 4.2, 1.6), color: GLASS }, { geo: g(1.9, 0.15, 1.9, 0, 4.95, 1.6), color: BODY },
+      { geo: g(6.4, 0.8, 1.4, 0, 0.8, 3.8), color: ORNG }, { geo: new THREE.CylinderGeometry(0.5, 0.5, 6.0, 10).rotateZ(Math.PI / 2).translate(0, 1.5, 4.2), color: TEAL },
+      { geo: g(0.5, 0.5, 4.0, 1.9, 3.8, -1.0).rotateY(0.0), color: BODY },
+      { geo: wheel(0.95, 0.7, 1.75, 0.95, 1.6), color: DARK }, { geo: wheel(0.95, 0.7, -1.75, 0.95, 1.6), color: DARK },
+      { geo: wheel(0.55, 0.45, 1.5, 0.55, -3.0), color: DARK }, { geo: wheel(0.55, 0.45, -1.5, 0.55, -3.0), color: DARK },
+    ]),
+    tractor: mergeSimple([
+      { geo: g(1.3, 1.1, 2.4, 0, 1.3, 0.7), color: TEAL }, { geo: g(1.4, 1.6, 1.4, 0, 2.3, -0.5), color: GLASS }, { geo: g(1.5, 0.12, 1.5, 0, 3.15, -0.5), color: BODY },
+      { geo: wheel(0.8, 0.5, 0.95, 0.8, -0.6), color: DARK }, { geo: wheel(0.8, 0.5, -0.95, 0.8, -0.6), color: DARK },
+      { geo: wheel(0.45, 0.3, 0.8, 0.45, 1.5), color: DARK }, { geo: wheel(0.45, 0.3, -0.8, 0.45, 1.5), color: DARK },
+      { geo: g(3.0, 0.5, 1.2, 0, 0.45, -2.6), color: ORNG },          // alat di belakang (bajak/penyemprot)
+    ]),
+  };
+  for (const [k, geo] of Object.entries(GEO)) {
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true }), FARM.maxM);
+    mesh.count = 0; mesh.frustumCulled = false; scene.add(mesh); FARM[k] = mesh;
+  }
+  // debu: kuad menghadap kamera, CPU
+  const dg = new THREE.InstancedBufferGeometry(), base = new THREE.PlaneGeometry(1, 1);
+  dg.index = base.index; dg.setAttribute('position', base.attributes.position); dg.setAttribute('uv', base.attributes.uv);
+  dg.setAttribute('aD', new THREE.InstancedBufferAttribute(new Float32Array(FARM.maxDust * 4), 4).setUsage(THREE.DynamicDrawUsage));
+  dg.instanceCount = 0;
+  const VS = /* glsl */`
+    attribute vec4 aD;                                     // s, za, tinggi, umur 0..1
+    varying vec2 vUv; varying float vA; varying vec3 vL;
+    void main() {
+      vec3 up, tS; vec3 base = groundFrame(aD.xy, aD.z, up, tS);
+      vec3 toE = uEye - base; float d = length(toE); toE = d > 1e-3 ? toE / d : up;
+      vec3 sd = cross(up, toE); sd = dot(sd, sd) > 1e-8 ? normalize(sd) : tS;
+      vec3 vu = cross(toE, sd);
+      float sz = 1.2 + 4.5 * aD.w;
+      vec3 p = base + (sd * position.x + vu * position.y) * sz;
+      vUv = uv; vA = 0.35 * (1.0 - aD.w) * smoothstep(0.0, 0.1, aD.w);
+      #ifndef DEPTH_ONLY
+      vL = vegLight(base, up, aD.xy, 0.5);
+      #endif
+      vec4 mvPosition = viewMatrix * vec4(p, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #ifndef DEPTH_ONLY
+      #include <fog_vertex>
+      #endif
+    }`;
+  const FS = /* glsl */`
+    varying vec2 vUv; varying float vA; varying vec3 vL;
+    void main() { vec2 q = vUv * 2.0 - 1.0; float a = vA * max(0.0, 1.0 - dot(q, q)); if (a < 0.004) discard;
+      gl_FragColor = vec4(vec3(0.62, 0.55, 0.4) * vL, a);
+      #include <fog_fragment>
+    }`;
+  const mat = vegMaterial({ vertex: VS, fragment: FS }); mat.transparent = true; mat.depthWrite = false;
+  FARM.dustMesh = new THREE.Mesh(dg, mat); FARM.dustMesh.frustumCulled = false; FARM.dustMesh.userData.noLight = true; realGroup.add(FARM.dustMesh);
+}
+function farmStage(f) { return ((((15 + (clock.totalH || 0)) / 96 + f.per) % 1) + 1) % 1; }
+const _fm = new THREE.Matrix4(), _fr = new THREE.Matrix4();
+function updateFarm(dt) {
+  groundMat.uniforms.uCropT.value = (((15 + (clock.totalH || 0)) / 96) % 1 + 1) % 1;
+  const h = clock.hour, work = h > 6.5 && h < 18.5 && RAIN.k < 0.3 && !ext.active;
+  const eS = modS(player.theta * R), eZ = player.za, now = performance.now();
+  if (now > FARM.nextPick) {                                         // pilih petak aktif terdekat tiap 3 s
+    FARM.nextPick = now + 3000;
+    const cand = [];
+    for (const f of fieldList) {
+      if (f.meadow || f.noFarm || f.s1 - f.s0 < 50 || f.z1 - f.z0 < 40) continue;
+      const cs = (f.s0 + f.s1) / 2, cz = (f.z0 + f.z1) / 2, d = Math.hypot(wrapS(cs - eS), cz - eZ); if (d > 900) continue;
+      let type = null;
+      if (f.crop === 'wheat') { const ph = farmStage(f); if (ph >= 0.72 && ph < 0.82) type = 'harvester'; }
+      else if (f.crop === 'plow') type = 'tractor';
+      else if (f.crop === 'soy' && f.per < 0.3) type = 'tractor';
+      if (type) cand.push([d, f, type]);
+    }
+    cand.sort((a, b) => a[0] - b[0]);
+    FARM.machines = cand.slice(0, FARM.maxM).map(([, f, type]) => ({ f, type }));
+  }
+  const cnt = { harvester: 0, tractor: 0 }, T = clock.sim;
+  for (const M of FARM.machines) {
+    const f = M.f, W = f.s1 - f.s0 - 12, lane = 8, nL = Math.max(1, Math.floor((f.z1 - f.z0 - 8) / lane)), turn = Math.PI * lane / 2;
+    const v = M.type === 'harvester' ? 2.2 : 3.0, cyc = W + turn, total = cyc * nL;
+    let dd = ((T * v + f.per * total * 7.3) % (2 * total));             // bolak-balik seluruh petak
+    const back = dd > total; if (back) dd = 2 * total - dd;
+    const L = Math.min(nL - 1, Math.floor(dd / cyc)), u = dd - L * cyc, dir = L % 2 ? -1 : 1;
+    let s, za, hd;
+    const zL = f.z0 + 4 + L * lane;
+    if (u < W) { s = dir > 0 ? f.s0 + 6 + u : f.s1 - 6 - u; za = zL; hd = dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
+    else { const a = (u - W) / turn * Math.PI, cs = dir > 0 ? f.s1 - 6 : f.s0 + 6; s = cs + dir * Math.sin(a) * lane / 2; za = zL + lane / 2 - Math.cos(a) * lane / 2; hd = dir * (Math.PI / 2 - a); }   // belok setengah lingkaran ke lajur berikutnya
+    if (back) hd += Math.PI;
+    if (!work) { M.vis = false; continue; }
+    M.vis = true; M.s = s; M.za = za; M.hd = hd;
+    const mesh = FARM[M.type], k = cnt[M.type]++;
+    surfaceMatrix(_fm, modS(s) / R, za, groundH(s, za)); _fm.multiply(_fr.makeRotationY(hd)); mesh.setMatrixAt(k, _fm);
+    if (Math.random() < dt * (M.type === 'harvester' ? 14 : 8) && FARM.dust.length < FARM.maxDust) {   // debu di belakang
+      const bs = Math.sin(hd), bz = Math.cos(hd), back2 = M.type === 'harvester' ? 3.5 : 3.2;
+      FARM.dust.push({ s: s - bs * back2 + (Math.random() - 0.5) * 2, za: za - bz * back2 + (Math.random() - 0.5) * 2, h: 0.6, age: 0, life: 4 + Math.random() * 3 });
+    }
+  }
+  for (const k of ['harvester', 'tractor']) { FARM[k].count = cnt[k]; FARM[k].instanceMatrix.needsUpdate = true; }
+  // debu naik pelan dan terbawa angin
+  const Wv = VU.uWind.value, arr = FARM.dustMesh.geometry.attributes.aD.array; let n = 0;
+  FARM.dust = FARM.dust.filter((d) => (d.age += dt) < d.life);
+  for (const d of FARM.dust) { d.s += Wv.x * dt * 0.8; d.za += Wv.y * dt * 0.8; d.h += 0.45 * dt; arr.set([eS + wrapS(d.s - eS), d.za, d.h, d.age / d.life], n * 4); n++; }
+  FARM.dustMesh.geometry.attributes.aD.needsUpdate = true; FARM.dustMesh.geometry.instanceCount = n;
+}
+
 // --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
 hub.userData.noLight = true;
 ballMesh.userData.noShadow = true; markMesh.userData.noShadow = true;
@@ -7762,6 +7961,186 @@ scene.traverse((o) => {
    ===================================================================== */
 const STEP = 1 / CONFIG.physicsHz;
 let acc = 0, last = performance.now();
+/* =====================================================================
+   TAHAP 12d (C2): MODE FOTO (tombol F)
+   HUD disembunyikan, panel kecil: jam, sudut pandang (FOV), jarak fokus + blur (kedalaman bidang di compMat),
+   eksposur, hentikan waktu. Enter / tombol Simpan = unduh PNG kanvas (tanpa panel). Semua dikembalikan saat keluar.
+   ===================================================================== */
+const PHOTO = { on: false, fov: CONFIG.fov, focus: 20, blur: 0, pause: false, save: null };
+const phEl = (id) => document.getElementById(id);
+const focusFromSlider = (u) => 0.5 * Math.pow(4000, u);              // 0,5 m sampai 2.000 m (skala log)
+const sliderFromFocus = (f) => Math.log(Math.max(0.5, f) / 0.5) / Math.log(4000);
+function applyPhoto() {
+  const fov = PHOTO.on ? PHOTO.fov : CONFIG.fov;
+  if (camera.fov !== fov) { camera.fov = farCam.fov = fov; camera.updateProjectionMatrix(); farCam.updateProjectionMatrix(); }
+  compMat.uniforms.uDof.value = PHOTO.on ? PHOTO.blur : 0;
+  compMat.uniforms.uFocus.value = PHOTO.focus;
+  if (PHOTO.on && PHOTO.blur > 0 && POST.mode === 2) POST.mode = 1;    // blur butuh efek layar
+}
+function syncPhotoUI() {
+  phEl('phHour').value = clock.hour; phEl('phHourV').textContent = fmtHour(clock.hour);
+  phEl('phFov').value = PHOTO.fov; phEl('phFovV').textContent = `${PHOTO.fov} derajat`;
+  phEl('phFocus').value = sliderFromFocus(PHOTO.focus);
+  phEl('phFocusV').textContent = PHOTO.focus < 10 ? `${PHOTO.focus.toFixed(1).replace('.', ',')} m` : `${Math.round(PHOTO.focus).toLocaleString('id-ID')} m`;
+  phEl('phBlur').value = PHOTO.blur; phEl('phBlurV').textContent = PHOTO.blur > 0 ? `${Math.round(PHOTO.blur * 100)}%` : 'mati';
+  phEl('phExp').value = POST.exposure; phEl('phExpV').textContent = POST.exposure.toFixed(2).replace('.', ',');
+  phEl('phPause').checked = PHOTO.pause;
+  phEl('phWeather').textContent = `Cuaca: ${WEATHER.modes.find((x) => x[0] === WEATHER.mode)[1]} (N)`;
+}
+function togglePhoto(force) {
+  const want = force === undefined ? !PHOTO.on : force;
+  if (want === PHOTO.on) return;
+  if (want) {
+    if (TOUR.on) stopTour();
+    PHOTO.on = true;
+    PHOTO.save = { post: POST.mode, exp: POST.exposure, rate: clock.hourRate };
+    document.body.classList.add('photo'); phEl('photo').hidden = false; startEl.hidden = true;
+    if (document.pointerLockElement) document.exitPointerLock();
+  } else {
+    PHOTO.on = false;
+    const S = PHOTO.save; POST.mode = S.post; POST.exposure = S.exp;
+    if (PHOTO.pause) clock.hourRate = S.rate;
+    PHOTO.pause = false;
+    document.body.classList.remove('photo'); phEl('photo').hidden = true;
+    updateTimeLabels();
+  }
+  applyPhoto(); syncPhotoUI();
+}
+function setPhotoPause(v) {
+  if (v === PHOTO.pause) return;
+  PHOTO.pause = v;
+  if (v) { PHOTO.save.rate = clock.hourRate; clock.hourRate = 0; } else clock.hourRate = PHOTO.save.rate;
+  updateTimeLabels();
+}
+function savePhoto() {
+  window.__captureCb = (url) => {
+    const d = new Date(), p2 = (n) => String(n).padStart(2, '0');
+    const a = document.createElement('a');
+    a.download = `cooper-station-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}.png`;
+    a.href = url; document.body.appendChild(a); a.click(); a.remove();
+    const b = phEl('phSave'); b.textContent = 'Tersimpan'; setTimeout(() => { b.textContent = 'Simpan PNG (Enter)'; }, 1500);
+  };
+}
+const phInput = (id, fn) => { const el = phEl(id); el.addEventListener('input', () => { fn(parseFloat(el.value)); applyPhoto(); syncPhotoUI(); }); el.addEventListener('change', () => el.blur()); };
+phInput('phHour', (v) => { clock.hour = v; });
+phInput('phFov', (v) => { PHOTO.fov = v; });
+phInput('phFocus', (v) => { PHOTO.focus = focusFromSlider(v); });
+phInput('phBlur', (v) => { PHOTO.blur = v; });
+phInput('phExp', (v) => { POST.exposure = v; });
+phEl('phPause').addEventListener('change', (e) => { setPhotoPause(e.target.checked); e.target.blur(); });
+on('phWeather', () => { cycleWeather(); syncPhotoUI(); });
+on('phSave', () => savePhoto());
+on('photoClose', () => togglePhoto(false));
+on('labPhoto', () => togglePhoto(true));
+on('btnPhoto', () => togglePhoto());
+function updatePhoto() {                                             // tiap frame saat mode foto: jam di panel ikut berjalan
+  if (!PHOTO.on) return;
+  const el = phEl('phHour');
+  if (document.activeElement !== el) { el.value = clock.hour; phEl('phHourV').textContent = fmtHour(clock.hour); }
+}
+
+/* =====================================================================
+   TAHAP 12d (C3): TUR SINEMATIK (tombol Y)
+   Kamera terbang otomatis di antara titik kunci (koordinat stasiun s, za, tinggi di atas tanah) dengan keterangan fisika,
+   lalu keluar ke kamera luar (kerangka inersia) untuk dermaga despun. Pemain dibekukan (state 'tour') dan dikembalikan
+   ke posisi semula saat selesai. Y atau Esc = berhenti.
+   ===================================================================== */
+const TOUR = { on: false, i: 0, t: 0, from: null, save: null, keys: null };
+function tourKeys() {
+  const sk = SPOTS.skyway, w = WHEAT_SPOT;
+  const cS = COOPER.s + 34, cZ = COOPER.za - 46;
+  return [
+    { s: CONFIG.spawn.theta * R, za: CONFIG.spawn.za, h: 0, hd: 0, pt: 26, hold: 8, title: 'Gravitasi dari putaran',
+      cap: 'Tidak ada massa besar di bawah kaki. Silinder berputar sekali tiap 63,4 detik, dan lantai terus mendorong kita ke arah sumbu. Rasanya seperti 1 g (9,81 m/s2). Lihat ke atas: tanah melengkung naik di kiri dan kanan.' },
+    { s: CONFIG.spawn.theta * R, za: 760, h: 230, hd: 0, pt: -6, hold: 8, title: 'Ukuran stasiun',
+      cap: 'Radius 1.000 m, panjang 8.000 m. Dari ketinggian ini seluruh permukaan terlihat sebagai tabung: kota di dekat end cap A, ladang di ujung jauh. Tanah di seberang ada 2 km di atas kepala.' },
+    { s: FOUNT.s, za: FOUNT.za + 14, h: 1.2, hd: 180, pt: 8, hold: 9, title: 'Air mancur Coriolis',
+      cap: `Semburan tengah naik lurus 10 m/s, tetapi mendarat sekitar ${FOUNT.shift10.toFixed(2).replace('.', ',')} m searah putaran. Air yang naik menuju sumbu menjaga momentum sudutnya, jadi sedikit mendahului lantai. Hujan miring sekitar 8 derajat karena efek yang sama.` },
+    { s: sk.s, za: sk.za, h: 0, hd: sk.heading, pt: sk.pitch, hold: 9, title: 'Skyway: jendela ke angkasa',
+      cap: 'Di bawah lantai kaca ini hanya ada ruang hampa. Bintang dan Saturnus melintas sekali tiap 63,4 detik, karena kita ikut berputar bersama stasiun. Tepi silinder bergerak 99 m/s.' },
+    { s: LIFT.theta * R, za: 170, h: 900, hd: 0, pt: 0, hold: 9, title: 'Dekat sumbu: gravitasi mengecil',
+      cap: 'Gravitasi buatan sebanding jarak ke sumbu: g = omega2 x r. Di 100 m dari sumbu hanya sekitar 0,1 g, di sumbu nol. Karena itu hub dan dermaga ada di sumbu, dan lift dari tanah ke hub terasa makin ringan.' },
+    { s: w.s, za: w.za, h: 32, hd: w.heading, pt: -14, hold: 9, title: 'Ladang dan siklus tanam',
+      cap: 'Satu siklus tanam = 4 hari stasiun (96 jam). Gandum tumbuh hijau, menguning, lalu dipanen mesin; ladang lain sedang dibajak traktor. Tekan Z untuk mempercepat waktu dan melihat musim berganti.' },
+    { s: cS, za: cZ, h: 6, hd: Math.atan2(COOPER.s - cS, COOPER.za - cZ) / DEG, pt: -3, hold: 8, title: 'Rumah Cooper',
+      cap: 'Rumah pertanian dekat end cap B. Di stasiun ini "atas" selalu ke arah sumbu, jadi setiap rumah, pohon, dan orang berdiri tegak ke pusat silinder dari segala arah.' },
+    { ext: 0, hold: 11, title: 'Dari luar: kerangka inersia',
+      cap: 'Kamera sekarang tidak ikut berputar. Dari sini terlihat stasiun berputar pada sumbunya, tepinya 99 m/s. Tidak ada yang menarik ke bawah: benda di dalam hanya ingin bergerak lurus, dan lantai terus membelokkannya.' },
+    { ext: 4, hold: 11, title: 'Dermaga despun',
+      cap: 'Dermaga di ujung end cap A tidak ikut berputar (despun). Shuttle KS-07 sandar di bagian yang diam, lalu penumpang lewat hub di sumbu, tempat putaran hampir tidak terasa. Tekan 8 untuk masuk kokpit.' },
+  ];
+}
+function tourPose() { return { s: player.theta * R, za: player.za, hA: player.h, hd: player.heading, pt: player.pitch }; }
+function startTour() {
+  if (TOUR.on) return;
+  if (ext.flight || !(player.state === 'ground' || player.state === 'air')) { setLabText('Tur bisa dimulai saat berjalan di dalam stasiun.'); return; }
+  if (PHOTO.on) togglePhoto(false);
+  if (ext.active) toggleExterior();
+  if (clock.hour < 6.5 || clock.hour > 18.5) clock.hour = 9.5;          // malam: pindah ke pagi supaya pemandangan terlihat
+  TOUR.save = { theta: player.theta, za: player.za, h: player.h, heading: player.heading, pitch: player.pitch, state: player.state };
+  startEl.hidden = true;
+  TOUR.keys = tourKeys(); TOUR.on = true; TOUR.i = 0; TOUR.t = 0; TOUR.from = tourPose();
+  player.state = 'tour'; player.vA = player.vT = 0; player.body.done = true;
+  if (document.pointerLockElement) document.exitPointerLock();
+  document.body.classList.add('tour'); phEl('tourCap').hidden = false;
+  tourCaption();
+}
+function stopTour() {
+  if (!TOUR.on) return;
+  TOUR.on = false;
+  if (ext.active) toggleExterior();
+  Object.assign(player, TOUR.save, { vA: 0, vT: 0 });
+  if (player.state === 'air') player.state = 'ground';
+  document.body.classList.remove('tour'); phEl('tourCap').hidden = true;
+  setLabText('Tur selesai. Kembali ke posisi semula.');
+}
+function tourCaption() {
+  const K = TOUR.keys[TOUR.i], cap = phEl('tourCap');
+  cap.style.opacity = 0;
+  setTimeout(() => {
+    if (!TOUR.on) return;
+    cap.querySelector('b').textContent = K.title; cap.querySelector('span').textContent = K.cap;
+    phEl('tourStep').textContent = `${TOUR.i + 1} / ${TOUR.keys.length}`;
+    cap.style.opacity = 1;
+  }, 400);
+}
+const angLerp = (a, b, u) => { let d = (b - a) % TAU; if (d > Math.PI) d -= TAU; if (d < -Math.PI) d += TAU; return a + d * u; };
+function tourTravel(A, B) {                                           // durasi terbang (s) dan tinggi lengkung (m)
+  const d = Math.hypot(wrapS(B.s - A.s), B.za - A.za, (B.hA - A.hA) * 0.7);
+  return { dur: Math.max(3, Math.min(9, 2 + d / 350)), arc: Math.min(350, d * 0.15) };
+}
+function stepTour(dt) {
+  if (!TOUR.on) return;
+  const K = TOUR.keys[TOUR.i];
+  TOUR.t += dt;
+  if (K.ext !== undefined) {                                          // segmen kamera luar
+    if (!ext.active) toggleExterior();
+    ext.auto = true; ext.targetT.copy(EXT_FOCUS[K.ext][0]); ext.distT = EXT_FOCUS[K.ext][1];
+    if (TOUR.t >= K.hold) tourNext();
+    return;
+  }
+  if (!K.B) { K.B = { s: K.s, za: K.za, hA: groundH(K.s, K.za) + K.h, hd: K.hd * DEG, pt: K.pt * DEG }; Object.assign(K, tourTravel(TOUR.from, K.B)); }
+  const A = TOUR.from, B = K.B, u = sstep(0, 1, TOUR.t / K.dur);
+  const s = A.s + wrapS(B.s - A.s) * u, za = A.za + (B.za - A.za) * u;
+  let hA = A.hA + (B.hA - A.hA) * u + K.arc * Math.sin(Math.PI * u);
+  hA = Math.min(R - 40, Math.max(hA, groundH(s, za) + 0.5));          // tidak melewati sumbu, tidak menembus tanah
+  const hold = Math.max(0, TOUR.t - K.dur);
+  player.theta = modS(s) / R; player.za = za; player.h = hA;
+  player.heading = angLerp(A.hd, B.hd, u) + hold * 0.018;              // saat diam: geser pelan ke samping
+  player.pitch = A.pt + (B.pt - A.pt) * u;
+  if (TOUR.t >= K.dur + K.hold) tourNext();
+}
+function tourNext() {
+  const K = TOUR.keys[TOUR.i];
+  if (K.B) TOUR.from = { s: K.B.s, za: K.B.za, hA: K.B.hA, hd: player.heading, pt: K.B.pt };
+  TOUR.i++; TOUR.t = 0;
+  if (TOUR.i >= TOUR.keys.length) { stopTour(); return; }
+  tourCaption();
+}
+on('tourStop', () => stopTour());
+on('labTour', () => startTour());
+on('btnTour', () => startTour());
+
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
@@ -7771,13 +8150,16 @@ function frame(now) {
   if (n === CONFIG.maxSubSteps) acc = 0;           // cegah spiral lambat
   stepPeds(Math.min(0.25, clock.sim - TRAFFIC.lastT));                                    // 12b-3
   stepTraffic(Math.min(0.25, clock.sim - TRAFFIC.lastT)); TRAFFIC.lastT = clock.sim;   // 12b-1
+  stepTour(dt);                                    // 12d
   updateCamera();
+  updatePhoto();                                   // 12d
   updatePortVisual();
   updateReal();
   updatePeds();                                    // 12b-3
   stepBirds(Math.min(0.1, dt)); updateBirds();     // 12b-4
   updateVibe();                                    // 12b-5
   updateRain(Math.min(0.1, dt));                   // 12c
+  updateFarm(Math.min(0.1, dt));                   // 12d
   updateFar();
   updateClouds(dt);
   updateWind(dt);                                  // 12b-2
@@ -7806,7 +8188,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

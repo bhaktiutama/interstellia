@@ -32,6 +32,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari satu menu
 | `tools/uji_burung.py` | Uji burung Cooper Station |
 | `tools/uji_suasana.py` | Uji suasana Cooper Station |
 | `tools/uji_hujan.py` | Uji hujan dan air mancur Coriolis |
+| `tools/uji_ladang_foto_tur.py` | Uji siklus tanam, mesin ladang, mode foto, tur sinematik |
 | `CLAUDE.md` | Konteks proyek untuk Claude Code |
 
 Riwayat Cooper Station per tahap ada di git log.
