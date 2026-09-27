@@ -176,7 +176,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 11d · spaceport: dermaga despun, terminal, shuttle orisinal yang bisa diterbangkan ke angkasa · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 12a · spaceport: gerbang B1 dari terminal ke shuttle, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -190,8 +190,8 @@
       <tr class="desk-only"><td>N</td><td>Cuaca: otomatis (berganti cerah, berawan, mendung), atau tetap cerah / berawan / mendung</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
       <tr class="desk-only"><td>1 - 8</td><td>Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum · Skyway · lapangan baseball · terminal spaceport · kokpit shuttle</td></tr>
-      <tr class="desk-only"><td>Spaceport</td><td>Lift (L) ke hub nol-g, E di pintu ujung hub = kapsul terowongan ke dermaga, lalu naik shuttle</td></tr>
-      <tr class="desk-only"><td>Shuttle</td><td>E lepas sandar / sandar otomatis · W/S dorong · A/D geser · R/F naik-turun · Z/C guling · mouse arah · Shift boost 10x · X rem · V kokpit/kamera belakang · L keluar (saat sandar)</td></tr>
+      <tr class="desk-only"><td>Spaceport</td><td>Terminal (7): E di gerbang B1 (dinding utara, ikuti papan jingga) = lift, hub, terowongan, kokpit otomatis (E lagi = langsung ke kokpit). Atau manual: lift (L) ke hub nol-g, E di pintu ujung hub = kapsul terowongan ke dermaga</td></tr>
+      <tr class="desk-only"><td>Shuttle</td><td>E lepas sandar / sandar otomatis (kotak target hijau = bisa sandar: jarak &lt; 400 m, kecepatan &lt; 30 m/s; layar kokpit: jarak, kecepatan mendekat/geser, penunjuk arah berth) · W/S dorong · A/D geser · R/F naik-turun · Z/C guling · mouse arah · Shift boost 10x · X rem · V kokpit/kamera belakang · L keluar (saat sandar)</td></tr>
       <tr class="desk-only"><td>Q</td><td>Preset kualitas: Ultra, Tinggi, Sedang, Rendah (awal: Ultra, turun otomatis bila FPS di bawah 30)</td></tr>
       <tr class="desk-only"><td>K · P</td><td>Kualitas vegetasi · efek layar (bloom, SSAO, tone mapping): Tinggi, Sedang, Rendah/Mati</td></tr>
       <tr class="desk-only"><td>U · J</td><td>Suara nyala/mati · musik: generatif, file sendiri (pilih di panel Uji), mati</td></tr>
@@ -1907,10 +1907,13 @@ for (const c of cityCells) {
   }
 }
 // plaza spaceport: beberapa hanggar dan terminal
+const TERM = { s: 110, za: 196, w: 120, d: 64, h: 11 };            // terminal kaca (dibangun di tahap 11d, di bawah)
 for (let i = 0; i < 26; i++) {
   const s = i * ART + ART / 2;
   if (Math.abs(wrapS(s - SKY_S)) < 60 || Math.abs(wrapS(s - LIFT.theta * R)) < 60) continue;
-  building('flat', s, 205, U(60, 110), U(40, 60), U(10, 18), pick(COLS.ind));
+  const w = U(60, 110), d = U(40, 60), h = U(10, 18), c = pick(COLS.ind);   // urutan acak tetap
+  if (Math.abs(wrapS(s - TERM.s)) < (w + TERM.w) / 2 + 6 && Math.abs(205 - TERM.za) < (d + TERM.d) / 2 + 6) continue;   // 12a: hanggar lama menumpuk di dalam terminal
+  building('flat', s, 205, w, d, h, c);
 }
 
 // --- utilitas: gudang dan tangki ---------------------------------------
@@ -2876,7 +2879,7 @@ const keys = new Set();
 function respawn() {
   Object.assign(player, { theta: CONFIG.spawn.theta, za: CONFIG.spawn.za, h: 0, state: 'ground',
     heading: CONFIG.spawn.heading * DEG, pitch: CONFIG.spawn.pitch * DEG, distance: 0, vA: 0, vT: 0 });
-  player.body.done = true;
+  player.body.done = true; PORT.trip = false;
 }
 
 // Basis kamera dari (up, tangen) lokal + heading/pitch. Hasil di _fwd (arah pandang), _camUp, _right.
@@ -2961,7 +2964,7 @@ function enterLift() {
 }
 function stepLift(dt) {
   const L = player.lift;
-  const fast = keys.has('ShiftLeft') || keys.has('ShiftRight') || input.run ? 5 : 1;
+  const fast = keys.has('ShiftLeft') || keys.has('ShiftRight') || input.run || PORT.trip ? 5 : 1;
   const travelled = L.dir > 0 ? R - L.r : L.r - LIFT.topR;
   const remaining = L.dir > 0 ? L.r - LIFT.topR : R - L.r;
   // profil kecepatan: percepatan dan perlambatan 1 m/s^2, maksimal 20 m/s
@@ -2975,8 +2978,9 @@ function stepLift(dt) {
     F.vel.set(0, 0, 0);
     upAt(LIFT.theta, F.up); tanAt(LIFT.theta, F.tan);
     player.state = 'float';
+    if (PORT.trip) portEnterPod(-1);                           // 12a: perjalanan dari gerbang B1 langsung ke kapsul terowongan
   } else if (L.dir < 0 && L.r >= R - 1e-6) {                 // tiba di tanah
-    player.h = 0; player.za = LIFT.za + 3; player.state = 'ground';
+    player.h = 0; player.za = LIFT.za + 3; player.state = 'ground'; PORT.trip = false;
   }
 }
 
@@ -3180,12 +3184,14 @@ const PLAQUE_TEXT = 'Museum Cooper Farm\n\nReplika rumah pertanian keluarga Coop
 const PLAQUE_POS = { s: COOPER.s + 3, za: COOPER.za - COOPER.d / 2 - 4 };
 function nearDist(s, za) { return Math.hypot(wrapS(player.theta * R - s), player.za - za); }
 function availableAction() {
+  if (PORT.trip && (player.state === 'lift' || player.state === 'float' || player.state === 'pod')) return { key: 'skip', label: 'Langsung ke kokpit KS-07' };
   if (player.state === 'tram') return tram.dwell > 0 ? { key: 'alight', label: `Turun di ${tramStopName()}` } : { key: null, label: 'Di dalam trem · tunggu halte berikutnya' };
   if (player.state === 'float' && player.float.pos.z < -HALF_L + HUB.zaMin + 5 && Math.hypot(player.float.pos.x, player.float.pos.y) < 5.5) return { key: 'port', label: 'Masuk terowongan ke dermaga despun' };
   if (player.state !== 'ground') return null;
   if (tram.dwell > 0 && nearDist(TRAM.s, tram.za) < 14) return { key: 'board', label: `Naik trem (berikutnya: ${TRAM.stops[tram.target].name})` };
   if (nearDist(PLAQUE_POS.s, PLAQUE_POS.za) < 4) return { key: 'plaque', label: 'Baca plakat' };
   if (nearDist(LIFT.theta * R, LIFT.za) < 8) return { key: 'lift', label: 'Naik lift ke sumbu' };
+  if (nearDist(TERM.gate.s, TERM.gate.za) < 4 && player.za > TERM.za - TERM.d / 2) return { key: 'gate', label: 'Gerbang B1: lift ke hub, terowongan, lalu kokpit shuttle KS-07 (otomatis)' };
   return null;
 }
 const plaqueEl = document.getElementById('plaque');
@@ -3205,6 +3211,8 @@ function doAction() {
   else if (a.key === 'plaque') { plaqueEl.querySelector('p').textContent = PLAQUE_TEXT; plaqueEl.hidden = false; }
   else if (a.key === 'lift') enterLift();
   else if (a.key === 'port') portEnterPod(-1);
+  else if (a.key === 'gate') portStartTrip();
+  else if (a.key === 'skip') { player.lift.r = LIFT.topR; player.lift.v = 0; portBoard(); }   // kabin lift menunggu di atas
 }
 function stepTramRider() {
   const [x, z] = TRAM_SEATS[player.seat || 0];
@@ -3539,7 +3547,7 @@ function updatePrompt() {
   if (player.state === 'lift') {
     const L = player.lift, fast = keys.has('ShiftLeft') || keys.has('ShiftRight') || input.run ? 5 : 1;
     const rem = L.dir > 0 ? L.r - LIFT.topR : R - L.r, g = OMEGA * OMEGA * L.r / CONFIG.g;
-    t = `Lift ${L.dir > 0 ? 'naik' : 'turun'} · tinggi ${(R - L.r).toFixed(0)} m · gravitasi ${g.toFixed(3)} g · ${L.v.toFixed(1)} m/s · tiba sekitar ${liftETA(rem, L.v, fast).toFixed(0)} s (Shift = 5x)`;
+    t = `Lift ${L.dir > 0 ? 'naik' : 'turun'} · tinggi ${(R - L.r).toFixed(0)} m · gravitasi ${g.toFixed(3)} g · ${L.v.toFixed(1)} m/s · tiba sekitar ${liftETA(rem, L.v, fast).toFixed(0)} s ${PORT.trip ? '(gerbang B1, 5x) · E langsung ke kokpit' : '(Shift = 5x)'}`;
   } else if (player.state === 'float') {
     t = `Hub nol-g · ${localG().toFixed(4)} g · WASD, Space naik, C turun · B lempar bola, G lepas bola · L turun dengan lift${a && a.key === 'port' ? ' · E terowongan ke dermaga' : ' · pintu dermaga di ujung hub (sumbu)'}`;
   }
@@ -4927,7 +4935,7 @@ function teleport(key) {
   if (ext.active) toggleExterior();
   plaqueEl.hidden = true;
   Object.assign(player, { theta: modS(T.s) / R, za: T.za, h: groundH(T.s, T.za), state: 'ground', heading: T.heading * DEG, pitch: T.pitch * DEG, vA: 0, vT: 0 });
-  player.body.done = true;
+  player.body.done = true; PORT.trip = false;
   setLabText(`Pindah ke ${T.name}.`);
 }
 
@@ -5388,11 +5396,11 @@ function startAudio() {
     return b;
   };
   AUDIO.white = mkNoise('white');
-  const loop = (buf, filterType, freq, q, gain) => {
+  const loop = (buf, filterType, freq, q, gain, dest = master) => {
     const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
     const f = ctx.createBiquadFilter(); f.type = filterType; f.frequency.value = freq; f.Q.value = q;
     const g = ctx.createGain(); g.gain.value = gain;
-    src.connect(f).connect(g).connect(master); src.start();
+    src.connect(f).connect(g).connect(dest); src.start();
     return { f, g };
   };
   AUDIO.air = loop(mkNoise('pink'), 'bandpass', 500, 0.4, 0.0);
@@ -5402,6 +5410,18 @@ function startAudio() {
   for (const [f, a] of [[50, 0.6], [100, 0.3], [150, 0.12]]) { const o = ctx.createOscillator(); o.frequency.value = f; const g = ctx.createGain(); g.gain.value = a; o.connect(g).connect(humG); o.start(); }
   // bus efek (langkah, burung, jangkrik) dan musik
   AUDIO.sfx = ctx.createGain(); AUDIO.sfx.gain.value = 1; AUDIO.sfx.connect(master);
+  // 12a: suara shuttle di bus sendiri (tetap terdengar di pesawat saat suara lingkungan stasiun dimatikan)
+  // mesin utama: gemuruh noise cokelat + dengung rendah; RCS: desis noise putih; kokpit: dengung avionik + kipas
+  const ship = ctx.createGain(); ship.gain.value = 0; ship.connect(master); AUDIO.shipBus = ship;
+  const brown = mkNoise('brown'), pink = mkNoise('pink');
+  AUDIO.eng = loop(brown, 'lowpass', 160, 0.8, 0, ship);
+  AUDIO.engTone = ctx.createGain(); AUDIO.engTone.gain.value = 0;
+  const engLp = ctx.createBiquadFilter(); engLp.type = 'lowpass'; engLp.frequency.value = 140; engLp.connect(AUDIO.engTone); AUDIO.engTone.connect(ship);
+  AUDIO.engOsc = [[38, 'sawtooth', 1], [57.3, 'triangle', 0.6]].map(([f, type, a]) => { const o = ctx.createOscillator(); o.type = type; o.frequency.value = f; const g = ctx.createGain(); g.gain.value = a; o.connect(g).connect(engLp); o.start(); return o; });
+  AUDIO.rcs = loop(AUDIO.white, 'highpass', 2600, 0.7, 0, ship);
+  AUDIO.cab = loop(pink, 'bandpass', 900, 0.5, 0, ship);
+  AUDIO.cabHum = ctx.createGain(); AUDIO.cabHum.gain.value = 0; AUDIO.cabHum.connect(ship);
+  for (const [f, a] of [[120, 1], [240, 0.35], [1830, 0.04]]) { const o = ctx.createOscillator(); o.frequency.value = f; const g = ctx.createGain(); g.gain.value = a; o.connect(g).connect(AUDIO.cabHum); o.start(); }
   AUDIO.musicBus = ctx.createGain(); AUDIO.musicBus.gain.value = 0.45; AUDIO.musicBus.connect(master); AUDIO.musicBus.connect(verb);
   // data permukaan untuk langkah kaki (dibaca sekali dari kanvas lahan)
   try { AUDIO.land = landCanvas.getContext('2d').getImageData(0, 0, LAND_W, LAND_H).data; } catch (e) { AUDIO.land = null; }
@@ -5490,6 +5510,29 @@ function loadMusicFile(file) {                                    // file musik 
   AUDIO.fileEl = el; setMusic('file');
   setLabText(`Musik: ${file.name}`);
 }
+// 12a: bunyi penjepit dermaga (lepas: pelepasan + desis udara; sandar: dua penjepit mengunci)
+function portClank(release) {
+  if (!AUDIO.ctx || !AUDIO.shipBus || AUDIO.ctx.state !== 'running') return;
+  const ctx = AUDIO.ctx, t0 = ctx.currentTime + 0.02, out = AUDIO.shipBus;
+  const hit = (t, loud) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();                                   // hentakan rendah struktur
+    o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(38, t + 0.25);
+    g.gain.setValueAtTime(0.35 * loud, t); g.gain.exponentialRampToValueAtTime(0.0005, t + 0.35); o.connect(g).connect(out); o.start(t); o.stop(t + 0.4);
+    for (const [f, a, d] of [[430, 0.05, 0.7], [1127, 0.03, 0.45], [2310, 0.012, 0.3]]) {        // dering logam
+      const m = ctx.createOscillator(), mg = ctx.createGain(); m.frequency.value = f * (0.97 + Math.random() * 0.06);
+      mg.gain.setValueAtTime(a * loud, t); mg.gain.exponentialRampToValueAtTime(0.0003, t + d); m.connect(mg).connect(out); m.start(t); m.stop(t + d + 0.05);
+    }
+    const n = ctx.createBufferSource(), nf = ctx.createBiquadFilter(), ng = ctx.createGain(); n.buffer = AUDIO.white;
+    nf.type = 'bandpass'; nf.frequency.value = 1400; nf.Q.value = 1.2;
+    ng.gain.setValueAtTime(0.12 * loud, t); ng.gain.exponentialRampToValueAtTime(0.0005, t + 0.12); n.connect(nf).connect(ng).connect(out); n.start(t, Math.random(), 0.15);
+  };
+  if (release) {
+    hit(t0, 0.8);
+    const n = ctx.createBufferSource(), nf = ctx.createBiquadFilter(), ng = ctx.createGain(); n.buffer = AUDIO.white;   // desis sisa udara di antarmuka sandar
+    nf.type = 'highpass'; nf.frequency.value = 1800; ng.gain.setValueAtTime(0, t0 + 0.1); ng.gain.linearRampToValueAtTime(0.05, t0 + 0.2); ng.gain.exponentialRampToValueAtTime(0.0005, t0 + 1.3);
+    n.connect(nf).connect(ng).connect(out); n.start(t0 + 0.1, 0, 1.3);
+  } else { hit(t0, 1); hit(t0 + 0.22, 0.8); }
+}
 function toggleSound() {
   AUDIO.on = !AUDIO.on; startAudio();
   if (AUDIO.master) AUDIO.master.gain.setTargetAtTime(AUDIO.on ? 0.9 : 0, AUDIO.ctx.currentTime, 0.1);
@@ -5526,6 +5569,16 @@ function updateAudio(dt) {
     if (AUDIO.lastState === 'air') playStep(surfaceAt(s, za), 2.2);             // mendarat
   }
   AUDIO.lastDist = player.distance; AUDIO.lastState = player.state;
+  // 12a: shuttle
+  if (AUDIO.shipBus) {
+    const fl = ext.flight ? 1 : 0, cock = fl && PORT.view === 'cockpit' ? 1 : 0, thr = fl * PORT.thr, rcs = fl * PORT.rcs;
+    AUDIO.shipBus.gain.setTargetAtTime(fl, t, 0.3);
+    AUDIO.eng.g.gain.setTargetAtTime(0.5 * thr, t, 0.15); AUDIO.eng.f.frequency.setTargetAtTime(120 + 160 * thr, t, 0.2);
+    AUDIO.engTone.gain.setTargetAtTime(0.09 * thr, t, 0.15);
+    for (const o of AUDIO.engOsc) o.detune.setTargetAtTime(600 * thr, t, 0.3);
+    AUDIO.rcs.g.gain.setTargetAtTime(0.045 * rcs, t, 0.03);
+    AUDIO.cab.g.gain.setTargetAtTime(0.012 * cock, t, 0.5); AUDIO.cabHum.gain.setTargetAtTime(0.006 * cock, t, 0.5);
+  }
   // musik generatif: jadwalkan akor dan nada sedikit di depan waktu sekarang
   if (AUDIO.music === 'gen') {
     if (t > AUDIO.nextChord - 4) {
@@ -5810,6 +5863,7 @@ const PORT = {
   mode: 'idle', view: 'cockpit', p: new THREE.Vector3(), v: new THREE.Vector3(), q: new THREE.Quaternion(),
   look: { yaw: 0, pitch: 0 }, brake: false, boost: false, t: 0, from: null, pod: { z: 0, dir: -1, v: 0 },
   eye: new THREE.Vector3(0, 1.15, -7.3), A_MAIN: 8, A_RCS: 3, board: 0,
+  trip: false, thr: 0, rcs: 0, turn: 0,                             // 12a: perjalanan otomatis dari gerbang B1; nilai untuk suara mesin/RCS
 };
 PORT.zHubPod = -HALF_L + HUB.zaMin - 1; PORT.zDockPod = PORT.ringZ + 15;
 const DOCK = new THREE.Group(); scene.add(DOCK);                   // kerangka inersia (despun)
@@ -6008,6 +6062,38 @@ function placeShip(obj, p, q) { obj.matrix.compose(p, q, _one3); obj.matrixWorld
 const _one3 = new THREE.Vector3(1, 1, 1);
 const BERTH_P = [0, 1, 2, 3].map((i) => { const p = new THREE.Vector3(), q = new THREE.Quaternion(); berthPose(i, p, q, i === 2 ? 29.5 : -1); return { p, q }; });
 berthPose(0, PORT.p, PORT.q);
+// 12a: panduan sandar: kotak target di berth 1 (seukuran shuttle + sayap/sirip) dan garis putus-putus dari kapal ke target.
+// Hijau = E sandar otomatis bisa dipakai (jarak < 400 m, kecepatan < 30 m/s), jingga = belum.
+const DGUIDE = {};
+{
+  const mat = new THREE.LineBasicMaterial({ color: 0x40ff90, transparent: true, opacity: 0.9, fog: false });
+  const box = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(22, 7.5, 28).translate(0, 1.2, 0.7)), mat);
+  const cross = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([[-11, 0], [11, 0], [0, -14], [0, 14]].map(([x, z]) => new THREE.Vector3(x, -2.55, z + 0.7))), mat);
+  box.add(cross); box.matrixAutoUpdate = false; box.matrix.compose(BERTH_P[0].p, BERTH_P[0].q, _one3);
+  const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(6), 3));
+  const lmat = new THREE.LineDashedMaterial({ color: 0x40ff90, dashSize: 5, gapSize: 4, transparent: true, opacity: 0.8, fog: false });
+  const line = new THREE.Line(lg, lmat); line.frustumCulled = false;
+  box.visible = line.visible = false; DOCK.add(box, line);
+  Object.assign(DGUIDE, { box, line, mat, lmat, lastDraw: 0 });
+}
+function updateDockGuide() {
+  const on = ext.flight && (PORT.mode === 'fly' || PORT.mode === 'autodock' || PORT.mode === 'undock');
+  DGUIDE.box.visible = DGUIDE.line.visible = on;
+  if (!on) return;
+  const ok = PORT.mode === 'autodock' || portCanDock(), c = ok ? 0x40ff90 : 0xffa530, pulse = 0.65 + 0.35 * Math.sin(performance.now() * 0.006);
+  DGUIDE.mat.color.setHex(c); DGUIDE.lmat.color.setHex(c); DGUIDE.mat.opacity = ok ? pulse : 0.85;
+  const a = DGUIDE.line.geometry.attributes.position, B = BERTH_P[0].p;
+  a.setXYZ(0, PORT.p.x, PORT.p.y, PORT.p.z); a.setXYZ(1, B.x, B.y, B.z); a.needsUpdate = true;
+  DGUIDE.line.computeLineDistances();
+}
+// data sandar relatif terhadap berth 1 (berth diam di kerangka inersia, jadi kecepatan relatif = kecepatan kapal)
+const _dg = new THREE.Vector3(), _dq = new THREE.Quaternion();
+function dockData() {
+  const d = _dg.subVectors(BERTH_P[0].p, PORT.p), dist = d.length(), sp = PORT.v.length();
+  const close = dist > 1e-3 ? PORT.v.dot(d) / dist : 0, lat = Math.sqrt(Math.max(0, sp * sp - close * close));
+  const loc = d.applyQuaternion(_dq.copy(PORT.q).invert());                 // arah berth di kerangka kapal (hidung = -z)
+  return { dist, sp, close, lat, lx: loc.x, ly: loc.y, lz: loc.z };
+}
 // jadwal shuttle terjadwal (berth 2): sandar 120 s, berangkat 90 s, hilang 30 s, datang 90 s
 const AI = { period: 330, p: new THREE.Vector3(), q: new THREE.Quaternion() };
 function aiShuttleState(t) {
@@ -6022,30 +6108,44 @@ function aiShuttleState(t) {
 }
 placeShip(SHIPS.cargo, BERTH_P[2].p, BERTH_P[2].q);
 
-// --- terminal di plaza spaceport ---
-const TERM = { s: 110, za: 196, w: 120, d: 64, h: 11 };
+// --- terminal di plaza spaceport (TERM didefinisikan di bagian plaza) ---
 {
   const G = new THREE.Group(), P = [], GL = [], m4 = new THREE.Matrix4();
   const { w, d, h } = TERM, STONE = [0.8, 0.79, 0.76], COLW = [0.9, 0.91, 0.92], MUL = [0.25, 0.27, 0.3], TEAL = [0.1, 0.45, 0.5];
   P.push({ geo: bx(w, 0.08, d, 0, 0.04, 0), color: STONE }, { geo: bx(w + 8, 0.9, d + 8, 0, h + 0.45, 0), color: COLW }, { geo: bx(w + 8.2, 0.3, d + 8.2, 0, h - 0.1, 0), color: [0.35, 0.37, 0.4] });
   const cols = [];
-  for (let x = -w / 2; x <= w / 2 + 0.1; x += 20) for (const z of [-d / 2, d / 2]) cols.push([x, z]);
-  for (let z = -d / 2 + 16; z < d / 2; z += 16) for (const x of [-w / 2, w / 2]) cols.push([x, z]);
+  // 12a: tiang di tengah pintu selatan, pintu barat, dan gerbang B1 dihapus (menghalangi jalan)
+  const inDoor = (x, z) => (x === 0 && Math.abs(z) === d / 2) || (x === -w / 2 && z === 0);
+  for (let x = -w / 2; x <= w / 2 + 0.1; x += 20) for (const z of [-d / 2, d / 2]) if (!inDoor(x, z)) cols.push([x, z]);
+  for (let z = -d / 2 + 16; z < d / 2; z += 16) for (const x of [-w / 2, w / 2]) if (!inDoor(x, z)) cols.push([x, z]);
   for (const x of [-30, 0, 30]) cols.push([x, 0]);
   for (const [x, z] of cols) P.push({ geo: bx(0.7, h, 0.7, x, h / 2, z), color: COLW });
   // dinding kaca + mullion; pintu: selatan (+z, ke kota) x -6..6, barat (-x, ke halte trem) z -5..5
-  const wall = (x0, z0, x1, z1, gap) => {
+  // 12a: celah kaca dipotong tepat di tepi pintu (dulu per panel 5 m, jadi celah kaca tidak sama dengan celah kolisi)
+  const wall = (x0, z0, x1, z1, door) => {                           // door = [t0, t1] di sepanjang dinding
     const L = Math.hypot(x1 - x0, z1 - z0), ux = (x1 - x0) / L, uz = (z1 - z0) / L;
+    const pane = (a, b) => { if (b - a > 0.05) GL.push(bx(ux ? b - a : 0.08, h, uz ? b - a : 0.08, x0 + ux * (a + b) / 2, h / 2, z0 + uz * (a + b) / 2)); };
     for (let t = 0; t < L; t += 5) {
-      const a = t, b = Math.min(L, t + 5), mx = x0 + ux * (a + b) / 2, mz = z0 + uz * (a + b) / 2;
-      if (gap && gap(mx, mz)) continue;
-      GL.push(bx(ux ? b - a : 0.08, h, uz ? b - a : 0.08, mx, h / 2, mz));
-      P.push({ geo: bx(ux ? 0.12 : 0.14, h, uz ? 0.12 : 0.14, x0 + ux * a, h / 2, z0 + uz * a), color: MUL });
+      const a = t, b = Math.min(L, t + 5);
+      if (door) { pane(a, Math.min(b, door[0])); pane(Math.max(a, door[1]), b); } else pane(a, b);
+      if (!door || a <= door[0] || a >= door[1]) P.push({ geo: bx(ux ? 0.12 : 0.14, h, uz ? 0.12 : 0.14, x0 + ux * a, h / 2, z0 + uz * a), color: MUL });
     }
-    P.push({ geo: bx(ux ? L : 0.16, 0.14, uz ? L : 0.16, (x0 + x1) / 2, 3.2, (z0 + z1) / 2), color: MUL });
+    P.push({ geo: bx(ux ? L : 0.16, 0.14, uz ? L : 0.16, (x0 + x1) / 2, 3.8, (z0 + z1) / 2), color: MUL });
   };
   wall(-w / 2, -d / 2, w / 2, -d / 2); wall(w / 2, -d / 2, w / 2, d / 2);
-  wall(-w / 2, d / 2, w / 2, d / 2, (x) => Math.abs(x) < 6); wall(-w / 2, -d / 2, -w / 2, d / 2, (x, z) => Math.abs(z) < 5);
+  wall(-w / 2, d / 2, w / 2, d / 2, [w / 2 - 6, w / 2 + 6]); wall(-w / 2, -d / 2, -w / 2, d / 2, [d / 2 - 5, d / 2 + 5]);
+  // 12a: bingkai pintu berwarna (hijau = keluar/masuk) dan gerbang keberangkatan B1 (jingga) di dinding utara
+  const EXITC = [0.16, 0.62, 0.36], GATEC = [0.86, 0.42, 0.1], DOORG = [0.1, 0.17, 0.2];
+  const frame = (x, z, alongX, half, color) => {                     // dua tiang + ambang atas, tinggi 3,6 m
+    for (const k of [-1, 1]) P.push({ geo: bx(0.5, 3.6, 0.5, x + (alongX ? k * (half + 0.25) : 0), 1.8, z + (alongX ? 0 : k * (half + 0.25))), color });
+    P.push({ geo: bx(alongX ? 2 * half + 1 : 0.5, 0.5, alongX ? 0.5 : 2 * half + 1, x, 3.85, z), color });
+  };
+  frame(0, d / 2, true, 6, EXITC); frame(-w / 2, 0, false, 5, EXITC);
+  frame(0, -d / 2 + 0.45, true, 2.2, GATEC);
+  P.push({ geo: bx(2.1, 3.3, 0.1, -1.1, 1.65, -d / 2 + 0.3), color: DOORG }, { geo: bx(2.1, 3.3, 0.1, 1.1, 1.65, -d / 2 + 0.3), color: DOORG });   // pintu geser gerbang
+  P.push({ geo: bx(0.06, 3.3, 0.12, 0, 1.65, -d / 2 + 0.36), color: GATEC });
+  P.push({ geo: bx(4.4, 0.03, 3.2, 0, 0.1, -d / 2 + 2.4), color: GATEC });                                   // lantai tunggu di depan gerbang
+  for (const z of [-d / 2 + 5, -d / 2 + 8]) P.push({ geo: bx(0.25, 0.02, 1.4, 0, 0.1, z), color: GATEC });   // garis pemandu dari lorong bangku
   // konter check-in + dinding merek
   for (const x of [-36, -18, 18, 36]) { P.push({ geo: bx(6, 1.1, 1.2, x, 0.55, 14), color: [0.3, 0.26, 0.22] }, { geo: bx(6, 2.8, 0.2, x, 1.4, 16.2), color: TEAL }); }
   // papan keberangkatan (bingkai)
@@ -6059,11 +6159,37 @@ const TERM = { s: 110, za: 196, w: 120, d: 64, h: 11 };
   const board = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 3.5).translate(0, 6.6, 4.19), new THREE.MeshBasicMaterial({ map: btex }));
   board.userData.noLight = true; board.userData.noShadow = true;
   const sc = document.createElement('canvas'); sc.width = 1024; sc.height = 128;
-  { const g = sc.getContext('2d'); g.fillStyle = '#123a40'; g.fillRect(0, 0, 1024, 128); g.fillStyle = '#e8f4f4'; g.font = 'bold 64px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  { const g = sc.getContext('2d'); g.fillStyle = '#123a40'; g.fillRect(0, 0, 1024, 128); g.fillStyle = '#e8f4f4'; g.font = 'bold 58px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText('SPACEPORT  ·  DERMAGA SUMBU', 512, 66); }
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(26, 3.2).translate(0, h - 1.9, d / 2 + 0.3), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc) }));
   sign.userData.noShadow = true;
   G.add(mesh, glass, board, sign);
+  // 12a: papan arah (menyala sendiri, terbaca siang dan malam)
+  const plate = (lines, pw, ph, bg, fg, x, y, z, rotY) => {
+    const cv = document.createElement('canvas'); cv.width = 1024; cv.height = Math.round(1024 * ph / pw);
+    const g = cv.getContext('2d'); g.fillStyle = bg; g.fillRect(0, 0, cv.width, cv.height);
+    g.fillStyle = fg; g.textAlign = 'center'; g.textBaseline = 'middle';
+    lines.forEach(([t, px], i) => {
+      g.font = `bold ${px}px sans-serif`; const tw = g.measureText(t).width;
+      if (tw > 950) g.font = `bold ${Math.floor(px * 950 / tw)}px sans-serif`;                   // teks panjang diperkecil agar muat
+      g.fillText(t, 512, cv.height * (i + 0.5) / lines.length + 2);
+    });
+    const tx = new THREE.CanvasTexture(cv); tx.anisotropy = 4;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph).rotateY(rotY).translate(x, y, z), new THREE.MeshBasicMaterial({ map: tx }));
+    m.userData.noLight = true; m.userData.noShadow = true; G.add(m); return m;
+  };
+  const GRN = '#1f7a47', ORG = '#c4600f', WHT = '#f4f7f5';
+  plate([['KELUAR · KOTA', 150]], 6, 0.9, GRN, WHT, 0, 4.65, d / 2 - 0.3, Math.PI);                 // pintu selatan, dari dalam
+  plate([['MASUK · TERMINAL', 140]], 6, 0.9, GRN, WHT, 0, 4.65, d / 2 + 0.3, 0);                     // pintu selatan, dari luar
+  plate([['KELUAR · HALTE TREM', 120]], 6, 0.9, GRN, WHT, -w / 2 + 0.3, 4.65, 0, Math.PI / 2);       // pintu barat, dari dalam
+  plate([['MASUK · TERMINAL', 140]], 6, 0.9, GRN, WHT, -w / 2 - 0.3, 4.65, 0, -Math.PI / 2);          // pintu barat, dari luar
+  plate([['GERBANG B1', 150], ['KE LIFT DERMAGA · SHUTTLE KS-07', 78]], 7, 1.6, ORG, WHT, 0, 5.0, -d / 2 + 0.75, 0);
+  // papan gantung di tengah aula (dua sisi) dan dekat pintu barat
+  plate([['\u2191  GERBANG B1 · KE LIFT DERMAGA', 92]], 8, 0.9, ORG, WHT, 0, 5.3, 22, 0);
+  plate([['\u2191  KELUAR · KOTA', 110]], 8, 0.9, GRN, WHT, 0, 5.3, 22, Math.PI);
+  plate([['\u2196  GERBANG B1 · KE LIFT DERMAGA', 88]], 8, 0.9, ORG, WHT, -46, 5.3, 0, -Math.PI / 2);
+  const cableM = new THREE.MeshBasicMaterial({ color: 0x3a3f45 });
+  for (const [x, z] of [[-3.2, 22], [3.2, 22], [-46, -3.2], [-46, 3.2]]) G.add(new THREE.Mesh(bx(0.05, h - 5.75, 0.05, x, (h + 5.75) / 2, z), cableM));   // kabel gantung
   // bangku ruang tunggu menghadap jendela (ke end cap A dan dermaga)
   const seats = [];
   for (let z = -24; z <= -12; z += 3) for (let x = -40; x <= 40; x += 2.1) if (Math.abs(x) > 4) seats.push([x, z]);
@@ -6079,6 +6205,8 @@ const TERM = { s: 110, za: 196, w: 120, d: 64, h: 11 };
   C(-(w / 2 + 6) / 2, d / 2, (w / 2 - 6) / 2, 0.2); C((w / 2 + 6) / 2, d / 2, (w / 2 - 6) / 2, 0.2);
   C(-w / 2, -(d / 2 + 5) / 2, 0.2, (d / 2 - 5) / 2); C(-w / 2, (d / 2 + 5) / 2, 0.2, (d / 2 - 5) / 2);
   for (const [x, z] of cols) C(x, z, 0.4, 0.4);
+  for (const k of [-1, 1]) { C(k * 6.25, d / 2, 0.25, 0.25); C(-w / 2, k * 5.25, 0.25, 0.25); C(k * 2.45, -d / 2 + 0.45, 0.25, 0.25); }   // 12a: tiang bingkai pintu
+  C(0, -d / 2 + 0.3, 2.2, 0.15);                                                                          // pintu gerbang (tertutup)
   for (const x of [-36, -18, 18, 36]) C(x, 14.5, 3, 1.0);
   for (let z = -24; z <= -12; z += 3) { C(-22, z, 18.2, 0.35); C(22, z, 18.2, 0.35); }
 }
@@ -6090,7 +6218,7 @@ function drawDepartureBoard() {
   g.fillStyle = '#9aa4ad'; g.textAlign = 'right'; g.fillText(fmtHour(clock.hour), W - 24, 30); g.textAlign = 'left';
   const ai = aiShuttleState(clock.sim), mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const rows = [
-    ['KS-07', 'Orbit Saturnus (bebas)', 'B1', PORT.mode === 'idle' ? 'SIAP · naik di 8' : PORT.mode === 'docked' ? 'NAIK' : 'TERBANG'],
+    ['KS-07', 'Orbit Saturnus (bebas)', 'B1', PORT.mode === 'idle' ? 'SIAP · GERBANG B1' : PORT.mode === 'docked' ? 'NAIK' : 'TERBANG'],
     ['KS-12', 'Titan · Kraken Mare', 'B2', ai.phase === 'sandar' ? `NAIK · ${mmss(ai.left)}` : ai.phase === 'berangkat' ? 'BERANGKAT' : ai.phase === 'tiba' ? `TIBA · ${mmss(ai.arrive)}` : 'DI JALAN'],
     ['CG-3', 'Kargo · Enceladus', 'B3', 'BONGKAR MUAT'],
     ['TG-1', 'Kapal tunda · patroli', '-', 'BERTUGAS'],
@@ -6108,6 +6236,13 @@ function drawDepartureBoard() {
 drawDepartureBoard();
 
 // --- aksi: terowongan, naik, lepas sandar, terbang, sandar otomatis, keluar ---
+// 12a: gerbang B1 di dinding utara terminal. E = lorong ke lift dermaga, lift naik ke hub, kapsul terowongan, kokpit (semua 5x, E = lewati)
+TERM.gate = { s: TERM.s, za: TERM.za - TERM.d / 2 + 2.5 };
+function portStartTrip() {
+  plaqueEl.hidden = true; PORT.trip = true;
+  enterLift();
+  setLabText('Gerbang B1: lorong ke lift dermaga, naik 994 m ke hub nol-g, lalu kapsul terowongan ke shuttle KS-07 (5x). E = langsung ke kokpit.');
+}
 function portEnterPod(dir) {                                        // dir -1 = ke dermaga, +1 = kembali ke hub
   PORT.pod.dir = dir; PORT.pod.v = 0; PORT.pod.z = dir < 0 ? PORT.zHubPod : PORT.zDockPod;
   const F = player.float; if (!F.up.lengthSq()) { upAt(LIFT.theta, F.up); tanAt(LIFT.theta, F.tan); }
@@ -6115,7 +6250,7 @@ function portEnterPod(dir) {                                        // dir -1 = 
   setLabText(dir < 0 ? 'Kapsul terowongan: meluncur 766 m ke dermaga despun (Shift = 5x).' : 'Kembali ke hub nol-g.');
 }
 function stepPod(dt) {
-  const P = PORT.pod, total = PORT.zHubPod - PORT.zDockPod, fast = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 5 : 1;
+  const P = PORT.pod, total = PORT.zHubPod - PORT.zDockPod, fast = keys.has('ShiftLeft') || keys.has('ShiftRight') || PORT.trip ? 5 : 1;
   const trav = P.dir < 0 ? PORT.zHubPod - P.z : P.z - PORT.zDockPod, rem = Math.max(0, total - trav);
   P.v = Math.min(70, Math.sqrt(2 * 4 * (trav + 0.5)), Math.sqrt(2 * 4 * rem)) * fast;
   P.z += P.dir * Math.min(P.v * dt, rem);
@@ -6127,7 +6262,7 @@ function stepPod(dt) {
 }
 function portBoard() {                                              // masuk kokpit shuttle di berth 1
   if (PORT.mode === 'idle') { PORT.mode = 'docked'; berthPose(0, PORT.p, PORT.q); PORT.v.set(0, 0, 0); }
-  PORT.view = 'cockpit'; PORT.look.yaw = 0; PORT.look.pitch = -0.05;
+  PORT.view = 'cockpit'; PORT.look.yaw = 0; PORT.look.pitch = -0.05; PORT.trip = false;
   player.state = 'ship'; player.mode = 'di kokpit';
   ext.flight = true;
   if (!ext.active) toggleExterior();
@@ -6142,7 +6277,7 @@ function portLeaveShip(toHub) {                                    // keluar kok
   if (toHub) portEnterPod(1);
 }
 function portAction() {
-  if (PORT.mode === 'docked') { PORT.mode = 'undock'; PORT.t = 0; setLabText('Lepas sandar: menjauh 15 m dari cincin, lalu kendali di tanganmu.'); }
+  if (PORT.mode === 'docked') { PORT.mode = 'undock'; PORT.t = 0; portClank(true); setLabText('Lepas sandar: menjauh 15 m dari cincin, lalu kendali di tanganmu.'); }
   else if (PORT.mode === 'fly' && portCanDock()) {
     PORT.mode = 'autodock'; PORT.t = 0; PORT.from = { p: PORT.p.clone(), v: PORT.v.clone(), q: PORT.q.clone() };
     PORT.from.T = Math.max(8, Math.min(40, PORT.p.distanceTo(BERTH_P[0].p) / 6));
@@ -6162,6 +6297,7 @@ function portMouse(dx, dy) {
   if (PORT.mode === 'fly' && PORT.view === 'cockpit' || PORT.mode === 'fly' && PORT.view === 'chase') {   // mouse = arah hidung
     _qa.setFromAxisAngle(_va.set(0, 1, 0), -dx * 0.0022); PORT.q.multiply(_qa);
     _qa.setFromAxisAngle(_va.set(1, 0, 0), -dy * 0.0022); PORT.q.multiply(_qa); PORT.q.normalize();
+    PORT.turn = Math.min(1, PORT.turn + (Math.abs(dx) + Math.abs(dy)) * 0.02);
   } else {                                                           // sandar: melihat sekeliling kokpit
     PORT.look.yaw = Math.max(-2.4, Math.min(2.4, PORT.look.yaw - dx * 0.003));
     PORT.look.pitch = Math.max(-1.2, Math.min(1.3, PORT.look.pitch - dy * 0.003));
@@ -6176,18 +6312,20 @@ function stepPort(dt) {
   { const s = aiShuttleState(clock.sim); SHIPS.ai.visible = s.vis; placeShip(SHIPS.ai, s.p, BERTH_P[1].q);
     SHIPS.ai.userData.glowMat.color.setRGB(1.5 * s.burn, 1.1 * s.burn, 2.4 * s.burn); }
   if (player.state === 'pod') stepPod(dt);
-  let thr = 0;
+  let thr = 0, rcs = 0;
+  PORT.turn *= Math.exp(-8 * dt);
   if (PORT.mode === 'undock') {
     PORT.t += dt; const e = Math.min(1, PORT.t / 5), k = e * e * (3 - 2 * e);
     const a = PORT.berthAng[0]; PORT.p.copy(BERTH_P[0].p).add(_va.set(Math.cos(a), Math.sin(a), 0).multiplyScalar(15 * k));
+    rcs = e < 0.9 ? 0.6 : 0;
     if (e >= 1) { PORT.mode = 'fly'; PORT.v.set(0, 0, 0); PORT.view = PORT.view || 'cockpit'; setLabText('Kendali manual. W/S dorong, mouse arah, Z/C guling, Shift boost, X rem, E sandar saat dekat.'); }
   } else if (PORT.mode === 'autodock') {
     const F = PORT.from; PORT.t += dt; const u = Math.min(1, PORT.t / F.T), T = F.T;
     const h00 = 2 * u ** 3 - 3 * u * u + 1, h10 = u ** 3 - 2 * u * u + u, h01 = -2 * u ** 3 + 3 * u * u;   // Hermite: kecepatan awal dijaga, berhenti di berth
     PORT.p.copy(F.p).multiplyScalar(h00).addScaledVector(F.v, h10 * T).addScaledVector(BERTH_P[0].p, h01);
     PORT.q.slerpQuaternions(F.q, BERTH_P[0].q, u * u * (3 - 2 * u));
-    thr = 0.3;
-    if (u >= 1) { PORT.mode = 'docked'; PORT.v.set(0, 0, 0); setLabText('Sudah sandar di berth 1. E = lepas sandar lagi, L = keluar ke terowongan.'); }
+    thr = 0.3 * (1 - u); rcs = (PORT.t * 3) % 1 < 0.35 ? 0.4 : 0;                             // semburan RCS pendek saat mengoreksi
+    if (u >= 1) { PORT.mode = 'docked'; PORT.v.set(0, 0, 0); portClank(false); setLabText('Sudah sandar di berth 1. E = lepas sandar lagi, L = keluar ke terowongan.'); }
   } else if (PORT.mode === 'fly') {
     const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
     const sx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0), sy = (keys.has('KeyR') || keys.has('Space') ? 1 : 0) - (keys.has('KeyF') ? 1 : 0);
@@ -6198,6 +6336,7 @@ function stepPort(dt) {
     if (PORT.brake) { const sp = PORT.v.length(), a = Math.min(sp / dt, PORT.A_MAIN * 3); if (sp > 1e-4) _va.addScaledVector(PORT.v, -a / sp); if (sp < 0.05) PORT.brake = false; }
     PORT.v.addScaledVector(_va, dt); PORT.p.addScaledVector(PORT.v, dt);
     thr = Math.max(0, f) * (boost > 1 ? 1 : 0.55) + (PORT.brake ? 0.4 : 0);
+    rcs = Math.min(1, Math.abs(sx) + Math.abs(sy) + 0.7 * Math.abs(roll) + (f < 0 ? 0.8 : 0) + PORT.turn + (PORT.brake ? 0.3 : 0));   // S = mundur pakai RCS
     // jangan menembus stasiun: silinder + kerah end cap, batang dermaga
     const r = Math.hypot(PORT.p.x, PORT.p.y), RC = R_OUT + HULL.collarT + 12, ZC = HALF_L + HULL.collarOut + 12;
     if (Math.abs(PORT.p.z) < ZC && r < RC) {
@@ -6207,6 +6346,7 @@ function stepPort(dt) {
     if (PORT.p.z < -HALF_L && PORT.p.z > PORT.zArm - 70 && r < 26) { const k = 26 / Math.max(r, 1e-3); PORT.p.x *= k; PORT.p.y *= k; }
   }
   SHIPS.player.userData.glowMat.color.setRGB(1.5 * thr, 1.1 * thr, 2.4 * thr);
+  PORT.thr = Math.min(1, thr); PORT.rcs = rcs;
 }
 const _camQ = new THREE.Quaternion(), _eul = new THREE.Euler(0, 0, 0, 'YXZ');
 function updateFlightCamera() {
@@ -6231,25 +6371,42 @@ function updatePortVisual() {
   NAV.strobe.color.setScalar(strobe ? 6 : 0.05);
   NAV.beacon.color.setRGB(beacon ? 3 : 0.3, beacon ? 1.6 : 0.15, beacon ? 0.2 : 0.02);
   NAV.guide.color.setRGB(0.3, 1.2 + 1.2 * Math.sin(T * 4), 3);
-  if (Math.floor(T) !== TERM.board.t) { TERM.board.t = Math.floor(T); drawDepartureBoard(); if (COCKPIT.visible) drawCockpitScreen(); }
+  if (Math.floor(T) !== TERM.board.t) { TERM.board.t = Math.floor(T); drawDepartureBoard(); }
+  const now = performance.now();                                    // 12a: layar kokpit 10 kali per detik (panduan sandar)
+  if (COCKPIT.visible && now - DGUIDE.lastDraw > 100) { DGUIDE.lastDraw = now; drawCockpitScreen(); }
+  updateDockGuide();
 }
-function drawCockpitScreen() {
+function drawCockpitScreen() {                                    // 12a: kiri = data sandar, kanan = penunjuk arah berth 1
   const { cv, tex } = COCKPIT.userData, g = cv.getContext('2d');
-  g.fillStyle = '#041014'; g.fillRect(0, 0, 512, 128); g.font = 'bold 26px ui-monospace, monospace'; g.fillStyle = '#6ff0c8';
-  const sp = PORT.v.length(), d = PORT.p.distanceTo(BERTH_P[0].p), r = PORT.p.length();
-  g.fillText(`V ${sp.toFixed(1)} m/s`, 14, 34); g.fillText(`BERTH ${d < 1000 ? d.toFixed(0) + ' m' : (d / 1000).toFixed(2) + ' km'}`, 260, 34);
-  g.fillText(`STASIUN ${(r / 1000).toFixed(2)} km`, 14, 76); g.fillText(PORT.brake ? 'REM' : PORT.mode.toUpperCase(), 330, 76);
-  g.fillStyle = '#2c7a64'; g.fillRect(14, 100, 484 * Math.min(1, sp / 300), 12);
+  const D = dockData(), r = PORT.p.length(), fmt = (x) => x < 1000 ? `${x.toFixed(0)} m` : `${(x / 1000).toFixed(2)} km`;
+  g.fillStyle = '#041014'; g.fillRect(0, 0, 512, 128); g.font = 'bold 21px ui-monospace, monospace'; g.textBaseline = 'alphabetic'; g.fillStyle = '#6ff0c8';
+  g.fillText(`JARAK ${fmt(D.dist)}`, 12, 28); g.fillText(`V ${D.sp.toFixed(1)} m/s`, 196, 28);
+  g.fillText(`DEKAT ${D.close.toFixed(1)}`, 12, 56); g.fillText(`GESER ${D.lat.toFixed(1)}`, 196, 56);
+  g.fillText(`STASIUN ${(r / 1000).toFixed(2)} km`, 12, 84);
+  const ok = PORT.mode === 'fly' && portCanDock(), far = PORT.mode === 'fly' && D.dist < 400 && D.sp >= 30;
+  g.fillStyle = PORT.brake ? '#f2c14e' : ok ? '#7dff9a' : far ? '#ff9a40' : '#6ff0c8';
+  g.fillText(PORT.brake ? 'REM' : ok ? 'E SANDAR' : far ? 'KURANGI V' : PORT.mode === 'autodock' ? 'SANDAR...' : PORT.mode.toUpperCase(), 250, 84);
+  g.fillStyle = '#123a33'; g.fillRect(12, 100, 360, 12);
+  g.fillStyle = D.sp < 30 ? '#2c7a64' : '#a8642a'; g.fillRect(12, 100, 360 * Math.min(1, D.sp / 300), 12);
+  g.fillStyle = '#e8eef2'; g.fillRect(12 + 360 * 30 / 300 - 1, 96, 2, 20);                 // tanda batas 30 m/s
+  // penunjuk arah: titik = posisi berth dilihat dari hidung kapal (tengah = tepat di depan); merah di tepi = di belakang
+  const cx = 446, cy = 64, rad = 54;
+  g.strokeStyle = '#2c7a64'; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, rad, 0, TAU); g.moveTo(cx - rad, cy); g.lineTo(cx + rad, cy); g.moveTo(cx, cy - rad); g.lineTo(cx, cy + rad); g.stroke();
+  g.beginPath(); g.arc(cx, cy, rad * 0.33, 0, TAU); g.stroke();
+  const ang = Math.atan2(Math.hypot(D.lx, D.ly), -D.lz), k = Math.min(1, ang / (Math.PI / 2)), h = Math.hypot(D.lx, D.ly) || 1;
+  const behind = D.lz > 0, px = cx + (behind ? 1 : k) * rad * D.lx / h, py = cy - (behind ? 1 : k) * rad * D.ly / h;
+  g.fillStyle = behind ? '#ff5040' : ok ? '#7dff9a' : '#f2c14e'; g.beginPath(); g.arc(px, py, 6, 0, TAU); g.fill();
   tex.needsUpdate = true;
 }
 function portPrompt() {
-  if (player.state === 'pod') { const P = PORT.pod, rem = P.dir < 0 ? P.z - PORT.zDockPod : PORT.zHubPod - P.z; return `Kapsul terowongan · ${P.v.toFixed(1)} m/s · sisa ${Math.abs(rem).toFixed(0)} m · Shift = 5x`; }
+  if (player.state === 'pod') { const P = PORT.pod, rem = P.dir < 0 ? P.z - PORT.zDockPod : PORT.zHubPod - P.z; return `Kapsul terowongan · ${P.v.toFixed(1)} m/s · sisa ${Math.abs(rem).toFixed(0)} m · ${PORT.trip ? 'gerbang B1 (5x) · E langsung ke kokpit' : 'Shift = 5x'}`; }
   const sp = PORT.v.length(), d = PORT.p.distanceTo(BERTH_P[0].p), fmt = (x) => x < 1000 ? `${x.toFixed(0)} m` : `${(x / 1000).toFixed(2)} km`;
   const cam = `V ${PORT.view === 'cockpit' ? 'kamera belakang' : 'kokpit'}`;
   if (PORT.mode === 'docked') return `Shuttle KS-07 · sandar di berth 1 · E lepas sandar · L keluar ke terowongan · mouse melihat · ${cam}`;
   if (PORT.mode === 'undock') return 'Lepas sandar...';
   if (PORT.mode === 'autodock') return `Sandar otomatis · ${fmt(d)}`;
-  return `${sp.toFixed(1)} m/s · berth ${fmt(d)} · W/S dorong · A/D geser · R/F naik-turun · Z/C guling · mouse arah · Shift boost 10x · X rem${PORT.brake ? ' (aktif)' : ''} · ${portCanDock() ? 'E SANDAR OTOMATIS · ' : ''}${cam}`;
+  const D = dockData();
+  return `${sp.toFixed(1)} m/s · berth ${fmt(d)} · mendekat ${D.close.toFixed(1)} m/s · W/S dorong · A/D geser · R/F naik-turun · Z/C guling · mouse arah · Shift boost 10x · X rem${PORT.brake ? ' (aktif)' : ''} · ${portCanDock() ? 'E SANDAR OTOMATIS · ' : ''}${cam}`;
 }
 SPOTS.spaceport = { s: TERM.s, za: TERM.za + 22, heading: 180, pitch: 4, name: 'Terminal spaceport' };
 
@@ -6305,7 +6462,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

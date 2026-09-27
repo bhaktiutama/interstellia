@@ -13,6 +13,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `docs/app/` | Dokumen tingkat aplikasi (penamaan, arsitektur) |
 | `docs/<id>/` | Konsep dan rencana per experience |
 | `tools/qc_load.py` | Cek halaman termuat tanpa error |
+| `tools/uji_spaceport.py` | Uji Cooper Station 12a: pintu terminal, gerbang B1 ke kokpit, sandar otomatis |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
 ## Aturan aplikasi
@@ -62,7 +63,8 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Awan/cuaca (11a) | `WEATHER` (mode auto/cerah/berawan/mendung, cover, ov), `CLOUD`, `updateClouds(dt)`, `cycleWeather()` (N) |
 | Sunrays (11b) | `RAYS`, `rayMat` (ray-march setengah resolusi + berkas layar), dipakai di `postEnd()` |
 | Perabot kota (11c) | `FURN` (bench, bin, hydrant, planter, signal, cabinet, mailbox, zebra), LOD per radius, `updateFurniture()` |
-| Spaceport (11d) | `PORT`, `DOCK` (grup despun), `SHIPS` (player, ai, cargo, tug), `COCKPIT`, `TERM` (terminal), `portBoard()`, `stepPort()`, `updateFlightCamera()`, `portKey()`, `portMouse()` |
+| Spaceport (11d) | `PORT`, `DOCK` (grup despun), `SHIPS` (player, ai, cargo, tug), `COCKPIT`, `TERM` (terminal; posisi didefinisikan di bagian plaza), `portBoard()`, `stepPort()`, `updateFlightCamera()`, `portKey()`, `portMouse()` |
+| Spaceport rapi (12a) | `TERM.gate`, `portStartTrip()`, `PORT.trip` (perjalanan otomatis 5x dari gerbang B1), `DGUIDE` + `updateDockGuide()` (kotak target, garis arah), `dockData()`, `drawCockpitScreen()`, `portClank()`, `AUDIO.shipBus` (eng, engTone, rcs, cab, cabHum), `PORT.thr` / `PORT.rcs` / `PORT.turn` |
 | Post | `POST`, `postBegin()`, `postEnd()`: HDR, SSAO, bloom 6 tingkat, ACES, FXAA |
 | Audio | `AUDIO`, `startAudio()`, `updateAudio(dt)` (semua disintesis) |
 | Preset | `PRESETS` (Ultra/Tinggi/Sedang/Rendah), `applyPreset(i)`, turun otomatis bila FPS < 30 selama 4 s |
@@ -74,7 +76,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 
 ## Status pemain (`player.state`)
 
-`ground`, `air`, `lift`, `float` (hub nol-g), `tram`, `pod` (kapsul terowongan ke dermaga), `ship` (di shuttle; `ext.active` dan `ext.flight` true).
+`ground`, `air`, `lift`, `float` (hub nol-g), `tram`, `pod` (kapsul terowongan ke dermaga), `ship` (di shuttle; `ext.active` dan `ext.flight` true). `PORT.trip` true = sedang perjalanan otomatis dari gerbang B1 (lift dan kapsul 5x, E = langsung ke kokpit).
 
 ## Tombol
 
@@ -92,5 +94,6 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 9 | Post-processing, audio |
 | 10-10f | Trem berinterior, mobil, lampu jalan, preset, kamera luar, lift dan hub, baseball |
 | 11a-11d | Cuaca dinamis, sunrays, perabot kota, spaceport dan shuttle |
+| 12a | Gerbang B1 terminal ke kokpit, pintu terminal bisa dilewati (hanggar lama di dalam terminal dihapus), suara shuttle, panduan sandar |
 
 Rencana berikutnya: `docs/cooper-station/rencana-tahap-12-cooper-station.md`.

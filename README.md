@@ -25,6 +25,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari satu menu
 | `docs/app/` | Dokumen aplikasi, termasuk usulan nama |
 | `docs/cooper-station/` | Konsep, tahapan, rencana tahap 11 dan 12 |
 | `tools/qc_load.py` | Cek halaman termuat tanpa error |
+| `tools/uji_spaceport.py` | Uji spaceport Cooper Station (pintu, gerbang, sandar) |
 | `CLAUDE.md` | Konteks proyek untuk Claude Code |
 
 Riwayat Cooper Station per tahap ada di git log.

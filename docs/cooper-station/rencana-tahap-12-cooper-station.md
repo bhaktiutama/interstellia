@@ -1,6 +1,6 @@
 # Rencana Tahap 12: Cooper Station
 
-Status: usulan, belum dikerjakan. Titik awal = tahap 11d (artifact versi 24). Semua yang sudah ada tetap dipertahankan.
+Status: 12a selesai (lihat bagian 12a). 12b sampai 12d belum dikerjakan. Titik awal = tahap 11d (artifact versi 24). Semua yang sudah ada tetap dipertahankan.
 
 ## Ringkasan
 
@@ -26,6 +26,17 @@ Status: usulan, belum dikerjakan. Titik awal = tahap 11d (artifact versi 24). Se
 | A1b | Cek kolisi pintu terminal | Pastikan pintu selatan (12 m) dan barat (10 m) bisa dilewati | Rendah |
 | A2 | Suara shuttle | Dengung mesin utama sesuai dorongan, desis RCS, bunyi penjepit saat sandar/lepas, dengung kokpit | Rendah |
 | A3 | Panduan sandar | Kotak target di berth, garis arah, kecepatan relatif dan jarak di layar kokpit | Rendah |
+
+### Hasil 12a (selesai)
+
+| No | Status | Yang dikerjakan |
+| --- | --- | --- |
+| A1 | Selesai | Gerbang B1 (bingkai jingga, pintu geser tertutup, lantai tunggu) di tengah dinding utara, di ujung lorong antar-bangku. E di depan gerbang = lift naik ke hub, kapsul terowongan, lalu kokpit KS-07, semua otomatis 5x (sekitar 19 s waktu simulasi). E lagi selama perjalanan = langsung ke kokpit. Papan: "GERBANG B1 · KE LIFT DERMAGA" di atas gerbang, papan gantung di tengah aula dan dekat pintu barat, "KELUAR · KOTA" / "KELUAR · HALTE TREM" di dalam, "MASUK · TERMINAL" di luar. Bingkai pintu hijau di pintu selatan dan barat. Papan keberangkatan KS-07: "SIAP · GERBANG B1" |
+| A1b | Selesai, ada bug | Pintu selatan ternyata tidak bisa dilewati sama sekali: hanggar lama dari generator plaza (s 120,8 m, za 205 m, sekitar 107 x 53 m) berada di dalam terminal, lengkap dengan kolisi. Hanggar itu kini dilewati (urutan acak kota tetap sama). Tiang di tengah pintu selatan, pintu barat, dan gerbang dihapus. Celah kaca kini sama persis dengan celah kolisi (dulu kaca terbuka di z -7..3 di pintu barat, kolisi di -5..5) |
+| A2 | Selesai | Bus suara shuttle sendiri (tetap terdengar di pesawat): gemuruh mesin utama mengikuti dorongan (nada naik saat boost), desis RCS saat geser, guling, mundur, rem, dan memutar dengan mouse, dengung avionik dan kipas di kokpit (mati di kamera belakang), bunyi penjepit saat lepas sandar (satu hentakan + desis udara) dan saat sandar (dua penjepit) |
+| A3 | Selesai | Kotak garis seukuran shuttle di berth 1 dan garis putus-putus dari kapal ke berth, tampil saat terbang. Hijau berkedip = E sandar otomatis bisa dipakai (jarak < 400 m, kecepatan < 30 m/s), jingga = belum. Layar kokpit diperbarui 10 kali per detik: jarak, kecepatan, kecepatan mendekat, kecepatan geser, jarak ke stasiun, status (E SANDAR / KURANGI V / REM), batang kecepatan dengan tanda 30 m/s, dan penunjuk arah berth (tengah = tepat di depan hidung, merah = di belakang). Prompt layar juga menampilkan kecepatan mendekat |
+
+Uji otomatis: `tools/uji_spaceport.py` (pintu, gerbang, urutan lift > kapsul > kokpit, lepas sandar, sandar otomatis). FPS dan kesan visual belum diuji di GTX 1060 dan M1.
 
 ## 12b. Kota hidup
 
