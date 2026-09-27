@@ -156,6 +156,7 @@
         <button id="labPreset" type="button">Preset: Ultra (otomatis) (Q)</button>
         <button id="labVeg" type="button">Vegetasi: Tinggi (K)</button>
         <button id="labPost" type="button">Efek layar: Tinggi (P)</button>
+        <button id="labRays" type="button">Sunrays: nyala</button>
         <label class="chk"><input id="inShadow" type="checkbox" checked> Bayangan</label>
       </div>
     </details>
@@ -173,7 +174,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 11a · cuaca dinamis: awan hanyut, terbentuk dan menghilang, bayangan awan ikut bergerak · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 11b · cuaca dinamis + sunrays: berkas cahaya sunline lewat celah awan dan sinar Matahari lewat kaca end cap · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -3446,6 +3447,7 @@ on('labOrbit', () => cycleOrbitSpeed());
 on('labExt', () => toggleExterior());
 on('labTime', () => cycleTimeRate());
 on('labWeather', () => cycleWeather());
+on('labRays', () => toggleRays());
 function updateTimeLabels() {
   const tr = TIME_RATES.find((x) => x[0] === clock.hourRate); const b = document.getElementById('labTime'); if (b && tr) b.innerHTML = `<kbd>Z</kbd>Waktu: ${tr[1]}`;
   const o = document.getElementById('labOrbit'); if (o) o.innerHTML = `<kbd>T</kbd>Orbit Saturnus: ${clock.orbitScale.toLocaleString('id-ID')}x`;
@@ -3746,7 +3748,7 @@ const CLOUD = { groups: [], mesh: null, aA: null, n: 0 };
   geo.setAttribute('aA', CLOUD.aA);
   const clouds = new THREE.InstancedMesh(geo, cloudMat, count);
   clouds.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  clouds.frustumCulled = false; clouds.renderOrder = 6; clouds.userData.noLight = true;
+  clouds.frustumCulled = false; clouds.renderOrder = 12;   // setelah kaca end cap (10) dan pendar cap (11): awan selalu di depan cap clouds.userData.noLight = true;
   CLOUD.mesh = clouds;
   scene.add(clouds);
 
@@ -3890,6 +3892,7 @@ function updateLighting() {
   amb = mixV(amb, [0.16 * (0.15 + day), 0.17 * (0.15 + day), 0.19 * (0.15 + day)], 0.6 * ov);
   U.uL_AmbCol.value.set(amb[0], amb[1], amb[2]);
   U.uL_CapI.value = 0.05 + 0.25 * day + 1.1 * golden * (1 - 0.35 * ov);
+  RAYS.str = U.uL_Sunline.value * (0.7 + 0.9 * golden) * (1 - 0.6 * ov);   // tahap 11b: berkas paling jelas pagi dan senja
   // sinar Matahari dalam kerangka stasiun (atau inersia saat kamera luar)
   if (ext.active) U.uL_SunDir.value.copy(SUN_DIR);
   else { const c = Math.cos(OMEGA * clock.sim), s = Math.sin(OMEGA * clock.sim);
@@ -5073,6 +5076,7 @@ const POST_R = {};
   POST_R.ao = [0, 1].map(() => new THREE.WebGLRenderTarget(4, 4, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }));
   POST_R.down = [0, 1, 2, 3, 4, 5].map(() => new THREE.WebGLRenderTarget(4, 4, hf));
   POST_R.up = [0, 1, 2, 3, 4].map(() => new THREE.WebGLRenderTarget(4, 4, hf));
+  POST_R.ray = new THREE.WebGLRenderTarget(4, 4, hf);                // tahap 11b: sunrays setengah resolusi
   POST_R.w = 0; POST_R.h = 0;
 }
 const fsScene = new THREE.Scene(), fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -5149,9 +5153,92 @@ const upMat = fsMat(/* glsl */`
     s += texture2D(tLow, vUv + uTexel).rgb + texture2D(tLow, vUv - uTexel).rgb + texture2D(tLow, vUv + vec2(uTexel.x, -uTexel.y)).rgb + texture2D(tLow, vUv + vec2(-uTexel.x, uTexel.y)).rgb;
     gl_FragColor = vec4(texture2D(tHigh, vUv).rgb + s / 16.0, 1.0);
   }`, { tLow: { value: null }, tHigh: { value: null }, uTexel: { value: new THREE.Vector2() } });
+// --- tahap 11b: sunrays (berkas cahaya), ray-march setengah resolusi ---
+// Sunline: cahaya jatuh radial dari sumbu. Titik udara di bawah lapisan awan terhalang bila tekstur bayangan awan
+// di (theta, za) gelap, jadi kabut di kolom itu lebih gelap dan celah awan menjadi tirai cahaya.
+// Matahari lewat kaca end cap: kolom miring yang ikut berputar tiap 63,4 s, dihamburkan ke depan (Henyey-Greenstein).
+const RAYS = { on: true, n: 16, str: 0, haze: 0.25 / 1000, beam: 1.1e-3 / 1000, dark: 0.85, streak: 0.35 };
+const rayMat = fsMat(/* glsl */`
+  uniform sampler2D tDepth, uCloudTex, tBright; uniform mat4 uProjInv, uCamWorld, uViewProj; uniform vec3 uCamPos, uFogCol, uLineCol, uSunCol, uSunDir;
+  uniform float uFogD, uStr, uHaze, uBeam, uDark, uR, uHalfL, uL, uN, uStreak, uAspect;
+  varying vec2 vUv;
+  // berkas layar: dari tiap piksel melangkah ke arah sumber cahaya di layar, mengumpulkan bagian terang (sunline, pinggir awan)
+  // yang tidak tertutup awan. Hasilnya garis-garis cahaya yang memancar dari sunline dan terputus oleh awan.
+  float streak(vec2 target, float j) {
+    vec2 dv = target - vUv; float len = length(dv * vec2(uAspect, 1.0));
+    if (len < 1e-4) return 0.0;
+    vec2 st = dv * min(1.0, 0.45 / len) / 12.0;
+    float s = 0.0, dec = 1.0;
+    for (int i = 0; i < 12; i++) {
+      vec2 p = vUv + st * (float(i) + j);
+      if (p.x < 0.0 || p.x > 1.0 || p.y < 0.0 || p.y > 1.0) break;
+      s += min(dot(textureLod(tBright, p, 0.0).rgb, vec3(0.3, 0.55, 0.15)), 4.0) * dec; dec *= 0.9;
+    }
+    return s / 12.0;
+  }
+  float ign(vec2 p) { return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y)); }
+  void main() {
+    float d = textureLod(tDepth, vUv, 0.0).r;
+    vec4 v = uProjInv * vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); vec3 vp = v.xyz / v.w;
+    float dist = d >= 0.99999 ? 6000.0 : length(vp);
+    vec3 dir = normalize(mat3(uCamWorld) * vp);
+    float L = min(dist, 8500.0), j = ign(gl_FragCoord.xy);
+    float dark = 0.0, haze = 0.0, beam = 0.0;
+    float capZ = uSunDir.z > 0.0 ? uHalfL : -uHalfL;
+    for (int i = 0; i < 16; i++) {
+      if (float(i) >= uN) break;
+      float x = (float(i) + j) / uN, t = L * x * x, dt = 2.0 * L * x / uN;   // sampel rapat di dekat mata (berkas dekat lebih jelas)
+      vec3 P = uCamPos + dir * t;
+      float r = length(P.xy), za = P.z + uHalfL;
+      if (r > uR || za < 0.0 || za > uL) continue;
+      float cs = textureLod(uCloudTex, vec2(fract(atan(P.y, P.x) / 6.2831853 + 1.0), za / uL), 0.0).r;
+      float lit = 1.0 - clamp(cs * 2.8, 0.0, 1.0) * smoothstep(560.0, 760.0, r);      // di atas lapisan awan: terang penuh
+      float ft = uFogD * t;
+      dark += 2.0 * uFogD * ft * exp(-ft * ft) * dt * (1.0 - lit);                   // porsi kabut yang tidak kena sunline
+      float cs2 = dot(P.xy / max(r, 1.0), -dir.xy);                    // hamburan ke depan: paling kuat saat menatap ke arah sumbu
+      float hg = 0.5 + 0.5 * 0.75 / pow(1.25 - cs2, 1.5);
+      haze += (lit - 0.8) * hg * dt * (1.0 - smoothstep(4000.0, 8000.0, t));   // terang di celah, gelap di bawah awan
+      if (abs(uSunDir.z) > 1e-3) {
+        float tt = (capZ - P.z) / uSunDir.z;
+        beam += (1.0 - smoothstep(uR * 0.9, uR, length(P.xy + uSunDir.xy * tt))) * dt;
+      }
+    }
+    float cth = dot(dir, uSunDir), g = 0.6;
+    float ph = 0.08 + (1.0 - g * g) / (12.566 * pow(1.0 + g * g - 2.0 * g * cth, 1.5));
+    vec3 c = (uLineCol * haze * uHaze - uFogCol * dark * uDark) * uStr + uSunCol * beam * uBeam * ph;
+    // titik sumbu terdekat dengan garis pandang -> posisi sunline di layar untuk piksel ini
+    float dz = dir.z, den = max(1.0 - dz * dz, 1e-3), dw = dot(dir, uCamPos);
+    float tv = (dz * uCamPos.z - dw) / den, sAx = (uCamPos.z - dz * dw) / den;
+    if (tv > 0.0 && abs(sAx) < uHalfL) {
+      vec4 cl = uViewProj * vec4(0.0, 0.0, sAx, 1.0);
+      if (cl.w > 0.0) c += uLineCol * uStr * uStreak * streak(cl.xy / cl.w * 0.5 + 0.5, j);
+    }
+    gl_FragColor = vec4(c, dist);
+  }`, { tDepth: { value: null }, uCloudTex: groundMat.uniforms.uCloudTex, uProjInv: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
+  uCamPos: { value: new THREE.Vector3() }, uFogCol: { value: new THREE.Vector3() }, uLineCol: LIGHT.uniforms.uL_SunlineCol, uSunCol: LIGHT.uniforms.uL_SunCol,
+  uSunDir: LIGHT.uniforms.uL_SunDir, uFogD: { value: 0 }, uStr: { value: 0 }, uHaze: { value: RAYS.haze }, uBeam: { value: RAYS.beam }, uDark: { value: RAYS.dark },
+  uR: { value: CONFIG.R }, uHalfL: { value: HALF_L }, uL: { value: CONFIG.L }, uN: { value: 16 },
+  tBright: { value: null }, uViewProj: { value: new THREE.Matrix4() }, uStreak: { value: RAYS.streak }, uAspect: { value: 1 } });
+function toggleRays() {
+  RAYS.on = !RAYS.on;
+  const b = document.getElementById('labRays'); if (b) b.textContent = `Sunrays: ${RAYS.on ? 'nyala' : 'mati'}${RAYS.n ? '' : ' (preset ini: mati)'}`;
+}
 // --- komposit: AO, bloom, exposure, ACES, sRGB, vignette, grain ---
 const compMat = fsMat(/* glsl */`
-  uniform sampler2D tHdr, tBloom, tAO; uniform float uExp, uBloom, uAO, uUseAO, uGrain, uVig, uTime; varying vec2 vUv;
+  uniform sampler2D tHdr, tBloom, tAO, tRay, tDepth; uniform float uExp, uBloom, uAO, uUseAO, uGrain, uVig, uTime, uUseRay; uniform vec2 uRayTexel; uniform mat4 uProjInv; varying vec2 vUv;
+  vec3 rays() {                                                    // upsample sadar kedalaman: tidak bocor ke tepi objek dekat
+    float d = textureLod(tDepth, vUv, 0.0).r;
+    vec4 v = uProjInv * vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+    float dist = d >= 0.99999 ? 6000.0 : length(v.xyz / v.w);
+    vec3 s = vec3(0.0); float ws = 0.0;
+    for (int k = 0; k < 9; k++) {                                    // 3x3 tap: meratakan pola jitter ray-march
+      vec2 o = vec2(float(k - (k / 3) * 3) - 1.0, float(k / 3) - 1.0) * 1.25 * uRayTexel;
+      vec4 t = textureLod(tRay, vUv + o, 0.0);
+      float w = 1.0 / (0.02 + abs(t.a - dist) / max(dist, 1.0));
+      s += t.rgb * w; ws += w;
+    }
+    return s / ws;
+  }
   vec3 aces(vec3 x) {                                              // ACES fitted (Stephen Hill)
     const mat3 m1 = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
     const mat3 m2 = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
@@ -5163,6 +5250,7 @@ const compMat = fsMat(/* glsl */`
   void main() {
     vec3 c = texture2D(tHdr, vUv).rgb;
     if (uUseAO > 0.5) c *= mix(1.0, texture2D(tAO, vUv).r, uAO);
+    if (uUseRay > 0.5) c = max(c + rays(), vec3(0.0));
     c += texture2D(tBloom, vUv).rgb * uBloom;
     c = aces(c * uExp);
     vec2 q = vUv - 0.5; c *= 1.0 - uVig * dot(q, q) * 2.2;
@@ -5170,7 +5258,8 @@ const compMat = fsMat(/* glsl */`
     c += (h(vUv * 1000.0 + uTime) - 0.5) * uGrain;
     gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));
   }`, { tHdr: { value: null }, tBloom: { value: null }, tAO: { value: null }, uExp: { value: 1 }, uBloom: { value: 0.5 }, uAO: { value: 0.5 }, uUseAO: { value: 1 },
-  uGrain: { value: 0.01 }, uVig: { value: 0.2 }, uTime: { value: 0 } });
+  uGrain: { value: 0.01 }, uVig: { value: 0.2 }, uTime: { value: 0 },
+  tRay: { value: null }, tDepth: { value: null }, uUseRay: { value: 0 }, uRayTexel: { value: new THREE.Vector2() }, uProjInv: { value: new THREE.Matrix4() } });
 // --- FXAA (versi ringkas, luma di kanal alfa) ---
 const fxaaMat = fsMat(/* glsl */`
   uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
@@ -5198,6 +5287,7 @@ function postBegin() {                                            // dipanggil s
     for (const t of POST_R.ao) t.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
     POST_R.down.forEach((t, i) => t.setSize(Math.max(2, w >> (i + 1)), Math.max(2, h >> (i + 1))));
     POST_R.up.forEach((t, i) => t.setSize(Math.max(2, w >> (i + 1)), Math.max(2, h >> (i + 1))));
+    POST_R.ray.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
   }
   renderer.setRenderTarget(POST_R.hdr);
   return true;
@@ -5219,6 +5309,18 @@ function postEnd() {
     U.uThr.value = POST.bloomThr; fsPass(downMat, t);
     src = t.texture; sw = t.width; sh = t.height;
   });
+  // sunrays (tahap 11b): hanya preset Ultra / Tinggi, di dalam stasiun
+  const useRay = RAYS.on && RAYS.n > 0 && POST.mode <= 1 && !ext.active && RAYS.str > 0.02;
+  if (useRay) {
+    const U = rayMat.uniforms;
+    U.tDepth.value = R0.hdr.depthTexture; U.uProjInv.value.copy(camera.projectionMatrixInverse); U.uCamWorld.value.copy(camera.matrixWorld);
+    camera.getWorldPosition(U.uCamPos.value); U.uFogCol.value.set(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b);
+    U.uFogD.value = scene.fog.density; U.uStr.value = RAYS.str; U.uN.value = RAYS.n;
+    U.uBeam.value = RAYS.beam * LIGHT.uniforms.uL_SunI.value / 0.12;
+    U.tBright.value = R0.down[0].texture; U.uStreak.value = RAYS.streak; U.uAspect.value = R0.w / R0.h;
+    U.uViewProj.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    fsPass(rayMat, R0.ray);
+  }
   // bloom naik: up[i] = down[i] + tenda(up[i+1] atau down[5])
   for (let i = R0.up.length - 1; i >= 0; i--) {
     const low = i === R0.up.length - 1 ? R0.down[i + 1] : R0.up[i + 1];
@@ -5226,6 +5328,8 @@ function postEnd() {
     fsPass(upMat, R0.up[i]);
   }
   const C = compMat.uniforms;
+  C.uUseRay.value = useRay ? 1 : 0; C.tRay.value = R0.ray.texture; C.tDepth.value = R0.hdr.depthTexture;
+  C.uRayTexel.value.set(1 / R0.ray.width, 1 / R0.ray.height); C.uProjInv.value.copy(camera.projectionMatrixInverse);
   C.tHdr.value = R0.hdr.texture; C.tBloom.value = R0.up[0].texture; C.tAO.value = R0.ao[1].texture; C.uUseAO.value = useAO ? 1 : 0;
   C.uExp.value = POST.exposure; C.uBloom.value = POST.bloom / 6; C.uAO.value = POST.ao; C.uGrain.value = POST.grain; C.uVig.value = POST.vignette; C.uTime.value = (clock.sim % 100);
   fsPass(compMat, R0.ldr);
@@ -5439,6 +5543,7 @@ function applyPreset(i) {
   POST.mode = P.post; const bp = document.getElementById('labPost'); if (bp) bp.textContent = `Efek layar: ${POST.names[POST.mode]} (P)`;
   SHADOW.enabled = P.shadow; const cb = document.getElementById('inShadow'); if (cb) cb.checked = P.shadow;
   TRAFFIC.U.uTraffic.value = P.traffic;
+  RAYS.n = [16, 10, 0, 0][i]; toggleRays(); toggleRays();
   const b = document.getElementById('labPreset'); if (b) b.textContent = `Preset: ${P.name}${PRESET.auto ? ' (otomatis)' : ''} (Q)`;
 }
 function cyclePreset() { PRESET.auto = false; applyPreset((PRESET.idx + 1) % PRESETS.length); }
@@ -5499,7 +5604,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
