@@ -1,0 +1,56 @@
+# Rencana Tahap 13-14 Copper Corn Station
+
+Status: rencana, menunggu persetujuan pemilik. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
+
+## Ringkasan
+
+- Tahap 13 (perbaikan dan navigasi): rel trem bersih dari tiang dan pohon, jembatan kaca di Skyway supaya luar angkasa langsung terlihat, jembatan jalan dan akuaduk sungai melintasi Skyway (mobil dan sungai tidak hilang lagi), peta M besar dan jelas.
+- Tahap 14 (dunia dan visual): hutan lebat bertombol 0, rumput tinggi di bukit ala Breath of the Wild, interior ruangan di balik jendela gedung.
+- Keputusan pemilik: Skyway dilintasi jembatan terbuka (bukan terowongan); hutan di pertanian tengah.
+
+## Penyebab yang ditemukan
+
+| Masukan | Penyebab |
+| --- | --- |
+| Tiang dan pohon di tengah rel trem | Lampu cincin struktur dipasang tiap 40 m mulai tepat dari garis rel (s = 0), jadi satu tiang per cincin berdiri di rel. Aturan jarak aman dari rel berbeda-beda antar bagian (kota, taman, pertanian, perabot), jadi sebagian pohon dan tiang lolos |
+| Skyway tidak memperlihatkan luar (tombol 5 dan tur) | Titik lokasi 3 m dari tepi jendela dengan pandangan 40 derajat ke bawah: garis pandang jatuh ke lantai sekitar 2 m di depan, sebelum tepi kaca |
+| Mobil dan sungai hilang di Skyway | Jendela Skyway adalah celah 30 m di tanah sepanjang 8 km. Jalan melingkar dan sungai berhenti di tepi celah; mobil lenyap lalu muncul lagi di seberang |
+| Peta kecil | Peta sekarang kartu maksimal 420 px, tanpa penanda lokasi penting |
+
+## Tahap 13: perbaikan dan navigasi
+
+| No | Item | Rencana | Uji |
+| --- | --- | --- | --- |
+| 13a | Rel trem bersih | Satu aturan koridor rel (lebar peron + 1 m, sepanjang stasiun) dipakai semua penempat objek: lampu cincin, pohon, perabot kota, kafe dan sepeda, lampu jalan, tiang. Lampu cincin di garis rel dipindah ke kedua sisi rel | Skrip audit: nol benda dalam 2,5 m dari as rel selain rel, peron, halte, dan palang perlintasan |
+| 13b | Skyway: jembatan kaca pandang | Jembatan pejalan kaki berlantai kaca melintang jendela (di Skyway kota dan satu di area taman), pagar kaca. Tombol 5 dan titik tur dipindah ke tengah jembatan, memandang ke bawah, sehingga bintang dan Saturnus melintas langsung di bawah kaki | Tombol 5 dan tur memperlihatkan luar angkasa; bisa berjalan melintas tanpa jatuh |
+| 13c | Jembatan jalan dan akuaduk | Tiap jalan melingkar yang memotong Skyway mendapat jembatan 30 m: dek tipis, pagar kaca, rangka ramping supaya pandangan jendela tetap terbuka. Mobil melintas tanpa hilang (jalur jadi lingkaran utuh). Sungai menyeberang lewat akuaduk kaca: air terlihat mengalir di atas bintang | Uji lalu lintas lama tetap lulus; mobil melintasi Skyway; tidak ada tabrakan |
+| 13d | Peta besar (M) | Hampir layar penuh, mendatar (sumbu 8 km ke samping, keliling ke bawah). Lapisan: zona, kota, ladang, sungai, jalan, rel dan halte, Skyway dan jembatan, cincin struktur. Penanda bernomor sesuai tombol 1-9 dan 0 (hutan), plus lift, terminal, air mancur, baseball, rumah Cooper. Posisi dan arah pemain, posisi trem langsung. Zoom (roda / cubit), geser (seret), klik penanda = pindah ke sana. Legenda dua bahasa | Peta terbuka, klik penanda memindah pemain, uji bahasa lulus |
+
+## Tahap 14: dunia dan visual
+
+| No | Item | Rencana | Uji |
+| --- | --- | --- | --- |
+| 14a | Hutan lebat | Blok hutan sekitar 600 x 450 m di pertanian tengah (za sekitar 4.300-4.900), beberapa ladang diganti. Pohon tinggi 22-35 m (pinus, ek, birch, elm) berjarak 6-9 m, semak dan pakis di bawah, tanah gelap berserasah, kabut tipis, berkas cahaya matahari di sela pohon. Tombol 0 (lokasi baru) dan masuk tur sinematik. Kepadatan per preset (Hemat lebih jarang) | FPS di GTX 1060 dan M1, jumlah pohon per preset |
+| 14b | Rumput tinggi di bukit | Padang rumput bukit mendapat rumput setinggi 0,6-1,1 m, rapat, gelap di pangkal dan terang di ujung, berkilau saat searah matahari. Gelombang angin besar terlihat berjalan di atas padang (mengikuti angin global), rumput menunduk di sekitar pemain. Di kejauhan tanah meniru warna dan gelombang yang sama, jadi tidak ada batas tajam. Radius per preset | Tidak ada titik NaN (aturan GPU), FPS per preset |
+| 14c | Interior jendela | Dari luar, tiap jendela memperlihatkan ruangan dengan kedalaman (lantai, plafon, dinding, perabot sederhana, tirai di sebagian jendela) yang ikut bergeser saat kamera bergerak (interior mapping). Malam hari sebagian ruangan menyala. Hanya untuk gedung dekat; gedung jauh tetap seperti sekarang. Mati di preset Hemat | Tidak ada NaN, tampilan siang dan malam, FPS |
+
+## Urutan kerja
+
+| Urutan | Sub-tahap | Alasan |
+| --- | --- | --- |
+| 1 | 13a | Kecil, memperbaiki bug yang terlihat |
+| 2 | 13b + 13c | Satu area (Skyway), jembatan memakai bahan dan aturan yang sama |
+| 3 | 13d | Peta menampilkan jembatan baru dan disiapkan untuk penanda hutan |
+| 4 | 14a | Lokasi baru (tombol 0) |
+| 5 | 14b | Rumput bukit |
+| 6 | 14c | Paling berat di shader, dikerjakan terakhir |
+
+Tiap sub-tahap: commit dan push sendiri, uji muat dan uji lama tetap lulus, pemilik mengecek visual dan FPS (GTX 1060 dan MacBook M1 preset Hemat).
+
+## Catatan dan risiko
+
+- Hutan lebat dan rumput tinggi paling berpotensi menurunkan FPS; keduanya diatur per preset dan ikut turun otomatis bila FPS di bawah 30.
+- Shader baru (rumput, interior, kaca) mengikuti aturan GPU M1: tanpa normalisasi vektor nol, tanpa pangkat bilangan negatif, semua geometri punya normal. Sandbox uji tidak memperlihatkan NaN, jadi pengecekan akhir di M1.
+- Jembatan dan akuaduk dibuat melengkung mengikuti lantai silinder (pelajaran dari pagar baseball).
+- Semua teks baru dua bahasa (Indonesia dan English).
+- B7 (interior jendela) dari daftar cadangan tahap 12 dipindah ke 14c.

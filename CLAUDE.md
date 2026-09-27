@@ -123,7 +123,7 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 12d | Siklus tanam gandum 96 jam, mesin panen dan traktor dengan debu, mode foto (F, DOF, simpan PNG), tur sinematik dengan penjelasan fisika (Y) |
 | 12d+ | Pertandingan baseball siang, pagar dan papan skor lapangan mengikuti lengkung silinder, perbaikan NaN layang-layang (kilau seperti komet), klik mouse = kunci / lepas kursor |
 
-Tahap 12 selesai. Sisa ide ada di bagian Cadangan `docs/cooper-station/rencana-tahap-12-cooper-station.md` (interior jendela, kabin shuttle, fisika orbit, simpan posisi).
+Tahap 12 selesai. Rencana berikutnya: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md` (13: rel trem bersih, jembatan Skyway, peta besar; 14: hutan, rumput tinggi bukit, interior jendela). Cadangan lain di rencana tahap 12.
 
 Catatan muat (M1): modul memakai `await bootStep(...)` di tingkat atas di antara bagian besar. Bagian baru ditambah di tingkat atas modul (bukan di dalam fungsi) dan diberi titik jeda bila berat; `window.__stationReady` baru true setelah shader dikompilasi.
 

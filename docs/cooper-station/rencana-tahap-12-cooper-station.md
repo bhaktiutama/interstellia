@@ -109,7 +109,7 @@ Uji: `tools/uji_ladang_foto_tur.py`. Belum dibuat: jejak panen di belakang mesin
 
 | No | Item | Catatan | Biaya |
 | --- | --- | --- | --- |
-| B7 | Interior jendela gedung | Ruangan terlihat di balik kaca saat didekati (interior mapping) | Sedang |
+| B7 | Interior jendela gedung | Dipindah ke tahap 14c (`rencana-tahap-13-14-cooper-station.md`) | Sedang |
 | C1 | Kabin shuttle bisa dijelajahi | Melayang nol-g di kabin, palka ke kokpit | Sedang |
 | C4 | Fisika orbit penerbangan | Gerak relatif dekat stasiun mengikuti persamaan Clohessy-Wiltshire, percepatan waktu untuk terbang ke cincin Saturnus | Tinggi |
 | C5 | Simpan posisi dan pengaturan | Lanjut dari posisi terakhir saat dibuka lagi | Rendah |
