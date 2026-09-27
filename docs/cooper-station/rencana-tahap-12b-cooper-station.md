@@ -2,6 +2,13 @@
 
 Status: rencana detail, belum dikerjakan. Titik awal = tahap 12a (commit `6db47ef`). Semua yang sudah ada tetap dipertahankan.
 
+## Catatan pemilik (sebelum dikerjakan)
+
+| No | Catatan | Masuk ke rencana |
+| --- | --- | --- |
+| N1 | Halte trem jangan di tengah perempatan, karena mobil dari kanan-kiri bisa menabrak halte | Item T0 di 12b-1 (dikerjakan paling awal) |
+| N2 | Tetap ada opsi performa rendah untuk MacBook M1 | Item M1 sampai M4 (bagian "Mode hemat"), berlaku untuk semua sub-tahap |
+
 ## Ringkasan
 
 - Tujuan: kota yang sekarang detail tapi sepi terasa hidup. Ada orang, lampu lalu lintas sungguhan, mobil yang berhenti untuk trem, burung, daun kuning yang tertiup angin, dan pohon yang lebih beragam.
@@ -14,7 +21,8 @@ Status: rencana detail, belum dikerjakan. Titik awal = tahap 12a (commit `6db47e
 | --- | --- | --- |
 | Mobil | 3.301 mobil GPU (`TRAFFIC`). Posisi dihitung di shader dari waktu: `p = mod(awal + v x t, panjang)`, kecepatan tetap 11-16 m/s, tidak pernah berhenti | Tidak ada antrean, mobil menembus simpang dan rel |
 | Lampu lalu lintas | 216 simpang arteri (24 arteri keliling x 9 arteri melingkar), 4 tiang per simpang (`FURN.signal`). Satu material untuk semua lampu, kuning berkedip (`updateFurniture`) | Tidak ada merah/hijau |
-| Trem vs mobil | Rel trem di s = 0 (boulevard 40 m). Arteri melingkar di za 250, 500, 750, 1.250, 1.500, 1.750, 2.250, 2.500 memotong rel (za 1.000 dan 2.000 adalah cincin struktur, tanpa mobil). Tidak ada lampu atau palang. Halte Pusat kota (za 500) dan Kota (za 1.250) tepat di perlintasan, trem berhenti 12 s di sana | Mobil melintas menembus trem, terutama saat trem berhenti di halte |
+| Trem vs mobil | Rel trem di s = 0 (boulevard 40 m). Arteri melingkar di za 250, 500, 750, 1.250, 1.500, 1.750, 2.250, 2.500 memotong rel (za 1.000 dan 2.000 adalah cincin struktur, tanpa mobil). Tidak ada lampu atau palang | Mobil melintas menembus trem |
+| Halte trem | Peron 26 m (za halte +- 13 m). Halte Pusat kota (za 500) dan Kota (za 1.250) tepat di arteri melingkar selebar 24 m (za +- 12 m), jadi jalur mobil memotong peron dan halte. Halte Permukiman (za 2.000) berdiri di atas cincin struktur | Mobil menembus peron (catatan N1) |
 | Pohon | 3 jenis (oak, elm, poplar), 6 template, 1 atlas daun 2 kolom, warna hijau dengan variasi kecil per pohon (`vTint`). Goyang daun kecil (5 cm), bergantung `windAt()` | Kota dan taman terlihat seragam |
 | Angin | Hanya noise `windAt(P)` di shader rumput, jagung, daun. Tidak ada arah angin global | Daun gugur dan bendera butuh arah angin yang sama |
 | Orang, burung | Tidak ada. Kicau burung hanya suara | Kota sepi |
@@ -23,11 +31,12 @@ Status: rencana detail, belum dikerjakan. Titik awal = tahap 12a (commit `6db47e
 
 | No | Item | Rencana | Biaya |
 | --- | --- | --- | --- |
+| T0 | Pindah halte dari perempatan (N1) | Halte dipindah ke tengah blok, jauh dari simpang: Pusat kota za 500 ke 625, Kota za 1.250 ke 1.125, Permukiman za 2.000 ke 2.125 (menjauhi cincin struktur). Peron 26 m lalu berjarak lebih dari 100 m dari tepi arteri terdekat. Ikut disesuaikan: titik awal pemain (sekarang za 500 "dekat halte Pusat kota") ke za 625, label peta "Pusat kota", posisi awal trem. Halte lain (Spaceport 120, Taman 2.950, Pertanian 4.800, Utilitas 6.650, Museum Cooper 7.250) sudah tidak di simpang. Uji: tiap peron dicek tidak beririsan dengan jalan mana pun (arteri, cincin) | Rendah |
 | A4a | Siklus lampu | Tiap simpang punya siklus 60 s: hijau arteri keliling 26 s, kuning 3 s, merah semua 1 s, hijau arteri melingkar 26 s, kuning 3 s, merah semua 1 s. Fase tiap simpang digeser mengikuti jarak (gelombang hijau sederhana: mobil yang lolos satu simpang cenderung lolos berikutnya). Satu fungsi fase yang sama ditulis di JS dan GLSL | Rendah |
 | A4b | Tampilan lampu | Muka lampu diganti 3 lampu (merah, kuning, hijau) per tiang. Warna per instance dihitung di shader dari fase simpang, jadi CPU tidak perlu update. Malam hari lampu menyala (bloom) | Rendah |
 | A4c | Mobil berhenti | Tetap di GPU tanpa beban CPU. Tiap mobil masih punya posisi "nominal" seperti sekarang. Saat lampu di depannya merah, mobil dalam 90 m sebelum garis henti ditahan: mengerem halus ke garis henti, dan mobil di belakangnya berbaris dengan jarak 7 m (urutan antrean dari waktu tiba). Saat hijau, mobil berangkat berurutan (jeda 1,5 s per mobil) lalu mengejar posisi nominalnya dalam 120 m setelah simpang. Mobil yang sudah melewati garis henti saat lampu berubah tetap jalan | Sedang |
 | A4d | Lampu rem | Lampu belakang lebih terang saat mobil melambat atau berhenti (dari turunan posisi di shader) | Rendah |
-| T1 | Perlintasan trem | 8 perlintasan di s = 0. Posisi, kecepatan, dan status berhenti trem dikirim ke shader mobil lewat uniform (1 vec4 per frame). Perlintasan "tertutup" bila trem berada dalam 60 m dari perlintasan, akan tiba dalam 8 s, atau sedang berhenti di halte perlintasan. Mobil berhenti di garis henti 24 m dari as rel, memakai logika antrean A4c | Rendah-sedang |
+| T1 | Perlintasan trem | 8 perlintasan di s = 0. Posisi, kecepatan, dan status berhenti trem dikirim ke shader mobil lewat uniform (1 vec4 per frame). Perlintasan "tertutup" bila trem berada dalam 60 m dari perlintasan atau akan tiba dalam 8 s. Setelah T0 tidak ada halte di perlintasan, jadi trem tidak pernah berhenti menutup simpang. Mobil berhenti di garis henti 24 m dari as rel, memakai logika antrean A4c | Rendah-sedang |
 | T2 | Rambu perlintasan | Tiang lampu merah berkedip ganda + palang yang turun/naik di 4 kaki tiap perlintasan (InstancedMesh, sudut palang dari shader). Garis henti dan tulisan "AWAS TREM" di aspal (shader tanah) | Rendah |
 | T3 | Suara | Bel perlintasan (ding-ding) saat perlintasan tertutup dan pemain dalam 150 m. Bel trem saat berangkat dari halte | Rendah |
 | T4 | Uji tabrakan | Skrip uji: simulasikan 30 menit waktu trem (percepat `uTime`), hitung setiap mobil yang posisinya berada di kotak perlintasan saat trem ada di kotak yang sama. Target: 0 kejadian | Rendah |
@@ -79,11 +88,24 @@ Catatan: pemain yang berdiri di jalan tetap tidak ditabrak mobil (mobil GPU tida
 | V5 | Detail kecil | Sepeda di rak dekat halte, beberapa orang bersepeda di boulevard, gelembung sabun atau layang-layang di taman siang hari (satu atau dua, bukan massal) | Rendah |
 | V6 | Warna suasana | Cahaya sore lebih hangat saat "jam emas" (penyesuaian kecil tone di `updateLighting()`), kabut tipis pagi di taman | Rendah |
 
+## Mode hemat untuk MacBook M1 (N2)
+
+Semua fitur 12b bisa dikecilkan atau dimatikan. Tujuannya M1 tetap lancar tanpa pemilik harus mengatur satu per satu.
+
+| No | Item | Rencana |
+| --- | --- | --- |
+| M1 | Preset baru "Hemat" | Preset ke-5 setelah Rendah (Ultra, Tinggi, Sedang, Rendah, Hemat). DPR 1,0 dengan resolusi dinamis boleh turun sampai 0,5, bayangan mati, efek layar mati, sunrays mati, vegetasi rendah, mobil 25%. Fitur 12b di preset ini: pejalan kaki radius 80 m dan kepadatan 30%, daun jatuh mati (daun kuning di pohon tetap), burung 1 kawanan tanpa merpati, pohon beragam tetap ada tapi impostor mulai lebih dekat (80 m, sekarang 130 m), kafe/bendera tetap (murah) |
+| M2 | Saklar per fitur | Di panel Grafik: Pejalan kaki (nyala/sedikit/mati), Daun jatuh (nyala/mati), Burung (nyala/mati). Pilihan manual menang atas preset |
+| M3 | Ingat pilihan | Preset dan saklar disimpan di browser (localStorage), jadi M1 langsung mulai di Hemat saat dibuka lagi. Tautan `index.html?preset=hemat` juga bisa dipakai dari menu utama |
+| M4 | Turun otomatis | Aturan lama tetap (FPS < 30 selama 4 s, preset turun satu tingkat) dan sekarang bisa sampai Hemat. Pesan di layar menyebut preset yang dipakai |
+
+Angka di atas masih rencana. Setelah tiap sub-tahap, pemilik mengukur FPS di M1 dengan preset Hemat, lalu angkanya disesuaikan.
+
 ## Urutan kerja dan uji
 
 | Urutan | Sub-tahap | Isi | Yang diuji |
 | --- | --- | --- | --- |
-| 1 | 12b-1 | Lampu lalu lintas, mobil berhenti, perlintasan trem | Uji otomatis 0 tabrakan mobil-trem; pemilik: mobil antre dan berangkat wajar, FPS tidak turun |
+| 1 | 12b-1 | Pindah halte (T0), preset Hemat (M1 sampai M4), lampu lalu lintas, mobil berhenti, perlintasan trem | Uji otomatis: tidak ada peron di jalan, 0 tabrakan mobil-trem; pemilik: mobil antre dan berangkat wajar, FPS di M1 dengan Hemat |
 | 2 | 12b-2 | Pohon baru, daun kuning, daun jatuh, angin global | Waktu muat (bake impostor 16 template), FPS di taman (GTX 1060 dan M1) |
 | 3 | 12b-3 | Pejalan kaki | FPS di Pusat kota pada jam ramai; angka kepadatan disesuaikan |
 | 4 | 12b-4 | Burung | Kawanan terlihat wajar, merpati terbang saat didekati |
@@ -102,7 +124,7 @@ Tiap sub-tahap: `tools/qc_load.py` tanpa error, uji otomatis ditambah ke `tools/
 | Burung | 1-2 | CPU boids kecil |
 | Suasana (kafe, bendera, lampu) | 4-6 | Kecil |
 
-Pejalan kaki dan daun jatuh ikut preset (Ultra sampai Rendah) dan ikut turun otomatis bila FPS di bawah 30.
+Pejalan kaki, daun jatuh, dan burung ikut preset (Ultra sampai Hemat) dan ikut turun otomatis bila FPS di bawah 30.
 
 ## Keputusan yang perlu dari pemilik
 
