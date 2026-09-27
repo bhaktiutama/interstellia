@@ -40,6 +40,8 @@ Uji otomatis: `tools/uji_spaceport.py` (pintu, gerbang, urutan lift > kapsul > k
 
 ## 12b. Kota hidup
 
+Rencana detail (diperluas: perlintasan trem, pohon beragam, daun kuning, suasana): `rencana-tahap-12b-cooper-station.md`.
+
 | No | Item | Rencana | Biaya |
 | --- | --- | --- | --- |
 | B1 | Pejalan kaki | Orang low-poly berjalan di trotoar, taman, terminal, halte; sebagian duduk di bangku. Instancing GPU (1 draw call), animasi langkah di shader, LOD radius 300 m. Kepadatan mengikuti kelas kota dan jam | Sedang-tinggi |
