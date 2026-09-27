@@ -1,6 +1,6 @@
 # Rencana Tahap 13-14 Copper Corn Station
 
-Status: disetujui pemilik. Tahap 13 selesai (13a-13d), 14a selesai. Berikutnya 14b. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
+Status: disetujui pemilik. Tahap 13 selesai (13a-13d), 14a dan 14b selesai. Berikutnya 14c. Titik awal: tahap 12d+ dan M1-M4 (menu, bahasa). Semua fitur lama dipertahankan.
 
 ## Ringkasan
 
@@ -82,6 +82,22 @@ Uji `tools/uji_peta.py`.
 | Muat | Sekitar 4,1 s di sandbox; bobot garis progres diukur ulang |
 
 Uji `tools/uji_hutan.py`. Uji lama tetap lulus (suasana, rel, bahasa, peta 11 penanda, ladang/foto/tur 11 titik, pohon, Skyway).
+
+
+### Hasil 14b (selesai)
+
+| Item | Hasil |
+| --- | --- |
+| Tempat | Semua lereng bukit bervegetasi (tinggi tanah 0,8-2,5 m ke atas, bertahap), bukan di ladang tanaman, halaman Cooper, atau Skyway. Rumput pendek lama disembunyikan di sana agar tidak dobel |
+| Rumput | Helai 0,6-1,1 m, rapat, gelap di pangkal dan terang di ujung, bercak kering kekuningan. Dua lapisan: rapat di dekat (18 m) dan lebih jarang sampai 60 m (Ultra) |
+| Angin | Pita gelombang besar yang berjalan searah angin global: helai merunduk dan sisi terangnya terlihat, ditambah getar kecil per helai. Makin kencang angin (cuaca mendung), makin cepat dan kuat |
+| Pemain | Rumput dalam 1,8 m merunduk menjauhi pemain |
+| Kejauhan | Shader tanah memakai fungsi gelombang yang sama: padang di bukit jauh ikut berwarna hijau kekuningan dan bergelombang, tanpa batas tajam dengan rumput 3D |
+| Per preset | Dekat / jauh: Ultra 18 / 60 m, Tinggi 15 / 50, Sedang 12 / 38, Rendah 9 / 26, Hemat 7 m / tidak ada (hanya gelombang di tanah). Lapisan hanya aktif bila ada bukit dalam jangkauan |
+| Biaya | Puncak bukit (tombol 2): Ultra 4,47 juta segitiga (kota 3,80 juta, hutan 4,06 juta), Hemat 1,38 juta. Geometri rumput tinggi tanpa kartu bulir agar vertex shader tidak bekerja percuma |
+| Perbaikan kecil | Kolam cahaya lampu cincin di malam hari masih di as rel (tiangnya sudah dipindah di 13a); kini ikut pindah |
+
+Uji `tools/uji_rumput_bukit.py`.
 
 ## Urutan kerja
 

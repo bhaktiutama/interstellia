@@ -1213,6 +1213,17 @@ await bootStep(BOOT_W[2], 'Permukaan silinder...');
    WORLD (gray-box): permukaan silinder, end cap, tiang penanda, sumbu
    ===================================================================== */
 // Tanah: tekstur tata guna lahan (dibuat prosedural di tahap 4c) + grid halus 10 m di dekat pemain
+// 14b: rumput tinggi bukit. Fungsi bersama rumput 3D dan shader tanah (gelombang angin yang sama dekat dan jauh).
+// Butuh vnoise() dari shader pemakai. Masker: lereng bukit dengan tinggi tanah 0,8-2,5 m ke atas.
+const MEADOW_GLSL = /* glsl */`
+  float meadowMask(float h) { return smoothstep(0.8, 2.5, h); }
+  float meadowWave(vec2 P, float t, vec2 W) {                       // pita terang bergerak searah angin, 0..1
+    float wl = length(W); vec2 d = wl > 1e-3 ? W / wl : vec2(1.0, 0.0);
+    float ph = dot(P, d) * 0.11 - t * (0.8 + 0.25 * wl) + 1.7 * vnoise(P * 0.02);
+    float band = 0.5 + 0.5 * sin(ph);
+    return band * band * (0.55 + 0.45 * vnoise(P * 0.05 + d * t * 0.1)) * clamp(0.45 + 0.2 * wl, 0.0, 1.2);
+  }
+`;
 const groundMat = new THREE.ShaderMaterial({
   fog: true,
   side: THREE.BackSide,
@@ -1272,6 +1283,7 @@ const groundMat = new THREE.ShaderMaterial({
       float kR = floor(za / 1000.0 + 0.5);
       if (kR >= 1.0 && kR <= 7.0) {                                   // tiang lampu cincin struktur tiap 40 m
         float zl = kR * 1000.0 + 9.0, sl = floor(sp / 40.0 + 0.5) * 40.0;
+        if (sl < 0.5) sl = -9.0;                                        // 13a: tiang di as rel trem dipindah 9 m
         float dsk = abs(mod(sl - skyS + CIRC * 1.5, CIRC) - CIRC * 0.5);
         if (dsk >= 20.0 && sl < CIRC - 20.0) pool += 0.8 * exp(-((za - zl) * (za - zl) + (sp - sl) * (sp - sl)) / RR);
       }
@@ -1279,6 +1291,8 @@ const groundMat = new THREE.ShaderMaterial({
     }
     uniform vec2 uFieldZ, uCityZ;
     uniform vec4 uReal;
+    uniform vec3 uWind;
+    uniform float uMeadowOn, uMeadowR;
     varying vec3 vPos;
     varying vec3 vWorld;
     #ifdef TERRAIN
@@ -1298,6 +1312,7 @@ const groundMat = new THREE.ShaderMaterial({
       return mix(mix(hash2(i), hash2(i + vec2(1, 0)), u.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), u.x), u.y);
     }
     float fbm2(vec2 p) { return 0.62 * vnoise(p) + 0.38 * vnoise(p * 2.31 + 17.0); }
+    ${MEADOW_GLSL}
     // garis dengan anti-alias: pusat c, setengah lebar hw, jejak piksel fp
     float lineAA(float d, float hw, float fp) {
       float cov = 1.0 - smoothstep(hw - fp, hw + fp, abs(d));
@@ -1451,6 +1466,14 @@ const groundMat = new THREE.ShaderMaterial({
         bool tuftCrop = abs(fd.b - 0.627) < 0.03 || abs(fd.b - 0.690) < 0.03 || abs(fd.b - 0.878) < 0.03;
         float underM = vegM * (1.0 - dirtM) * (fieldM > 0.5 ? (tuftCrop ? 1.0 : 0.0) : 1.0);
         col = mix(col, col * vec3(0.62, 0.58, 0.46), underM * (1.0 - smoothstep(uGrassR * 0.7, uGrassR, eyeDist)));
+      }
+      {                                                           // 14b: padang rumput tinggi di bukit (dilihat dari jauh ikut bergelombang)
+        float mm = meadowMask(uR - length(vWorld.xy)) * vegM * (1.0 - fieldM) * uMeadowOn;
+        if (mm > 0.01) {
+          float w = meadowWave(vec2(s < 0.0 ? s + 2.0 * PI * uR : s, za), uTime, uWind.xy);
+          col = mix(col, col * vec3(1.05, 1.1, 0.86) * (0.9 + 0.3 * w), mm);
+          col = mix(col, col * vec3(0.55, 0.6, 0.48), mm * (1.0 - smoothstep(uMeadowR * 0.6, uMeadowR, eyeDist)));   // tanah di bawah helai
+        }
       }
       {                                                           // 12b-2: serakan daun kering di bawah pohon berwarna
         float lt = textureLod(uLitterTex, uv, 0.0).r;
@@ -5006,16 +5029,18 @@ const VU = {
   uHouse: { value: new THREE.Vector4(...YARD_OBST[0]) },
   uFieldRect: { value: new THREE.Vector4(BALLPARK.s0, BALLPARK.z0, BALLPARK.s1, BALLPARK.z1) }, uHome: { value: new THREE.Vector2(FIELD.s, FIELD.za) },
   uLodD: { value: 130 },
+  uMeadowOn: { value: 1 },                                           // 14b: 1 = rumput tinggi bukit aktif (rumput pendek disembunyikan di bukit)
   uLodF: { value: 70 }, uForest: { value: new THREE.Vector4(FOREST.s0, FOREST.z0, FOREST.s1, FOREST.z1) },   // 14a: radius mesh penuh pohon hutan
   uWind: { value: new THREE.Vector3(1.2, 0.4, 0.4) },
   uCropT: groundMat.uniforms.uCropT,
 };
+groundMat.uniforms.uWind = VU.uWind; groundMat.uniforms.uMeadowOn = VU.uMeadowOn; groundMat.uniforms.uMeadowR = { value: 70 };   // 14b
 const VEG_COMMON = /* glsl */`
   #ifndef texture2D
   #define texture2D texture
   #endif
   uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex, uHeightTex;
-  uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uLodD, uLodF;
+  uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uLodD, uLodF, uMeadowOn;
   uniform vec4 uForest;
   uniform vec2 uFieldZ, uEyeSZ;
   uniform vec4 uHM, uYard, uHouse, uFieldRect;
@@ -5066,6 +5091,7 @@ const VEG_COMMON = /* glsl */`
   }
   bool isCorn(vec2 P) { return abs(fieldData(P).b - 0.784) < 0.03; }
   float windAt(vec2 P) { return vnoise(P / 14.0 + vec2(uTime * 0.35, uTime * 0.12)); }
+  ${MEADOW_GLSL}
   #ifndef DEPTH_ONLY
   ${LIGHT_GLSL}
   vec3 vegLight(vec3 p, vec3 n, vec2 P, float shadeK) {            // cahaya stasiun + bayangan tajuk dan awan
@@ -5112,7 +5138,7 @@ function instGeo(base, cells) {
 
 await bootStep(BOOT_W[11], 'Rumput dan gandum...');
 // --- rumput dan tanaman rendah: rumpun helai (+ bulir untuk gandum dan sorgum) ------------
-function tuftGeo(nBlades, segs, width, radius, seed) {
+function tuftGeo(nBlades, segs, width, radius, seed, heads = true) {
   let sd = seed; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const pos = [], head = [], idx = [];
   for (let b = 0; b < nBlades; b++) {
@@ -5128,7 +5154,7 @@ function tuftGeo(nBlades, segs, width, radius, seed) {
     for (let k = 0; k < segs - 1; k++) { const q = v0 + k * 2; idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2); }
     const q = v0 + (segs - 1) * 2; idx.push(q, q + 1, q + 2);
     // bulir: dua kartu bersilang di ujung helai (dikempiskan untuk rumput dan kedelai)
-    for (const [ux, uz] of [[1, 0], [0, 1]]) {
+    if (heads) for (const [ux, uz] of [[1, 0], [0, 1]]) {           // 14b: rumput tinggi tanpa bulir (hemat vertex)
       const h0 = pos.length / 3, y0 = hf * 0.9, y1 = hf * 1.02, e = 0.009;
       pos.push(tx - ux * e, y0, tz - uz * e, tx + ux * e, y0, tz + uz * e, tx + ux * e, y1, tz + uz * e, tx - ux * e, y1, tz - uz * e);
       head.push(1, 1, 1, 1); idx.push(h0, h0 + 1, h0 + 2, h0, h0 + 2, h0 + 3);
@@ -5166,6 +5192,7 @@ const GRASS_VS = /* glsl */`
       float kS = floor(P.x / uArt + 0.5);
       if (P.y > uFieldZ.x && mod(kS, 2.0) < 0.5 && abs(P.x - kS * uArt) < 3.8) veg = 0.0;   // jalan tanah ladang
       if (veg < 0.5) { ${CLIP_AWAY} }
+      if (uMeadowOn > 0.5 && meadowMask(terrainH(P)) > 0.55) { ${CLIP_AWAY} }   // 14b: diganti rumput tinggi
     }
     bool yard = kind == 0 && inRect(P, uYard);
     if (kind == 0 && inRect(P, uFieldRect)) {                        // lapangan baseball: rumput pendek, tanah infield dan warning track kosong
@@ -5235,6 +5262,77 @@ const GRASS = {};
   GRASS.near = mk(tuftGeo(7, 3, 0.022, 0.13, 11), near, 0.3, 0.3, 0.75);
   GRASS.far = mk(tuftGeo(4, 2, 0.05, 0.22, 23), far, 0.55, 0.28, 0.7);
 }
+
+// --- 14b: rumput tinggi di bukit (gaya padang luas): helai 0,6-1,1 m, gelap di pangkal, terang di ujung, pita gelombang angin
+// besar yang berjalan (meadowWave, sama dengan shader tanah), menunduk di sekitar pemain. Dua lapisan: rapat dekat, jarang sampai
+// radius per preset. Hanya aktif bila pemain dekat bukit (lihat updateReal).
+const MEADOW_VS = /* glsl */`
+  attribute vec2 aCell;
+  attribute float aHead;
+  uniform vec2 uCenter;
+  uniform float uSpacing, uFadeIn0, uFadeIn1, uFadeOut0, uFadeOut1;
+  varying vec3 vCol;
+  void main() {
+    if (aHead > 0.5) { ${CLIP_AWAY} }                                // tanpa bulir
+    vec2 idx = uCenter + aCell;
+    float h1 = hash2(idx), h2 = hash2(idx + vec2(71.0, 13.0)), h3 = hash2(idx + vec2(5.0, 97.0));
+    vec2 P = (idx + vec2(h1, h2)) * uSpacing;
+    float d = distance(P, uEyeSZ);
+    float k = smoothstep(uFadeIn0, uFadeIn1, d) * (1.0 - smoothstep(uFadeOut0, uFadeOut1, d));
+    if (k < 0.02) { ${CLIP_AWAY} }
+    float mm = meadowMask(terrainH(P));
+    if (mm < 0.05 || inRect(P, uHouse) || inRect(P, uYard) || skywayDist(P) < 17.0 || fieldData(P).b > 0.2) { ${CLIP_AWAY} }
+    vec3 land = textureLod(uLand, landUV(P), 0.0).rgb;
+    vec3 sb = sqrt(max(land, 0.0));
+    float mx = max(sb.r, max(sb.g, sb.b)), mn = min(sb.r, min(sb.g, sb.b));
+    float veg = smoothstep(0.15, 0.2, (mx - mn) / max(mx, 1e-3)) * step(sb.r, sb.g * 1.02) * (1.0 - smoothstep(0.04, 0.1, sb.b - max(sb.r, sb.g)));
+    if (veg < 0.5) { ${CLIP_AWAY} }
+    float hgt = mix(0.6, 1.1, 0.65 * vnoise(P / 6.0) + 0.35 * h3) * mm * k;
+    vec3 up, tS; vec3 base = groundFrame(P, 0.0, up, tS);
+    float ang = h3 * 6.2832, ca = cos(ang), sa = sin(ang);
+    vec2 xz = vec2(ca * position.x - sa * position.z, sa * position.x + ca * position.z);
+    float t = position.y;
+    vec2 W = uWind.xy; float wl = length(W); vec2 wd = wl > 1e-3 ? W / wl : vec2(1.0, 0.0);
+    float wave = meadowWave(P, uTime, W);
+    vec2 bend = wd * (0.12 + 0.75 * wave) + vec2(0.06 * sin(uTime * 3.1 + h1 * 6.28 + P.x * 0.7), 0.05 * sin(uTime * 2.6 + h2 * 6.28));
+    vec2 dp = P - uEyeSZ; float dl = length(dp);                      // menunduk menjauhi pemain
+    if (dl < 1.8) bend += (dl > 1e-3 ? dp / dl : vec2(1.0, 0.0)) * (1.0 - dl / 1.8) * 1.1;
+    vec2 off = bend * t * t * hgt;
+    vec3 p = base + tS * (xz.x + off.x) + vec3(0.0, 0.0, xz.y + off.y) + up * (t * hgt * (1.0 - 0.35 * min(length(bend), 1.0) * t));
+    #ifndef DEPTH_ONLY
+    vec3 c = mix(land * vec3(0.42, 0.5, 0.36), land * vec3(1.18, 1.22, 0.86), smoothstep(0.0, 1.0, t)) * (0.9 + 0.2 * h2);
+    c *= 1.0 + 0.35 * wave * t;                                     // pita gelombang: sisi helai yang terang
+    c = mix(c, c * vec3(1.18, 1.05, 0.7), smoothstep(0.6, 0.85, vnoise(P / 11.0 + 5.0)) * 0.5 * t);   // bercak kering
+    vec3 n = normalize(up * 1.5 + (tS * (xz.x + off.x) + vec3(0.0, 0.0, xz.y + off.y)) * 3.0);   // komponen atas selalu ada: tidak pernah nol
+    vCol = c * vegLight(p, n, P, 1.0);
+    #endif
+    vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    #ifndef DEPTH_ONLY
+    #include <fog_vertex>
+    #endif
+  }`;
+const MEADOW = { nearR: 18, midR: 60, active: false };
+{
+  const near = sortedCells(0.32, 0.32, 18), mid = sortedCells(0.85, 0.85, 60);
+  const mk = (geo, cells, spacing) => {
+    const m = new THREE.Mesh(instGeo(geo, cells.cells), vegMaterial({ vertex: MEADOW_VS, fragment: GRASS_FS, uniforms: {
+      uCenter: { value: new THREE.Vector2() }, uSpacing: { value: spacing }, uFadeIn0: { value: -1 }, uFadeIn1: { value: 0 }, uFadeOut0: { value: 16 }, uFadeOut1: { value: 18 } } }));
+    m.frustumCulled = false; m.userData.noLight = true; m.userData.cells = cells;
+    realGroup.add(m); return m;
+  };
+  MEADOW.near = mk(tuftGeo(5, 4, 0.034, 0.15, 31, false), near, 0.32);
+  MEADOW.mid = mk(tuftGeo(9, 3, 0.07, 0.45, 47, false), mid, 0.85);
+}
+function applyMeadowRadii() {                                        // radius per preset (dipanggil dari PRESET_HOOKS)
+  const N = MEADOW.near.material.uniforms, M = MEADOW.mid.material.uniforms;
+  N.uFadeOut0.value = Math.max(0, MEADOW.nearR - 2); N.uFadeOut1.value = MEADOW.nearR;
+  M.uFadeIn0.value = Math.max(-1, MEADOW.nearR - 3); M.uFadeIn1.value = MEADOW.nearR; M.uFadeOut0.value = MEADOW.midR * 0.75; M.uFadeOut1.value = Math.max(MEADOW.midR, M.uFadeOut0.value + 0.5);   // smoothstep tanpa tepi sama
+  MEADOW.nearN = MEADOW.nearR ? MEADOW.near.userData.cells.countFor(MEADOW.nearR) : 0;
+  MEADOW.midN = MEADOW.midR ? MEADOW.mid.userData.cells.countFor(MEADOW.midR) : 0;
+  groundMat.uniforms.uMeadowR.value = Math.max(MEADOW.nearR, MEADOW.midR);
+}
+applyMeadowRadii();
 
 await bootStep(BOOT_W[12], 'Jagung...');
 // --- jagung: tanaman lengkap (dekat) ------------------------------------------
@@ -5996,6 +6094,15 @@ function updateReal() {
     GRASS.far.material.uniforms.uCenter.value.set(Math.floor(eyeS / 0.55), Math.floor(eyeZ / 0.55));
     CORN.near.material.uniforms.uCenter.value.set(Math.floor(eyeS / 0.76), Math.floor(eyeZ / 0.25));
     CORN.mid.material.uniforms.uCenter.value.set(Math.floor(eyeS / 0.76), Math.floor(eyeZ / 2.0));
+  }
+  // 14b: rumput tinggi hanya bila ada bukit dalam jangkauan (tanpa itu semua instance terbuang di vertex shader)
+  const reach = MEADOW.midR + 20;
+  MEADOW.active = near && MEADOW.nearN > 0 && HILLS.some((H) => Math.hypot(wrapS(eyeS - H.s) / (H.rs * 1.6 + reach), (eyeZ - H.za) / (H.rz * 1.6 + reach)) < 1);
+  MEADOW.near.geometry.instanceCount = MEADOW.active ? MEADOW.nearN : 0;
+  MEADOW.mid.geometry.instanceCount = MEADOW.active ? MEADOW.midN : 0;
+  if (MEADOW.active) {
+    MEADOW.near.material.uniforms.uCenter.value.set(Math.floor(eyeS / 0.32), Math.floor(eyeZ / 0.32));
+    MEADOW.mid.material.uniforms.uCenter.value.set(Math.floor(eyeS / 0.85), Math.floor(eyeZ / 0.85));
   }
   updateFallSources();                             // 12b-2
   if (Math.hypot(wrapS(eyeS - TREES.lastS), eyeZ - TREES.lastZ, eyeH - TREES.lastD) > 1.5) {
@@ -8878,7 +8985,8 @@ Object.assign(FOREST, { k: 0, fernR: 60, list: null, lastS: 1e9, lastZ: 1e9, las
   FOREST.mesh.frustumCulled = false; FOREST.mesh.userData.noLight = true;
   realGroup.add(FOREST.mesh);
 }
-function applyForestPreset(i) { TREES.forestLod = [70, 60, 45, 35, 25][i]; FOREST.fernR = [60, 50, 40, 28, 0][i]; FOREST.lastS = 1e9; }
+function applyForestPreset(i) { TREES.forestLod = [70, 60, 45, 35, 25][i]; FOREST.fernR = [60, 50, 40, 28, 0][i]; FOREST.lastS = 1e9;
+  MEADOW.nearR = [18, 15, 12, 9, 7][i]; MEADOW.midR = [60, 50, 38, 26, 0][i]; applyMeadowRadii(); }   // 14b: rumput tinggi bukit
 PRESET_HOOKS.push(applyForestPreset); applyForestPreset(PRESET.idx);
 const _fogG = new THREE.Color(0.30, 0.40, 0.30);
 function updateForest(dt) {
@@ -9170,7 +9278,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, MEADOW, applyMeadowRadii, GRASS, FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

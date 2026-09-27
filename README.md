@@ -36,6 +36,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari satu menu
 | `tools/uji_skyway.py` | Uji jembatan dan akuaduk Skyway |
 | `tools/uji_peta.py` | Uji peta besar (M) |
 | `tools/uji_hutan.py` | Uji hutan lebat |
+| `tools/uji_rumput_bukit.py` | Uji rumput tinggi di bukit |
 | `tools/uji_bahasa.py` | Uji kelengkapan kamus bahasa dan ganti bahasa |
 | `tools/uji_ladang_foto_tur.py` | Uji siklus tanam, mesin ladang, mode foto, tur sinematik |
 | `CLAUDE.md` | Konteks proyek untuk Claude Code |

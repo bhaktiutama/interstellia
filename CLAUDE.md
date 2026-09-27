@@ -24,6 +24,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_skyway.py` | Uji Copper Corn Station 13b-13c: mobil melintasi jembatan Skyway, akuaduk, tombol 5 di atas kaca |
 | `tools/uji_peta.py` | Uji Copper Corn Station 13d: peta besar, penanda, zoom, klik = pindah, legenda dua bahasa |
 | `tools/uji_hutan.py` | Uji Copper Corn Station 14a: hutan lebat (jumlah, tinggi, jalan setapak, tombol 0, pakis per preset, biaya) |
+| `tools/uji_rumput_bukit.py` | Uji Copper Corn Station 14b: rumput tinggi bukit aktif di bukit, mati di kota, radius per preset |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
@@ -81,6 +82,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Rel dan Skyway (13a-c) | `inTramCorridor()`, `treeSkipped` (pohon yang ditolak tetap memakai angka acak), `RING_LAMP_S`, `SKY_ROADS`, `onSkyRoad()`, `SKYX` (akuaduk, `flow`), lantai kaca jendela `glass` / `glassMat` |
 | Peta (13d) | `MAPV` (zoom, cx = za, cy = s), `MAP_MARKS` (key, name, at, go), `drawMapStatic()` (latar 4000 x 3142), `drawMap()` (vektor tiap frame), `mapZoomAt()`, `mapCenterMe()`, `mapGo()`, `buildMapLegend()` |
 | Hutan (14a) | `FOREST` (s0, s1, z0, z1, trailW, k, fernR, list, mesh), `forestTrail(za)`, `inForest()`, pohon `t.forest` (langkah 4 di blok TREES, RNG sendiri), `TREES.forestLod` + uniform `uLodF` / `uForest` (impostor lebih dekat), `updateForest()` (kabut, pakis), `applyForestPreset()`, `SPOTS.forest` (tombol 0) |
+| Rumput bukit (14b) | `MEADOW_GLSL` (`meadowMask(h)`, `meadowWave(P, t, W)`, dipakai rumput 3D dan shader tanah), `MEADOW` (near, mid, nearR, midR, active), `MEADOW_VS`, `applyMeadowRadii()`, uniform `uMeadowOn` (rumput pendek disembunyikan di bukit), `tuftGeo(..., heads)` |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
 | Kolisi | `COL`, `addCollider(s, za, hs, hz)` (AABB di bidang s-za), `LATE_COLLIDERS` |
 | Awan/cuaca (11a) | `WEATHER` (mode auto/cerah/berawan/mendung, cover, ov), `CLOUD`, `updateClouds(dt)`, `cycleWeather()` (N) |
@@ -131,6 +133,7 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 12d+ | Pertandingan baseball siang, pagar dan papan skor lapangan mengikuti lengkung silinder, perbaikan NaN layang-layang (kilau seperti komet), klik mouse = kunci / lepas kursor |
 | 13a-13d | Rel trem bersih, jembatan jalan dan akuaduk di Skyway (mobil satu keliling penuh), tombol 5 di atas lantai kaca, peta besar M dengan penanda dan klik = pindah |
 | 14a | Hutan lebat 5.222 pohon 22-35 m dengan jalan setapak, semak dan pakis, kabut hutan, tombol 0, penanda peta, titik tur |
+| 14b | Rumput tinggi di bukit dengan pita gelombang angin (dekat 3D, jauh di shader tanah), merunduk di sekitar pemain |
 
 Tahap 12 selesai. Rencana berikutnya: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md` (13: rel trem bersih, jembatan Skyway, peta besar; 14: hutan, rumput tinggi bukit, interior jendela). Cadangan lain di rencana tahap 12.
 
