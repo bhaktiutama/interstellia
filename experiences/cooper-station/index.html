@@ -691,7 +691,7 @@ const groundMat = new THREE.ShaderMaterial({
     uFieldTex: { value: null }, uCloudTex: { value: null }, uTime: { value: 0 }, uArt: { value: TAU * CONFIG.R / 26 },
     uCloudK: { value: 0.2 }, uFieldZ: { value: new THREE.Vector2(3200, 7850) }, uCityZ: { value: new THREE.Vector2(250, 2500) },
     uReal: { value: new THREE.Vector4(-1e9, -1e9, -1e9, -1e9) }, uShadeTex: { value: null }, uGrassR: { value: 0 }, uCornR: { value: 0 }, uGapHalf: { value: 0 }, uNight: { value: 0 },
-    uLitterTex: { value: null }, uWet: { value: 0 },
+    uLitterTex: { value: null }, uWet: { value: 0 }, uRainNow: { value: 0 },
   }, LIGHT.uniforms]),
   vertexShader: /* glsl */`
     #include <fog_pars_vertex>
@@ -713,7 +713,7 @@ const groundMat = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */`
     #include <fog_pars_fragment>
     uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex, uLitterTex;
-    uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf, uNight, uWet;
+    uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf, uNight, uWet, uRainNow;
     // tahap 10: kolam cahaya lampu jalan (posisi sama dengan tiang lampu di JS)
     float lampPool(float s, float za) {
       const float SP = 45.0, OFF = 13.5, RR = 81.0, CIRC = 6283.185307;
@@ -923,14 +923,16 @@ const groundMat = new THREE.ShaderMaterial({
           col = mix(col, lc, smoothstep(0.3, 0.7, n1 * 0.55 + lt * 0.7) * min(1.0, lt * 1.5));
         }
       }
-      float puddle = 0.0;                                         // 12c: tanah basah dan genangan
+      float puddle = 0.0, wetL = 0.0;                             // 12c: tanah basah dan genangan
       if (uWet > 0.01 && waterM < 0.5) {
         float mx = max(col.r, max(col.g, col.b)), sat = (mx - min(col.r, min(col.g, col.b))) / max(mx, 1e-3);
         float hard = 1.0 - smoothstep(0.12, 0.3, sat);                // aspal, beton, paving
-        float wetL = uWet * mix(0.3, 1.0, smoothstep(0.02, 0.12, textureLod(uCloudTex, uv, 0.0).r));   // basah terutama di bawah awan hujan
+        wetL = uWet * mix(0.3, 1.0, smoothstep(0.02, 0.12, textureLod(uCloudTex, uv, 0.0).r));   // basah terutama di bawah awan hujan
         col *= 1.0 - wetL * (0.18 + 0.27 * hard);
-        puddle = hard * wetL * smoothstep(0.58, 0.72, vnoise(P * 0.22) * 0.7 + vnoise(P * 0.9 + 13.0) * 0.3);
-        col = mix(col, col * 0.55, puddle);
+        // genangan: tepi lembut, mengecil saat mengering (ambang naik saat wetL turun)
+        float pn = vnoise(P * 0.22) * 0.7 + vnoise(P * 0.9 + 13.0) * 0.25 + vnoise(P * 3.7 + 7.0) * 0.05;
+        puddle = hard * smoothstep(0.74 - 0.14 * wetL, 0.8 - 0.14 * wetL, pn) * smoothstep(0.05, 0.3, wetL);
+        col = mix(col, col * 0.3, puddle);                            // air gelap (menyerap), pantulan ditambah setelah cahaya
       }
       float rw = length(vWorld.xy);
       vec3 up = vec3(-vWorld.xy / rw, 0.0);
@@ -948,7 +950,19 @@ const groundMat = new THREE.ShaderMaterial({
       float cshadow = textureLod(uCloudTex, uv, 0.0).r;           // bayangan awan (sunline terhalang sebagian)
       light -= uL_SunlineCol * uL_Sunline * uCloudK * cshadow;
       col *= max(light, vec3(0.0));
-      if (puddle > 0.0) col += fogColor * (0.35 * puddle + 0.06 * uWet);   // genangan memantulkan langit (warna kabut)
+      if (uWet > 0.01 && waterM < 0.5) {                          // 12c revisi: pantulan Fresnel (kuat saat dilihat miring), lampu jalan, riak hujan
+        vec3 V = cameraPosition - vWorld; float vl = length(V); V = vl > 1e-4 ? V / vl : up;
+        float cosT = clamp(dot(V, up), 0.0, 1.0), F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
+        vec3 refl = fogColor * 1.1 + vec3(1.0, 0.72, 0.42) * 2.2 * uNight * lampPool(s, za);
+        float ring = 0.0;
+        if (puddle > 0.01 && uRainNow > 0.05) {                   // riak tetes hujan: cincin melebar di sel 0,5 m
+          vec2 g = P * 2.0, c = floor(g), f = fract(g) - 0.5;
+          float hc = hash2(c), tt = fract(uTime * 1.4 + hc);
+          float rr = length(f - (vec2(hash2(c + 3.1), hash2(c + 7.7)) - 0.5) * 0.5);
+          ring = smoothstep(0.035, 0.0, abs(rr - tt * 0.42)) * (1.0 - tt) * uRainNow;
+        }
+        col += refl * (F * (0.9 * puddle + 0.12 * wetL) + 0.05 * puddle + 0.35 * ring * puddle);
+      }
 
       // ---- air: riak gelombang, fresnel, pantulan atmosfer dan kilau sunline ----
       if (waterM > 0.01) {
@@ -7639,9 +7653,12 @@ function rainSheltered() {
 function updateRain(dt) {
   const k = sstep(0.6, 0.85, WEATHER.ov);
   RAIN.k += (k - RAIN.k) * Math.min(1, dt / 8);
-  RAIN.wet += (RAIN.k > 0.05 ? (RAIN.k - RAIN.wet) / 60 : -RAIN.wet / 300) * dt;   // basah dalam sekitar 1 menit, kering sekitar 5 menit
+  // basah/kering mengikuti jam stasiun (revisi: dulu waktu nyata 5 menit, jadi dengan 1 menit = 1 jam genangan bertahan sampai besok).
+  // Kering sekitar 0,7 jam stasiun di siang hari (lebih lambat malam hari); saat waktu berhenti tetap kering dalam sekitar 5 menit nyata.
+  const hr = clock.hourRate || 0, sunK = 0.6 + 0.8 * sstep(6, 9, clock.hour) * (1 - sstep(16, 19, clock.hour));
+  RAIN.wet += (RAIN.k > 0.05 ? (RAIN.k - RAIN.wet) * (1 / 60 + hr / 0.3) : -RAIN.wet * (1 / 300 + hr / 0.7) * sunK) * dt;
   RAIN.wet = Math.max(0, Math.min(1, RAIN.wet));
-  groundMat.uniforms.uWet.value = RAIN.wet;
+  groundMat.uniforms.uWet.value = RAIN.wet; groundMat.uniforms.uRainNow.value = RAIN.k;
   const show = RAIN.k > 0.02 && !ext.active && !rainSheltered();
   RAIN.mesh.geometry.instanceCount = show ? Math.round(RAIN.presetN * Math.min(1, RAIN.k * 1.2)) : 0;
   RAIN.U.uRain.value.set(RAIN.k, VU.uEyeSZ.value.x, VU.uEyeSZ.value.y, 0);

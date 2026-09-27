@@ -73,6 +73,8 @@ Uji: `tools/uji_hujan.py` (7 cek). Waktu muat di sandbox sekitar 6,6 s.
 | Gerak tetes aneh, seperti zoom in/out ke arah kamera | Tetes yang lewat sangat dekat kamera ikut digambar (besar dan melesat), dan lebar garis membesar dengan jarak | Tetes dalam 1,2 m dari kamera tidak digambar, redup sampai 5 m; lebar garis tetap 1 cm |
 | Garis tetes terlalu terang di malam hari | Warna tetes tetap (0,72), tidak ikut cahaya | Warna tetes diambil dari warna kabut (terang siang, gelap malam). Air mancur juga ikut pencahayaan |
 | Hujan global | Hujan hanya bergantung tingkat mendung seluruh stasiun | Hujan hanya di bawah awan: tiap tetes membaca peta bayangan awan tepat di atasnya. Saat mendung penuh, awan menutupi sekitar 20% area, jadi hujan turun di bawah gugusan awan dan kering di celahnya. Tanah basah terutama di bawah awan, suara hujan mengikuti awan di atas pemain (dibaca tiap 0,4 s) |
+| Genangan kurang nyata | Genangan hanya bercak abu-abu rata (lebih terang dari jalan) | Air genangan gelap, memantulkan langit kuat saat dilihat miring (Fresnel), memantulkan lampu jalan malam hari, riak cincin saat hujan, tepi lembut, mengecil saat mengering |
+| Genangan tidak kering sampai besok | Pengeringan memakai waktu nyata 5 menit; dengan jam 1 menit = 1 jam itu sama dengan 5-15 jam stasiun | Basah dan kering mengikuti jam stasiun: kering sekitar 1-1,5 jam stasiun di siang hari (lebih lambat malam), saat waktu berhenti sekitar 5 menit nyata. Terukur: basah 1,0 menjadi 0,10 setelah 1 jam stasiun, 0,01 setelah 2 jam |
  Belum dibuat: percikan tetes di tanah, tirai hujan di kejauhan (diwakili kabut mendung yang sudah ada).
 
 ## 12d. Ladang, foto, tur
