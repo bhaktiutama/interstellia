@@ -80,6 +80,7 @@
   #labTable td { padding: 3px 4px 3px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
   #labTable .ok { color: #8fd18a; } #labTable .bad { color: var(--warn); }
   #lab .note { color: var(--muted); font-size: 11px; }
+  #lab .chk { display: flex; align-items: center; gap: 6px; padding: 6px; }
   .hidden-ui #lab { display: none; }
   #touchbtns { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 150px); }
   #touchbtns button { padding: 8px 10px; }
@@ -113,6 +114,7 @@
   <div class="body">
     <div class="row"><label for="inSpeed">Kecepatan lempar</label><output id="inSpeedV"></output><input id="inSpeed" type="range" min="1" max="100" step="1"></div>
     <div class="row"><label for="inElev">Sudut elevasi</label><output id="inElevV"></output><input id="inElev" type="range" min="0" max="90" step="1"></div>
+    <div class="row"><label for="inHour">Jam stasiun ([ ])</label><output id="inHourV"></output><input id="inHour" type="range" min="0" max="23.9" step="0.1"></div>
     <div class="row"><label for="inDrop">Tinggi jatuh</label><output id="inDropV"></output><input id="inDrop" type="range" min="1" max="500" step="1"></div>
     <div class="btns">
       <button id="labThrow" type="button"><kbd>B</kbd>Lempar</button>
@@ -122,6 +124,8 @@
       <button id="labOrbit" type="button"><kbd>T</kbd>Percepat orbit</button>
       <button id="labWin" type="button">Ke Skyway</button>
       <button id="labExt" type="button"><kbd>V</kbd>Kamera luar</button>
+      <button id="labTime" type="button">Kecepatan waktu</button>
+      <label class="chk"><input id="inShadow" type="checkbox" checked> Bayangan</label>
     </div>
     <div id="labResult">Lempar ke arah hadap, dengan sudut elevasi dari slider. Tiang biru = titik lepas, tiang merah = titik mendarat.</div>
     <table id="labTable"></table>
@@ -132,7 +136,7 @@
 <div id="start">
   <div class="card">
     <h1>Cooper Station</h1>
-    <div class="sub">Tahap 4d gray-box · lambung 80 m, utilitas luar (tekan V) · R 1.000 m, L 8.000 m, 1 g</div>
+    <div class="sub">Tahap 5 · sunline, siklus siang-malam, cincin lampu end cap, awan, bayangan · R 1.000 m, L 8.000 m, 1 g</div>
     <table>
       <tr class="desk-only"><td>Mouse</td><td>Melihat (klik untuk mengunci kursor)</td></tr>
       <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -142,6 +146,7 @@
       <tr class="desk-only"><td>L</td><td>Lift ke sumbu (0 g) / turun lagi; Shift = 5x cepat</td></tr>
       <tr class="desk-only"><td>E · M</td><td>Aksi (naik/turun trem, baca plakat, lift) · peta</td></tr>
       <tr class="desk-only"><td>V</td><td>Kamera luar: lihat stasiun dari angkasa (drag = putar, scroll = zoom)</td></tr>
+      <tr class="desk-only"><td>[ · ]</td><td>Jam stasiun mundur / maju 1 jam (siklus siang-malam)</td></tr>
       <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
       <tr class="desk-only"><td>O</td><td>Jalan otomatis ke depan</td></tr>
       <tr class="desk-only"><td>X</td><td>Turbo 50 m/s (debug)</td></tr>
@@ -232,6 +237,84 @@ renderer.setSize(window.innerWidth, window.innerHeight, false);
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(CONFIG.fogColor, CONFIG.fogDensity);
 const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 0.25, 12000);
+
+/* =====================================================================
+   TAHAP 5: MODEL CAHAYA STASIUN (dipakai tanah dan semua objek dalam stasiun)
+   - Sunline: cahaya garis di sumbu; permukaan menghadap sumbu paling terang, dinding setengah (wrap)
+   - Ambient: pantulan dari sisi seberang silinder
+   - Cincin lampu end cap (keemasan) di kedua ujung, radius 0,7 R; bayangan real-time dekat pemain
+   - Sinar Matahari asli: hanya titik yang "melihat" Matahari lewat kaca end cap (dihitung analitik)
+   ===================================================================== */
+const CAP_RING_R = 0.7 * CONFIG.R;
+const LIGHT = { uniforms: {
+  uL_R: { value: CONFIG.R }, uL_HalfL: { value: HALF_L }, uL_CapRingR: { value: CAP_RING_R },
+  uL_Sunline: { value: 0.9 }, uL_SunlineCol: { value: new THREE.Vector3(1, 0.97, 0.92) },
+  uL_AmbCol: { value: new THREE.Vector3(0.17, 0.2, 0.25) },
+  uL_CapI: { value: 0.3 }, uL_CapCol: { value: new THREE.Vector3(1.0, 0.7, 0.36) },
+  uL_SunDir: { value: new THREE.Vector3(0, 0, 1) }, uL_SunI: { value: 0.12 }, uL_SunCol: { value: new THREE.Vector3(1.0, 0.96, 0.9) },
+  uL_ShadowMap: { value: null }, uL_ShadowMat: { value: new THREE.Matrix4() }, uL_ShadowOn: { value: 0 }, uL_ShadowCap: { value: 0 },
+} };
+const LIGHT_GLSL = /* glsl */`
+  uniform float uL_R, uL_HalfL, uL_CapRingR, uL_Sunline, uL_CapI, uL_SunI, uL_ShadowOn, uL_ShadowCap;
+  uniform vec3 uL_SunlineCol, uL_AmbCol, uL_CapCol, uL_SunDir, uL_SunCol;
+  uniform sampler2D uL_ShadowMap;
+  uniform mat4 uL_ShadowMat;
+  float stationShadow(vec3 p) {
+    vec4 sc = uL_ShadowMat * vec4(p, 1.0);
+    vec3 c = sc.xyz / sc.w * 0.5 + 0.5;
+    if (c.x <= 0.0 || c.x >= 1.0 || c.y <= 0.0 || c.y >= 1.0 || c.z >= 1.0) return 1.0;
+    float s = 0.0, tx = 1.0 / 2048.0;
+    for (int i = -1; i <= 1; i += 2) for (int j = -1; j <= 1; j += 2)
+      s += step(c.z - 0.0005, texture2D(uL_ShadowMap, c.xy + vec2(float(i), float(j)) * tx * 0.75).r);
+    s *= 0.25;
+    float edge = smoothstep(0.0, 0.08, min(min(c.x, 1.0 - c.x), min(c.y, 1.0 - c.y)));
+    return mix(1.0, s, edge);
+  }
+  vec3 stationLight(vec3 p, vec3 n) {
+    float r = length(p.xy);
+    vec3 up = r > 1.0 ? vec3(-p.xy / r, 0.0) : vec3(0.0, 0.0, 1.0);
+    float d = dot(n, up);
+    vec3 col = uL_SunlineCol * uL_Sunline * max(0.55 + 0.45 * d, 0.1);     // sunline (cahaya garis di sumbu)
+    col += uL_AmbCol * (0.7 + 0.3 * d);                                     // pantulan dari sisi seberang
+    vec2 rim = r > 1.0 ? p.xy / r : vec2(1.0, 0.0);
+    for (int k = 0; k < 2; k++) {                                           // cincin lampu end cap A dan B
+      float sz = k == 0 ? -uL_HalfL : uL_HalfL;
+      vec3 dv = vec3(rim * uL_CapRingR, sz) - p;
+      float dist = length(dv);
+      vec3 L = dv / dist;
+      float fall = 1.0 / (1.0 + (dist / 2200.0) * (dist / 2200.0));
+      float sh = (uL_ShadowOn > 0.5 && abs(float(k) - uL_ShadowCap) < 0.5) ? stationShadow(p) : 1.0;
+      col += uL_CapCol * uL_CapI * fall * max(dot(n, L), 0.0) * sh;
+    }
+    if (abs(uL_SunDir.z) > 1e-3) {                                          // sinar Matahari lewat kaca end cap
+      float capZ = uL_SunDir.z > 0.0 ? uL_HalfL : -uL_HalfL;
+      float t = (capZ - p.z) / uL_SunDir.z;
+      float lit = 1.0 - smoothstep(uL_R * 0.95, uL_R, length(p.xy + uL_SunDir.xy * t));
+      col += uL_SunCol * uL_SunI * lit * max(dot(n, uL_SunDir), 0.0);
+    }
+    return col;
+  }
+`;
+function patchLit(mat) {
+  if (mat.userData.lit) return;
+  mat.userData.lit = true;
+  mat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, LIGHT.uniforms);
+    sh.vertexShader = 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+      {
+        vec4 lw = vec4(transformed, 1.0); vec3 ln = normal;
+        #ifdef USE_INSTANCING
+          lw = instanceMatrix * lw; ln = transpose(inverse(mat3(instanceMatrix))) * ln;
+        #endif
+        vLitWorld = (modelMatrix * lw).xyz;
+        vLitNormal = normalize(mat3(modelMatrix) * ln);
+      }`);
+    sh.fragmentShader = 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + LIGHT_GLSL +
+      sh.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight *= stationLight(vLitWorld, normalize(vLitNormal));\n#include <opaque_fragment>');
+  };
+  mat.customProgramCacheKey = () => 'stationLit';
+  mat.needsUpdate = true;
+}
 
 /* =====================================================================
    TAHAP 3: SCENE JAUH (Saturnus, cincin, bintang, Matahari)
@@ -368,12 +451,14 @@ const groundMat = new THREE.ShaderMaterial({
   side: THREE.BackSide,
   uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
     uLand: { value: null }, uR: { value: CONFIG.R }, uHalfL: { value: HALF_L }, uL: { value: CONFIG.L },
-  }]),
+  }, LIGHT.uniforms]),
   vertexShader: /* glsl */`
     #include <fog_pars_vertex>
     varying vec3 vPos;
+    varying vec3 vWorld;
     void main() {
       vPos = position;
+      vWorld = (modelMatrix * vec4(position, 1.0)).xyz;
       vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
       gl_Position = projectionMatrix * mvPosition;
       #include <fog_vertex>
@@ -383,6 +468,8 @@ const groundMat = new THREE.ShaderMaterial({
     uniform sampler2D uLand;
     uniform float uR, uHalfL, uL;
     varying vec3 vPos;
+    varying vec3 vWorld;
+    ${LIGHT_GLSL}
     const float PI = 3.141592653589793;
     float gridLine(float coord, float spacing, float halfW, float footprint) {
       float d = abs(fract(coord / spacing + 0.5) - 0.5) * spacing;
@@ -402,11 +489,15 @@ const groundMat = new THREE.ShaderMaterial({
       float fpA = length(fwidth(vPos.xy)), fpZ = fwidth(za);
       float fine = max(gridLine(uv.x * 2.0 * PI * uR, 10.0, 0.06, fpA), gridLine(za, 10.0, 0.06, fpZ));
       vec3 col = mix(base, base * 0.86, fine * 0.35);
+      float rw = length(vWorld.xy);
+      col *= stationLight(vWorld, vec3(-vWorld.xy / rw, 0.0));
       gl_FragColor = vec4(col, 1.0);
       #include <colorspace_fragment>
       #include <fog_fragment>
     }`,
 });
+
+Object.assign(groundMat.uniforms, LIGHT.uniforms);   // pakai objek uniform yang sama (bukan salinan)
 
 // Permukaan dalam silinder: open-ended, 512 segmen keliling (sagitta 1,9 cm), 32 segmen panjang.
 // Sumbu silinder = Z dunia. Ada celah untuk strip jendela Skyway (lebar 30 m) di theta = WIN.theta.
@@ -699,12 +790,6 @@ updateCrawlers(0);
 
 
 
-// Sumbu: placeholder Sunline (garis)
-{
-  const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -HALF_L), new THREE.Vector3(0, 0, HALF_L)]);
-  const axis = new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0xfff1d6, fog: false }));
-  scene.add(axis);
-}
 
 /* =====================================================================
    OBJEK TAHAP 2: lift, hub 0 g, bola, penanda mendarat, lintasan
@@ -1002,6 +1087,7 @@ function mergeSimple(parts) {
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  out.computeVertexNormals();
   return out;
 }
 function shadeFaces(g, base = 0.55, step = 0.25) {              // variasi terang per segitiga (atap)
@@ -1522,6 +1608,7 @@ function stepFloat(dt) {
 
 function physicsStep(dt) {
   clock.sim += dt;
+  if (clock.hourRate) clock.hour = (clock.hour + dt * clock.hourRate) % 24;
   clock.orbit += dt * clock.orbitScale;
   switch (player.state) {
     case 'ground': stepGround(dt); break;
@@ -1785,6 +1872,8 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyE') doAction();
   if (e.code === 'KeyM') toggleMap();
   if (e.code === 'KeyV') toggleExterior();
+  if (e.code === 'BracketLeft') shiftHour(-1);
+  if (e.code === 'BracketRight') shiftHour(1);
   if (e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
@@ -1864,6 +1953,11 @@ on('labDrop', () => dropBall());
 on('labLift', () => enterLift());
 on('labOrbit', () => cycleOrbitSpeed());
 on('labExt', () => toggleExterior());
+on('labTime', () => cycleTimeRate());
+const inHour = document.getElementById('inHour'), inHourV = document.getElementById('inHourV');
+inHour.addEventListener('input', () => { clock.hour = +inHour.value; inHourV.textContent = fmtHour(clock.hour); });
+inHour.addEventListener('change', () => inHour.blur());
+document.getElementById('inShadow').addEventListener('change', (e) => { SHADOW.enabled = e.target.checked; e.target.blur(); });
 on('labWin', () => { if (player.state !== 'ground') return; player.theta = WIN.theta; player.pitch = -70 * DEG; });
 on('labTest', () => {
   const rows = runSelfTest();
@@ -1890,7 +1984,7 @@ window.addEventListener('resize', () => {
    ===================================================================== */
 const hud = document.getElementById('hud');
 hud.innerHTML = `
-  <div class="title">Tahap 4d · lambung tebal</div>
+  <div class="title">Tahap 5 · cahaya</div>
   <span class="k">FPS</span><span class="v" id="hFps">-</span>
   <span class="k wide">Frame</span><span class="v wide" id="hMs">-</span>
   <span class="k">Draw call</span><span class="v" id="hCalls">-</span>
@@ -1911,10 +2005,11 @@ hud.innerHTML = `
   <div class="sep"></div>
   <span class="k">Saturnus</span><span class="v" id="hSat">-</span>
   <span class="k wide">Fase orbit</span><span class="v wide" id="hOrb">-</span>
+  <span class="k">Jam stasiun</span><span class="v" id="hHour">-</span>
   <span class="k">Orbit x</span><span class="v" id="hOrbX">-</span>
   <span class="k wide">Trem</span><span class="v wide" id="hTram">-</span>`;
 const H = (id) => document.getElementById(id);
-const hEl = { tram: H('hTram'), sat: H('hSat'), orb: H('hOrb'), orbX: H('hOrbX'), fps: H('hFps'), ms: H('hMs'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
+const hEl = { hour: H('hHour'), tram: H('hTram'), sat: H('hSat'), orb: H('hOrb'), orbX: H('hOrbX'), fps: H('hFps'), ms: H('hMs'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
   theta: H('hTheta'), z: H('hZ'), h: H('hH'), head: H('hHead'), dist: H('hDist'), mode: H('hMode'), g: H('hG') };
 const _tmpV2 = new THREE.Vector2(), _satDir = new THREE.Vector3();
 const ORBIT_SPEEDS = [1, 100, 1000, 10000];
@@ -1968,9 +2063,186 @@ function updateStats(dt) {
   hEl.sat.textContent = `${(Math.acos(Math.max(-1, Math.min(1, _satDir.dot(upNow)))) / DEG).toFixed(0)}° dari zenit`;
   hEl.orb.textContent = `${(((orbitPhase() / DEG) % 360 + 360) % 360).toFixed(1)}° · ${(T_ORB / 3600).toFixed(2)} j`;
   hEl.orbX.textContent = clock.orbitScale + 'x';
+  hEl.hour.textContent = `${fmtHour(clock.hour)} · ${TIME_RATES.find((t) => t[0] === clock.hourRate)[1]}`;
+  if (document.activeElement !== inHour) { inHour.value = clock.hour.toFixed(1); inHourV.textContent = fmtHour(clock.hour); }
   hEl.g.textContent = player.state === 'air' ? `${localG().toFixed(3)} g (jatuh bebas)` : localG().toFixed(3) + ' g';
   stats.frames = 0; stats.time = 0;
 }
+
+/* =====================================================================
+   TAHAP 5: SUNLINE, TULANG SUMBU, CINCIN LAMPU END CAP, AWAN, BAYANGAN, SIKLUS HARI
+   ===================================================================== */
+const SPINE = { z0: -HALF_L + 80, z1: HALF_L - 80, modules: 5 };
+// inti sunline + cahaya pendar (additive) + modul cincin di tulang sumbu
+const sunCore = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, SPINE.z1 - SPINE.z0, 16, 1, true).rotateX(Math.PI / 2),
+  new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }));
+sunCore.userData.noLight = true;
+const glowMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  uniforms: { uCol: { value: new THREE.Vector3(1, 0.95, 0.85) }, uI: { value: 1 } },
+  vertexShader: /* glsl */`
+    varying vec3 vN; varying vec3 vV;
+    void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+  fragmentShader: /* glsl */`
+    uniform vec3 uCol; uniform float uI;
+    varying vec3 vN; varying vec3 vV;
+    void main() { float f = pow(max(dot(normalize(vN), normalize(vV)), 0.0), 3.0); gl_FragColor = vec4(uCol * f * uI * 0.55, 1.0); }`,
+});
+const sunGlow = new THREE.Mesh(new THREE.CylinderGeometry(38, 38, SPINE.z1 - SPINE.z0, 32, 1, true).rotateX(Math.PI / 2), glowMat);
+sunGlow.renderOrder = 5;
+sunCore.position.z = sunGlow.position.z = (SPINE.z0 + SPINE.z1) / 2;
+scene.add(sunCore, sunGlow);
+{
+  const modMat = new THREE.MeshBasicMaterial({ color: 0x2b3038 });
+  for (let k = 1; k <= SPINE.modules; k++) {
+    const z = SPINE.z0 + (k / (SPINE.modules + 1)) * (SPINE.z1 - SPINE.z0);
+    const tor = new THREE.Mesh(new THREE.TorusGeometry(34, 6, 10, 48), modMat);
+    tor.position.z = z; tor.userData.noLight = true; scene.add(tor);
+    const hubC = new THREE.Mesh(new THREE.CylinderGeometry(14, 14, 30, 16).rotateX(Math.PI / 2), modMat);
+    hubC.position.z = z; hubC.userData.noLight = true; scene.add(hubC);
+  }
+}
+// cincin lampu keemasan di kedua end cap (di luar kaca, menempel pada jari-jari)
+const capRingMat = new THREE.MeshBasicMaterial({ color: 0xffc070, fog: false });
+for (const sgn of [-1, 1]) {
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(CAP_RING_R, 10, 10, 192), capRingMat);
+  ring.position.z = sgn * (HALF_L + 9); ring.userData.noLight = true;
+  scene.add(ring);
+}
+
+// --- awan: billboard lembut, 1 draw call --------------------------------
+const cloudTex = (() => {
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d');
+  let sd = 7; const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 26; i++) {
+    const x = 34 + rr() * 60, y = 44 + rr() * 44, r = 16 + rr() * 26;
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0, 'rgba(255,255,255,0.55)'); grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, TAU); g.fill();
+  }
+  return new THREE.CanvasTexture(c);
+})();
+const cloudMat = new THREE.ShaderMaterial({
+  transparent: true, depthWrite: false,
+  uniforms: { uTex: { value: cloudTex }, uCol: { value: new THREE.Vector3(1, 1, 1) }, uFogCol: { value: new THREE.Vector3() }, uFogD: { value: CONFIG.fogDensity }, uAlpha: { value: 0.9 } },
+  vertexShader: /* glsl */`
+    varying vec2 vUv; varying float vDist;
+    void main() {
+      vUv = uv;
+      vec4 c = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+      float size = length(instanceMatrix[0].xyz);
+      vec3 camRight = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
+      vec3 camUp = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
+      vec4 mv = viewMatrix * vec4(c.xyz + (camRight * position.x + camUp * position.y) * size, 1.0);
+      vDist = -mv.z;
+      gl_Position = projectionMatrix * mv;
+    }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D uTex; uniform vec3 uCol, uFogCol; uniform float uFogD, uAlpha;
+    varying vec2 vUv; varying float vDist;
+    void main() {
+      float a = texture2D(uTex, vUv).a * uAlpha;
+      float f = 1.0 - exp(-uFogD * uFogD * vDist * vDist);
+      gl_FragColor = vec4(mix(uCol, uFogCol, f * 0.8), a * (1.0 - 0.5 * f) * smoothstep(20.0, 120.0, vDist));
+      #include <colorspace_fragment>
+    }`,
+});
+{
+  const puffs = [];
+  let sd = 99; const rr = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 45; i++) {
+    const th = rr() * TAU, za = 300 + rr() * 7400, h = 260 + rr() * 160;
+    const n = 3 + Math.floor(rr() * 3);
+    for (let q = 0; q < n; q++) puffs.push([th + (rr() - 0.5) * 120 / R, za + (rr() - 0.5) * 160, h + (rr() - 0.5) * 30, 80 + rr() * 70]);
+  }
+  const clouds = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1), cloudMat, puffs.length);
+  const m = new THREE.Matrix4(), p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+  puffs.forEach(([th, za, h, size], i) => {
+    const r = R - h;
+    clouds.setMatrixAt(i, m.compose(p.set(r * Math.cos(th), r * Math.sin(th), za - HALF_L), q, s.set(size, size, size)));
+  });
+  clouds.instanceMatrix.needsUpdate = true; clouds.frustumCulled = false; clouds.renderOrder = 6;
+  clouds.userData.noLight = true;
+  scene.add(clouds);
+}
+
+// --- bayangan real-time dari cincin lampu end cap terdekat (radius sekitar 320 m dari pemain) ---
+const SHADOW = { enabled: true, size: 2048, extent: 320 };
+const shadowRT = new THREE.WebGLRenderTarget(SHADOW.size, SHADOW.size, { depthBuffer: true });
+shadowRT.depthTexture = new THREE.DepthTexture(SHADOW.size, SHADOW.size);
+const shadowCam = new THREE.OrthographicCamera(-SHADOW.extent, SHADOW.extent, SHADOW.extent, -SHADOW.extent, 1, 2600);
+shadowCam.layers.set(1);
+const depthMat = new THREE.MeshBasicMaterial({ colorWrite: false, side: THREE.DoubleSide });
+LIGHT.uniforms.uL_ShadowMap.value = shadowRT.depthTexture;
+const _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sl = new THREE.Vector3();
+function shadowPass() {
+  const U = LIGHT.uniforms;
+  if (!SHADOW.enabled || ext.active || U.uL_CapI.value < 0.15) { U.uL_ShadowOn.value = 0; return; }
+  groundPoint(player.theta, player.za, 0, _sp);
+  const cap = player.za < CONFIG.L / 2 ? 0 : 1;
+  const cx = Math.cos(player.theta), cy = Math.sin(player.theta);
+  _sq.set(cx * CAP_RING_R, cy * CAP_RING_R, cap === 0 ? -HALF_L : HALF_L);
+  _sl.subVectors(_sq, _sp).normalize();
+  shadowCam.position.copy(_sp).addScaledVector(_sl, 1200);
+  shadowCam.up.set(-cx, -cy, 0);
+  shadowCam.lookAt(_sp);
+  shadowCam.updateMatrixWorld();
+  U.uL_ShadowMat.value.multiplyMatrices(shadowCam.projectionMatrix, shadowCam.matrixWorldInverse);
+  U.uL_ShadowCap.value = cap; U.uL_ShadowOn.value = 1;
+  scene.overrideMaterial = depthMat;
+  renderer.setRenderTarget(shadowRT); renderer.clear(); renderer.render(scene, shadowCam);
+  renderer.setRenderTarget(null);
+  scene.overrideMaterial = null;
+}
+
+// --- siklus hari -----------------------------------------------------------
+const TIME_RATES = [[1 / 60, '1 menit = 1 jam'], [1 / 10, '10 detik = 1 jam'], [1, '1 detik = 1 jam'], [0, 'berhenti']];
+clock.hour = 15.0; clock.hourRate = TIME_RATES[0][0];
+const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const mixV = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+function updateLighting() {
+  const h = clock.hour, U = LIGHT.uniforms;
+  const day = sstep(5.5, 7.5, h) * (1 - sstep(17.5, 19.5, h));
+  const golden = Math.min(1, Math.exp(-(((h - 18.2) / 1.1) ** 2)) + 0.6 * Math.exp(-(((h - 6.6) / 0.9) ** 2)));
+  U.uL_Sunline.value = 0.04 + 0.9 * day;
+  U.uL_SunlineCol.value.set(1.0, 0.97 - 0.14 * golden, 0.92 - 0.32 * golden);
+  const amb = mixV(mixV([0.02, 0.025, 0.045], [0.17, 0.2, 0.25], day), [0.2, 0.14, 0.09], golden * 0.6);
+  U.uL_AmbCol.value.set(amb[0], amb[1], amb[2]);
+  U.uL_CapI.value = 0.05 + 0.25 * day + 1.1 * golden;
+  // sinar Matahari dalam kerangka stasiun (atau inersia saat kamera luar)
+  if (ext.active) U.uL_SunDir.value.copy(SUN_DIR);
+  else { const c = Math.cos(OMEGA * clock.sim), s = Math.sin(OMEGA * clock.sim);
+    U.uL_SunDir.value.set(SUN_DIR.x * c + SUN_DIR.y * s, -SUN_DIR.x * s + SUN_DIR.y * c, SUN_DIR.z); }
+  // kabut: biru siang, keemasan senja, biru gelap malam
+  const fog = mixV(mixV([0.05, 0.06, 0.09], [0.68, 0.76, 0.86], day), [0.86, 0.66, 0.46], Math.min(1, golden * 0.75));
+  scene.fog.color.setRGB(fog[0], fog[1], fog[2], THREE.SRGBColorSpace);
+  // visual sunline, cincin lampu, awan
+  const I = U.uL_Sunline.value;
+  sunCore.material.color.setRGB(0.25 + 1.2 * I, 0.24 + 1.15 * I * (1 - 0.1 * golden), 0.22 + 1.05 * I * (1 - 0.3 * golden));
+  glowMat.uniforms.uI.value = 0.15 + 1.1 * I;
+  capRingMat.color.setRGB(0.3 + 1.6 * U.uL_CapI.value, 0.2 + 1.0 * U.uL_CapI.value, 0.08 + 0.45 * U.uL_CapI.value);
+  const cc = U.uL_SunlineCol.value;
+  cloudMat.uniforms.uCol.value.set(cc.x * (0.25 + 0.9 * I) + amb[0] + 0.25 * golden, cc.y * (0.25 + 0.9 * I) + amb[1] + 0.12 * golden, cc.z * (0.25 + 0.9 * I) + amb[2]);
+  cloudMat.uniforms.uFogCol.value.set(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b);
+  cloudMat.uniforms.uFogD.value = scene.fog.density;
+}
+function shiftHour(dh) { clock.hour = ((clock.hour + dh) % 24 + 24) % 24; }
+function cycleTimeRate() {
+  const i = TIME_RATES.findIndex((t) => t[0] === clock.hourRate);
+  clock.hourRate = TIME_RATES[(i + 1) % TIME_RATES.length][0];
+}
+const fmtHour = (h) => `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`;
+
+// --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
+hub.userData.noLight = true;
+ballMesh.userData.noShadow = true; markMesh.userData.noShadow = true;
+scene.traverse((o) => {
+  if (!o.isMesh || !o.material || !o.material.isMeshBasicMaterial || o.userData.noLight) return;
+  for (let p = o; p; p = p.parent) if (p === exteriorGroup) return;
+  patchLit(o.material);
+  if (!o.userData.noShadow) o.layers.enable(1);
+});
 
 /* =====================================================================
    LOOP: fixed timestep untuk fisika, render tiap frame
@@ -1986,7 +2258,9 @@ function frame(now) {
   if (n === CONFIG.maxSubSteps) acc = 0;           // cegah spiral lambat
   updateCamera();
   updateFar();
+  updateLighting();
   renderer.info.reset();
+  shadowPass();
   renderer.clear();
   renderer.render(farScene, farCam);
   renderer.clearDepth();
@@ -2002,7 +2276,7 @@ updateCamera();
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting };
 requestAnimationFrame(frame);
 </script>
 </body>
