@@ -97,6 +97,8 @@ Per baris za: puncak 90 rumah per sel (za 750), turun ke 53 (za 1500), 27 (za 20
 - Alun-alun (plaza) di depan halte New York dengan bangku dan pohon.
 - Tiap distrik: balai distrik (gedung sipil rendah berpilar) di blok dekat simpang arteri paling tengah distrik.
 
+**Hasil 16c (selesai):** sistem lokasi khusus `reserveSite()` (blok terdekat ke titik sasaran dipesan sebelum pengisian, dipakai juga 16d dan 16e). CBD New York: blok pusat dalam 380 m dari (s 0, za 480) selalu podium + menara, 72 menara 60-150 m (tertinggi 142 m). Menara ikon orisinal di blok dekat halte New York: lima tingkat mundur (34, 28, 22, 16, 10 m), cincin mahkota, antena, puncak 221 m, lampu penanda merah berkedip malam. Alun-alun di depan halte New York. 14 balai distrik (aula berpilar enam, serambi, atap limas; megacity berkubah). Biaya titik awal kota Ultra 3,21 jt, Hemat 1,14 jt segitiga.
+
 ### 16d Pasar
 - Pasar New York: gedung pasar besar beratap lengkung + lapak terbuka di blok samping halte 1125 (akses trem).
 - Pasar distrik: di tiap megacity (Tokyo, Shanghai, Delhi, Kairo) di blok pusat kepadatan dekat simpang besar; pasar lingkungan kecil (lapak saja) di tiap distrik astronom di blok tengah.

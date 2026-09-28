@@ -7,7 +7,7 @@ from playwright.async_api import async_playwright
 UJI = r"""
 (async () => {
   const S = window.__station, out = {}, wait = (ms) => new Promise((r) => setTimeout(r, ms));
-  const D = S.DISTRICTS, city = D.filter((d) => d.kind === 'mega' || d.kind === 'astro');
+  const CIRC_H = Math.PI * S.R, D = S.DISTRICTS, city = D.filter((d) => d.kind === 'mega' || d.kind === 'astro');
   const cnt = new Map(); let none = 0;
   for (const c of S.cityCells) { const d = S.districtAt(c.s0 + S.ART / 2, c.z0 + 125); if (!d) none++; else cnt.set(d.name, (cnt.get(d.name) || 0) + 1); }
   out[`sel kota ${S.cityCells.length}: tanpa distrik ${none}, distrik kota terisi ${cnt.size}/${city.length}`] = none === 0 && cnt.size === 14 && city.length === 14;
@@ -18,8 +18,15 @@ UJI = r"""
   out[`luar kota: ${luar.join(', ')}`] = luar.join() === 'Taman Nil,Taman Mekong,Punjab,Pampas,Iowa,Ukraina';
   const stops = S.TRAM.stops.map((s) => s.name).join(', ');
   out[`halte: ${stops}`] = /New York, Pasar New York, Kairo, Taman Nil, Pampas/.test(stops);
-  S.setLang('id'); S.teleport('cooper'); await wait(1500); S.teleport('baseball'); await wait(1500);
-  const toast = document.getElementById('toast').textContent, here = S.districtAt(S.player.theta * S.R, S.player.za);
+  // 16c: pusat New York dan balai distrik
+  const site = (t) => S.SITES.filter((x) => x.type === t);
+  const cbd = S.BUILD.flat.filter((b) => Math.hypot(((b[0] + CIRC_H) % (2 * CIRC_H)) - CIRC_H, b[1] - 480) < 400 && b[5] === 8).map((b) => b[4]);
+  out[`menara ikon ${S.LANDMARK.h.toFixed(0)} m, menara CBD ${cbd.length} (tertinggi ${Math.max(...cbd).toFixed(0)} m), alun-alun ${site('alun').length}`] = S.LANDMARK.h > 200 && Math.max(...cbd) > 120 && site('alun').length === 1;
+  const balai = site('balai');
+  out[`balai distrik ${balai.length}, tiap distrik kota satu`] = balai.length === 14 && new Set(balai.map((x) => x.district.name)).size === 14 && balai.every((x) => S.districtAt(x.q.bs, x.q.bz) === x.district);
+  S.setLang('id'); S.teleport('cooper'); await wait(1500); S.teleport('baseball');
+  const here = S.districtAt(S.player.theta * S.R, S.player.za);
+  let toast = ''; for (let q = 0; q < 40 && toast !== `Distrik ${here && here.name}`; q++) { await wait(250); toast = document.getElementById('toast').textContent; }   // HUD diperbarui berkala
   out[`notifikasi saat pindah: "${toast}"`] = !!here && toast === `Distrik ${here.name}`;
   return out;
 })()

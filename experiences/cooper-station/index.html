@@ -2755,26 +2755,76 @@ function buildMosqueMesh() {                                          // gabung 
 }
 // --- kota: isi setiap blok sesuai kepadatan -----------------------------
 const parkBlocks = [];
+// 15c: sisi arteri mundur 3 m lagi (tepi blok 17 m dari sumbu, di belakang trotoar); boulevard 25 m
+function blockRect(c, a, b) {
+  const { sCuts, zCuts } = c.grid;
+  const artS = (x) => (Math.abs(wrapS(x - TRAM.s)) < 1 ? ROAD.boulevard / 2 : ROAD.art / 2) + 3;
+  const inS0 = a === 0 ? artS(sCuts[a]) : ROAD.local / 2, inS1 = a === sCuts.length - 2 ? artS(sCuts[a + 1]) : ROAD.local / 2;
+  const inZ0 = b === 0 ? ROAD.art / 2 + 3 : ROAD.local / 2, inZ1 = b === zCuts.length - 2 ? ROAD.art / 2 + 3 : ROAD.local / 2;
+  const s0 = sCuts[a] + inS0 + 2, s1 = sCuts[a + 1] - inS1 - 2, z0 = zCuts[b] + inZ0 + 2, z1 = zCuts[b + 1] - inZ1 - 2;
+  return { s0, s1, z0, z1, bw: s1 - s0, bd: z1 - z0, bs: (s0 + s1) / 2, bz: (z0 + z1) / 2, key: `${c.i}|${c.z0}|${a}|${b}` };
+}
+// 16c: lokasi khusus (fasilitas kota) dipesan dulu pada blok terdekat ke titik sasaran, lalu dibangun di loop pengisian
+const CITY_BLOCKS = [], SITES = [], SITE_AT = new Map();
+for (const c of cityCells) for (let a = 0; a < c.grid.sCuts.length - 1; a++) for (let b = 0; b < c.grid.zCuts.length - 1; b++) {
+  const q = blockRect(c, a, b); if (q.bw >= 12 && q.bd >= 12) CITY_BLOCKS.push(q);
+}
+function reserveSite(type, target, minW, minD, extra = {}) {
+  let best = null, bdist = 1e9;
+  for (const q of CITY_BLOCKS) {
+    if (SITE_AT.has(q.key) || q.bw < minW || q.bd < minD || inBallpark(q.bs, q.bz, 10) || inWater(q.bs, q.bz, 20) || inRiver(q.bs, q.bz, 25)) continue;
+    if (extra.district && districtAt(q.bs, q.bz) !== extra.district) continue;
+    const dd = Math.hypot(wrapS(q.bs - target.s), q.bz - target.za); if (dd < bdist) { bdist = dd; best = q; }
+  }
+  if (!best) return null;
+  const site = Object.assign({ type, q: best }, extra); SITES.push(site); SITE_AT.set(best.key, site); return site;
+}
+const LANDMARK = { h: 0, beacon: null };
+reserveSite('menara', { s: 75, za: 540 }, 32, 32);                 // menara ikon dekat halte New York
+reserveSite('alun', { s: 45, za: 640 }, 20, 20);                  // alun-alun di depan halte New York
+for (const D of DISTRICTS) if (D.kind === 'mega' || D.kind === 'astro')
+  reserveSite('balai', { s: D.c.s + 40, za: D.c.za + 30 }, 40, 30, { district: D });   // balai distrik dekat pusat distrik
+function buildSite(site) {
+  const { s0, z0, s1, z1, bw, bd, bs, bz } = site.q, P = MOSQUE.parts;
+  const add = (geo, col, x, y, z) => P.push({ geo: geo.translate(x, y, z), col, s: bs, za: bz });
+  if (site.type === 'alun') { parkBlocks.push([s0, z0, s1, z1, true]); return; }
+  if (site.type === 'menara') {                                     // menara ikon orisinal: lima tingkat mundur, mahkota, antena 220 m
+    const tiers = [[34, 70], [28, 45], [22, 35], [16, 25], [10, 10]]; let y = 0;
+    building('flat', bs, bz, Math.min(bw - 4, 52), Math.min(bd - 4, 46), 9, pick(COLS.mid), 0, true, 11);   // podium
+    for (const [w, h] of tiers) { building('flat', bs, bz, w, w, h, '#a9b8c4', y, y === 0, 1); y += h; }
+    const STEEL = [0.62, 0.65, 0.68];
+    add(new THREE.TorusGeometry(7, 0.35, 6, 32).rotateX(Math.PI / 2), STEEL, 0, y - 6, 0);
+    add(new THREE.CylinderGeometry(0.25, 1.4, 36, 10), STEEL, 0, y + 18, 0);
+    LANDMARK.s = bs; LANDMARK.za = bz; LANDMARK.h = y + 36; return;
+  }
+  if (site.type === 'balai') {                                      // balai distrik: aula berpilar dengan serambi; megacity berkubah
+    const W = Math.min(40, bw - 8), Dd = Math.min(26, bd - 14), STONE = [0.9, 0.87, 0.8], LEAD = [0.47, 0.51, 0.55];
+    building('flat', bs, bz + 3, W, Dd, 11, '#e8e0cc', 0, true, 7, 1);
+    const zf = 3 - Dd / 2 - 3.5;                                    // serambi di muka -za
+    for (let q = 0; q < 6; q++) add(new THREE.CylinderGeometry(0.55, 0.65, 9, 12), STONE, -W * 0.36 + q * W * 0.144, 4.5, zf);
+    add(new THREE.BoxGeometry(W * 0.82, 1.2, 6), STONE, 0, 9.6, zf + 0.5);
+    add(new THREE.ConeGeometry(Math.SQRT1_2, 1, 4).rotateY(Math.PI / 4).scale(W * 0.84, 2.4, 6.2), STONE, 0, 11.4, zf + 0.5);
+    if (site.district.kind === 'mega') { add(new THREE.CylinderGeometry(6.4, 6.4, 3, 28), STONE, 0, 12.5, 3); add(new THREE.SphereGeometry(6, 28, 12, 0, TAU, 0, Math.PI / 2), LEAD, 0, 14, 3); }
+    site.hall = { s: bs, za: bz };
+  }
+}
 for (const c of cityCells) {
   const { sCuts, zCuts } = c.grid;
   for (let a = 0; a < sCuts.length - 1; a++) for (let b = 0; b < zCuts.length - 1; b++) {
-    // 15c: sisi arteri mundur 3 m lagi (tepi blok 17 m dari sumbu, di belakang trotoar); boulevard 25 m
-    const artS = (x) => (Math.abs(wrapS(x - TRAM.s)) < 1 ? ROAD.boulevard / 2 : ROAD.art / 2) + 3;
-    const inS0 = a === 0 ? artS(sCuts[a]) : ROAD.local / 2, inS1 = a === sCuts.length - 2 ? artS(sCuts[a + 1]) : ROAD.local / 2;
-    const inZ0 = b === 0 ? ROAD.art / 2 + 3 : ROAD.local / 2, inZ1 = b === zCuts.length - 2 ? ROAD.art / 2 + 3 : ROAD.local / 2;
-    const s0 = sCuts[a] + inS0 + 2, s1 = sCuts[a + 1] - inS1 - 2, z0 = zCuts[b] + inZ0 + 2, z1 = zCuts[b + 1] - inZ1 - 2;
-    const bw = s1 - s0, bd = z1 - z0, bs = (s0 + s1) / 2, bz = (z0 + z1) / 2;
+    const { s0, s1, z0, z1, bw, bd, bs, bz, key } = blockRect(c, a, b);
     if (bw < 12 || bd < 12) continue;
+    const site = SITE_AT.get(key); if (site) { buildSite(site); continue; }   // 16c: fasilitas kota
     const d = cityDensity(bs, bz), cls = cityClass(d), r = rnd();
     if ((cls === 'pusat' && r < 0.08) || (cls !== 'pusat' && r < 0.05)) { parkBlocks.push([s0, z0, s1, z1, cls === 'pusat']); continue; }
     if (cls === 'pusat') {
-      const t = Math.min(1, (d - 0.72) / 0.28);
-      if (rnd() < 0.4) {                                          // podium + menara
+      const t = Math.min(1, (d - 0.72) / 0.28), cbd = Math.hypot(wrapS(bs), bz - 480);   // 16c: CBD New York dalam 380 m dari pusat
+      if (cbd < 380 || rnd() < 0.4) {                               // podium + menara
         const w = bw * U(0.7, 0.9), dd = bd * U(0.7, 0.9);
         if (!clearOf(bs, bz, w, dd)) continue;
         const col = pick(COLS.tower);
         building('flat', bs, bz, w, dd, U(7, 10), pick(COLS.mid), 0, true, 11);
-        building('flat', bs + U(-3, 3), bz + U(-3, 3), w * U(0.45, 0.65), dd * U(0.45, 0.65), U(22, 40) + 38 * t * U(0.5, 1), col, 8);
+        const hT = cbd < 380 ? U(60, 150) * (1 - 0.45 * cbd / 380) : U(22, 40) + 38 * t * U(0.5, 1);
+        building('flat', bs + U(-3, 3), bz + U(-3, 3), w * U(0.45, 0.65), dd * U(0.45, 0.65), hT, col, 8);
       } else {                                                    // 2-3 gedung berjajar
         const k = rnd() < 0.5 ? 2 : 3, piece = bd / k;
         for (let q = 0; q < k; q++) {
@@ -2804,7 +2854,12 @@ for (const c of cityCells) {
     }
   }
 }
-buildMosqueMesh();
+buildMosqueMesh();                                                  // juga potongan fasilitas 16c (pilar, mahkota menara)
+if (LANDMARK.h) {                                                    // 16c: lampu penanda pesawat di puncak menara ikon (berkedip malam)
+  LANDMARK.beacon = new THREE.Mesh(new THREE.SphereGeometry(0.6, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2010 }));
+  surfaceMatrix(LANDMARK.beacon.matrix, LANDMARK.s / R, LANDMARK.za, LANDMARK.h); LANDMARK.beacon.matrixAutoUpdate = false;
+  LANDMARK.beacon.userData.noLight = true; LANDMARK.beacon.userData.noShadow = true; scene.add(LANDMARK.beacon);
+}
 // plaza spaceport: beberapa hanggar dan terminal
 const TERM = { s: 110, za: 196, w: 120, d: 64, h: 11 };            // terminal kaca (dibangun di tahap 11d, di bawah)
 for (let i = 0; i < 26; i++) {
@@ -6724,6 +6779,7 @@ function updateTraffic() {
   BALLPARK_G.userData.heads.color.setRGB(0.4 + 4 * nt, 0.4 + 3.9 * nt, 0.38 + 3.6 * nt);      // lampu stadion
   BALLPARK_G.userData.decalMat.color.setScalar(1 + 8 * nt);                                   // lapangan terang saat lampu stadion menyala
   groundMat.uniforms.uNight.value = nt;
+  if (LANDMARK.beacon) { const on = (clock.sim % 1.5) < 0.25 ? 1 : 0; LANDMARK.beacon.material.color.setRGB(0.5 + 5 * nt * on, 0.03, 0.02); }
 }
 
 await bootStep(BOOT_W[16], 'Efek layar...');
@@ -9677,7 +9733,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
