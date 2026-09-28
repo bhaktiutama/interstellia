@@ -84,7 +84,7 @@ Catatan: cat yang dilihat tegak lurus hanya memantul sekitar 4%, jadi kilap pali
 
 | Tahap | Isi | Biaya GPU (perkiraan) |
 | --- | --- | --- |
-| 17c | Adaptasi mata: rata-rata log luminans layar (192 titik, tengah lebih berbobot) di target 1x1, dihaluskan terhadap waktu di GPU (tanpa baca balik). Eksposur x (kunci / L)^0,45, dibatasi 0,6 sampai 1,8. Ke terang cepat (sekitar 0,5 s), ke gelap lambat (sekitar 2 s). `ADAPT`, `lumMat`, `POST_R.lum` | Sangat rendah |
+| 17c | Adaptasi mata: rata-rata log luminans layar (192 titik, tengah lebih berbobot) di target 1x1, dihaluskan terhadap waktu di GPU (tanpa baca balik). Revisi setelah uji Bhakti (tidak terasa): eksposur x (0,16 / L)^0,6, dibatasi 0,45 sampai 2,2 (dulu ^0,45, 0,6-1,8). Ke terang sekitar 0,6 s, ke gelap sekitar 2,5 s. Terukur: siang di luar x1,06, terminal x1,56, malam x2,2. Tombol "Adaptasi mata" di panel Grafik untuk membandingkan. Butuh efek layar (tidak aktif di preset Hemat). `ADAPT`, `lumMat`, `POST_R.lum` | Sangat rendah |
 | 17e | `nightLight(p, n)` di `LIGHT_GLSL`: kolam cahaya lampu jalan (`lampPoolL`, salinan `lampPool` tanah) dan trem (`tramPoolL`) menerangi gedung, perabot, pohon, rumput, mobil, pejalan kaki. Muka atas penuh, dinding setengah, hilang di atas 18 m | Rendah |
 | 17f | Bayangan sunline: peta kedalaman ortografis 2048 piksel, 300 x 300 m di sekitar pemain, dilihat dari arah sumbu (`SUNSH`, `sunShadowPass()`). Tajam ke arah keliling, kabur searah sumbu sepanjang 0,75 x tinggi penghalang (cari penghalang 7 titik + PCF 8 titik; vegetasi 3 + 3). Bayangan tajuk panggang memudar di area ini agar tidak dobel. Mobil dan pejalan kaki kini ikut membuat bayangan. Mati di preset Rendah dan Hemat, saat malam, di lift/hub, dan di kamera luar | Sedang |
 

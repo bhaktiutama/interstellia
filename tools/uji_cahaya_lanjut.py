@@ -84,13 +84,29 @@ UJI = r"""
   // ---------- 17c: adaptasi mata ----------
   const readL = () => { const px = new Uint16Array(4); S.renderer.readRenderTargetPixels(S.POST_R.lum[S.ADAPT.cur], 0, 0, 1, 1, px); return [...px].map((h) => THREE.DataUtils.fromHalfFloat(h)); };   // target half-float
   const mult = (L) => Math.min(S.ADAPT.max, Math.max(S.ADAPT.min, Math.pow(S.ADAPT.key / Math.max(L, 1e-4), S.ADAPT.pow)));
-  S.teleport('cooper'); S.clock.hour = 13; await wait(6000);
-  const Ld = readL(); await wait(200);
-  S.clock.hour = 23; await wait(9000);
+  // [0] = teradaptasi, [1] = sesaat. Sandbox lambat (beberapa fps), jadi pengali diuji dari nilai sesaat.
+  const hr0 = S.clock.hourRate; S.clock.hourRate = 0;
+  S.teleport('cooper'); S.clock.hour = 13; await wait(5000);
+  const Ld = readL();
+  S.teleport('spaceport'); await wait(5000);
+  const Lt = readL();
+  S.teleport('cooper'); S.clock.hour = 23; await wait(6000);
   const Ln = readL();
-  out[`17c adaptasi: luminans teradaptasi siang ${Ld[0].toFixed(4)} (pengali ${mult(Ld[0]).toFixed(2)}), malam ${Ln[0].toFixed(4)} (pengali ${mult(Ln[0]).toFixed(2)})`] =
-    Number.isFinite(Ld[0]) && Number.isFinite(Ln[0]) && Ld[0] > 0 && Ln[0] > 0 && Ln[0] < Ld[0] && mult(Ln[0]) > mult(Ld[0]) && Math.abs(mult(Ld[0]) - 1) < 0.25;
-  S.clock.hour = 12;
+  out[`17c luminans sesaat: siang di luar ${Ld[1].toFixed(4)} (pengali ${mult(Ld[1]).toFixed(2)}), terminal ${Lt[1].toFixed(4)} (pengali ${mult(Lt[1]).toFixed(2)}), malam ${Ln[1].toFixed(4)} (pengali ${mult(Ln[1]).toFixed(2)})`] =
+    [Ld, Lt, Ln].every((v) => Number.isFinite(v[0]) && v[0] > 0) && Math.abs(mult(Ld[1]) - 1) < 0.2 && mult(Ln[1]) > 1.8;
+  out[`17c nilai teradaptasi bergerak ke arah malam: ${Ld[0].toFixed(4)} -> ${Ln[0].toFixed(4)}`] = Ln[0] < Ld[0];
+  S.clock.hour = 12; S.clock.hourRate = hr0;
+
+  // ---------- 18a: kompleks utilitas padat ----------
+  const UT = S.UTIL, inBand = S.houseList.filter(([s, za, w, d, h, t]) => za > UT.za0 && za < UT.za1 && w > 5 && d > 5);
+  let ov = 0; const mo = (x) => { const C = 2 * Math.PI * S.R; return ((x % C) + C * 1.5) % C - C / 2; };
+  for (let i = 0; i < inBand.length; i++) for (let j = i + 1; j < inBand.length; j++) {
+    const A = inBand[i], B = inBand[j];
+    if (Math.abs(mo(A[0] - B[0])) < (A[2] + B[2]) / 2 - 0.5 && Math.abs(A[1] - B[1]) < (A[3] + B[3]) / 2 - 0.5) ov++;
+  }
+  const inSky = inBand.filter(([s]) => Math.abs(mo(s - S.SKY_S)) < 45).length;
+  out[`18a utilitas: ${S.UTIL_PLAN.modules} modul, ${S.UTIL_PLAN.silos} tangki, ${S.UTIL_PLAN.pipes} rak pipa; ${inBand.length} bangunan dasar; tumpang tindih ${ov}; di Skyway ${inSky}`] =
+    S.UTIL_PLAN.modules > 1000 && ov === 0 && inSky === 0;
 
   out[`semua evaluasi shader: tanpa nilai tidak valid (${bad})`] = bad === 0;
   return out;

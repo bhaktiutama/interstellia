@@ -251,6 +251,7 @@
         <button id="labVeg" type="button">Vegetasi: Tinggi (K)</button>
         <button id="labPost" type="button">Efek layar: Tinggi (P)</button>
         <button id="labRays" type="button">Sunrays: nyala</button>
+        <button id="labAdapt" type="button">Adaptasi mata: nyala</button>
         <button id="labLeaf" type="button">Suasana daun: Campur</button>
         <button id="labFall" type="button">Daun jatuh: nyala</button>
         <button id="labPeds" type="button">Pejalan kaki: nyala</button>
@@ -683,6 +684,8 @@ Object.assign(I18N.en, {
   "Sunrays: {s}": "Sunrays: {s}",
   " (preset ini: mati)": " (this preset: off)",
   "Efek layar: {m} (P)": "Screen effects: {m} (P)",
+  "Adaptasi mata: nyala": "Eye adaptation: on",
+  "Adaptasi mata: {s}": "Eye adaptation: {s}",
   "Musik: {m} (J)": "Music: {m} (J)",
   "generatif": "generative",
   "file sendiri": "own file",
@@ -3226,10 +3229,79 @@ for (let i = 0; i < 26; i++) {
 }
 
 // --- utilitas: gudang dan tangki ---------------------------------------
+// 18a: kompleks utilitas padat. Loop lama tetap dijalankan tanpa membangun apa pun, agar urutan angka acak bersama
+// (rnd / U / pick) untuk bagian sesudahnya (rumah pertanian dan seterusnya) tidak bergeser.
 for (let s = 20; s < CIRC - 60; s += U(110, 150)) for (let z = UTIL.za0 + 40; z < UTIL.za1 - 40; z += U(100, 130)) {
   const w = U(40, 90), d = U(25, 45);
-  if (clearOf(s + w / 2, z, w, d)) building('flat', s + w / 2, z, w, d, U(8, 16), pick(COLS.ind));
-  if (rnd() < 0.3 && clearOf(s + w + 20, z, 20, 20)) building('silo', s + w + 20, z, 18, 18, U(12, 18), '#c9ccd0');
+  if (clearOf(s + w / 2, z, w, d)) { U(8, 16); pick(COLS.ind); }
+  if (rnd() < 0.3 && clearOf(s + w + 20, z, 20, 20)) U(12, 18);
+}
+// Kompleks baru (angka acak sendiri): jalan servis keliling di tengah pita (10 m) dan dua jalan sekunder (7 m), jalan
+// silang tiap 70-130 m. Tiap blok dipecah berulang (BSP) menjadi modul yang rapat, dipisah lorong 2,5-4,5 m: gudang dan
+// hanggar bertingkat, blok atas bertangga, unit atap, gugus tangki, cerobong, dan rak pipa di atas jalan servis.
+const UTIL_PLAN = { modules: 0, silos: 0, pipes: 0 };
+{
+  let sd = 20260928; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const RU = (a, b) => a + (b - a) * r(), RP = (a) => a[Math.floor(r() * a.length)];
+  const Z0 = UTIL.za0 + 14, Z1 = UTIL.za1 - 14, ZM = (UTIL.za0 + UTIL.za1) / 2, LANE = 7;
+  const LANES = [[ZM - 125 - LANE / 2, ZM - 125 + LANE / 2], [ZM - 5, ZM + 5], [ZM + 125 - LANE / 2, ZM + 125 + LANE / 2]];
+  const STRIPS = [[Z0, LANES[0][0]], [LANES[0][1], LANES[1][0]], [LANES[1][1], LANES[2][0]], [LANES[2][1], Z1]];
+  const COLS_U = [...COLS.ind, '#7c8388', '#c3c6c9', '#868d86', '#9aa39c', '#aab0b5', '#6f767c'];
+  const mo = (x) => ((x % CIRC) + CIRC) % CIRC;
+  const EX = [[TRAM.s, ROAD.boulevard / 2 + 3], [SKY_S, 47]];
+  const blocked = (a, b) => EX.some(([c, h]) => { for (let x = a; x <= b + 1e-6; x += Math.max(1, (b - a) / 8)) { const d = Math.abs(mo(x - c + CIRC / 2) - CIRC / 2); if (d < h) return true; } return false; });
+  const box = (s, za, w, d, h, col, elev = 0, style = 4, coll = true) => building('flat', s, za, w, d, h, col, elev, coll, style);
+  function module(a0, b0, a1, b1) {
+    const w = a1 - a0, d = b1 - b0, cs = (a0 + a1) / 2, cz = (b0 + b1) / 2;
+    if (w < 8 || d < 8 || !clearOf(cs, cz, w, d, 2)) return;
+    const k = r();
+    UTIL_PLAN.modules++;
+    if (k < 0.1 && w >= 14 && d >= 14) {                              // gugus tangki
+      const ns = Math.min(3, Math.floor(w / 9)), nz = Math.min(3, Math.floor(d / 9)), h = RU(10, 20), col = RP(['#c9ccd0', '#b8bcc0', '#d4d6d8']);
+      box(cs, cz, w, d, 1.2, '#7d8388');                               // alas beton
+      for (let i = 0; i < ns; i++) for (let j = 0; j < nz; j++) {
+        building('silo', a0 + (i + 0.5) * w / ns, b0 + (j + 0.5) * d / nz, 7.5, 7.5, h, col, 1.2, false); UTIL_PLAN.silos++;
+      }
+      return;
+    }
+    if (k < 0.16 && Math.min(w, d) <= 18) {                          // cerobong di atas alas
+      box(cs, cz, w, d, 5, RP(COLS_U));
+      box(cs, cz, Math.min(w, 7), Math.min(d, 7), RU(30, 48), '#8a9096', 5, 4, false);
+      return;
+    }
+    const h = r() < 0.12 ? RU(24, 30) : RU(6, 20), col = RP(COLS_U), st = r() < 0.7 ? 4 : 10;
+    box(cs, cz, w, d, h, col, 0, st);
+    if (r() < 0.45 && w > 14 && d > 14) {                             // blok atas bertangga
+      const w2 = w * RU(0.35, 0.7), d2 = d * RU(0.35, 0.7);
+      const s2 = a0 + w2 / 2 + (w - w2) * r(), z2 = b0 + d2 / 2 + (d - d2) * r();
+      box(s2, z2, w2, d2, RU(4, 10), RP(COLS_U), h, st, false);
+    }
+    const nu = r() < 0.5 ? 1 + Math.floor(r() * 2) : 0;                  // unit atap (pendingin, tangki kecil)
+    for (let i = 0; i < nu; i++) {
+      const uw = RU(3, 6), ud = RU(3, 6);
+      box(a0 + uw / 2 + (w - uw) * r(), b0 + ud / 2 + (d - ud) * r(), uw, ud, RU(1.5, 3.5), '#9aa0a5', h, 4, false);
+    }
+  }
+  function split(a0, b0, a1, b1, dep) {
+    const w = a1 - a0, d = b1 - b0;
+    if ((w < 34 && d < 34) || dep > 6 || (w < 70 && d < 70 && r() < 0.22)) { module(a0, b0, a1, b1); return; }
+    const g = RU(2.5, 4.5);
+    if (w > d) { const c = a0 + w * RU(0.3, 0.7); split(a0, b0, c - g / 2, b1, dep + 1); split(c + g / 2, b0, a1, b1, dep + 1); }
+    else { const c = b0 + d * RU(0.3, 0.7); split(a0, b0, a1, c - g / 2, dep + 1); split(a0, c + g / 2, a1, b1, dep + 1); }
+  }
+  for (let s = 0; s < CIRC - 20;) {
+    const bw = RU(70, 130), s1 = Math.min(s + bw, CIRC);
+    if (blocked(s, s1 + LANE)) { s += 10; continue; }
+    for (const [za, zb] of STRIPS) split(s + 2, za + 2, s1 - 2, zb - 2, 0);
+    for (const [za, zb] of LANES) lrect(s, za, s1 + LANE, zb, PAL.road);  // jalan servis keliling
+    lrect(s1, Z0, s1 + LANE, Z1, PAL.road);                                // jalan silang
+    for (const [za, zb] of LANES) {                                        // rak pipa di atas jalan servis keliling (tinggi 6,5 m)
+      const zp = (za + zb) / 2 + (zb - za) * 0.3;
+      box((s + s1) / 2, zp, s1 - s - 4, 1.6, 1.2, '#7f868c', 6.5, 4, false); UTIL_PLAN.pipes++;
+      for (let x = s + 4; x < s1 - 2; x += 30) box(x, zp, 0.9, 0.9, 6.5, '#6f767c', 0, 4, false);
+    }
+    s = s1 + LANE;
+  }
 }
 
 // --- rumah pertanian di ladang -------------------------------------------
@@ -5132,6 +5204,7 @@ on('labPort', () => teleport('spaceport'));
 on('labShip', () => portBoard());
 on('labVeg', () => cycleVegQuality());
 on('labPost', () => cyclePost());
+on('labAdapt', () => toggleAdapt());                                // 17c
 on('labPreset', () => cyclePreset());
 on('labSound', () => toggleSound());
 on('labMusic', () => { startAudio(); cycleMusic(); });
@@ -7516,9 +7589,10 @@ function toggleRays() {
 }
 // --- 17c: adaptasi mata. Rata-rata log luminans layar (192 titik, tengah lebih berbobot) dihaluskan terhadap waktu di
 // dua target 1x1 bergantian (tanpa membaca balik ke CPU). Eksposur x (kunci / L)^pow, dibatasi. Mata menyesuaikan
-// ke terang lebih cepat (sekitar 0,5 s) daripada ke gelap (sekitar 2 s): masuk terminal terasa gelap lalu pulih,
-// menatap sunline terasa silau. Kunci dikalibrasi agar siang di luar tetap sama dengan eksposur lama.
-const ADAPT = { on: true, key: 0.2, pow: 0.45, min: 0.6, max: 1.8, up: 2.0, down: 0.5, cur: 0, init: true, t: 0 };
+// ke terang lebih cepat (sekitar 0,6 s) daripada ke gelap (sekitar 2,5 s): masuk terminal terasa gelap lalu pulih,
+// keluar ke siang terasa silau sesaat. Kunci 0,16 = luminans rata-rata siang di luar (diukur: 0,144-0,172), jadi siang
+// di luar tetap sama dengan eksposur lama. Revisi: pow 0,45 -> 0,6, batas 0,6-1,8 -> 0,45-2,2 agar terasa.
+const ADAPT = { on: true, key: 0.16, pow: 0.6, min: 0.45, max: 2.2, up: 1.8, down: 0.4, cur: 0, init: true, t: 0 };
 const lumMat = fsMat(/* glsl */`
   uniform sampler2D tHdr, tPrev; uniform float uKUp, uKDown, uInit; varying vec2 vUv;
   void main() {
@@ -7683,6 +7757,10 @@ function postEnd() {
 function cyclePost() {
   POST.mode = (POST.mode + 1) % POST.names.length;
   uiLabel('labPost', () => t('Efek layar: {m} (P)', { m: t(POST.names[POST.mode]) }));
+}
+function toggleAdapt() {                                           // 17c: adaptasi mata nyala/mati (untuk membandingkan)
+  ADAPT.on = !ADAPT.on; ADAPT.init = true;
+  uiLabel('labAdapt', () => t('Adaptasi mata: {s}', { s: t(ADAPT.on ? 'nyala' : 'mati') }));
 }
 
 await bootStep(BOOT_W[17], 'Audio...');
@@ -10345,7 +10423,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, ADAPT, POST_R, CLOUD, postBegin, postEnd, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
