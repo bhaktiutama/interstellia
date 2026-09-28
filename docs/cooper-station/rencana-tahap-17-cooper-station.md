@@ -5,8 +5,8 @@ Per 28 September 2026 · Bhakti · gambar penjelasan: artifact "Gerhana Saturnus
 ## Ringkasan
 
 - **17a (selesai):** sumbu stasiun dimiringkan ulang agar sinar Matahari masuk lewat end cap B dengan sudut landai 25 derajat, dan stasiun lewat bayangan Saturnus sekali tiap orbit (gerhana sekitar 2,8 jam).
-- **17b dan 17d (selesai):** kaca, air, jalan basah, dan mobil memantulkan daratan seberang (bukan langit biru); ambient siang ikut warna daratan; material cat, logam, dan kaca berkilap dengan Fresnel.
-- **17c, 17e, 17f (rencana):** adaptasi mata, lampu malam menerangi objek, bayangan sunline.
+- **17b dan 17d (selesai):** kaca, air, jalan basah, dan mobil memantulkan daratan seberang (bukan langit biru) dan awan yang sedang lewat; ambient siang ikut warna daratan; material cat, logam, dan kaca berkilap dengan Fresnel.
+- **17c, 17e, 17f (selesai):** adaptasi mata, lampu jalan dan trem menerangi objek saat malam, bayangan sunline real-time di sekitar pemain (termasuk mobil dan pejalan kaki).
 - Kota, ladang, dan fitur lain tidak berubah.
 
 ## 17a: orbit dan gerhana Saturnus (selesai)
@@ -72,13 +72,23 @@ Yang dibuat:
 
 Catatan: cat yang dilihat tegak lurus hanya memantul sekitar 4%, jadi kilap paling terlihat di sudut miring, pada logam, dan pada kaca. Pantulan tidak memperhitungkan objek dekat selain siluet gedung seberang yang sudah ada (14c).
 
-## 17c, 17e, 17f: pencahayaan lanjutan (rencana, belum dikerjakan)
+### Revisi: awan ikut terpantul
+
+| Bagian | Isi |
+| --- | --- |
+| Peta tutupan awan | Kanvas kedua 512 x 1024 digambar bersama bayangan awan (tiap 0,25 sampai 1,5 s), memakai jejak awan sebenarnya (tidak dipanjangkan seperti bayangan), `uL_Cloud` |
+| `farEnv` | Sinar pantul memotong lapisan awan (jari-jari R - 340 m) dua kali: dekat daratan seberang dan di atas pemandang. Warna awan saat ini (`uL_CloudCol`, sama dengan awan yang terlihat) ditumpuk dengan kabut sesuai jarak |
+| Hasil | Awan yang hanyut, terbentuk, dan menghilang ikut terlihat di kaca gedung, air, jalan basah, logam, dan mobil |
+
+## 17c, 17e, 17f: pencahayaan lanjutan (selesai)
 
 | Tahap | Isi | Biaya GPU (perkiraan) |
 | --- | --- | --- |
-| 17c | Adaptasi mata (eksposur otomatis dari mip bloom terkecil) | Sangat rendah |
-| 17e | Lampu jalan, mobil, trem menerangi objek saat malam (bukan hanya tanah) | Rendah sampai sedang |
-| 17f | Bayangan sunline di dekat pemain: tajam ke arah keliling, kabur ke arah sumbu | Sedang (mati di Hemat) |
+| 17c | Adaptasi mata: rata-rata log luminans layar (192 titik, tengah lebih berbobot) di target 1x1, dihaluskan terhadap waktu di GPU (tanpa baca balik). Eksposur x (kunci / L)^0,45, dibatasi 0,6 sampai 1,8. Ke terang cepat (sekitar 0,5 s), ke gelap lambat (sekitar 2 s). `ADAPT`, `lumMat`, `POST_R.lum` | Sangat rendah |
+| 17e | `nightLight(p, n)` di `LIGHT_GLSL`: kolam cahaya lampu jalan (`lampPoolL`, salinan `lampPool` tanah) dan trem (`tramPoolL`) menerangi gedung, perabot, pohon, rumput, mobil, pejalan kaki. Muka atas penuh, dinding setengah, hilang di atas 18 m | Rendah |
+| 17f | Bayangan sunline: peta kedalaman ortografis 2048 piksel, 300 x 300 m di sekitar pemain, dilihat dari arah sumbu (`SUNSH`, `sunShadowPass()`). Tajam ke arah keliling, kabur searah sumbu sepanjang 0,75 x tinggi penghalang (cari penghalang 7 titik + PCF 8 titik; vegetasi 3 + 3). Bayangan tajuk panggang memudar di area ini agar tidak dobel. Mobil dan pejalan kaki kini ikut membuat bayangan. Mati di preset Rendah dan Hemat, saat malam, di lift/hub, dan di kamera luar | Sedang |
+
+Catatan 17e: lampu tidak terhalang atap (tidak ada bayangan lampu), dan sorot lampu depan mobil belum menerangi objek (hanya aspal, seperti sebelumnya).
 
 ## Catatan
 
