@@ -31,15 +31,30 @@ Hasil uji: 2.888 modul, 1.155 tangki, 165 segmen rak pipa, tanpa tumpang tindih,
 | Gereja, masjid, pasar tanpa halaman keras | Pelataran beton (`PAL.plaza`) di depan sampai jalan dan pinggiran 2,5 m sekeliling tapak; pasar: pelataran gedung dan lantai beton di area lapak. Rumput di sisa blok tetap |
 | Jendela rumah Cooper tampak gelap dari dalam | Dinding dan plester kini berlubang jendela sungguhan (`holeWall`), kusen berupa bingkai, kaca bening transparan (tetap memantul di sudut miring). Dari dalam terlihat luar yang terang |
 | Bayangan hitam di dinding gedung (Ultra) | Sampel PCF bayangan sunline diberi bobot Lambert terhadap arah elemen garis sunline (dinding hanya diuji terhadap separuh garis di depannya); atap dihitung dari titik yang digeser 1 m searah normal, jadi dinding luar tidak lagi dianggap di bawah atap |
-| Baru: dek pandang menara ikon | Dek 22 x 22 m di atap tingkat teratas (185,5 m), pagar, rumah lift. Aksi E di depan lobi = lift 22 s naik; E di depan pintu rumah lift = turun. Tombol "Dek pandang menara (185 m)" di panel Lokasi. B lempar bola, G jatuhkan bola ke luar pagar |
+| Baru: dek pandang menara ikon | (versi pertama, diganti di 18b-2) Dek 22 x 22 m di atap tingkat teratas (185,5 m) dengan lift. Tombol dek di panel Lokasi. B lempar bola, G jatuhkan bola ke luar pagar |
 
-Hasil uji lempar bola (`tools/uji_menara.py`):
+Hasil uji lempar bola versi pertama (`tools/uji_menara.py`, dek 185,5 m):
 
 | Kasus | Belokan titik jatuh | Keterangan |
 | --- | --- | --- |
 | Jatuh dari dek (187,0 m) | 94,68 m | sama dengan hitungan analitik kerangka inersia (94,68 m), waktu jatuh 7,23 s |
 | Jatuh dari 20 m di tanah | 2,72 m | pembanding |
 | g lokal di dek | 0,8145 g | = 1 - h/R |
+
+## 18b-2: revisi kedua setelah uji Bhakti
+
+| Temuan | Perbaikan |
+| --- | --- |
+| Pelat dek 22 x 22 m di atap merusak bentuk menara | Pelat, pagar lebar, dan rumah lift dihapus. Dek pindah ke teras yang sudah ada di atap tingkat 4 (lebar 16 m, 175 m), keliling tingkat puncak (lebar 10 m). Lebar teras 3 m, hanya ditambah pagar di tepi. Tidak ada lantai baru |
+| Lift tidak perlu | E di depan lobi = langsung di teras depan dek. E di mana saja di dek = langsung ke depan lobi. State `tlift` dihapus |
+| Bayangan hitam di sebagian dinding, hilang saat didekati, membesar saat dijauhi | Penyebab: peta bayangan sunline diproyeksikan searah "atas" di posisi pemain. Pada gedung berjarak d, atas lokal miring d/R, jadi gedung jauh tampak condong dan atapnya menutupi dinding yang menghadap pemain (gedung 12 m pada 60 m: gelap di bawah 7,8 m). Perbaikan: setelah tinggi penghalang diketahui, sampel diulang di kolom yang benar-benar dilewati sinar radial lokal. Berlaku juga untuk faktor atap dan bayangan gedung tinggi di tanah |
+
+Uji lempar bola dari dek baru:
+
+| Kasus | Nilai | Sumber |
+| --- | --- | --- |
+| Jatuh dari 176,5 m (dek 175 m + tangan 1,5 m) | belok 85,67 m, waktu jatuh 6,96 s | hitungan analitik kerangka inersia; simulasi dicek oleh `tools/uji_menara.py` (selisih di bawah 5%) |
+| g lokal di dek | 0,825 g | 1 - h/R |
 
 ## Catatan teknis
 

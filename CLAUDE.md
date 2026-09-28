@@ -34,8 +34,8 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_gerhana.py` | Uji Copper Corn Station 17a: Matahari 25 derajat dari sumbu di bidang orbit, lompat ke gerhana, lama gerhana dan penumbra, sinar padam, cahaya tepi Saturnus |
 | `tools/uji_pantulan.py` | Uji Copper Corn Station 17b + 17d: pantulan daratan seberang (arah atas hijau, ke end cap berkabut, sunline), tanpa nilai tidak valid, ambient warna daratan, material berkilap |
-| `tools/uji_cahaya_lanjut.py` | Uji Copper Corn Station 17c + 17e + 17f + 18a: adaptasi mata (siang, terminal, malam), lampu malam menerangi objek, bayangan sunline (tajam keliling, lembut searah sumbu), awan terpantul, kompleks utilitas padat tanpa tumpang tindih |
-| `tools/uji_menara.py` | Uji Copper Corn Station 18b: dek pandang menara (185 m), lift naik-turun, pagar dek, jatuhkan bola dari dek vs hitungan analitik dan vs di tanah, pintu menara gereja, atap pasar menempel, kaca bening rumah Cooper |
+| `tools/uji_cahaya_lanjut.py` | Uji Copper Corn Station 17c + 17e + 17f + 18a + 18b-2: adaptasi mata (siang, terminal, malam), lampu malam menerangi objek, bayangan sunline (tajam keliling, lembut searah sumbu, dinding gedung jauh tidak gelap), awan terpantul, kompleks utilitas padat tanpa tumpang tindih |
+| `tools/uji_menara.py` | Uji Copper Corn Station 18b: dek pandang menara (teras 175 m), E naik-turun langsung, pagar dek, jatuhkan bola dari dek vs hitungan analitik dan vs di tanah, pintu menara gereja, atap pasar menempel, kaca bening rumah Cooper |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
@@ -81,7 +81,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Konfigurasi | `CONFIG`, `HALF_L`, `R`, `CIRC`, `ART` (arteri keliling tiap 241,7 m), `ART_Z` (250 m), `ROAD`, `CITY`, `PARKZ`, `FARMS`, `RINGS_Z`, `nearRing()` |
 | Cahaya | `LIGHT_GLSL` / `stationLight()`, `LIGHT.uniforms` (uL_Sunline, uL_SunDir, uL_CapI), `patchLit()` untuk MeshBasicMaterial, `updateLighting()` |
 | Pantulan dan kilap (17b, 17d) | `farEnv(P, Rd, rough, lineK)` di `LIGHT_GLSL` (daratan seberang dari `uL_Land`, end cap, sunline, kabut; tidak ada langit biru), uniform `uL_FarLight` / `uL_FarAvg` / `uL_FogCol` / `uL_FogD` / `uL_Night`, `FAR.land` (rata-rata warna daratan, ambient siang), `specMat(m, rough, f0, metal, glass)` + `SPEC_GLSL` di `patchLit()` (uniform per material `uSpec`, `userData.specU`); awan terpantul dari `uL_Cloud` (`CLOUD.mapTex`, digambar di `CLOUD.drawShadow()`) + `uL_CloudCol` |
-| Cahaya lanjut (17c, 17e, 17f) | 17c `ADAPT` + `lumMat` + `POST_R.lum` (adaptasi mata di `postEnd()`, uniform `tAdapt` di `compMat`); 17e `nightLight(p, n)`, `lampPoolL()` / `tramPoolL()` di `LIGHT_GLSL` (salinan `lampPool` / `tramPool` tanah: ubah bersama), `uL_Tram` = `groundMat.uniforms.uTram`; 17f `SUNSH` + `sunShadowPass()`, `sunlineShadow(p, n)` / `sunShCover(p)`, `SUNSH_CHEAP` di `VEG_COMMON`, mobil dan pejalan kaki `castAlpha` |
+| Cahaya lanjut (17c, 17e, 17f) | 17c `ADAPT` + `lumMat` + `POST_R.lum` (adaptasi mata di `postEnd()`, uniform `tAdapt` di `compMat`); 17e `nightLight(p, n)`, `lampPoolL()` / `tramPoolL()` di `LIGHT_GLSL` (salinan `lampPool` / `tramPool` tanah: ubah bersama), `uL_Tram` = `groundMat.uniforms.uTram`; 17f `SUNSH` + `sunShadowPass()`, `sunlineShadow(p, n, roof)` (18b-2: sampel diulang di kolom sinar radial lokal, koreksi lengkung) / `sunShCover(p)`, `SUNSH_CHEAP` di `VEG_COMMON`, mobil dan pejalan kaki `castAlpha` |
 | Bayangan | `SHADOW`, pass layer 1; alpha caster layer 2 (`ALPHA_CASTERS`) |
 | Tanah | heightmap `TER` (half-float, sama CPU/GPU), `groundH(s, za)`, `groundMat` (uLand, uFieldTex, uCloudTex, uShadeTex, lampPool) |
 | Vegetasi | `VEG_COMMON`, `TREES` (LOD + impostor, 16 template: oak, elm, poplar, maple, birch, pine, willow, bunga), `TREE_KINDS`, `GRASS`, `CORN` |
@@ -99,7 +99,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Trotoar dan jalan setapak (15c) | `SIDEWALK_GLSL` (`sidewalkD(P, art)`, di shader tanah dan rumput) = `SIDEWALK.d(s, za)` di JS (ubah keduanya bersama), `PARK_PATHS` (runs, mesh pita), `colAt(s, za, m)`; tepi blok arteri 17 m dari sumbu |
 | Fasilitas kota (16c-e) | `blockRect(c, a, b)`, `CITY_BLOCKS`, `reserveSite(type, target, minW, minD, extra)` + `SITE_AT` / `SITES`, `buildSite(site)` (menara, alun, balai, ...), `LANDMARK` (menara ikon 221 m, beacon), `MARKET` (list, stalls, aisles) + `marketStalls()` / `buildMarket()`, `buildCivic()` (taman distrik, sekolah, rs); potongan geometri fasilitas ikut `MOSQUE.parts` (penanda `g` = ikut tinggi tanah, digabung ke `MOSQUE.meshG` setelah `TER`) |
 | Utilitas (18a) | `UTIL` (za0 6.400, za1 6.900), `UTIL_PLAN` (modules, silos, pipes); blok "18a" setelah loop lama gudang (loop lama hanya menghabiskan angka acak): generator acak sendiri, `split()` BSP, `module()` (gudang bertingkat, tangki, cerobong, unit atap), rak pipa di atas jalan servis |
-| Dek pandang (18b) | `DECK` (s, za, h 185,5, half 11, house, podD; diisi di `buildSite('menara')`), `player.deck`, `onDeck()`, `deckClamp()` (di `stepGround`), `startTowerLift(up)` + `stepTowerLift()` (state `'tlift'`), `goDeck()` (tombol panel), aksi E `tower` / `towerdown`, pendaratan di dek di `stepAir`, `dropBall` dari luar pagar |
+| Dek pandang (18b) | `DECK` (s, za, h 175, half 8, inner 5, podD; teras keliling atap tingkat 4, diisi di `buildSite('menara')`), `player.deck`, `onDeck()` (cincin), `deckClamp()` (di `stepGround`), `towerJump(up)` (aksi E `tower` / `towerdown`, langsung tanpa lift), `goDeck()` (tombol panel), pendaratan di dek di `stepAir`, `dropBall` dari luar pagar |
 | Distrik (16) | `DISTRICTS` (name, kind mega/astro/taman/tani, k0-k1, z0-z1, c), `districtAt(s, za)`, `HUD_DIST` (notifikasi saat pindah distrik), `homeDensity()` |
 | Masjid (15e) | `MOSQUE` (list, mesh, names), `mosque(s, za, kind)` 0 Utsmani / 1 Maroko / 2 Saudi, `buildMosqueMesh()`; menggantikan setiap gereja kedua |
 | Permukiman (15d, 16a) | `fillHomes(s0, z0, s1, z1, d, sparse)` (gang, 4 baris, baris samping; tingkat dari `homeDensity()`: deret / tunggal / berhalaman / besar / desa, ambang 0,47 / 0,33 / 0,21 / 0,07), `YARD_TREES` (ditanam di blok pohon), `GANGS`; `front` 3/4 = muka -s/+s di `BUILD_FS` |
@@ -126,7 +126,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 
 ## Status pemain (`player.state`)
 
-`ground` (`player.deck` true = di dek pandang menara), `air`, `lift`, `tlift` (lift menara ikon, 18b), `float` (hub nol-g), `tram`, `pod` (kapsul terowongan ke dermaga), `ship` (di shuttle; `ext.active` dan `ext.flight` true), `tour` (tur sinematik, pemain dibekukan). `PORT.trip` true = sedang perjalanan otomatis dari gerbang B1 (lift dan kapsul 5x, E = langsung ke kokpit).
+`ground` (`player.deck` true = di dek pandang menara), `air`, `lift`, `float` (hub nol-g), `tram`, `pod` (kapsul terowongan ke dermaga), `ship` (di shuttle; `ext.active` dan `ext.flight` true), `tour` (tur sinematik, pemain dibekukan). `PORT.trip` true = sedang perjalanan otomatis dari gerbang B1 (lift dan kapsul 5x, E = langsung ke kokpit).
 
 ## Tombol
 
@@ -163,7 +163,7 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 17b, 17d | Kaca gedung, air, jalan basah, dan mobil memantulkan daratan seberang (bukan langit biru), ambient siang ikut warna daratan, kilap dan Fresnel untuk cat, logam, dan kaca |
 | 17c, 17e, 17f | Awan ikut terpantul, adaptasi mata (tombol di panel Grafik), lampu jalan dan trem menerangi objek saat malam, bayangan sunline real-time dekat pemain (tajam keliling, lembut searah sumbu; mobil dan pejalan kaki ikut) |
 | 18a | Kompleks utilitas padat: mozaik modul berdempetan (gudang bertingkat, tangki, cerobong, unit atap), jalan servis, rak pipa |
-| 18b | Atap pasar menempel dinding, pintu menara gereja, halaman beton gereja/masjid/pasar, jendela rumah Cooper tembus pandang (lubang dinding sungguhan), bayangan sunline dinding tidak lagi hitam, dek pandang menara ikon 185 m dengan lift dan uji lempar bola |
+| 18b | Atap pasar menempel dinding, pintu menara gereja, halaman beton gereja/masjid/pasar, jendela rumah Cooper tembus pandang (lubang dinding sungguhan), bayangan sunline dinding tidak lagi hitam (koreksi lengkung silinder), dek pandang di teras tingkat 4 menara ikon (175 m, E langsung naik-turun) dan uji lempar bola |
 
 Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Tahap 15 selesai: `docs/cooper-station/rencana-tahap-15-cooper-station.md` (15a lampu trem, 15b lalu lintas boulevard, 15c trotoar, 15d permukiman padat, 15e masjid). Tahap 16 selesai: `docs/cooper-station/rencana-tahap-16-cooper-station.md`. Tahap 17: `docs/cooper-station/rencana-tahap-17-cooper-station.md` (17a sampai 17f selesai). Tahap 18: `docs/cooper-station/rencana-tahap-18-cooper-station.md` (18a kompleks utilitas, 18b revisi bangunan dan dek pandang selesai).
 

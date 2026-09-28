@@ -1,6 +1,7 @@
-"""Uji 18b (Copper Corn Station): dek pandang menara ikon, lift, lempar dan jatuhkan bola dari 185 m, plus revisi bangunan.
-- Dek di atap tingkat teratas (sekitar 185 m), g lokal = 1 - h/R, pemain tidak bisa keluar pagar atau menembus rumah lift.
-- Lift: aksi E di lobi -> naik (state 'tlift') -> tiba di dek; turun kembali ke lobi.
+"""Uji 18b (Copper Corn Station): dek pandang menara ikon, E naik/turun, lempar dan jatuhkan bola dari 175 m, plus revisi bangunan.
+- 18b-2: dek = teras keliling di atap tingkat 4 (175 m) di sekitar tingkat puncak; g lokal = 1 - h/R; pemain tidak bisa
+  keluar pagar atau masuk badan tingkat puncak.
+- Aksi E di lobi -> langsung di dek (tanpa lift); E di mana saja di dek -> langsung ke lobi.
 - Bola dijatuhkan dari luar pagar: titik jatuh dibandingkan hitungan analitik kerangka inersia (bola bergerak lurus
   dengan kecepatan tepi omega x r0), selisih di bawah 5%; belokan jauh lebih besar daripada jatuh dari 20 m di tanah.
 - Gereja: menara punya pintu (depan -za). Pasar besar: atap lengkung menempel dinding (dasar 6,2 m, jari-jari 12 m).
@@ -13,24 +14,22 @@ UJI = r"""
 (async () => {
   const S = window.__station, out = {}, wait = (ms) => new Promise((r) => setTimeout(r, ms)), D = S.DECK, R = S.R, P = S.player;
   const OM = S.OMEGA, wrap = (x) => { const C = 2 * Math.PI * R; return ((x % C) + C * 1.5) % C - C / 2; };
-  out[`dek pandang di ${D.h.toFixed(1)} m (s ${D.s.toFixed(0)}, za ${D.za.toFixed(0)})`] = D.h > 180 && D.h < 190;
-  // lift dari lobi
+  out[`dek pandang di ${D.h.toFixed(1)} m (s ${D.s.toFixed(0)}, za ${D.za.toFixed(0)})`] = D.h > 170 && D.h < 180 && D.half > D.inner;
+  // E dari lobi
   S.teleport('nyc'); await wait(300);
   P.theta = D.s / R; P.za = D.za - D.podD / 2 - 1.5; P.h = 0; P.state = 'ground'; P.deck = false;
   const a = S.availableAction();
   out[`aksi di lobi: ${a ? a.key : 'tidak ada'}`] = !!a && a.key === 'tower';
   S.doAction();
-  out[`naik lift: state ${P.state}`] = P.state === 'tlift';
-  for (let i = 0; i < 400 && P.state === 'tlift'; i++) S.physicsStep(0.1);
   out[`tiba di dek: state ${P.state}, dek ${P.deck}, h ${P.h.toFixed(1)} m, g lokal ${S.localG().toFixed(4)} (1 - h/R = ${(1 - P.h / R).toFixed(4)})`] =
     P.state === 'ground' && P.deck === true && Math.abs(P.h - D.h) < 0.01 && Math.abs(S.localG() - (1 - P.h / R)) < 0.002;
-  // berjalan maju terus: tetap di dalam pagar, tidak menembus rumah lift
+  // berjalan maju terus: tetap di dalam pagar, tidak masuk badan tingkat puncak
   S.input.auto = true;
   for (const hd of [Math.PI, 0.3, 1.9, -1.2]) { P.heading = hd; for (let i = 0; i < 120; i++) S.physicsStep(0.1); }
   S.input.auto = false;
   const ds = wrap(P.theta * R - D.s), dz = P.za - D.za;
   out[`jalan 48 s di dek: posisi (${ds.toFixed(1)}, ${dz.toFixed(1)}) m dari pusat, h ${P.h.toFixed(1)}`] =
-    Math.abs(ds) <= D.half - 0.49 && Math.abs(dz) <= D.half - 0.49 && !(Math.abs(ds) < D.house && Math.abs(dz) < D.house) && Math.abs(P.h - D.h) < 0.01;
+    Math.abs(ds) <= D.half - 0.49 && Math.abs(dz) <= D.half - 0.49 && Math.max(Math.abs(ds), Math.abs(dz)) >= D.inner + 0.34 && Math.abs(P.h - D.h) < 0.01;
   // jatuhkan bola ke luar pagar
   P.heading = Math.PI / 2;
   S.dropBall(); const b = S.getLastBall(), p0 = b.pos.clone();
@@ -46,11 +45,11 @@ UJI = r"""
   for (let i = 0; i < 100 && !g0.done; i++) await wait(100);
   const gS = wrap((Math.atan2(g0.pos.y, g0.pos.x) - Math.atan2(q0.y, q0.x)) * R);
   out[`pembanding di tanah (20 m): belok ${gS.toFixed(3)} m; dari dek ${(Math.abs(simS) / Math.max(Math.abs(gS), 1e-3)).toFixed(0)}x lebih besar`] = g0.done && Math.abs(simS) > 10 * Math.abs(gS);
-  // turun lift
-  S.goDeck(); await wait(200);
+  // turun: E dari sisi belakang dek (bukan titik datang)
+  S.goDeck(); P.za = D.za + (D.half + D.inner) / 2; await wait(200);
   const a2 = S.availableAction();
   out[`aksi di dek: ${a2 ? a2.key : 'tidak ada'}`] = !!a2 && a2.key === 'towerdown';
-  S.doAction(); for (let i = 0; i < 400 && P.state === 'tlift'; i++) S.physicsStep(0.1);
+  S.doAction();
   out[`turun ke lobi: state ${P.state}, dek ${P.deck}, h ${P.h.toFixed(2)}`] = P.state === 'ground' && !P.deck && P.h === 0;
   // revisi bangunan
   const churchTowers = S.BUILD.hip.filter((b) => b[6] === '#e9e4da');

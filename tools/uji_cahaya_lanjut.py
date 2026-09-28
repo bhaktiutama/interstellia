@@ -61,6 +61,22 @@ UJI = r"""
   const fr = shaded / (W * W);
   out[`17f pusat kota: ${(100 * fr).toFixed(1)}% tanah terbayangi sunline, ${(100 * partial / (W * W)).toFixed(1)}% penumbra`] = fr > 0.03 && fr < 0.9 && partial > 0;
   out[`17f bayangan tajam ke arah keliling, lembut searah sumbu: perubahan per piksel keliling ${(runS / nS).toFixed(4)} > sumbu ${(runZ / nZ).toFixed(4)}`] = runS / nS > runZ / nZ;
+  // 18b-2: dinding gedung jauh (50-110 m searah keliling) yang menghadap pemain tidak boleh tertutup atap sendiri
+  // (dulu: peta diproyeksikan searah atas di posisi pemain, gedung jauh tampak condong d/R, separuh bawah dinding gelap)
+  const wrapC = (x) => { const C = 2 * Math.PI * S.R; return ((x % C) + C * 1.5) % C - C / 2; };
+  const far = S.houseList.filter(([s, za, w, d, h]) => { const ds = Math.abs(wrapC(s - s0)); return ds > 50 && ds < 110 && Math.abs(za - z0) < 100 && h > 8 && h < 60 && w > 6 && d > 6; }).slice(0, 10);
+  let wallN = 0, wallRoof = 0, wallVis = 0;
+  for (const [bs, bz, bw, bd, bh] of far) {
+    const sg = Math.sign(wrapC(bs - s0)), sw = bs - sg * (bw / 2 + 0.02);
+    const body = `
+      float s = ${sw.toFixed(3)}, za = ${bz.toFixed(3)} + (f.x - 0.5) * ${(bd * 0.6).toFixed(2)}, hh = 1.0 + f.y * ${(bh - 2).toFixed(2)}, th = s / uL_R, r = uL_R - hh;
+      vec3 p = vec3(r * cos(th), r * sin(th), za - uL_HalfL), n = ${(-sg).toFixed(1)} * vec3(-sin(th), cos(th), 0.0);
+      float roof; gl_FragColor = vec4(sunlineShadow(p, n, roof), roof, 0.0, 1.0);`;
+    const px = evalGLSL(16, 16, body); bad += badOf(px);
+    for (let i = 0; i < px.length; i += 4) { wallN++; wallVis += px[i]; if (px[i + 1] > 0.5) wallRoof++; }
+  }
+  out[`18b-2 dinding ${far.length} gedung jauh menghadap pemain: rata-rata terang ${(wallVis / Math.max(wallN, 1)).toFixed(2)}, dianggap di bawah atap ${(100 * wallRoof / Math.max(wallN, 1)).toFixed(1)}%`] =
+    far.length > 0 && wallRoof / wallN < 0.05 && wallVis / wallN > 0.7;
   S.clock.hour = 23; S.updateLighting(); S.sunShadowPass();
   out[`17f malam: peta bayangan sunline mati (${U.uL_SunShOn.value})`] = U.uL_SunShOn.value === 0;
   S.clock.hour = 12; S.updateLighting(); S.sunShadowPass();

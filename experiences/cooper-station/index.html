@@ -206,7 +206,7 @@
     <section data-lpane="lokasi"><div class="ptitle">Pindah lokasi</div>
       <div class="btns">
         <button id="labCooper" type="button"><kbd>1</kbd>Rumah Cooper</button>
-        <button id="labDeck" type="button">Dek pandang menara (185 m)</button>
+        <button id="labDeck" type="button">Dek pandang menara (175 m)</button>
         <button id="labHill" type="button"><kbd>2</kbd>Puncak bukit</button>
         <button id="labCorn" type="button"><kbd>3</kbd>Ladang jagung</button>
         <button id="labWheat" type="button"><kbd>4</kbd>Ladang gandum</button>
@@ -688,13 +688,10 @@ Object.assign(I18N.en, {
   "Adaptasi mata: nyala": "Eye adaptation: on",
   "Adaptasi mata: {s}": "Eye adaptation: {s}",
   " (butuh efek layar)": " (needs screen effects)",
-  "Dek pandang menara (185 m)": "Tower observation deck (185 m)",
-  "Naik lift ke dek pandang menara ({h} m)": "Take the lift to the tower observation deck ({h} m)",
+  "Dek pandang menara (175 m)": "Tower observation deck (175 m)",
+  "Naik ke dek pandang menara ({h} m)": "Go up to the tower observation deck ({h} m)",
   "Turun ke lobi menara": "Go down to the tower lobby",
-  "Lift naik ke dek pandang ({h} m)...": "Lift going up to the observation deck ({h} m)...",
-  "Lift turun ke lobi...": "Lift going down to the lobby...",
   "Dek pandang {h} m · g lokal {g} · B lempar bola, G jatuhkan bola ke luar pagar": "Observation deck {h} m · local g {g} · B throw ball, G drop ball over the railing",
-  "lift menara": "tower lift",
   "Musik: {m} (J)": "Music: {m} (J)",
   "generatif": "generative",
   "file sendiri": "own file",
@@ -1018,9 +1015,17 @@ const LIGHT_GLSL = /* glsl */`
     float bias = 0.3 / uL_SunShK.x, sr = 45.0 / uL_SunShK.y, zr = c.z - bias, bs = 0.0, bn = 0.0, fe = smoothstep(0.0, 0.08, e);
     // 18b: atap = satu sampel pada titik yang digeser 1 m searah normal. Dinding luar keluar dari tapak gedung (bukan di
     // bawah atap); lantai dan dinding interior tetap di bawah atap. Penghalang harus rendah (di bawah 12-40 m).
+    // 18b-2: koreksi lengkung silinder. Peta diproyeksikan searah "atas" di posisi pemain; pada jarak d, atas lokal miring
+    // d/R, jadi gedung jauh tampak condong dan atapnya menutupi dinding yang menghadap pemain. Setelah tinggi penghalang
+    // diketahui, sampel diulang di kolom yang dilewati sinar radial lokal pada ketinggian itu (dekat pemain: tanpa geser).
     vec3 cr = (uL_SunShMat * vec4(p + n * 1.0, 1.0)).xyz * 0.5 + 0.5;
     float dr = textureLod(uL_SunSh, cr.xy, 0.0).r, zrr = cr.z - bias;
-    if (dr < zrr) roof = (1.0 - smoothstep(12.0, 40.0, (zrr - dr) * uL_SunShK.x)) * fe;
+    if (dr < zrr) {
+      float hr = (zrr - dr) * uL_SunShK.x;
+      vec2 cr2 = (uL_SunShMat * vec4(p + n * 1.0 + up * hr, 1.0)).xy * 0.5 + 0.5;
+      float dr2 = textureLod(uL_SunSh, cr2, 0.0).r;
+      if (dr2 < zrr) roof = (1.0 - smoothstep(12.0, 40.0, (zrr - dr2) * uL_SunShK.x)) * fe;
+    }
     #ifdef SUNSH_CHEAP
     const int NB = 3, NP = 3;
     #else
@@ -1034,6 +1039,7 @@ const LIGHT_GLSL = /* glsl */`
     }
     if (bn < 0.5) return 1.0;
     float hb = (c.z - bs / bn) * uL_SunShK.x;                         // tinggi rata-rata penghalang di atas penerima (m)
+    c.xy = (uL_SunShMat * vec4(p + n * 0.25 + up * hb, 1.0)).xy * 0.5 + 0.5;   // 18b-2: kolom sinar radial lokal
     float w = max(0.75 * hb, 0.25) / uL_SunShK.y, vis = 0.0, ws = 0.0;
     // 18b: tiap sampel mewakili elemen garis sunline pada arah L_u; bobot Lambert terhadap normal, jadi dinding yang
     // menghadap searah sumbu hanya diuji terhadap separuh garis di depannya (separuh di belakang dinding tidak menyinari).
@@ -3095,8 +3101,8 @@ function reserveSite(type, target, minW, minD, extra = {}) {
   const site = Object.assign({ type, q: best }, extra); SITES.push(site); SITE_AT.set(best.key, site); return site;
 }
 const LANDMARK = { h: 0, beacon: null };
-// 18b: dek pandang di atap tingkat teratas menara ikon (185 m): pelat 22 x 22 m, pagar, rumah lift di tengah. Diisi di buildSite.
-const DECK = { s: 0, za: 0, h: 0, half: 11, house: 2.4, podD: 40 };
+// 18b: dek pandang menara ikon. 18b-2: teras keliling di atap tingkat 4 (175 m, lebar 16 m) di sekitar tingkat puncak, berpagar. Diisi di buildSite.
+const DECK = { s: 0, za: 0, h: 0, half: 8, inner: 5, podD: 40 };   // 18b-2: teras tingkat 4 menara ikon (diisi di buildSite)
 reserveSite('menara', { s: 75, za: 540 }, 32, 32);                 // menara ikon dekat halte New York
 reserveSite('alun', { s: 45, za: 640 }, 20, 20);                  // alun-alun di depan halte New York
 for (const D of DISTRICTS) if (D.kind === 'mega' || D.kind === 'astro')
@@ -3185,16 +3191,13 @@ function buildSite(site) {
     const STEEL = [0.62, 0.65, 0.68];
     add(new THREE.TorusGeometry(7, 0.35, 6, 32).rotateX(Math.PI / 2), STEEL, 0, y - 6, 0);
     add(new THREE.CylinderGeometry(0.25, 1.4, 36, 10), STEEL, 0, y + 18, 0);
-    { // 18b: dek pandang melingkar di atap (menjorok 6 m ke segala arah), pagar tiang + tiga batang, rumah lift dengan pintu di -za
-      const SLAB = [0.7, 0.7, 0.68], RAIL = [0.6, 0.63, 0.66], HOUSE = [0.52, 0.57, 0.63], DOOR = [0.2, 0.24, 0.28], F = y + 0.5, hw = DECK.half;
-      add(new THREE.BoxGeometry(2 * hw, 0.5, 2 * hw), SLAB, 0, y + 0.25, 0);
+    { // 18b-2: dek pandang = teras keliling di atap tingkat 4 (lebar 16 m, 175 m) di sekeliling tingkat puncak (10 m); hanya pagar
+      const RAIL = [0.6, 0.63, 0.66], top = tiers[tiers.length - 1], sub = tiers[tiers.length - 2], F = y - top[1], hw = sub[0] / 2;
       for (const e of [-1, 1]) for (const ax of [0, 1]) {
         for (let q = -hw; q <= hw + 1e-6; q += 2) add(new THREE.BoxGeometry(0.08, 1.2, 0.08), RAIL, ax ? e * (hw - 0.1) : q, F + 0.6, ax ? q : e * (hw - 0.1));
         for (const [yy, th] of [[0.4, 0.05], [0.8, 0.05], [1.2, 0.1]]) add(ax ? new THREE.BoxGeometry(th, th, 2 * hw) : new THREE.BoxGeometry(2 * hw, th, th), RAIL, ax ? e * (hw - 0.1) : 0, F + yy, ax ? 0 : e * (hw - 0.1));
       }
-      add(new THREE.BoxGeometry(2 * DECK.house, 3, 2 * DECK.house), HOUSE, 0, F + 1.5, 0);
-      add(new THREE.BoxGeometry(1.4, 2.2, 0.06), DOOR, 0, F + 1.1, -DECK.house - 0.03);
-      Object.assign(DECK, { s: bs, za: bz, h: F, podD: Math.min(bd - 4, 46) });
+      Object.assign(DECK, { s: bs, za: bz, h: F, half: hw, inner: top[0] / 2, podD: Math.min(bd - 4, 46) });
     }
     LANDMARK.s = bs; LANDMARK.za = bz; LANDMARK.h = y + 36; return;
   }
@@ -4520,35 +4523,27 @@ function stepGround(dt) {
   if (inWater(player.theta * R, player.za, 0.3)) { player.theta = prevTheta; player.za = prevZa; }   // tidak bisa berjalan di air
   player.h = groundH(player.theta * R, player.za);                  // ikut kontur bukit (0 di luar area uji)
 }
-// --- 18b: dek pandang menara ikon dan liftnya -----------------------------------------------
-function onDeck(s, za, m = 0) { return Math.abs(wrapS(s - DECK.s)) < DECK.half - m && Math.abs(za - DECK.za) < DECK.half - m; }
-function deckClamp() {
+// --- 18b: dek pandang menara ikon (18b-2: teras keliling tingkat 4, E langsung naik/turun tanpa lift) ------------------
+function onDeck(s, za, m = 0) {
+  const q = Math.max(Math.abs(wrapS(s - DECK.s)), Math.abs(za - DECK.za));
+  return q < DECK.half - m && q > DECK.inner + m;
+}
+function deckClamp() {                                             // di dalam pagar, tidak masuk badan tingkat puncak
   let ds = wrapS(player.theta * R - DECK.s), dz = player.za - DECK.za;
-  const lim = DECK.half - 0.5, hs = DECK.house + 0.35;
+  const lim = DECK.half - 0.5, hs = DECK.inner + 0.35;
   ds = Math.max(-lim, Math.min(lim, ds)); dz = Math.max(-lim, Math.min(lim, dz));
   if (Math.abs(ds) < hs && Math.abs(dz) < hs) { if (hs - Math.abs(ds) < hs - Math.abs(dz)) ds = Math.sign(ds || 1) * hs; else dz = Math.sign(dz || 1) * hs; }
   player.theta = modS(DECK.s + ds) / R; player.za = DECK.za + dz;
 }
-function startTowerLift(up) {                                      // naik: dari lobi ke depan pintu rumah lift di dek; turun: sebaliknya
-  player.tl = { h0: up ? 0 : DECK.h, h1: up ? DECK.h : 0, t: 0, dur: 2 + DECK.h / 9, up };
-  player.theta = modS(DECK.s) / R; player.za = DECK.za - DECK.house - 1.2; player.heading = Math.PI; player.pitch = 0;
-  player.state = 'tlift'; player.mode = 'lift menara'; player.deck = false; player.vA = player.vT = 0;
-  setLabText(t(up ? 'Lift naik ke dek pandang ({h} m)...' : 'Lift turun ke lobi...', { h: fmtInt(DECK.h) }));
+function towerJump(up) {                                           // E: naik ke teras depan dek / turun ke depan lobi
+  if (!DECK.h) return;
+  if (up) { goDeck(); return; }
+  Object.assign(player, { theta: modS(DECK.s) / R, za: DECK.za - DECK.podD / 2 - 2.5, h: 0, state: 'ground', deck: false, heading: Math.PI, pitch: 0, vA: 0, vT: 0 });
 }
-function stepTowerLift(dt) {
-  const L = player.tl; L.t = Math.min(L.dur, L.t + dt);
-  const x = L.t / L.dur, k = x * x * (3 - 2 * x);
-  player.h = L.h0 + (L.h1 - L.h0) * k;
-  if (L.t >= L.dur) {
-    player.state = 'ground';
-    if (L.up) { player.deck = true; player.h = DECK.h; setLabText(t('Dek pandang {h} m · g lokal {g} · B lempar bola, G jatuhkan bola ke luar pagar', { h: fmtInt(DECK.h), g: fmtN(localG(), 3) })); }
-    else { player.deck = false; player.h = 0; player.za = DECK.za - DECK.podD / 2 - 2.5; }
-  }
-}
-function goDeck() {                                                // lokasi langsung (panel): berdiri di depan pintu rumah lift
+function goDeck() {                                                // lokasi langsung (panel dan E): teras depan, menghadap ke luar
   if (!DECK.h) return;
   if (ext.active) toggleExterior();
-  Object.assign(player, { theta: modS(DECK.s) / R, za: DECK.za - DECK.house - 1.2, h: DECK.h, state: 'ground', deck: true, heading: Math.PI, pitch: -0.1, vA: 0, vT: 0 });
+  Object.assign(player, { theta: modS(DECK.s) / R, za: DECK.za - (DECK.half + DECK.inner) / 2, h: DECK.h, state: 'ground', deck: true, heading: Math.PI, pitch: -0.1, vA: 0, vT: 0 });
   player.body.done = true; PORT.trip = false;
   setLabText(t('Dek pandang {h} m · g lokal {g} · B lempar bola, G jatuhkan bola ke luar pagar', { h: fmtInt(DECK.h), g: fmtN(localG(), 3) }));
 }
@@ -4667,7 +4662,6 @@ function physicsStep(dt) {
     case 'lift': stepLift(dt); break;
     case 'float': stepFloat(dt); break;
     case 'tram': stepTramRider(); break;
-    case 'tlift': stepTowerLift(dt); break;                          // 18b
   }
   stepTram(dt);
   if (player.state === 'tram') stepTramRider();
@@ -4823,8 +4817,8 @@ function availableAction() {
   if (nearDist(PLAQUE_POS.s, PLAQUE_POS.za) < 4) return { key: 'plaque', label: t('Baca plakat') };
   if (nearDist(FOUNT.plaque.s, FOUNT.plaque.za) < 3.5) return { key: 'fount', label: t('Baca plakat air mancur Coriolis') };
   if (nearDist(LIFT.theta * R, LIFT.za) < 8) return { key: 'lift', label: t('Naik lift ke sumbu') };
-  if (DECK.h && !player.deck && Math.abs(wrapS(player.theta * R - DECK.s)) < 6 && Math.abs(player.za - (DECK.za - DECK.podD / 2)) < 4) return { key: 'tower', label: t('Naik lift ke dek pandang menara ({h} m)', { h: fmtInt(DECK.h) }) };   // 18b
-  if (player.deck && Math.abs(wrapS(player.theta * R - DECK.s)) < 2.5 && Math.abs(player.za - (DECK.za - DECK.house - 1.2)) < 1.8) return { key: 'towerdown', label: t('Turun ke lobi menara') };
+  if (DECK.h && !player.deck && Math.abs(wrapS(player.theta * R - DECK.s)) < 6 && Math.abs(player.za - (DECK.za - DECK.podD / 2)) < 4) return { key: 'tower', label: t('Naik ke dek pandang menara ({h} m)', { h: fmtInt(DECK.h) }) };   // 18b
+  if (player.deck) return { key: 'towerdown', label: t('Turun ke lobi menara') };
   if (nearDist(TERM.gate.s, TERM.gate.za) < 4 && player.za > TERM.za - TERM.d / 2) return { key: 'gate', label: t('Gerbang B1: lift ke hub, terowongan, lalu kokpit shuttle KS-07 (otomatis)') };
   return null;
 }
@@ -4845,8 +4839,8 @@ function doAction() {
   else if (a.key === 'plaque') { plaqueEl.querySelector('p').textContent = t(PLAQUE_TEXT); plaqueEl.hidden = false; }
   else if (a.key === 'fount') { plaqueEl.querySelector('p').textContent = t(FOUNT_TEXT, { s10: fmtN(FOUNT.shift10, 2), s6: fmtN(FOUNT.shift6, 2) }); plaqueEl.hidden = false; }
   else if (a.key === 'lift') enterLift();
-  else if (a.key === 'tower') startTowerLift(true);                 // 18b
-  else if (a.key === 'towerdown') startTowerLift(false);
+  else if (a.key === 'tower') towerJump(true);                      // 18b
+  else if (a.key === 'towerdown') towerJump(false);
   else if (a.key === 'port') portEnterPod(-1);
   else if (a.key === 'gate') portStartTrip();
   else if (a.key === 'skip') { player.lift.r = LIFT.topR; player.lift.v = 0; portBoard(); }   // kabin lift menunggu di atas
@@ -10567,7 +10561,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, DECK, goDeck, startTowerLift, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
