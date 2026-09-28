@@ -51,7 +51,7 @@ UJI = r"""
   const shBody = `
     float s = ${s0.toFixed(3)} + (f.x * 2.0 - 1.0) * ${E.toFixed(1)}, za = ${z0.toFixed(3)} + (f.y * 2.0 - 1.0) * ${E.toFixed(1)}, th = s / uL_R, r = uL_R - 0.05;
     vec3 p = vec3(r * cos(th), r * sin(th), za - uL_HalfL), n = vec3(-cos(th), -sin(th), 0.0);
-    gl_FragColor = vec4(sunlineShadow(p, n), sunShCover(p), 0.0, 1.0);`;
+    float roof; gl_FragColor = vec4(sunlineShadow(p, n, roof), sunShCover(p), roof, 1.0);`;
   const W = 256, sh = evalGLSL(W, W, shBody); bad += badOf(sh);
   let shaded = 0, partial = 0, runS = 0, runZ = 0, nS = 0, nZ = 0;
   const v = (x, y) => sh[(y * W + x) * 4];
@@ -88,12 +88,14 @@ UJI = r"""
   const hr0 = S.clock.hourRate; S.clock.hourRate = 0;
   S.teleport('cooper'); S.clock.hour = 13; await wait(5000);
   const Ld = readL();
+  S.player.theta = S.COOPER.s / S.R; S.player.za = S.COOPER.za; S.player.h = 0; await wait(5000);   // di dalam rumah Cooper
+  const Lh = readL();
   S.teleport('spaceport'); await wait(5000);
   const Lt = readL();
   S.teleport('cooper'); S.clock.hour = 23; await wait(6000);
   const Ln = readL();
-  out[`17c luminans sesaat: siang di luar ${Ld[1].toFixed(4)} (pengali ${mult(Ld[1]).toFixed(2)}), terminal ${Lt[1].toFixed(4)} (pengali ${mult(Lt[1]).toFixed(2)}), malam ${Ln[1].toFixed(4)} (pengali ${mult(Ln[1]).toFixed(2)})`] =
-    [Ld, Lt, Ln].every((v) => Number.isFinite(v[0]) && v[0] > 0) && Math.abs(mult(Ld[1]) - 1) < 0.2 && mult(Ln[1]) > 1.8;
+  out[`17c luminans sesaat: siang di luar ${Ld[1].toFixed(4)} (x${mult(Ld[1]).toFixed(2)}), dalam rumah Cooper ${Lh[1].toFixed(4)} (x${mult(Lh[1]).toFixed(2)}), terminal ${Lt[1].toFixed(4)} (x${mult(Lt[1]).toFixed(2)}), malam ${Ln[1].toFixed(4)} (x${mult(Ln[1]).toFixed(2)})`] =
+    [Ld, Lh, Lt, Ln].every((v) => Number.isFinite(v[0]) && v[0] > 0) && Math.abs(mult(Ld[1]) - 1) < 0.2 && mult(Lh[1]) > 1.6 && mult(Lt[1]) > 1.6 && mult(Ln[1]) > 1.8;
   out[`17c nilai teradaptasi bergerak ke arah malam: ${Ld[0].toFixed(4)} -> ${Ln[0].toFixed(4)}`] = Ln[0] < Ld[0];
   S.clock.hour = 12; S.clock.hourRate = hr0;
 

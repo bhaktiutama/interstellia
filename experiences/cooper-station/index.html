@@ -686,6 +686,7 @@ Object.assign(I18N.en, {
   "Efek layar: {m} (P)": "Screen effects: {m} (P)",
   "Adaptasi mata: nyala": "Eye adaptation: on",
   "Adaptasi mata: {s}": "Eye adaptation: {s}",
+  " (butuh efek layar)": " (needs screen effects)",
   "Musik: {m} (J)": "Music: {m} (J)",
   "generatif": "generative",
   "file sendiri": "own file",
@@ -996,7 +997,10 @@ const LIGHT_GLSL = /* glsl */`
     vec2 c = (uL_SunShMat * vec4(p, 1.0)).xy * 0.5 + 0.5;
     return smoothstep(0.0, 0.08, min(min(c.x, 1.0 - c.x), min(c.y, 1.0 - c.y)));
   }
-  float sunlineShadow(vec3 p, vec3 n) {
+  // roof (keluaran): 0..1, seberapa tertutup oleh atap dekat di atas kepala (penghalang rendah di atas penerima). Di bawah
+  // atap, bukan hanya sunline yang terhalang tetapi juga ambient dari sisi seberang dan cincin lampu (interior lebih gelap).
+  float sunlineShadow(vec3 p, vec3 n, out float roof) {
+    roof = 0.0;
     if (uL_SunShOn < 0.5) return 1.0;
     vec3 c = (uL_SunShMat * vec4(p + n * 0.25, 1.0)).xyz * 0.5 + 0.5;   // ortografis: w = 1
     float e = min(min(c.x, 1.0 - c.x), min(c.y, 1.0 - c.y));
@@ -1020,7 +1024,9 @@ const LIGHT_GLSL = /* glsl */`
       float u = (float(k) + 0.5) / float(NP) * 2.0 - 1.0, wt = 1.0 / (1.0 + 1.7 * u * u);
       vis += step(zr, textureLod(uL_SunSh, c.xy + vec2(0.0, u * w), 0.0).r) * wt; ws += wt;
     }
-    return mix(1.0, vis / ws, smoothstep(0.0, 0.08, e));
+    float fe = smoothstep(0.0, 0.08, e), v = mix(1.0, vis / ws, fe);
+    roof = (1.0 - v) * (1.0 - smoothstep(12.0, 40.0, hb));
+    return v;
   }
   float stationShadow(vec3 p) {
     vec4 sc = uL_ShadowMat * vec4(p, 1.0);
@@ -1037,8 +1043,9 @@ const LIGHT_GLSL = /* glsl */`
     float r = length(p.xy);
     vec3 up = r > 1.0 ? vec3(-p.xy / r, 0.0) : vec3(0.0, 0.0, 1.0);
     float d = dot(n, up);
-    vec3 col = uL_SunlineCol * uL_Sunline * max(0.55 + 0.45 * d, 0.1) * sunlineShadow(p, n);   // sunline (cahaya garis di sumbu), 17f: bayangan
-    col += uL_AmbCol * (0.7 + 0.3 * d);                                     // pantulan dari sisi seberang (17d: warna daratan)
+    float roof, vis = sunlineShadow(p, n, roof);
+    vec3 col = uL_SunlineCol * uL_Sunline * max(0.55 + 0.45 * d, 0.1) * vis;   // sunline (cahaya garis di sumbu), 17f: bayangan
+    col += uL_AmbCol * (0.7 + 0.3 * d) * (1.0 - 0.75 * roof);                  // pantulan dari sisi seberang (17d: warna daratan); atap menghalangi
     vec2 rim = r > 1.0 ? p.xy / r : vec2(1.0, 0.0);
     for (int k = 0; k < 2; k++) {                                           // cincin lampu end cap A dan B
       float sz = k == 0 ? -uL_HalfL : uL_HalfL;
@@ -1047,13 +1054,13 @@ const LIGHT_GLSL = /* glsl */`
       vec3 L = dv / dist;
       float fall = 1.0 / (1.0 + (dist / 2200.0) * (dist / 2200.0));
       float sh = (uL_ShadowOn > 0.5 && abs(float(k) - uL_ShadowCap) < 0.5) ? stationShadow(p) : 1.0;
-      col += uL_CapCol * uL_CapI * fall * max(dot(n, L), 0.0) * sh;
+      col += uL_CapCol * uL_CapI * fall * max(dot(n, L), 0.0) * sh * (1.0 - 0.6 * roof);
     }
     if (abs(uL_SunDir.z) > 1e-3) {                                          // sinar Matahari lewat kaca end cap
       float capZ = uL_SunDir.z > 0.0 ? uL_HalfL : -uL_HalfL;
       float t = (capZ - p.z) / uL_SunDir.z;
       float lit = 1.0 - smoothstep(uL_R * 0.95, uL_R, length(p.xy + uL_SunDir.xy * t));
-      col += uL_SunCol * uL_SunI * lit * max(dot(n, uL_SunDir), 0.0);
+      col += uL_SunCol * uL_SunI * lit * max(dot(n, uL_SunDir), 0.0) * (1.0 - 0.8 * roof);
     }
     return col;
   }
@@ -5293,6 +5300,7 @@ const stats = { frames: 0, time: 0, fps: 0, ms: 0, low: 0, high: 0 };
 function updateStats(dt) {
   stats.frames++; stats.time += dt;
   if (stats.time < 0.25) return;
+  if (!labEl.classList.contains('collapsed') && labEl.offsetParent) updateAdaptLabel();   // 17c: pengali adaptasi di tombol panel
   stats.fps = stats.frames / stats.time; stats.ms = 1000 * stats.time / stats.frames;
   if (stats.fps < CONFIG.dynRes.lowFps) { stats.low += stats.time; stats.high = 0; } else stats.low = 0;
   if (stats.fps > CONFIG.dynRes.highFps) { stats.high += stats.time; } else stats.high = 0;
@@ -7761,6 +7769,18 @@ function cyclePost() {
 function toggleAdapt() {                                           // 17c: adaptasi mata nyala/mati (untuk membandingkan)
   ADAPT.on = !ADAPT.on; ADAPT.init = true;
   uiLabel('labAdapt', () => t('Adaptasi mata: {s}', { s: t(ADAPT.on ? 'nyala' : 'mati') }));
+}
+// label tombol menampilkan pengali eksposur saat ini (dibaca dari target 1x1, hanya saat panel terbuka, tiap 0,25 s)
+const _adPx = new Uint16Array(4);
+function updateAdaptLabel() {
+  let s = t(ADAPT.on ? 'nyala' : 'mati');
+  if (ADAPT.on && POST.mode === 2) s += t(' (butuh efek layar)');
+  else if (ADAPT.on && !ADAPT.init) {
+    renderer.readRenderTargetPixels(POST_R.lum[ADAPT.cur], 0, 0, 1, 1, _adPx);
+    const L = THREE.DataUtils.fromHalfFloat(_adPx[0]);
+    if (L > 0) s += ` (x${fmtN(Math.min(ADAPT.max, Math.max(ADAPT.min, Math.pow(ADAPT.key / L, ADAPT.pow))), 2)})`;
+  }
+  uiLabel('labAdapt', () => t('Adaptasi mata: {s}', { s }));
 }
 
 await bootStep(BOOT_W[17], 'Audio...');
