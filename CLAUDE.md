@@ -37,6 +37,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_cahaya_lanjut.py` | Uji Copper Corn Station 17c + 17e + 17f + 18a + 18b-2: adaptasi mata (siang, terminal, malam), lampu malam menerangi objek, bayangan sunline (tajam keliling, lembut searah sumbu, dinding gedung jauh tidak gelap, bayangan tidak bergeser saat pemain pindah), awan terpantul, kompleks utilitas padat tanpa tumpang tindih |
 | `tools/uji_menara.py` | Uji Copper Corn Station 18b: dek pandang menara (teras 175 m), E naik-turun langsung, pagar dek, jatuhkan bola dari dek vs hitungan analitik dan vs di tanah, pintu menara gereja, atap pasar menempel, kaca bening rumah Cooper |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
+| `tools/uji_gerak.py` | Uji Copper Corn Station 19a-19b: gerak kepala jalan/lari/mendarat, FOV, motor (kecepatan, belok miring, rem, berat terasa, tabrakan, air, turun, parkir), lampu depan malam |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
 ## Aturan aplikasi
@@ -122,15 +123,17 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Panel dan HUD (M2) | `labEl`, `toggleLab()`, `labTab(id)` (data-ltab / data-lpane), `LABUI`, `setLabText()` (juga notifikasi `#toast`), `setHudMode(compact)` (kelas `x` = baris HUD lengkap) |
 | Bahasa (M3) | `LANGS`, `LANG` (cur, labels, hooks), `t(src, vars)`, `fmtN()`, `fmtInt()`, `uiLabel(id, fn, html)`, `translateDom()`, `setLang(c)`, kamus `I18N.en` (kunci = teks Indonesia persis), pilihan di `.langPick`, `?lang=en`, localStorage `lazarus.lang` |
 | Layar muat dan bantuan (M1) | `BOOT`, `BOOT_W` (bobot progres terukur), `bootStep(frac, label)`, `startEl`, `helpEl` + `toggleHelp()` / `helpTab()`, `showHint()`, pilihan preset `#presetPick` |
+| Gerak kepala (19a) | `BOB` (level, phase, steps, amp, run, y/vy pegas mendarat), `BOB_LEVELS`, `headBob(dt)` (dipanggil di awal `updateCamera()`), `lookBasis(up, tan, dPitch)` + `rollBasis(r)`, `updateFov(dt)` (lari dan motor; diam = tepat `CONFIG.fov`, tidak jalan saat mode foto), `cycleBob()` / `bobLabel()`; suara langkah = `BOB.steps` berubah (`AUDIO.lastSteps`) |
+| Motor (19b) | `MOTO` (on, parked, s, za, h, hd, v, yaw, steer, lean, pitch, look, gFelt, gear, rpm, sy suspensi), sub-mode state `ground`; fisika `stepMoto(dt)` (dekat `stepGround`), `motoMount()` / `motoDismount()` / `motoPark()` / `toggleMoto()` (C), `motoCrash()`, `motoHorn()` (Space); kamera `motoCamera()`; model `MOTO.mesh` (kelompok body, frontG = front + riderF berputar di `MOTO_V.axis`, rider, stand, shadow = layer 1 saja), `motoMatrix(m, lean, pitch)`, `motoVisual()` (tiap frame di `updateCamera`), dasbor `drawDash()` (`MOTO_V.dashTex`), suara `motoAudio()` / `motoStartSound()` / `motoHornSound()` / `motoThud()`; lampu depan = uniform `uL_Head` / `uL_HeadDir` / `uL_HeadG` di `LIGHT`, `headPoolL()` (tanah, juga pantulan aspal basah) dan `headSpotL()` (di `nightLight`), `motoPrompt()`, panel tab Gerak (`labMoto`, `labBob`), tombol sentuh `btnMoto` |
 | Uji | `window.__station` mengekspor objek penting untuk skrip uji |
 
 ## Status pemain (`player.state`)
 
-`ground` (`player.deck` true = di dek pandang menara), `air`, `lift`, `float` (hub nol-g), `tram`, `pod` (kapsul terowongan ke dermaga), `ship` (di shuttle; `ext.active` dan `ext.flight` true), `tour` (tur sinematik, pemain dibekukan). `PORT.trip` true = sedang perjalanan otomatis dari gerbang B1 (lift dan kapsul 5x, E = langsung ke kokpit).
+`ground` (`player.deck` true = di dek pandang menara; `MOTO.on` true = naik motor, fisika `stepMoto`), `air`, `lift`, `float` (hub nol-g), `tram`, `pod` (kapsul terowongan ke dermaga), `ship` (di shuttle; `ext.active` dan `ext.flight` true), `tour` (tur sinematik, pemain dibekukan). `PORT.trip` true = sedang perjalanan otomatis dari gerbang B1 (lift dan kapsul 5x, E = langsung ke kokpit).
 
 ## Tombol
 
-W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 0-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis, 0 = hutan lebat), K, Q, P, U, J, F (mode foto, Enter simpan PNG), Y (tur sinematik), I (lompat ke gerhana Saturnus), ` (panel kontrol), / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
+W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 0-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis, 0 = hutan lebat), K, Q, P, U, J, F (mode foto, Enter simpan PNG), Y (tur sinematik), I (lompat ke gerhana Saturnus), C (naik / turun motor), ` (panel kontrol), / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L. Di motor: W gas, S rem / mundur, A/D belok, Shift sport, Space klakson, O gas terus, mouse menoleh, C atau E turun (di bawah 10 km/h).
 
 ## Riwayat tahap
 
@@ -164,8 +167,9 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 17c, 17e, 17f | Awan ikut terpantul, adaptasi mata (tombol di panel Grafik), lampu jalan dan trem menerangi objek saat malam, bayangan sunline real-time dekat pemain (tajam keliling, lembut searah sumbu; mobil dan pejalan kaki ikut) |
 | 18a | Kompleks utilitas padat: mozaik modul berdempetan (gudang bertingkat, tangki, cerobong, unit atap), jalan servis, rak pipa |
 | 18b | Atap pasar menempel dinding, pintu menara gereja, halaman beton gereja/masjid/pasar, jendela rumah Cooper tembus pandang (lubang dinding sungguhan), bayangan dinding tidak lagi hitam atau naik turun (peta bayangan sunline dan cincin cap dalam koordinat silinder terbuka), dek pandang di teras tingkat 4 menara ikon (175 m, E langsung naik-turun) dan uji lempar bola |
+| 19a, 19b | Gerak kepala saat jalan dan lari (langkah, ayun, napas, hentakan mendarat, FOV lari; panel Gerak: Mati/Halus/Normal), motor POV (setang, dasbor, spion, miring di tikungan, suspensi, berat terasa searah/melawan putaran), lampu depan malam menerangi tanah dan objek, suara mesin dan klakson |
 
-Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Tahap 15 selesai: `docs/cooper-station/rencana-tahap-15-cooper-station.md` (15a lampu trem, 15b lalu lintas boulevard, 15c trotoar, 15d permukiman padat, 15e masjid). Tahap 16 selesai: `docs/cooper-station/rencana-tahap-16-cooper-station.md`. Tahap 17: `docs/cooper-station/rencana-tahap-17-cooper-station.md` (17a sampai 17f selesai). Tahap 18: `docs/cooper-station/rencana-tahap-18-cooper-station.md` (18a kompleks utilitas, 18b revisi bangunan dan dek pandang selesai).
+Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Tahap 15 selesai: `docs/cooper-station/rencana-tahap-15-cooper-station.md` (15a lampu trem, 15b lalu lintas boulevard, 15c trotoar, 15d permukiman padat, 15e masjid). Tahap 16 selesai: `docs/cooper-station/rencana-tahap-16-cooper-station.md`. Tahap 17: `docs/cooper-station/rencana-tahap-17-cooper-station.md` (17a sampai 17f selesai). Tahap 18: `docs/cooper-station/rencana-tahap-18-cooper-station.md` (18a kompleks utilitas, 18b revisi bangunan dan dek pandang selesai). Tahap 19: `docs/cooper-station/rencana-tahap-19-cooper-station.md` (19a gerak kepala, 19b motor dan lampu depan selesai; berisi usulan lanjutan).
 
 Catatan muat (M1): modul memakai `await bootStep(...)` di tingkat atas di antara bagian besar. Bagian baru ditambah di tingkat atas modul (bukan di dalam fungsi) dan diberi titik jeda bila berat; `window.__stationReady` baru true setelah shader dikompilasi.
 
