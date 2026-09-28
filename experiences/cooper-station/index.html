@@ -876,11 +876,14 @@ const LIGHT_GLSL = /* glsl */`
     return col;
   }
 `;
+const CABIN_LIGHT = { uCabin: { value: new THREE.Color(0, 0, 0) } };   // 15a: lampu kabin trem malam (material userData.cabin)
 function patchLit(mat) {
   if (mat.userData.lit) return;
   mat.userData.lit = true;
+  const cabin = !!mat.userData.cabin;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, LIGHT.uniforms);
+    if (cabin) Object.assign(sh.uniforms, CABIN_LIGHT);
     sh.vertexShader = 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
       {
         vec4 lw = vec4(transformed, 1.0); vec3 ln = normal;
@@ -891,9 +894,10 @@ function patchLit(mat) {
         vec3 wn = mat3(modelMatrix) * ln; vLitNormal = wn * inversesqrt(max(dot(wn, wn), 1e-12));   // normal nol tetap nol (tanpa NaN)
       }`);
     sh.fragmentShader = 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + LIGHT_GLSL +
-      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\noutgoingLight *= stationLight(vLitWorld, litN);\n#include <opaque_fragment>');
+      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\noutgoingLight *= stationLight(vLitWorld, litN);\n' + (cabin ? 'outgoingLight += diffuseColor.rgb * uCabin;\n' : '') + '#include <opaque_fragment>');
+    if (cabin) sh.fragmentShader = 'uniform vec3 uCabin;\n' + sh.fragmentShader;
   };
-  mat.customProgramCacheKey = () => 'stationLit';
+  mat.customProgramCacheKey = () => cabin ? 'stationLitCabin' : 'stationLit';
   mat.needsUpdate = true;
 }
 
@@ -1234,6 +1238,7 @@ const groundMat = new THREE.ShaderMaterial({
     uCloudK: { value: 0.2 }, uFieldZ: { value: new THREE.Vector2(3200, 7850) }, uCityZ: { value: new THREE.Vector2(250, 2500) },
     uReal: { value: new THREE.Vector4(-1e9, -1e9, -1e9, -1e9) }, uShadeTex: { value: null }, uGrassR: { value: 0 }, uCornR: { value: 0 }, uGapHalf: { value: 0 }, uNight: { value: 0 },
     uLitterTex: { value: null }, uWet: { value: 0 }, uRainNow: { value: 0 }, uCropT: { value: 0 },
+    uTram: { value: new THREE.Vector4(0, -1e4, 1, 0) },                // 15a: (s, za, arah, malam) trem untuk kolam cahaya
   }, LIGHT.uniforms]),
   vertexShader: /* glsl */`
     #include <fog_pars_vertex>
@@ -1256,6 +1261,18 @@ const groundMat = new THREE.ShaderMaterial({
     #include <fog_pars_fragment>
     uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex, uLitterTex;
     uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf, uNight, uWet, uRainNow, uCropT;
+    uniform vec4 uTram;
+    // 15a: sorot lampu depan trem (melebar ke depan sampai 26 m) + pendaran jendela di samping badan trem
+    float tramPool(float s, float za) {
+      const float CIRC = 6283.185307;
+      float ds = mod(s - uTram.x + CIRC * 1.5, CIRC) - CIRC * 0.5, dz = za - uTram.y;
+      if (abs(ds) > 8.0 || abs(dz) > 40.0) return 0.0;
+      float along = dz * uTram.z - 9.0, w = 0.9 + 0.12 * max(along, 0.0);
+      float beam = exp(-ds * ds / (w * w)) * smoothstep(-0.5, 2.0, along) * (1.0 - smoothstep(10.0, 26.0, along));
+      float side = abs(ds) - 1.9;
+      float glow = exp(-side * side / 1.6) * (1.0 - smoothstep(8.0, 10.0, abs(dz)));
+      return 1.3 * beam + 0.55 * glow;
+    }
     vec3 wheatStage(float g) { float ph = fract(uCropT + g);          // sama dengan VEG_COMMON (12d)
       float grow = ph < 0.82 ? mix(0.3, 1.0, clamp(ph / 0.45, 0.0, 1.0)) : 0.14;
       return vec3(grow, smoothstep(0.45, 0.72, ph), ph >= 0.82 ? 1.0 : 0.0); }
@@ -1505,6 +1522,7 @@ const groundMat = new THREE.ShaderMaterial({
       #endif
       vec3 light = stationLight(vWorld, nrm);
       if (uNight > 0.01) light += vec3(1.0, 0.72, 0.42) * 1.5 * uNight * lampPool(s, za);   // lampu jalan malam
+      if (uTram.w > 0.01) light += vec3(1.0, 0.9, 0.75) * uTram.w * tramPool(s, za);         // 15a: trem malam
       {                                                           // bayangan tajuk pohon dari sunline (tepat di atas)
         float tsh = textureGrad(uShadeTex, uv, gx, gy).r;
         light -= (uL_SunlineCol * uL_Sunline * 0.7 + uL_AmbCol * 0.35) * tsh;
@@ -3377,6 +3395,7 @@ const TRAM_PARTS = {};
     glass: new THREE.MeshBasicMaterial({ color: 0x8fa6b3, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
     lamp: new THREE.MeshBasicMaterial({ color: 0xfff4e0 }),
   };
+  for (const k of ['inner', 'floor', 'seat', 'seatFrame', 'pole']) M[k].userData.cabin = true;   // 15a: diterangi lampu kabin saat malam
   const staticG = new THREE.Group();
   const box = (sx, sy, sz, mat, x, y, z, parent = staticG, tile = 1) => {
     const g = new THREE.BoxGeometry(sx, sy, sz);
@@ -3446,7 +3465,7 @@ const TRAM_PARTS = {};
   }
   for (const sx of [-1, 1]) {
     const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 2 * L - 1, 8).rotateX(Math.PI / 2), M.pole); rail.position.set(sx * 0.45, T.roof - 0.35, 0); staticG.add(rail);
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 2 * L - 1.2), M.lamp); lamp.position.set(sx * 0.55, T.roof - 0.13, 0); lamp.userData.noLight = true; tramMesh.add(lamp);
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 2 * L - 1.2), M.lamp); lamp.position.set(sx * 0.55, T.roof - 0.13, 0); lamp.userData.noLight = true; tramMesh.add(lamp); TRAM_PARTS.cabinLamp = M.lamp;
   }
   // pintu geser: 2 daun per pintu per sisi (hanya sisi peron +x yang membuka)
   TRAM_PARTS.doors = [];
@@ -3488,6 +3507,10 @@ function updateTramVisual() {
     const front = lm.userData.end === tram.dir;
     lm.material.color.setRGB(front ? 1.2 + 2.5 * night : 0.5 + 1.2 * night, front ? 1.15 + 2.3 * night : 0.04, front ? 1.0 + 2.0 * night : 0.03);
   }
+  // 15a: lampu kabin (strip plafon menyala di atas ambang bloom, interior diterangi) dan kolam cahaya di tanah
+  TRAM_PARTS.cabinLamp.color.setRGB(1.0 + 2.2 * night, 0.96 + 2.0 * night, 0.88 + 1.6 * night);
+  CABIN_LIGHT.uCabin.value.setRGB(0.95, 0.82, 0.62).multiplyScalar(0.85 * night);
+  groundMat.uniforms.uTram.value.set(TRAM.s, tram.za, tram.dir, night);
   if (tram.shownTarget !== tram.target) {                          // papan tujuan: halte berikutnya
     tram.shownTarget = tram.target;
     for (const { cv, dt } of TRAM_PARTS.dest) {
@@ -9359,7 +9382,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

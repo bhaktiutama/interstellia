@@ -26,6 +26,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_hutan.py` | Uji Copper Corn Station 14a: hutan lebat (jumlah, tinggi, jalan setapak, tombol 0, pakis per preset, biaya) |
 | `tools/uji_rumput_bukit.py` | Uji Copper Corn Station 14b: rumput tinggi bukit aktif di bukit, mati di kota, radius per preset |
 | `tools/uji_interior.py` | Uji Copper Corn Station 14c: ruangan di balik jendela per preset, tanpa nilai tidak valid siang dan malam |
+| `tools/uji_trem_malam.py` | Uji Copper Corn Station 15a: lampu kabin dan strip plafon trem malam, kolam cahaya tanah |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
@@ -96,7 +97,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Audio | `AUDIO`, `startAudio()`, `updateAudio(dt)` (semua disintesis) |
 | Preset | `PRESETS` (Ultra/Tinggi/Sedang/Rendah/Hemat; Hemat untuk MacBook M1), `applyPreset(i)`, turun otomatis bila FPS < 30 selama 4 s, tersimpan di localStorage, `?preset=hemat` |
 | Lalu lintas | `TRAFFIC` (gambar di GPU, posisi dari simulasi CPU `stepTraffic()` model IDM, atribut `aSim`), `SIG` + `sigState(k, m, axis, t)` (lampu lalu lintas), `XING` + `updateCrossings()` + `XVIS` (perlintasan trem, palang, bel), `LAMP` |
-| Trem | `TRAM`, `TRAM_CAR`, `TRAM_SEATS`, `tram` |
+| Trem | `TRAM`, `TRAM_CAR`, `TRAM_SEATS`, `tram`, `TRAM_PARTS` (lights, cabinLamp, doors), `updateTramVisual()`; malam (15a): `CABIN_LIGHT.uCabin` (material `userData.cabin` di `patchLit`), `tramPool()` + uniform `uTram` di `groundMat` |
 | Lift/hub | `LIFT`, `HUB`, `CABIN`, `enterLift()`, `stepFloat()` |
 | Lokasi | `SPOTS` + `teleport(key)`: cooper, hill, corn, wheat, skyway, baseball, spaceport, fountain, forest |
 | Panel dan HUD (M2) | `labEl`, `toggleLab()`, `labTab(id)` (data-ltab / data-lpane), `LABUI`, `setLabText()` (juga notifikasi `#toast`), `setHudMode(compact)` (kelas `x` = baris HUD lengkap) |
@@ -138,7 +139,7 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 14b | Rumput tinggi di bukit dengan pita gelombang angin (dekat 3D, jauh di shader tanah), merunduk di sekitar pemain |
 | 14c | Interior jendela: ruangan berkedalaman di balik jendela gedung dekat (perabot, tirai, lampu malam), kaca memantulkan langit dan gedung seberang makin kuat dengan jarak, mati di Rendah dan Hemat |
 
-Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Cadangan lain di rencana tahap 12.
+Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Tahap 15 sedang dikerjakan: `docs/cooper-station/rencana-tahap-15-cooper-station.md` (15a lampu trem, 15b lalu lintas boulevard, 15c trotoar, 15d permukiman padat).
 
 Catatan muat (M1): modul memakai `await bootStep(...)` di tingkat atas di antara bagian besar. Bagian baru ditambah di tingkat atas modul (bukan di dalam fungsi) dan diberi titik jeda bila berat; `window.__stationReady` baru true setelah shader dikompilasi.
 
