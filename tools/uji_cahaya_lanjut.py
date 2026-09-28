@@ -77,6 +77,36 @@ UJI = r"""
   }
   out[`18b-2 dinding ${far.length} gedung jauh menghadap pemain: rata-rata terang ${(wallVis / Math.max(wallN, 1)).toFixed(2)}, dianggap di bawah atap ${(100 * wallRoof / Math.max(wallN, 1)).toFixed(1)}%`] =
     far.length > 0 && wallRoof / wallN < 0.05 && wallVis / wallN > 0.7;
+  // 18b-3: bayangan di titik dinding yang sama tidak boleh bergantung pada posisi pemain (dulu: peta dirender dari arah di
+  // posisi pemain, pindah 40 m ke samping mengubah 10-13% titik dinding). Dievaluasi siang (sunline) dan senja (cincin cap kuat).
+  {
+    const P = S.player, sA = P.theta * S.R, zA = P.za;
+    const blds = S.houseList.filter(([s, za, w, d, h]) => { const q = Math.max(Math.abs(wrapC(s - sA)), Math.abs(za - zA)); return q > 25 && q < 110 && h > 8 && w > 6 && d > 6; }).slice(0, 24);
+    const faces = [];
+    for (const [bs, bz, bw, bd, bh] of blds) for (const [ax, sg] of [[0, 1], [0, -1], [1, 1], [1, -1]]) faces.push({ bs, bz, bw, bd, bh, ax, sg });
+    const evalAll = () => { S.shadowPass(); S.sunShadowPass(); return faces.map((F) => {
+      const sw = F.ax === 0 ? `${(F.bs + F.sg * (F.bw / 2 + 0.03)).toFixed(3)}` : `${F.bs.toFixed(3)} + (f.x - 0.5) * ${(F.bw * 0.8).toFixed(2)}`;
+      const zw = F.ax === 1 ? `${(F.bz + F.sg * (F.bd / 2 + 0.03)).toFixed(3)}` : `${F.bz.toFixed(3)} + (f.x - 0.5) * ${(F.bd * 0.8).toFixed(2)}`;
+      const nn = F.ax === 0 ? `${F.sg.toFixed(1)} * vec3(-sin(th), cos(th), 0.0)` : `vec3(0.0, 0.0, ${F.sg.toFixed(1)})`;
+      const px = evalGLSL(8, 8, `float s = ${sw}, za = ${zw}, hh = 1.5 + f.y * ${(F.bh - 3).toFixed(2)}, th = s / uL_R, r = uL_R - hh;
+        vec3 p = vec3(r * cos(th), r * sin(th), za - uL_HalfL), n = ${nn};
+        float roof, sv = sunlineShadow(p, n, roof), cs = uL_ShadowOn > 0.5 ? stationShadow(p) : 1.0;
+        gl_FragColor = vec4(sv, cs, roof, 1.0);`); bad += badOf(px); return px; }); };
+    for (const hr of [12, 18.2]) {
+      S.clock.hour = hr; S.updateLighting();
+      P.theta = sA / S.R; P.za = zA; const A = evalAll();
+      for (const [nm, dS, dZ] of [['keliling +40 m', 40, 0], ['sumbu +40 m', 0, 40]]) {
+        P.theta = (sA + dS) / S.R; P.za = zA + dZ; const B = evalAll();
+        let n = 0, cS = 0, cC = 0, cR = 0;
+        for (let f = 0; f < A.length; f++) for (let i = 0; i < A[f].length; i += 4) {
+          n++; if (Math.abs(A[f][i] - B[f][i]) > 0.3) cS++; if (Math.abs(A[f][i + 1] - B[f][i + 1]) > 0.3) cC++; if (Math.abs(A[f][i + 2] - B[f][i + 2]) > 0.3) cR++;
+        }
+        out[`18b-3 jam ${hr}, pemain pindah ${nm}: ${faces.length} muka dinding, titik yang berubah: sunline ${(100 * cS / n).toFixed(1)}%, cincin cap ${(100 * cC / n).toFixed(1)}%, atap ${(100 * cR / n).toFixed(1)}%`] =
+          faces.length >= 16 && cS / n < 0.02 && cC / n < 0.02 && cR / n < 0.02;
+      }
+    }
+    P.theta = sA / S.R; P.za = zA; S.clock.hour = 12; S.updateLighting();
+  }
   S.clock.hour = 23; S.updateLighting(); S.sunShadowPass();
   out[`17f malam: peta bayangan sunline mati (${U.uL_SunShOn.value})`] = U.uL_SunShOn.value === 0;
   S.clock.hour = 12; S.updateLighting(); S.sunShadowPass();

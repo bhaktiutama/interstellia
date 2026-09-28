@@ -56,6 +56,17 @@ Uji lempar bola dari dek baru:
 | Jatuh dari 176,5 m (dek 175 m + tangan 1,5 m) | belok 85,67 m, waktu jatuh 6,96 s | hitungan analitik kerangka inersia; simulasi dicek oleh `tools/uji_menara.py` (selisih di bawah 5%) |
 | g lokal di dek | 0,825 g | 1 - h/R |
 
+## 18b-3: bayangan naik turun di dinding gedung dan rumah
+
+Temuan Bhakti: bayangan gelap di kaca gedung tinggi dan dinding rumah naik turun saat didekati, tidak di semua gedung.
+
+| Item | Isi |
+| --- | --- |
+| Sumber | Dua peta bayangan: sunline (`SUNSH`) dan cincin lampu end cap (`SHADOW`, kuat saat senja, cahaya keemasan dari arah end cap). Keduanya dirender dari arah di posisi pemain. Karena stasiun melengkung, arah "atas" dan arah ke cincin cap di gedung yang jauh ke samping berbeda, jadi bayangannya bergeser tiap kali pemain bergerak ke samping |
+| Terukur sebelum perbaikan | Pemain pindah 40 m ke samping: 9,9% titik dinding berubah untuk bayangan sunline, 12,6% untuk bayangan cincin cap, 13,9 sampai 15,6% titik berubah terang lebih dari 30%. Pindah 40 m searah sumbu: di bawah 1% |
+| Perbaikan | Kedua peta dirender dalam koordinat silinder terbuka: tiap titik dipindah ke bidang datar dengan busur dan jarak dari sumbu tetap. Di koordinat ini arah atas lokal dan arah ke cincin cap sama di sepanjang keliling, jadi bayangan tidak lagi bergantung pada posisi pemain. Koreksi 18b-2 digantikan cara ini |
+| Uji | `tools/uji_cahaya_lanjut.py`: titik dinding yang berubah saat pemain pindah 40 m (keliling dan sumbu, siang dan senja) harus di bawah 2% |
+
 ## Catatan teknis
 
 - Loop lama tetap dijalankan tanpa membangun apa pun, supaya urutan `rnd()` / `U()` / `pick()` untuk rumah pertanian dan seterusnya tidak bergeser. Kompleks baru memakai generator acak sendiri (benih 20260928).
