@@ -90,6 +90,8 @@ Per baris za: puncak 90 rumah per sel (za 750), turun ke 53 (za 1500), 27 (za 20
 - Nama halte trem diganti (entri `I18N.en` diperbarui).
 - HUD: notifikasi "Distrik {nama}" (lewat `setLabText`/toast) saat pemain masuk distrik baru; nama distrik di baris lokasi HUD lengkap.
 
+**Hasil 16b (selesai):** `DISTRICTS` (20: 14 distrik kota, Taman Nil, Taman Mekong, Punjab, Pampas, Iowa, Ukraina) dan `districtAt(s, za)`. Semua 234 sel kota masuk tepat satu distrik (12-20 sel per distrik). Halte trem: Spaceport, New York, Pasar New York, Kairo, Taman Nil, Pampas, Utilitas, Museum Cooper. HUD: baris lokasi menampilkan nama distrik, notifikasi "Distrik ..." saat pemain berpindah distrik (berjalan, melompat, atau naik trem). Uji `tools/uji_distrik.py`.
+
 ### 16c Pusat kota New York (downtown) dan balai distrik
 - Blok dalam radius sekitar 350 m dari (s 0, za 480) dijadikan CBD: menara 60-150 m, podium, satu menara ikon orisinal sekitar 200 m (kaca, meruncing, puncak antena) di blok strategis dekat halte New York.
 - Alun-alun (plaza) di depan halte New York dengan bangku dan pohon.

@@ -30,6 +30,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_boulevard.py` | Uji Copper Corn Station 15b: mobil boulevard samping rel trem, 30 menit tanpa tabrakan trem dan konflik simpang |
 | `tools/uji_trotoar.py` | Uji Copper Corn Station 15c: rute pejalan kaki di trotoar dan jalan setapak taman, tidak di gedung atau pohon |
 | `tools/uji_permukiman.py` | Uji Copper Corn Station 15d: jumlah rumah, tanah kosong permukiman, rumah tidak bertumpuk atau di trotoar |
+| `tools/uji_distrik.py` | Uji Copper Corn Station 16: distrik (sel kota, nama, halte, notifikasi), fasilitas, peta |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
@@ -89,6 +90,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Hutan (14a) | `FOREST` (s0, s1, z0, z1, trailW, k, fernR, list, mesh), `forestTrail(za)`, `inForest()`, pohon `t.forest` (langkah 4 di blok TREES, RNG sendiri), `TREES.forestLod` + uniform `uLodF` / `uForest` (impostor lebih dekat), `updateForest()` (kabut, pakis), `applyForestPreset()`, `SPOTS.forest` (tombol 0) |
 | Rumput bukit (14b) | `MEADOW_GLSL` (`meadowMask(h)`, `meadowGust(P, off)`, dipakai rumput 3D dan shader tanah; uniform `uWindSlow`, `uGustOff` diintegrasikan di `updateWind()`: jangan pakai fase waktu x kecepatan angin), `MEADOW` (near, mid, nearR, midR, active), `MEADOW_VS`, `applyMeadowRadii()`, uniform `uMeadowOn` (rumput pendek disembunyikan di bukit), `tuftGeo(..., heads)` |
 | Trotoar dan jalan setapak (15c) | `SIDEWALK_GLSL` (`sidewalkD(P, art)`, di shader tanah dan rumput) = `SIDEWALK.d(s, za)` di JS (ubah keduanya bersama), `PARK_PATHS` (runs, mesh pita), `colAt(s, za, m)`; tepi blok arteri 17 m dari sumbu |
+| Distrik (16) | `DISTRICTS` (name, kind mega/astro/taman/tani, k0-k1, z0-z1, c), `districtAt(s, za)`, `HUD_DIST` (notifikasi saat pindah distrik), `homeDensity()` |
 | Masjid (15e) | `MOSQUE` (list, mesh, names), `mosque(s, za, kind)` 0 Utsmani / 1 Maroko / 2 Saudi, `buildMosqueMesh()`; menggantikan setiap gereja kedua |
 | Permukiman (15d, 16a) | `fillHomes(s0, z0, s1, z1, d, sparse)` (gang, 4 baris, baris samping; tingkat dari `homeDensity()`: deret / tunggal / berhalaman / besar / desa, ambang 0,47 / 0,33 / 0,21 / 0,07), `YARD_TREES` (ditanam di blok pohon), `GANGS`; `front` 3/4 = muka -s/+s di `BUILD_FS` |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
