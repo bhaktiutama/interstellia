@@ -32,6 +32,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_permukiman.py` | Uji Copper Corn Station 15d: jumlah rumah, tanah kosong permukiman, rumah tidak bertumpuk atau di trotoar |
 | `tools/uji_distrik.py` | Uji Copper Corn Station 16: distrik (sel kota, nama, halte, notifikasi), fasilitas, peta |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
+| `tools/uji_gerhana.py` | Uji Copper Corn Station 17a: Matahari 25 derajat dari sumbu di bidang orbit, lompat ke gerhana, lama gerhana dan penumbra, sinar padam, cahaya tepi Saturnus |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
@@ -67,6 +68,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Putaran | omega 0,09905 rad/s, periode 63,4 s, 1 g di tanah, kecepatan tepi 99,05 m/s |
 | Koordinat | sumbu = world Z; za = z + 4.000 (jarak dari end cap A); s = theta x R (busur keliling) |
 | Kerangka | dalam stasiun = kerangka berputar; kamera luar (V) dan pesawat = kerangka inersia (scene.rotation.z = omega t) |
+| Orbit (17a) | radius 260.000 km, periode 37,57 jam; sumbu 65 derajat dari normal orbit; Matahari di bidang orbit, 25 derajat dari sumbu +z (masuk lewat end cap B); gerhana 2,78 jam per orbit |
 | Dua scene | farScene (1 unit = 1.000 km: Saturnus, bintang, Matahari) + scene utama |
 
 ## Peta kode (cari dengan nama)
@@ -102,6 +104,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Perabot kota (11c) | `FURN` (bench, bin, hydrant, planter, signal, cabinet, mailbox, zebra), LOD per radius, `updateFurniture()` |
 | Spaceport (11d) | `PORT`, `DOCK` (grup despun), `SHIPS` (player, ai, cargo, tug), `COCKPIT`, `TERM` (terminal; posisi didefinisikan di bagian plaza), `portBoard()`, `stepPort()`, `updateFlightCamera()`, `portKey()`, `portMouse()` |
 | Spaceport rapi (12a) | `TERM.gate`, `portStartTrip()`, `PORT.trip` (perjalanan otomatis 5x dari gerbang B1), `DGUIDE` + `updateDockGuide()` (kotak target, garis arah), `dockData()`, `drawCockpitScreen()`, `portClank()`, `AUDIO.shipBus` (eng, engTone, rcs, cab, cabHum), `PORT.thr` / `PORT.rcs` / `PORT.turn` |
+| Orbit dan gerhana (17a) | `ORBIT` (axisTiltDeg), `SUN_AXIS_DEG`, `SUN_DIR`, `orbitPhase()`, `saturnDirInertial()`, `ECL` (k, phiC, half, dockLight) + `updateEclipse()` (dipanggil di `updateFar()`), `eclipseIn()`, `jumpToEclipse()` (tombol I), cangkang cahaya tepi `limbMat` di blok Saturnus, silau `glareMat` (uK) |
 | Post | `POST`, `postBegin()`, `postEnd()`: HDR, SSAO, bloom 6 tingkat, ACES, FXAA |
 | Audio | `AUDIO`, `startAudio()`, `updateAudio(dt)` (semua disintesis) |
 | Preset | `PRESETS` (Ultra/Tinggi/Sedang/Rendah/Hemat; Hemat untuk MacBook M1), `applyPreset(i)`, turun otomatis bila FPS < 30 selama 4 s, tersimpan di localStorage, `?preset=hemat` |
@@ -120,7 +123,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 
 ## Tombol
 
-W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 0-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis, 0 = hutan lebat), K, Q, P, U, J, F (mode foto, Enter simpan PNG), Y (tur sinematik), ` (panel kontrol), / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
+W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca), O, X, R, H, 0-9 (lokasi; 8 = kokpit shuttle, 9 = air mancur Coriolis, 0 = hutan lebat), K, Q, P, U, J, F (mode foto, Enter simpan PNG), Y (tur sinematik), I (lompat ke gerhana Saturnus), ` (panel kontrol), / atau F1. Di pesawat: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
 
 ## Riwayat tahap
 
@@ -149,8 +152,9 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 14c | Interior jendela: ruangan berkedalaman di balik jendela gedung dekat (perabot, tirai, lampu malam), kaca memantulkan langit dan gedung seberang makin kuat dengan jarak, mati di Rendah dan Hemat |
 | 15a-15e | Trem menyala malam, mobil di boulevard samping rel, trotoar dan jalan setapak taman, permukiman padat bertingkat (gang, rumah deret, pohon halaman), setengah gereja diganti masjid (Utsmani, Maroko, Saudi) |
 | 16a-16f | Gradasi kepadatan permukiman (deret sampai desa), 14 distrik kota (megacity dan astronom) + zona luar kota bernama, pusat New York dengan menara ikon 221 m, balai distrik, 15 pasar, taman distrik, sekolah, rumah sakit, peta dengan distrik dan ikon fasilitas |
+| 17a | Sumbu stasiun dimiringkan ulang: sinar Matahari masuk end cap B 25 derajat (jangkauan 4,3 km), gerhana Saturnus tiap orbit (sinar padam, cahaya tepi atmosfer, notifikasi, tombol I) |
 
-Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Tahap 15 selesai: `docs/cooper-station/rencana-tahap-15-cooper-station.md` (15a lampu trem, 15b lalu lintas boulevard, 15c trotoar, 15d permukiman padat, 15e masjid). Tahap 16 selesai: `docs/cooper-station/rencana-tahap-16-cooper-station.md`.
+Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Tahap 15 selesai: `docs/cooper-station/rencana-tahap-15-cooper-station.md` (15a lampu trem, 15b lalu lintas boulevard, 15c trotoar, 15d permukiman padat, 15e masjid). Tahap 16 selesai: `docs/cooper-station/rencana-tahap-16-cooper-station.md`. Tahap 17: `docs/cooper-station/rencana-tahap-17-cooper-station.md` (17a orbit dan gerhana selesai, 17b-17f pencahayaan rencana).
 
 Catatan muat (M1): modul memakai `await bootStep(...)` di tingkat atas di antara bagian besar. Bagian baru ditambah di tingkat atas modul (bukan di dalam fungsi) dan diberi titik jeda bila berat; `window.__stationReady` baru true setelah shader dikompilasi.
 

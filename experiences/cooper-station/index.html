@@ -229,6 +229,7 @@
       <div class="btns">
         <button id="labTime" type="button"><kbd>Z</kbd>Waktu: 1 menit = 1 jam</button>
         <button id="labOrbit" type="button"><kbd>T</kbd>Orbit Saturnus: 1x</button>
+        <button id="labEclipse" type="button"><kbd>I</kbd>Lompat ke gerhana Saturnus</button>
         <button id="labWeather" type="button"><kbd>N</kbd>Cuaca: Otomatis (Berawan)</button>
       </div>
     </section>
@@ -329,6 +330,7 @@
         <tr class="desk-only"><td>[ · ] · Z</td><td>Jam stasiun mundur / maju 1 jam · kecepatan waktu (1 menit = 1 jam, 10 s, 1 s, berhenti)</td></tr>
         <tr class="desk-only"><td>N</td><td>Cuaca: otomatis (berganti cerah, berawan, mendung), atau tetap cerah / berawan / mendung. Mendung tebal = hujan (miring sekitar 8 derajat karena Coriolis), tanah basah dan genangan</td></tr>
         <tr class="desk-only"><td>T</td><td>Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)</td></tr>
+        <tr class="desk-only"><td>I</td><td>Lompat ke 2 menit sebelum gerhana Saturnus (sekali tiap orbit 37,6 jam, lamanya sekitar 2,8 jam). Lihat lewat kaca end cap B atau kamera luar (V)</td></tr>
     </table>
     <table data-pane="grafik">
         <tr class="desk-only"><td>Q</td><td>Preset kualitas: Ultra, Tinggi, Sedang, Rendah, Hemat (untuk MacBook M1). Awal: pilihan terakhir (atau Ultra), turun otomatis bila FPS di bawah 30. Bisa juga lewat alamat: index.html?preset=hemat</td></tr>
@@ -495,6 +497,15 @@ Object.assign(I18N.en, {
   "Jam stasiun mundur / maju 1 jam · kecepatan waktu (1 menit = 1 jam, 10 s, 1 s, berhenti)": "Station clock back / forward 1 hour · time speed (1 minute = 1 hour, 10 s, 1 s, stopped)",
   "Cuaca: otomatis (berganti cerah, berawan, mendung), atau tetap cerah / berawan / mendung. Mendung tebal = hujan (miring sekitar 8 derajat karena Coriolis), tanah basah dan genangan": "Weather: automatic (cycles clear, cloudy, overcast), or fixed clear / cloudy / overcast. Heavy overcast = rain (tilted about 8 degrees by Coriolis), wet ground and puddles",
   "Percepat orbit Saturnus (1x, 100x, 1.000x, 10.000x)": "Speed up the Saturn orbit (1x, 100x, 1,000x, 10,000x)",
+  "Lompat ke 2 menit sebelum gerhana Saturnus (sekali tiap orbit 37,6 jam, lamanya sekitar 2,8 jam). Lihat lewat kaca end cap B atau kamera luar (V)": "Jump to 2 minutes before the Saturn eclipse (once per 37.6-hour orbit, lasting about 2.8 hours). Watch through the end cap B glass or the outside camera (V)",
+  "Lompat ke gerhana Saturnus": "Jump to Saturn eclipse",
+  "Gerhana Saturnus dimulai: Saturnus menutup Matahari": "Saturn eclipse begins: Saturn covers the Sun",
+  "Gerhana Saturnus selesai": "Saturn eclipse over",
+  "Gerhana Saturnus dalam {m} menit. Lihat ke end cap B atau kamera luar (V).": "Saturn eclipse in {m} minutes. Look toward end cap B or use the outside camera (V).",
+  "Gerhana Saturnus dimulai dalam 2 menit. Lihat ke end cap B (tombol 1: rumah Cooper) atau kamera luar (V). T = percepat orbit.": "The Saturn eclipse begins in 2 minutes. Look toward end cap B (key 1: Cooper house) or use the outside camera (V). T = speed up orbit.",
+  "gerhana": "eclipse",
+  "gerhana dalam {x}": "eclipse in {x}",
+  "mnt": "min",
   "Preset kualitas: Ultra, Tinggi, Sedang, Rendah, Hemat (untuk MacBook M1). Awal: pilihan terakhir (atau Ultra), turun otomatis bila FPS di bawah 30. Bisa juga lewat alamat: index.html?preset=hemat": "Quality preset: Ultra, High, Medium, Low, Saver (for MacBook M1). Starts with your last choice (or Ultra) and drops automatically when FPS is below 30. Also via the address: index.html?preset=hemat",
   "Kualitas vegetasi · efek layar (bloom, SSAO, tone mapping): Tinggi, Sedang, Rendah/Mati": "Vegetation quality · screen effects (bloom, SSAO, tone mapping): High, Medium, Low/Off",
   "Suara nyala/mati · musik: generatif, file sendiri (pilih di panel Uji), mati": "Sound on/off · music: generative, your own file (choose it in the panel), off",
@@ -926,9 +937,10 @@ await bootStep(BOOT_W[1], 'Saturnus dan bintang...');
    Kamera jauh selalu di titik asal, hanya rotasi: q_far = rotZ(omega*t) * q_kamera_stasiun.
    ===================================================================== */
 const SATURN = { GM: 3.7931e16, rEq: 60.268, rPole: 54.364 };   // m^3/s^2 dan 1.000 km (NASA NSSDCA)
-const ORBIT = { r: 260, tiltDeg: 15, phi0: 0, axisTiltDeg: 40 };  // radius orbit 260.000 km, cincin miring 15 derajat
-// axisTiltDeg: sumbu stasiun (tetap di ruang inersia, efek giroskop) miring 40 derajat dari normal orbit,
-// sehingga Saturnus berpindah antara 50 dan 130 derajat dari sumbu selama satu orbit dan bisa terlihat lewat end cap.
+const ORBIT = { r: 260, tiltDeg: 15, phi0: 0, axisTiltDeg: 65 };  // radius orbit 260.000 km, cincin miring 15 derajat
+// axisTiltDeg: sumbu stasiun (tetap di ruang inersia, efek giroskop) miring 65 derajat dari normal orbit (25 derajat dari bidang orbit),
+// sehingga Saturnus berpindah antara 25 dan 155 derajat dari sumbu selama satu orbit dan sering terlihat lewat end cap.
+// 17a: nilai lama 40. Diubah agar Matahari (di bidang orbit, syarat gerhana tiap orbit) hanya 25 derajat dari sumbu.
 const T_ORB = 2 * Math.PI * Math.sqrt(Math.pow(ORBIT.r * 1e6, 3) / SATURN.GM);   // s, sekitar 37,57 jam
 const RINGS = [   // radius dalam dan luar (1.000 km), warna, alpha (NASA Saturnian Rings Fact Sheet)
   { r0: 66.900, r1: 74.510, c: [0.55, 0.52, 0.48], a: 0.06 },   // D
@@ -940,7 +952,10 @@ const RINGS = [   // radius dalam dan luar (1.000 km), warna, alpha (NASA Saturn
 ];
 const farScene = new THREE.Scene();
 const farCam = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 1, 20000);
-const SUN_DIR = new THREE.Vector3(0.75, 0.45, 0.35).normalize();   // Matahari di belakang stasiun: Saturnus tampak hampir penuh di fase 0
+// 17a: Matahari di bidang orbit (tegak lurus normal orbit), 90 - axisTiltDeg = 25 derajat dari sumbu +z. Sinar masuk lewat
+// end cap B dengan sudut landai (jangkauan sekitar 4,3 km, dulu 800 m), dan stasiun lewat bayangan Saturnus sekali tiap orbit.
+const SUN_AXIS_DEG = 90 - ORBIT.axisTiltDeg;
+const SUN_DIR = new THREE.Vector3(0, Math.sin(SUN_AXIS_DEG * DEG), Math.cos(SUN_AXIS_DEG * DEG));
 {
   const sun = new THREE.DirectionalLight(0xffffff, 2.4);
   sun.position.copy(SUN_DIR);
@@ -1130,12 +1145,36 @@ farScene.add(saturn);
   const rings = new THREE.Mesh(rg, ringMat);
   rings.renderOrder = 2;
   saturn.add(rings);
+  // 17a: cincin cahaya atmosfer di tepi Saturnus saat Matahari di belakangnya (hamburan maju, paling jelas saat gerhana).
+  // Cangkang 1,2% lebih besar dari planet, additive; terang di tepi (sudut pandang menyinggung) dan saat kamera membelakangi Matahari.
+  const limbMat = new THREE.ShaderMaterial({
+    uniforms: SAT_U, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    vertexShader: /* glsl */`
+      varying vec3 vP, vL;
+      void main() { vP = position; vL = position * ${'vec3(' + SATURN.rEq * 1.012 + ',' + SATURN.rPole * 1.012 + ',' + SATURN.rEq * 1.012 + ')'}; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: /* glsl */`
+      ${SAT_COMMON}
+      varying vec3 vP, vL;
+      void main() {
+        vec3 n = normalize(vP / uScale);
+        vec3 V = normalize(uCamL - vL);
+        float rim = 1.0 - clamp(abs(dot(n, V)), 0.0, 1.0);
+        float back = max(-dot(V, uSunL), 0.0);
+        float g = pow(rim, 3.0) * pow(back, 24.0) * 1.6 * uSunI;
+        gl_FragColor = vec4(vec3(1.0, 0.62, 0.34) * g, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const limb = new THREE.Mesh(new THREE.SphereGeometry(1, 96, 64), limbMat);
+  limb.scale.set(SATURN.rEq * 1.012, SATURN.rPole * 1.012, SATURN.rEq * 1.012); limb.renderOrder = 1;
+  saturn.add(limb);
   // Matahari: silau lembut (1 titik, additive); ukuran sebenarnya dari Saturnus hanya sekitar 3,4 menit busur
   const glareMat = new THREE.ShaderMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uPx: { value: 1 } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uPx: { value: 1 }, uK: { value: 1 } },
     vertexShader: /* glsl */`uniform float uPx; void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_PointSize = 150.0 * uPx; }`,
-    fragmentShader: /* glsl */`void main() { vec2 d = gl_PointCoord - 0.5; float r = length(d) * 2.0; if (r > 1.0) discard;
-      float g = exp(-r * 9.0) * 1.6 + exp(-r * 3.0) * 0.18; gl_FragColor = vec4(pow(max(vec3(1.0, 0.95, 0.85) * g, vec3(0.0)), vec3(2.2)), 1.0);
+    fragmentShader: /* glsl */`uniform float uK; void main() { vec2 d = gl_PointCoord - 0.5; float r = length(d) * 2.0; if (r > 1.0) discard;
+      float g = (exp(-r * 9.0) * 1.6 + exp(-r * 3.0) * 0.18) * uK;   // 17a: padam saat gerhana
+      gl_FragColor = vec4(pow(max(vec3(1.0, 0.95, 0.85) * g, vec3(0.0)), vec3(2.2)), 1.0);
       #include <colorspace_fragment>
     }`,
   });
@@ -1176,6 +1215,7 @@ function updateFar() {
   SU.uCamL.value.copy(saturn.position).negate().applyQuaternion(_qSatInv.copy(saturn.quaternion).invert());   // kamera jauh di titik asal
   SU.uSpin.value = (TAU * clock.orbit / SAT_SPIN) % (TAU * 25);
   saturn.userData.glareMat.uniforms.uPx.value = renderer.getPixelRatio();
+  updateEclipse();                                                  // 17a
   if (ext.active) { farCam.quaternion.copy(camera.quaternion); return; }   // kamera luar sudah di kerangka inersia
   _qSt.setFromAxisAngle(_zAxis, OMEGA * clock.sim);
   farCam.quaternion.copy(_qSt).multiply(camera.quaternion);
@@ -1185,6 +1225,63 @@ function saturnDirStation(out) {
   saturnDirInertial(out);
   const c = Math.cos(OMEGA * clock.sim), s = Math.sin(OMEGA * clock.sim);
   return out.set(out.x * c + out.y * s, -out.x * s + out.y * c, out.z);   // rotasi -omega*t
+}
+/* =====================================================================
+   TAHAP 17a: GERHANA SATURNUS
+   Matahari ada di bidang orbit, jadi stasiun lewat bayangan Saturnus sekali tiap orbit (sekitar 2,8 jam dari 37,57 jam).
+   ECL.k = bagian cakram Matahari yang terlihat (1 = terang, 0 = gerhana total). Penumbra dari diameter sudut Matahari
+   dilihat dari Saturnus (0,0557 derajat, sekitar 20 s saat masuk/keluar), ditambah sekitar 240 km untuk atmosfer.
+   Dipakai: uL_SunI (sinar lewat end cap, sunrays), silau Matahari, lampu dermaga, cahaya tepi atmosfer Saturnus.
+   ===================================================================== */
+const ECL = { k: 1, on: false, phiC: 0, half: Math.asin(SATURN.rEq / ORBIT.r), warned: false, dockLight: null };
+{
+  const v = new THREE.Vector3(); let best = -2;                     // fase orbit saat Saturnus paling dekat ke arah Matahari
+  for (let i = 0; i < 7200; i++) {
+    const phi = i / 7200 * TAU;
+    v.set(-Math.cos(phi), -Math.sin(phi), 0).applyQuaternion(Q_ORBIT);
+    const d = v.dot(SUN_DIR); if (d > best) { best = d; ECL.phiC = phi; }
+  }
+}
+const SUN_ANG = 0.0557 * DEG;                                       // diameter sudut Matahari dari Saturnus (rad)
+const _eP = new THREE.Vector3(), _eS = new THREE.Vector3(), _eQ = new THREE.Quaternion();
+// detik (waktu orbit) sampai gerhana berikutnya dimulai
+function eclipseIn() { const d = ((ECL.phiC - ECL.half - orbitPhase()) % TAU + TAU) % TAU; return d / TAU * T_ORB; }
+function updateEclipse() {
+  // stasiun relatif Saturnus di kerangka lokal Saturnus, diskalakan agar Saturnus (pepat) menjadi bola satuan
+  _eQ.copy(saturn.quaternion).invert();
+  _eP.copy(saturn.position).negate().applyQuaternion(_eQ);
+  _eS.copy(SUN_DIR).applyQuaternion(_eQ);
+  const along = _eP.dot(_eS);                                       // < 0: stasiun di sisi malam Saturnus
+  let k = 1;
+  if (along < 0) {
+    const sx = _eS.x / SATURN.rEq, sy = _eS.y / SATURN.rPole, sz = _eS.z / SATURN.rEq;
+    const px = _eP.x / SATURN.rEq, py = _eP.y / SATURN.rPole, pz = _eP.z / SATURN.rEq;
+    const t = -(px * sx + py * sy + pz * sz) / (sx * sx + sy * sy + sz * sz);
+    const d = Math.hypot(px + t * sx, py + t * sy, pz + t * sz);   // jarak garis ke Matahari dari pusat (1 = tepi Saturnus)
+    const w = -along * SUN_ANG / SATURN.rEq;                        // lebar penumbra (satuan jari-jari Saturnus)
+    const x = Math.min(1, Math.max(0, (d - (1 - 0.5 * w)) / (w + 0.004)));
+    k = x * x * (3 - 2 * x);
+  }
+  ECL.k = k;
+  if (ECL.dockLight) ECL.dockLight.intensity = 2.2 * (0.3 + 0.7 * k);
+  saturn.userData.glareMat.uniforms.uK.value = k;
+  // notifikasi: 10 menit sebelum, mulai, selesai (hanya bila orbit tidak terlalu cepat)
+  const on = k < 0.5, say = window.__stationReady && clock.orbitScale <= 100;
+  if (on !== ECL.on && say) setLabText(on ? 'Gerhana Saturnus dimulai: Saturnus menutup Matahari' : 'Gerhana Saturnus selesai');
+  ECL.on = on;
+  const tNext = eclipseIn();
+  if (!on && tNext < 600 && !ECL.warned && say) {
+    ECL.warned = true;
+    setLabText(t('Gerhana Saturnus dalam {m} menit. Lihat ke end cap B atau kamera luar (V).', { m: fmtInt(Math.max(1, Math.ceil(tNext / 60))) }));
+  }
+  if (tNext > 900) ECL.warned = false;
+}
+// tombol I: lompat ke 2 menit (waktu orbit) sebelum gerhana berikutnya
+function jumpToEclipse() {
+  let dt = eclipseIn() - 120; if (dt < 0) dt += T_ORB;
+  clock.orbit += dt; ECL.warned = true;
+  updateFar();
+  setLabText('Gerhana Saturnus dimulai dalam 2 menit. Lihat ke end cap B (tombol 1: rumah Cooper) atau kamera luar (V). T = percepat orbit.');
 }
 // Kamera luar (tombol V): mengorbit stasiun di kerangka inersia; stasiun terlihat berputar
 const ext = { active: false, yaw: 212 * Math.PI / 180, pitch: 12 * Math.PI / 180, dist: 6500, target: new THREE.Vector3(0, 0, -2400) };
@@ -4708,6 +4805,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyG') dropBall();
   if (e.code === 'KeyL') enterLift();
   if (e.code === 'KeyT') cycleOrbitSpeed();
+  if (e.code === 'KeyI') jumpToEclipse();                           // 17a
   if (e.code === 'KeyE') doAction();
   if (e.code === 'KeyM') toggleMap();
   if (e.code === 'KeyV') toggleExterior();
@@ -4834,6 +4932,7 @@ on('labThrow', () => throwBall());
 on('labDrop', () => dropBall());
 on('labLift', () => enterLift());
 on('labOrbit', () => cycleOrbitSpeed());
+on('labEclipse', () => jumpToEclipse());                            // 17a
 on('labExt', () => toggleExterior());
 on('labTime', () => cycleTimeRate());
 on('labWeather', () => cycleWeather());
@@ -4976,7 +5075,8 @@ function updateStats(dt) {
   saturnDirStation(_satDir);
   const upNow = player.state === 'float' ? player.float.up : upAt(player.theta, _up);
   hEl.sat.textContent = t('{a}° dari zenit', { a: (Math.acos(Math.max(-1, Math.min(1, _satDir.dot(upNow)))) / DEG).toFixed(0) });
-  hEl.orb.textContent = `${(((orbitPhase() / DEG) % 360 + 360) % 360).toFixed(1)}° · ${(T_ORB / 3600).toFixed(2)} ${t('j')}`;
+  const eIn = eclipseIn(), eTxt = ECL.k < 0.99 ? t('gerhana') : t('gerhana dalam {x}', { x: eIn >= 3600 ? `${Math.floor(eIn / 3600)} ${t('j')} ${Math.floor(eIn % 3600 / 60)} ${t('mnt')}` : `${Math.ceil(eIn / 60)} ${t('mnt')}` });
+  hEl.orb.textContent = `${(((orbitPhase() / DEG) % 360 + 360) % 360).toFixed(1)}° · ${(T_ORB / 3600).toFixed(2)} ${t('j')} · ${eTxt}`;   // 17a
   hEl.orbX.textContent = clock.orbitScale + 'x';
   hEl.hour.textContent = `${fmtHour(clock.hour)} · ${t(TIME_RATES.find((x) => x[0] === clock.hourRate)[1])}`;
   if (document.activeElement !== inHour) { inHour.value = clock.hour.toFixed(1); inHourV.textContent = fmtHour(clock.hour); }
@@ -5303,6 +5403,7 @@ function updateLighting() {
   amb = mixV(amb, [0.16 * (0.15 + day), 0.17 * (0.15 + day), 0.19 * (0.15 + day)], 0.6 * ov);
   U.uL_AmbCol.value.set(amb[0], amb[1], amb[2]);
   U.uL_CapI.value = 0.05 + 0.25 * day + 1.1 * golden * (1 - 0.35 * ov);
+  U.uL_SunI.value = 0.12 * ECL.k;                                   // 17a: sinar Matahari lewat end cap padam saat gerhana
   RAYS.str = U.uL_Sunline.value * (0.7 + 0.9 * golden) * (1 - 0.6 * ov);   // tahap 11b: berkas paling jelas pagi dan senja
   // sinar Matahari dalam kerangka stasiun (atau inersia saat kamera luar)
   if (ext.active) U.uL_SunDir.value.copy(SUN_DIR);
@@ -7955,8 +8056,11 @@ const PORT = {
 PORT.zHubPod = -HALF_L + HUB.zaMin - 1; PORT.zDockPod = PORT.ringZ + 15;
 const DOCK = new THREE.Group(); scene.add(DOCK);                   // kerangka inersia (despun)
 {
+  // 17a: dermaga di end cap A kini berada di bayangan stasiun sendiri, jadi cahayanya dianggap lampu sorot dermaga
+  // dengan arah Matahari lama (tampilan spaceport tidak berubah); ikut meredup sebagian saat gerhana (lihat updateFar)
   const sun = new THREE.DirectionalLight(0xfff4e6, 2.2), tgt = new THREE.Object3D();
-  sun.position.copy(SUN_DIR).multiplyScalar(1000); sun.target = tgt; DOCK.add(sun, tgt, new THREE.AmbientLight(0x8090a8, 0.35));
+  sun.position.set(0.75, 0.45, 0.35).normalize().multiplyScalar(1000); sun.target = tgt; DOCK.add(sun, tgt, new THREE.AmbientLight(0x8090a8, 0.35));
+  ECL.dockLight = sun;
 }
 // --- penggabung geometri berwarna (normal dijaga per bagian) ---
 function mergeColored(parts) {
@@ -9948,7 +10052,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
