@@ -13,20 +13,23 @@ UJI = r"""
   S.applyPreset(0);
   out[`uInterior per preset Ultra..Hemat: ${on.join(' ')}`] = on.join('') === '11100';
   const W = 1280, H = 800, rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.FloatType });
-  const shoot = () => {                                     // gedung saja, tanpa post; mesh dipinjam lalu dikembalikan
-    const sc = new THREE.Scene(), ms = Object.values(S.cityMeshes), par = ms.map((m) => m.parent);
-    ms.forEach((m) => sc.add(m)); sc.fog = S.scene.fog; sc.rotation.copy(S.scene.rotation); sc.background = new THREE.Color(0, 0, 0);
+  const g = S.BUILD.flat.find((q) => q[7] === 2 && q[8] === 1 && q[4] > 12 && q[1] > 300);   // apartemen menghadap -za
+  // hanya gedung sasaran (satu instance) supaya gedung lain tidak menghalangi kamera (15d: permukiman lebih rapat)
+  const src = S.cityMeshes.flat, idx = S.BUILD.flat.indexOf(g), geo1 = src.geometry.clone(), m1 = new THREE.Matrix4();
+  geo1.setAttribute('aStyle', new THREE.InstancedBufferAttribute(new Float32Array([g[7], g[8]]), 2));
+  const one = new THREE.InstancedMesh(geo1, src.material, 1); src.getMatrixAt(idx, m1); one.setMatrixAt(0, m1);
+  if (src.instanceColor) { const c = new THREE.Color(); src.getColorAt(idx, c); one.setColorAt(0, c); }
+  one.frustumCulled = false;
+  const shoot = () => {
+    const sc = new THREE.Scene(); sc.add(one); sc.fog = S.scene.fog; sc.rotation.copy(S.scene.rotation); sc.background = new THREE.Color(0, 0, 0);
     const cam = S.camera.clone(); cam.aspect = W / H; cam.updateProjectionMatrix();
     S.renderer.setRenderTarget(rt); S.renderer.clear(); S.renderer.render(sc, cam); S.renderer.setRenderTarget(null);
-    ms.forEach((m, i) => par[i].add(m));
     const px = new Float32Array(W * H * 4); S.renderer.readRenderTargetPixels(rt, 0, 0, W, H, px); return px;
   };
-  const types = Object.keys(S.BUILD).sort((x, y) => S.BUILD[y].length - S.BUILD[x].length);
-  const g = S.BUILD[types[0]].find((q) => q[4] > 15 && q[1] > 300);
   for (const [nm, hr] of [['siang', 11], ['malam', 21]]) {
     S.clock.hour = hr; S.teleport('cooper');
     const za = g[1] - g[3] / 2 - 14;
-    Object.assign(S.player, { theta: g[0] / S.R, za, h: S.groundH(g[0], za), heading: Math.PI, pitch: 0.3 });
+    Object.assign(S.player, { theta: g[0] / S.R, za, h: S.groundH(g[0], za), heading: 0, pitch: 0.3 });
     await wait(3000);
     S.BUILD_U.uInterior.value = 1; const a = shoot(), a2 = shoot();
     S.BUILD_U.uInterior.value = 0; const b = shoot(); S.BUILD_U.uInterior.value = 1;
@@ -38,16 +41,16 @@ UJI = r"""
       if (a[i] !== a2[i] || a[i + 1] !== a2[i + 1] || a[i + 2] !== a2[i + 2]) same++;
     }
     const n = W * H;
-    out[`${nm}: gedung ${(bld / n * 100).toFixed(1)}% layar, berubah oleh ruangan ${(chg / n * 100).toFixed(2)}% layar`] = bld / n > 0.05 && chg / n > 0.005;
+    out[`${nm}: gedung ${(bld / n * 100).toFixed(1)}% layar, berubah oleh ruangan ${(chg / n * 100).toFixed(2)}% layar`] = bld / n > 0.02 && chg / n > 0.005;
     out[`${nm}: tanpa nilai tidak valid (${bad}), deterministik (${same} piksel beda)`] = bad === 0 && same === 0;
   }
   // revisi 14c: kuat pantulan kaca (refK) rata-rata di piksel ruangan, dekat (15 m) lawan jauh (60 m); shader dipinjam sementara
-  const mat = Object.values(S.cityMeshes)[0].material, fs0 = mat.fragmentShader;
+  const mat = src.material, fs0 = mat.fragmentShader;
   mat.fragmentShader = fs0.replace('kI = detail;', 'kI = detail; gl_FragColor = vec4(refK, 100.0, 0.0, 1.0); return;'); mat.needsUpdate = true;
   S.clock.hour = 11; const ref = {};
   for (const d of [15, 60]) {
     const za = g[1] - g[3] / 2 - d;
-    Object.assign(S.player, { theta: g[0] / S.R, za, h: S.groundH(g[0], za), heading: Math.PI, pitch: 0.3 });
+    Object.assign(S.player, { theta: g[0] / S.R, za, h: S.groundH(g[0], za), heading: 0, pitch: 0.3 });
     await wait(1500);
     const px = shoot(); let n = 0, sum = 0;
     for (let i = 0; i < px.length; i += 4) if (px[i + 1] === 100) { n++; sum += px[i]; }

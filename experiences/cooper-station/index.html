@@ -2248,7 +2248,8 @@ const inBallpark = (s, za, m = 0) => { const d = wrapS(s - BALLPARK.s0); return 
 // 4) jalan lokal (digambar sebelum air: jalan lokal berhenti di tepi sungai)
 const localRoads = [];                                           // [s0, z0, s1, z1] persegi jalan lokal
 function blocksOfCell(c) {
-  const n = c.cls === 'pusat' ? 4 : c.cls === 'menengah' ? 3 : c.cls === 'permukiman' ? 2 : 1;
+  const bp = c.s0 === BALLPARK.s0 && c.z0 === BALLPARK.z0;          // 15d: sel tepi juga dibagi 2 (jalan lokal), kecuali lapangan baseball
+  const n = c.cls === 'pusat' ? 4 : c.cls === 'menengah' ? 3 : c.cls === 'permukiman' ? 2 : bp ? 1 : 2;
   const sCuts = [c.s0], zCuts = [c.z0];
   for (let m = 1; m < n; m++) { sCuts.push(c.s0 + (m + U(-0.12, 0.12)) * ART / n); zCuts.push(c.z0 + (m + U(-0.12, 0.12)) * ART_Z / n); }
   sCuts.push(c.s0 + ART); zCuts.push(c.z0 + ART_Z);
@@ -2569,6 +2570,72 @@ function clearOf(s, za, w, d, margin = 4) {                      // tidak di air
   return true;
 }
 
+// 15d: permukiman padat bertingkat. Blok dalam (lebih dari 60 m) diberi gang 6 m sepanjang s di tengah, jadi 4 baris
+// rumah (2 menghadap jalan tepi blok, 2 menghadap gang); blok lebar (lebih dari 80 m) juga diberi baris samping menghadap
+// jalan sepanjang za (front 3/4). Bentuk menurut kepadatan: rumah deret 2-3 lantai (d > 0,45), rumah tunggal, rumah besar
+// berhalaman di tepi. Pohon halaman belakang dicatat di YARD_TREES dan ditanam di blok pohon.
+const YARD_TREES = [], GANGS = [];
+function fillHomes(s0, z0, s1, z1, d, sparse) {
+  const bw = s1 - s0, bd = z1 - z0, GW = 6, gang = bd > 60, zg = (z0 + z1) / 2;
+  const kind = sparse ? 'big' : d > 0.45 ? 'row' : 'house';
+  const depth = Math.min(30, gang ? (bd - GW) / 4 : bd / 2);
+  if (gang) {                                                     // gang: aspal 6 m dengan tepi abu, menembus sampai jalan
+    lrect(s0 - 2, zg - GW / 2 - 1, s1 + 2, zg + GW / 2 + 1, PAL.path); lrect(s0 - 2, zg - GW / 2, s1 + 2, zg + GW / 2, PAL.road);
+    GANGS.push([s0 - 2, zg - GW / 2, s1 + 2, zg + GW / 2]);
+  }
+  const side = bw > 80 ? Math.min(24, depth + 2) : 0;
+  // satu baris rumah: tepi jalan di e (koordinat tegak), menjorok ke arah dir, rentang [a, b] sepanjang tepi.
+  // axis 'z': tepi sejajar s (rumah menghadap -za/+za, front 1/2); axis 's': tepi sejajar za (menghadap -s/+s, front 3/4)
+  const rowOf = (axis, e, dir, a, b, D) => {
+    const put = (u, v, w, dd, h, type, col, style = 3) => {       // u sepanjang tepi, v tegak (jarak dari tepi ke pusat)
+      const cs = axis === 'z' ? u : e + dir * v, cz = axis === 'z' ? e + dir * v : u;
+      const ws = axis === 'z' ? w : dd, wz = axis === 'z' ? dd : w;
+      const t = axis === 'z' ? type : type === 'gable' ? 'gablez' : type;
+      const front = axis === 'z' ? (dir === 1 ? 1 : 2) : (dir === 1 ? 3 : 4);
+      if (!clearOf(cs, cz, ws, wz)) return false;
+      building(t, cs, cz, ws, wz, h, col, 0, true, style, style === 3 || style === 9 ? front : 0); return true;
+    };
+    const yard = (u, v) => YARD_TREES.push(axis === 'z' ? [u, e + dir * v] : [e + dir * v, u]);
+    let u = a + U(0, 3);
+    if (kind === 'row') {                                        // rumah deret: 4-6 unit menempel, jeda 3-5 m antar deret
+      while (u < b - 16) {
+        const n = 4 + Math.floor(rnd() * 3), set = U(3, 4.5), dd = Math.min(U(10, 12), D - set - 5), h = U(7.5, 11), tp = rnd() < 0.7 ? 'gable' : 'hip';
+        for (let q = 0; q < n; q++) { const w = U(7, 9); if (u + w > b) break; put(u + w / 2, set + dd / 2, w - 0.05, dd, h + U(-0.4, 0.4), tp, pick(COLS.house)); u += w; }
+        u += U(3, 5);
+      }
+    } else if (kind === 'house') {                               // rumah tunggal berhalaman, garasi, pohon belakang
+      while (u < b - 12) {
+        const lot = U(16, 22), w = U(9, 13), set = U(4, 6), dd = Math.min(U(8, 11), D - set - 6);
+        const c = u + lot / 2, two = rnd() < 0.45, h = two ? U(7.5, 9) : U(5, 6.5), col = pick(COLS.house);
+        if (c + w / 2 < b && dd > 6 && put(c, set + dd / 2, w, dd, h, rnd() < 0.5 ? 'gable' : 'hip', col)) {
+          if (rnd() < 0.3 && c + w / 2 + 6.5 < Math.min(b, u + lot)) put(c + w / 2 + 3.4, set + 3, 5.5, 6, 3, 'flat', pick(COLS.house), 9);   // garasi
+          if (rnd() < 0.45) yard(c + U(-3, 3), set + dd + (D - set - dd) / 2);
+        }
+        u += lot;
+      }
+    } else {                                                     // tepi: rumah besar, kavling luas, sesekali kosong
+      while (u < b - 14) {
+        const lot = U(26, 34);
+        if (rnd() < 0.15) { u += lot; continue; }
+        const w = U(11, 15), set = U(5, 8), dd = Math.min(U(9, 12), D - set - 7), c = u + lot / 2;
+        const two = rnd() < 0.35, h = two ? U(7.5, 9) : U(5, 6.5), col = pick(COLS.house), tp = rnd() < 0.5 ? 'gable' : 'hip';
+        if (c + w / 2 < b && dd > 7 && put(c, set + dd / 2, w, dd, h, tp, col)) {
+          if (rnd() < 0.3 && c + w / 2 + 7 < Math.min(b, u + lot)) put(c + w / 2 + 3.5, set + dd / 2 + 2, 6, 8, h * 0.8, tp, col);   // sayap
+          if (rnd() < 0.2) put(c + U(-4, 4), set + dd + 4.5, 3, 3, 2.4, 'flat', pick(COLS.house), 9);          // gudang kebun
+          yard(c + U(-5, 5), set + dd + (D - set - dd) * 0.6); if (rnd() < 0.4) yard(c + U(-8, 8), D - 3);
+        }
+        u += lot;
+      }
+    }
+  };
+  const za0 = s0 + side, za1 = s1 - side;
+  rowOf('z', z0, 1, za0, za1, depth); rowOf('z', z1, -1, za0, za1, depth);
+  if (gang) { rowOf('z', zg - GW / 2, -1, za0, za1, depth); rowOf('z', zg + GW / 2, 1, za0, za1, depth); }
+  if (side) for (const [e, dir] of [[s0, 1], [s1, -1]]) {
+    if (gang) { rowOf('s', e, dir, z0, zg - GW / 2, side); rowOf('s', e, dir, zg + GW / 2, z1, side); }
+    else rowOf('s', e, dir, z0, z1, side);
+  }
+}
 // --- kota: isi setiap blok sesuai kepadatan -----------------------------
 const parkBlocks = [];
 for (const c of cityCells) {
@@ -2609,29 +2676,13 @@ for (const c of cityCells) {
         }
       }
       if (rnd() < 0.04 && bw > 50 && bd > 45 && clearOf(bs, bz, 45, 22)) building('flat', bs, bz, 45, 22, 9, '#d9c9a8');   // sekolah/pasar
-    } else {                                                      // permukiman dan tepi: rumah menghadap jalan
+    } else {                                                      // 15d: permukiman dan tepi, kepadatan bertingkat
       const sparse = cls === 'tepi';
       if (!sparse && rnd() < 0.03 && bw > 60 && bd > 50) {        // gereja: badan + menara
         if (clearOf(bs, bz, 16, 30)) { building('gablez', bs, bz, 16, 30, 11, '#e9e4da', 0, true, 7, 1); building('hip', bs, bz - 17, 6, 6, 26, '#e9e4da'); }
         continue;
       }
-      for (const [zz, dir] of [[z0, 1], [z1, -1]]) {
-        let s = s0 + U(0, 4);
-        while (s < s1 - 10) {
-          const lot = sparse ? U(30, 46) : U(18, 26);
-          if (sparse && rnd() < 0.45) { s += lot; continue; }
-          const w = U(9, 14), dd = U(8, 12), set = U(4, 7);
-          const cs = s + lot / 2, cz = zz + dir * (set + dd / 2);
-          if (cs + w / 2 < s1 && clearOf(cs, cz, w, dd)) {
-            const two = rnd() < 0.4, h = two ? U(7.5, 9) : U(5, 6.5), col = pick(COLS.house), tr = rnd();
-            const type = tr < 0.5 ? 'gable' : 'hip';
-            building(type, cs, cz, w, dd, h, col, 0, true, 3, dir === 1 ? 1 : 2);
-            if (tr > 0.85 && cs + w / 2 + 5.5 < s1 && clearOf(cs + w / 2 + 3, cz + dir * 3, 6, 8)) building(type, cs + w / 2 + 2.5, cz + dir * 3, 6, 8, h * 0.8, col);   // sayap rumah L
-            else if (rnd() < 0.3 && cs - w / 2 - 6.25 > s0 && clearOf(cs - w / 2 - 3.5, cz, 5.5, 6)) building('flat', cs - w / 2 - 3.5, cz, 5.5, 6, 3, pick(COLS.house), 0, true, 9, dir === 1 ? 1 : 2);  // garasi
-          }
-          s += lot;
-        }
-      }
+      fillHomes(s0, z0, s1, z1, d, sparse);
     }
   }
 }
@@ -2766,7 +2817,7 @@ const BUILD_FS = /* glsl */`
       float u = fz ? vO.x : vO.z, W = fz ? vScale.x : vScale.z;
       if (code == 6.0) { u = atan(vO.z, vO.x) * 0.5 * vScale.x; W = 3.14159 * vScale.x; }
       float y = vO.y, H = vScale.y;
-      bool isFront = (front == 1.0 && n.z < -0.5) || (front == 2.0 && n.z > 0.5);
+      bool isFront = (front == 1.0 && n.z < -0.5) || (front == 2.0 && n.z > 0.5) || (front == 3.0 && n.x < -0.5) || (front == 4.0 && n.x > 0.5);   // 15d: 3/4 = muka -s/+s
       bool gableEnd = y > H + 0.01;
       vec3 base = vCol;
       float fwU = fwidth(u), fwY = fwidth(y);
@@ -3027,6 +3078,7 @@ for (let q = 0; q < 2600; q++) {                                 // taman & sung
 for (let z = 150; z < 7850; z += 25) { tree(SKY_S - 36, z, U(0.8, 1.1)); tree(SKY_S + 36, z, U(0.8, 1.1)); }   // promenade Skyway
 for (const [s0, z, s1] of windbreaks) for (let s = s0 + 6; s < s1 - 6; s += 12) tree(s, z, U(0.9, 1.2));      // penahan angin
 for (const L of LAKES) for (let a = 0; a < TAU; a += 0.09) if (rnd() < 0.5) tree(L.s + Math.cos(a) * (L.rs + 16), L.za + Math.sin(a) * (L.rz + 16), U(0.8, 1.2));
+for (const [s, za] of YARD_TREES) tree(s, za, U(0.65, 0.95));   // 15d: pohon halaman belakang permukiman
 // tahap 6b: pohon kerucut gray-box diganti pohon prosedural (lihat modul realisme); di sini hanya kolisi.
 // rnd() tetap dipanggil 3x per pohon supaya urutan acak sesudahnya tidak berubah.
 treeList.forEach(([s, za, k]) => { rnd(); rnd(); rnd(); if (!nearRing(za)) addCollider(s, za, 0.4 * k, 0.4 * k); });
@@ -9502,7 +9554,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

@@ -41,6 +41,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari satu menu
 | `tools/uji_trem_malam.py` | Uji lampu trem saat malam |
 | `tools/uji_boulevard.py` | Uji mobil di boulevard samping rel trem |
 | `tools/uji_trotoar.py` | Uji pejalan kaki di trotoar dan jalan setapak |
+| `tools/uji_permukiman.py` | Uji kepadatan permukiman |
 | `tools/uji_bahasa.py` | Uji kelengkapan kamus bahasa dan ganti bahasa |
 | `tools/uji_ladang_foto_tur.py` | Uji siklus tanam, mesin ladang, mode foto, tur sinematik |
 | `CLAUDE.md` | Konteks proyek untuk Claude Code |

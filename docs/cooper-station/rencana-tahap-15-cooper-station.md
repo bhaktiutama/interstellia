@@ -78,6 +78,24 @@ Uji `tools/uji_trotoar.py`. Uji lama tetap lulus (pejalan kaki, lalu lintas, pet
 - Semua rumah baru lewat `building()` (collider, `houseList`, peta `drawMapStatic` otomatis). Pejalan kaki tidak masuk gang (tetap di trotoar arteri).
 - Biaya: rumah instanced (tanpa culling). Target jumlah rumah sekitar 2-2,5x sekarang; jumlah dan segitiga dicatat per preset. Bila Hemat naik lebih dari 10%, rumah isian gang ditaruh di akhir buffer dan dipotong `mesh.count` di Hemat.
 
+**Hasil 15d (selesai):**
+
+| Ukuran | Sebelum 15d | Sesudah |
+| --- | --- | --- |
+| Rumah permukiman di kota | 6.883 | 12.706 (1,85x) |
+| Titik sampel sel permukiman/tepi yang lebih dari 25 m dari rumah (tanah kosong) | 34,4% | 6,0% |
+| Rumah permukiman bertumpuk (garasi keluar kavling) | 789 | 0 |
+| Gang, pohon halaman belakang | 0, 0 | 785, 6.243 |
+| Titik awal kota, segitiga Ultra / Hemat | 2,94 jt / 1,00 jt | 3,17 jt / 1,13 jt |
+
+- `fillHomes()`: gang 6 m di tengah blok dalam (4 baris rumah), baris samping menghadap jalan sepanjang za (`front` 3/4, atap `gablez`), sel tepi dibagi 2 (kecuali sel lapangan baseball).
+- Rumah deret 2-3 lantai (4-6 unit menempel, lebar 7-9 m) bila kepadatan lebih dari 0,45; rumah tunggal kavling 16-22 m dengan garasi dan pohon belakang; tepi: rumah besar kavling 26-34 m, sayap, gudang kebun, 15% kavling kosong.
+- Pagar halaman belum dibuat (ditunda; pohon halaman dan gudang dulu).
+- Hemat naik 13% (lebih dari batas 10% di rencana), tetapi masih di bawah Hemat terberat yang sudah ada (bukit 1,38 jt, hutan 1,42 jt), jadi rumah tidak dipotong di Hemat. Bila M1 terasa berat, bisa ditambah.
+- `uji_interior` diperbarui: merender satu gedung sasaran saja (permukiman rapat menghalangi kamera).
+
+Uji `tools/uji_permukiman.py`. Semua uji lama lulus.
+
 ## Berkas
 
 - `experiences/cooper-station/index.html`: `updateTramVisual`, material trem, `patchLit`, `groundMat` (uTram, marka boulevard, trotoar), lajur `TRAFFIC`, loop lampu jalan dan `lampPool`, `XING`/sinyal k = 0, loop penempatan bangunan dan `blocksOfCell`, `BUILD_FS` (`isFront`), pohon jalan, `FURN` (pagar), rute `PEDS`, jalur taman.
