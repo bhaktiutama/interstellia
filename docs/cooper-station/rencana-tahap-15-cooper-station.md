@@ -96,6 +96,18 @@ Uji `tools/uji_trotoar.py`. Uji lama tetap lulus (pejalan kaki, lalu lintas, pet
 
 Uji `tools/uji_permukiman.py`. Semua uji lama lulus.
 
+### 15e Masjid (permintaan tambahan pemilik, selesai)
+
+Setengah gereja diganti masjid (bergantian), tiga gaya bergiliran. Badan masjid lewat `building()` gaya 7 (jendela tinggi, pintu menghadap jalan, collider, tampil di peta); kubah, menara, dan atap = potongan geometri digabung ke satu mesh `MOSQUE.mesh` (20 rb segitiga, normal asli).
+
+| Gaya | Bentuk |
+| --- | --- |
+| Utsmani (era Konstantinopel) | Kubah pusat abu timah di atas drum, dua setengah kubah depan-belakang, empat kubah sudut, serambi depan berkubah kecil, dua menara pensil 38 m dengan dua balkon dan atap kerucut runcing |
+| Maroko | Aula rendah dengan atap limas genteng hijau, satu menara persegi 30 m berwarna oker dengan pita keramik hijau, lentera kecil beratap hijau, finial tiga bola emas |
+| Arab Saudi | Aula putih, kubah besar putih di atas drum, kubah sudut, dua menara segi delapan dengan dua balkon, bagian atas ramping dan kubah kecil |
+
+Hasil: 9 masjid (3 per gaya), 10 gereja. Uji di `tools/uji_permukiman.py` (jumlah, tiga gaya, normal sah).
+
 ## Berkas
 
 - `experiences/cooper-station/index.html`: `updateTramVisual`, material trem, `patchLit`, `groundMat` (uTram, marka boulevard, trotoar), lajur `TRAFFIC`, loop lampu jalan dan `lampPool`, `XING`/sinyal k = 0, loop penempatan bangunan dan `blocksOfCell`, `BUILD_FS` (`isFront`), pohon jalan, `FURN` (pagar), rute `PEDS`, jalur taman.

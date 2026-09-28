@@ -2636,6 +2636,75 @@ function fillHomes(s0, z0, s1, z1, d, sparse) {
     else rowOf('s', e, dir, z0, z1, side);
   }
 }
+// 15e: masjid, menggantikan setengah gereja (bergantian), tiga gaya bergiliran. Badan = building() gaya 7 (jendela tinggi,
+// pintu di muka -za, collider, peta); kubah, menara, atap hijau = potongan geometri digabung ke satu mesh MOSQUE.mesh.
+// 0 Utsmani (kubah pusat bertimbal, dua setengah kubah, kubah sudut, serambi, dua menara pensil beratap kerucut)
+// 1 Maroko (atap limas genteng hijau, menara persegi dengan pita hijau dan lentera bermahkota)
+// 2 Arab Saudi (putih, kubah besar, dua menara segi delapan bertingkat dengan balkon dan kubah kecil)
+const MOSQUE = { slots: 0, list: [], parts: [], mesh: null, names: ['Utsmani', 'Maroko', 'Saudi'] };
+function mosque(s, za, kind) {
+  const P = MOSQUE.parts, add = (geo, col, x, y, z) => P.push({ geo: geo.translate(x, y, z), col, s, za });
+  const half = (r, seg = 24) => new THREE.SphereGeometry(r, seg, Math.max(6, seg / 2), 0, TAU, 0, Math.PI / 2);
+  const cyl = (r0, r1, h, seg = 16) => new THREE.CylinderGeometry(r0, r1, h, seg);
+  const pyr = (w, d, h) => new THREE.ConeGeometry(Math.SQRT1_2, 1, 4).rotateY(Math.PI / 4).scale(w, h, d);
+  const LEAD = [0.47, 0.51, 0.55], STONE = [0.86, 0.83, 0.76], GOLD = [0.86, 0.7, 0.32], GREEN = [0.17, 0.44, 0.32], WHITE = [0.93, 0.91, 0.86];
+  const finial = (x, y, z) => { add(cyl(0.07, 0.07, 2.2, 6), GOLD, x, y + 1.1, z); add(new THREE.SphereGeometry(0.28, 8, 6), GOLD, x, y + 0.9, z); };
+  const colz = [];
+  if (kind === 0) {
+    building('flat', s, za, 24, 24, 10, '#e6e0d2', 0, true, 7, 1);
+    building('flat', s, za - 16, 24, 8, 6, '#ddd6c6', 0, true, 7, 1);          // serambi depan
+    add(cyl(9.3, 9.3, 2.2, 32), STONE, 0, 11.1, 0); add(half(9, 32), LEAD, 0, 12.2, 0); finial(0, 21, 0);
+    for (const e of [-1, 1]) add(new THREE.SphereGeometry(6, 20, 8, 0, Math.PI, 0, Math.PI / 2).rotateY(e > 0 ? 0 : Math.PI), LEAD, 0, 10, e * 6);   // setengah kubah
+    for (const x of [-8.5, 8.5]) for (const z of [-8.5, 8.5]) add(half(2.8, 16), LEAD, x, 10, z);
+    for (const x of [-4, 4, -12 + 2, 12 - 2]) add(half(2.2, 12), LEAD, x * 1.0, 6, -16);   // kubah kecil serambi
+    for (const x of [-14.5, 14.5]) {
+      add(cyl(1.25, 1.35, 38), STONE, x, 19, -20.5);
+      for (const y of [25, 32]) add(cyl(2.0, 1.6, 0.6), STONE, x, y, -20.5);
+      add(new THREE.ConeGeometry(1.4, 9, 16), LEAD, x, 38 + 4.5, -20.5); finial(x, 47, -20.5);
+      colz.push([x, -20.5, 1.4]);
+    }
+  } else if (kind === 1) {
+    building('flat', s, za, 28, 22, 8, '#eadcc0', 0, true, 7, 1);
+    add(pyr(28.6, 22.6, 3.6), GREEN, 0, 8 + 1.8, 0);
+    const mx = 11, mz = -14, OCH = [0.85, 0.73, 0.55];
+    add(new THREE.BoxGeometry(5.6, 30, 5.6), OCH, mx, 15, mz);
+    for (const y of [22, 27.5]) add(new THREE.BoxGeometry(5.9, 1.0, 5.9), GREEN, mx, y, mz);   // pita keramik hijau
+    add(new THREE.BoxGeometry(6.4, 0.6, 6.4), OCH, mx, 30.3, mz);                     // mahkota bergerigi (disederhanakan)
+    add(new THREE.BoxGeometry(2.6, 5, 2.6), OCH, mx, 33, mz); add(pyr(2.9, 2.9, 2.2), GREEN, mx, 36.6, mz);
+    add(cyl(0.07, 0.07, 2.4, 6), GOLD, mx, 38.9, mz); for (const y of [38.2, 38.9, 39.5]) add(new THREE.SphereGeometry(0.26, 8, 6), GOLD, mx, y, mz);
+    colz.push([mx, mz, 2.8]);
+  } else {
+    building('flat', s, za, 26, 26, 9, '#f2ede3', 0, true, 7, 1);
+    add(cyl(8.3, 8.3, 2.0, 32), WHITE, 0, 10, 0); add(half(8, 32), WHITE, 0, 11, 0); finial(0, 19, 0);
+    for (const x of [-9, 9]) for (const z of [-9, 9]) add(half(2.2, 12), WHITE, x, 9, z);
+    for (const x of [-15.5, 15.5]) {
+      add(cyl(1.7, 1.9, 30, 8), WHITE, x, 15, -14);
+      for (const y of [20, 28]) add(cyl(2.5, 2.2, 0.8, 8), WHITE, x, y, -14);
+      add(cyl(1.15, 1.4, 6, 8), WHITE, x, 33, -14); add(half(1.3, 12), WHITE, x, 36, -14); finial(x, 37.2, -14);
+      colz.push([x, -14, 2]);
+    }
+  }
+  for (const [x, z, r] of colz) addCollider(s + x, za + z, r, r);
+  MOSQUE.list.push([s, za, kind]);
+}
+function buildMosqueMesh() {                                          // gabung semua potongan (normal asli, warna per titik)
+  if (!MOSQUE.parts.length) return;
+  const pos = [], nrm = [], col = [], m4 = new THREE.Matrix4(), nm = new THREE.Matrix3(), v = new THREE.Vector3();
+  for (const { geo, col: c, s, za } of MOSQUE.parts) {
+    surfaceMatrix(m4, s / R, za, 0); nm.getNormalMatrix(m4);
+    const g = geo.index ? geo.toNonIndexed() : geo, p = g.attributes.position.array, n = g.attributes.normal.array;
+    for (let i = 0; i < p.length; i += 3) {
+      v.set(p[i], p[i + 1], p[i + 2]).applyMatrix4(m4); pos.push(v.x, v.y, v.z);
+      v.set(n[i], n[i + 1], n[i + 2]).applyMatrix3(nm).normalize(); nrm.push(v.x, v.y, v.z);
+      col.push(c[0], c[1], c[2]);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  MOSQUE.mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true }));
+  MOSQUE.mesh.frustumCulled = false; MOSQUE.mesh.layers.enable(1); scene.add(MOSQUE.mesh);
+  MOSQUE.parts.length = 0;
+}
 // --- kota: isi setiap blok sesuai kepadatan -----------------------------
 const parkBlocks = [];
 for (const c of cityCells) {
@@ -2678,14 +2747,16 @@ for (const c of cityCells) {
       if (rnd() < 0.04 && bw > 50 && bd > 45 && clearOf(bs, bz, 45, 22)) building('flat', bs, bz, 45, 22, 9, '#d9c9a8');   // sekolah/pasar
     } else {                                                      // 15d: permukiman dan tepi, kepadatan bertingkat
       const sparse = cls === 'tepi';
-      if (!sparse && rnd() < 0.03 && bw > 60 && bd > 50) {        // gereja: badan + menara
-        if (clearOf(bs, bz, 16, 30)) { building('gablez', bs, bz, 16, 30, 11, '#e9e4da', 0, true, 7, 1); building('hip', bs, bz - 17, 6, 6, 26, '#e9e4da'); }
+      if (!sparse && rnd() < 0.03 && bw > 60 && bd > 50) {        // gereja: badan + menara; 15e: setengahnya masjid
+        if (MOSQUE.slots++ % 2 === 1) { if (clearOf(bs, bz, 34, 34)) mosque(bs, bz, MOSQUE.list.length % 3); }
+        else if (clearOf(bs, bz, 16, 30)) { building('gablez', bs, bz, 16, 30, 11, '#e9e4da', 0, true, 7, 1); building('hip', bs, bz - 17, 6, 6, 26, '#e9e4da'); }
         continue;
       }
       fillHomes(s0, z0, s1, z1, d, sparse);
     }
   }
 }
+buildMosqueMesh();
 // plaza spaceport: beberapa hanggar dan terminal
 const TERM = { s: 110, za: 196, w: 120, d: 64, h: 11 };            // terminal kaca (dibangun di tahap 11d, di bawah)
 for (let i = 0; i < 26; i++) {
@@ -9554,7 +9625,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

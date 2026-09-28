@@ -89,6 +89,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Hutan (14a) | `FOREST` (s0, s1, z0, z1, trailW, k, fernR, list, mesh), `forestTrail(za)`, `inForest()`, pohon `t.forest` (langkah 4 di blok TREES, RNG sendiri), `TREES.forestLod` + uniform `uLodF` / `uForest` (impostor lebih dekat), `updateForest()` (kabut, pakis), `applyForestPreset()`, `SPOTS.forest` (tombol 0) |
 | Rumput bukit (14b) | `MEADOW_GLSL` (`meadowMask(h)`, `meadowGust(P, off)`, dipakai rumput 3D dan shader tanah; uniform `uWindSlow`, `uGustOff` diintegrasikan di `updateWind()`: jangan pakai fase waktu x kecepatan angin), `MEADOW` (near, mid, nearR, midR, active), `MEADOW_VS`, `applyMeadowRadii()`, uniform `uMeadowOn` (rumput pendek disembunyikan di bukit), `tuftGeo(..., heads)` |
 | Trotoar dan jalan setapak (15c) | `SIDEWALK_GLSL` (`sidewalkD(P, art)`, di shader tanah dan rumput) = `SIDEWALK.d(s, za)` di JS (ubah keduanya bersama), `PARK_PATHS` (runs, mesh pita), `colAt(s, za, m)`; tepi blok arteri 17 m dari sumbu |
+| Masjid (15e) | `MOSQUE` (list, mesh, names), `mosque(s, za, kind)` 0 Utsmani / 1 Maroko / 2 Saudi, `buildMosqueMesh()`; menggantikan setiap gereja kedua |
 | Permukiman (15d) | `fillHomes(s0, z0, s1, z1, d, sparse)` (gang, 4 baris, baris samping, rumah deret / tunggal / besar), `YARD_TREES` (ditanam di blok pohon), `GANGS`; `front` 3/4 = muka -s/+s di `BUILD_FS` |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
 | Interior jendela (14c) | Di `BUILD_FS` blok "14c" (ruangan = bay x lantai, sinar dari varying `vDirO` di `BUILD_VS`, arah kamera ke titik dalam ruang objek berskala), `kI` (campur dengan kaca lama lewat `detail`), `BUILD_U.uInterior`, `applyInteriorPreset()` (mati di Rendah dan Hemat) |
@@ -143,8 +144,9 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 14a | Hutan lebat 5.222 pohon 22-35 m dengan jalan setapak, semak dan pakis, kabut hutan, tombol 0, penanda peta, titik tur |
 | 14b | Rumput tinggi di bukit dengan pita gelombang angin (dekat 3D, jauh di shader tanah), merunduk di sekitar pemain |
 | 14c | Interior jendela: ruangan berkedalaman di balik jendela gedung dekat (perabot, tirai, lampu malam), kaca memantulkan langit dan gedung seberang makin kuat dengan jarak, mati di Rendah dan Hemat |
+| 15a-15e | Trem menyala malam, mobil di boulevard samping rel, trotoar dan jalan setapak taman, permukiman padat bertingkat (gang, rumah deret, pohon halaman), setengah gereja diganti masjid (Utsmani, Maroko, Saudi) |
 
-Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Tahap 15 sedang dikerjakan: `docs/cooper-station/rencana-tahap-15-cooper-station.md` (15a lampu trem, 15b lalu lintas boulevard, 15c trotoar, 15d permukiman padat).
+Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Tahap 15 selesai: `docs/cooper-station/rencana-tahap-15-cooper-station.md` (15a lampu trem, 15b lalu lintas boulevard, 15c trotoar, 15d permukiman padat, 15e masjid).
 
 Catatan muat (M1): modul memakai `await bootStep(...)` di tingkat atas di antara bagian besar. Bagian baru ditambah di tingkat atas modul (bukan di dalam fungsi) dan diberi titik jeda bila berat; `window.__stationReady` baru true setelah shader dikompilasi.
 

@@ -1,5 +1,5 @@
 """Uji 15d (Copper Corn Station): permukiman padat bertingkat. Jumlah rumah per bentuk, tanah kosong di sel permukiman
-(titik sampel yang jauh dari rumah), rumah tidak bertumpuk, tidak di trotoar atau jalan, gang ada, biaya segitiga dicatat.
+(titik sampel yang jauh dari rumah), rumah tidak bertumpuk, tidak di trotoar atau jalan, gang ada, masjid (15e) menggantikan setengah gereja, biaya segitiga dicatat.
 Pakai: python tools/uji_permukiman.py   (butuh: pip install playwright && playwright install chromium)"""
 import asyncio, pathlib
 from playwright.async_api import async_playwright
@@ -34,6 +34,12 @@ UJI = r"""
     }
   }
   out[`sel permukiman: titik lebih dari 25 m dari rumah ${(far / pts * 100).toFixed(1)}% dari ${pts}`] = far / pts < 0.2;
+  // 15e: masjid menggantikan setengah gereja, tiga gaya, normal geometri sah (tanpa NaN atau nol)
+  const M = S.MOSQUE, churches = S.BUILD.gablez.filter((b) => b[6] === '#e9e4da').length, kinds = new Set(M.list.map((q) => q[2]));
+  out[`masjid ${M.list.length} (gaya ${[...kinds].map((k) => M.names[k]).join(', ')}), gereja ${churches}`] = M.list.length >= 3 && kinds.size === 3 && Math.abs(M.list.length - churches) <= 2;
+  const N = M.mesh.geometry.attributes.normal.array; let badN = 0;
+  for (let i = 0; i < N.length; i += 3) { const l = Math.hypot(N[i], N[i + 1], N[i + 2]); if (!Number.isFinite(l) || l < 0.5) badN++; }
+  out[`kubah dan menara: ${N.length / 9} segitiga, normal tidak sah ${badN}`] = badN === 0;
   const cost = () => { const i = S.renderer.info.render; return `${Math.round(i.triangles / 1000)} rb segitiga`; };
   S.clock.hour = 11; S.applyPreset(0); S.teleport('cooper'); await wait(3000); const u = cost();
   S.applyPreset(4); await wait(3000); const h = cost(); S.applyPreset(0);
