@@ -1219,6 +1219,41 @@ await bootStep(BOOT_W[2], 'Permukaan silinder...');
 // Tanah: tekstur tata guna lahan (dibuat prosedural di tahap 4c) + grid halus 10 m di dekat pemain
 // 14b: rumput tinggi bukit. Fungsi bersama rumput 3D dan shader tanah (gelombang angin yang sama dekat dan jauh).
 // Butuh vnoise() dari shader pemakai. Masker: lereng bukit dengan tinggi tanah 0,8-2,5 m ke atas.
+// 15c: trotoar kota, dihitung analitik (tajam, tidak bergantung tekstur 3 m per piksel). Pita 5 m di tepi arteri kota
+// (sepanjang za: 12-17 m dari sumbu, boulevard 20-25 m; arteri melingkar non-cincin: 12-17 m). Dipakai shader tanah dan rumput.
+// Hasil: jarak dari kerb (0-5 m) bila di trotoar, -1 bila bukan. Posisi JS yang sama: SIDEWALK.
+const SIDEWALK_GLSL = /* glsl */`
+  float sidewalkD(vec2 P, float art) {
+    const float CIRC = 6283.185307;
+    float s = P.x, za = P.y;
+    if (za < 225.0 || za > 2517.0) return -1.0;
+    float sw = mod(s + CIRC * 0.5, CIRC) - CIRC * 0.5;
+    if (abs(sw) > CIRC * 0.5 - 30.0) return -1.0;                   // promenade Skyway
+    float kS = floor(s / art + 0.5), dS = s - kS * art, km = mod(kS, 26.0);
+    bool bl = km < 0.5 || km > 25.5;
+    float kZ = floor(za / 250.0 + 0.5), dZ = za - kZ * 250.0;
+    bool ringZ = abs(kZ - 4.0) < 0.5 || abs(kZ - 8.0) < 0.5;          // cincin struktur za 1000 dan 2000
+    bool artZ = kZ >= 1.0 && kZ <= 10.0 && !ringZ;
+    float roadS = bl ? 20.0 : 12.0;
+    if (abs(dS) < roadS || (artZ && abs(dZ) < 12.0) || (ringZ && abs(dZ) < 8.5)) return -1.0;
+    float d = 1e3, dA = abs(dS) - roadS, dB = abs(dZ) - 12.0;
+    if (dA < 5.0) d = dA;
+    if (artZ && dB < 5.0) d = min(d, dB);
+    return d < 5.0 ? d : -1.0;
+  }`;
+const SIDEWALK = { in: 12, w: 5, blvdIn: 20,                        // 15c: sama dengan SIDEWALK_GLSL
+  d(s, za) {                                                        // jarak dari kerb (0-5 m) bila di trotoar, -1 bila bukan
+    if (za < 225 || za > 2517) return -1;
+    const C = TAU * CONFIG.R, A = C / 26, sw = ((s + C / 2) % C + C) % C - C / 2;
+    if (Math.abs(sw) > C / 2 - 30) return -1;
+    const kS = Math.round(s / A), dS = s - kS * A, km = ((kS % 26) + 26) % 26, bl = km === 0;
+    const kZ = Math.round(za / 250), dZ = za - kZ * 250, ringZ = kZ === 4 || kZ === 8, artZ = kZ >= 1 && kZ <= 10 && !ringZ;
+    const roadS = bl ? 20 : 12;
+    if (Math.abs(dS) < roadS || (artZ && Math.abs(dZ) < 12) || (ringZ && Math.abs(dZ) < 8.5)) return -1;
+    let d = 1e3; const dA = Math.abs(dS) - roadS, dB = Math.abs(dZ) - 12;
+    if (dA < 5) d = dA; if (artZ && dB < 5) d = Math.min(d, dB);
+    return d < 5 ? d : -1;
+  } };
 const MEADOW_GLSL = /* glsl */`
   float meadowMask(float h) { return smoothstep(0.8, 2.5, h); }
   // hembusan angin: bercak tak beraturan 20-60 m, 0..1. off = geseran hembusan (m) yang diintegrasikan di CPU dari angin halus,
@@ -1334,6 +1369,7 @@ const groundMat = new THREE.ShaderMaterial({
     }
     float fbm2(vec2 p) { return 0.62 * vnoise(p) + 0.38 * vnoise(p * 2.31 + 17.0); }
     ${MEADOW_GLSL}
+    ${SIDEWALK_GLSL}
     // garis dengan anti-alias: pusat c, setengah lebar hw, jejak piksel fp
     float lineAA(float d, float hw, float fp) {
       float cov = 1.0 - smoothstep(hw - fp, hw + fp, abs(d));
@@ -1396,6 +1432,14 @@ const groundMat = new THREE.ShaderMaterial({
       float dZ = za - kZ * 250.0;                                 // jarak ke arteri melingkar terdekat
       float kSm = mod(kS, 26.0);
       bool blvd = kSm < 0.5 || kSm > 25.5;
+      // 15c: trotoar kota: beton bernat, kerb terang 0,3 m, lajur pohon dan tiang (0,3-1,8 m) sedikit lebih gelap
+      float swd = wetM < 0.5 ? sidewalkD(vec2(s, za), uArt) : -1.0;
+      if (swd >= 0.0) {
+        float curbM = 1.0 - smoothstep(0.25, 0.35, swd);
+        vec3 pav = vec3(0.60, 0.59, 0.56) * (0.94 + 0.12 * vnoise(P / 7.0)) * (swd > 0.3 && swd < 1.8 ? 0.88 : 1.0);
+        col = mix(pav, vec3(0.74, 0.73, 0.70), curbM);
+        concM = 1.0; asphM = 0.0; vegM = 0.0; grayM = 1.0;
+      }
 
       // ---- ladang: data per petak (arah baris, jarak baris, jenis) ----
       float inFarm = step(uFieldZ.x, za) * step(za, uFieldZ.y);
@@ -2213,6 +2257,8 @@ function blocksOfCell(c) {
 for (const c of cityCells) {
   c.grid = blocksOfCell(c);
   const { sCuts, zCuts } = c.grid;
+  for (let m = 1; m < sCuts.length - 1; m++) lstripS(sCuts[m], ROAD.local + 3, c.z0, c.z0 + ART_Z, PAL.path);   // 15c: tepi trotoar 1,5 m jalan lokal
+  for (let m = 1; m < zCuts.length - 1; m++) lrect(c.s0, zCuts[m] - ROAD.local / 2 - 1.5, c.s0 + ART, zCuts[m] + ROAD.local / 2 + 1.5, PAL.path);
   for (let m = 1; m < sCuts.length - 1; m++) { lstripS(sCuts[m], ROAD.local, c.z0, c.z0 + ART_Z, PAL.road); localRoads.push([sCuts[m] - ROAD.local / 2, c.z0, sCuts[m] + ROAD.local / 2, c.z0 + ART_Z]); }
   for (let m = 1; m < zCuts.length - 1; m++) { lrect(c.s0, zCuts[m] - ROAD.local / 2, c.s0 + ART, zCuts[m] + ROAD.local / 2, PAL.road); }
 }
@@ -2528,8 +2574,10 @@ const parkBlocks = [];
 for (const c of cityCells) {
   const { sCuts, zCuts } = c.grid;
   for (let a = 0; a < sCuts.length - 1; a++) for (let b = 0; b < zCuts.length - 1; b++) {
-    const inS0 = a === 0 ? ROAD.art / 2 : ROAD.local / 2, inS1 = a === sCuts.length - 2 ? ROAD.art / 2 : ROAD.local / 2;
-    const inZ0 = b === 0 ? ROAD.art / 2 : ROAD.local / 2, inZ1 = b === zCuts.length - 2 ? ROAD.art / 2 : ROAD.local / 2;
+    // 15c: sisi arteri mundur 3 m lagi (tepi blok 17 m dari sumbu, di belakang trotoar); boulevard 25 m
+    const artS = (x) => (Math.abs(wrapS(x - TRAM.s)) < 1 ? ROAD.boulevard / 2 : ROAD.art / 2) + 3;
+    const inS0 = a === 0 ? artS(sCuts[a]) : ROAD.local / 2, inS1 = a === sCuts.length - 2 ? artS(sCuts[a + 1]) : ROAD.local / 2;
+    const inZ0 = b === 0 ? ROAD.art / 2 + 3 : ROAD.local / 2, inZ1 = b === zCuts.length - 2 ? ROAD.art / 2 + 3 : ROAD.local / 2;
     const s0 = sCuts[a] + inS0 + 2, s1 = sCuts[a + 1] - inS1 - 2, z0 = zCuts[b] + inZ0 + 2, z1 = zCuts[b + 1] - inZ1 - 2;
     const bw = s1 - s0, bd = z1 - z0, bs = (s0 + s1) / 2, bz = (z0 + z1) / 2;
     if (bw < 12 || bd < 12) continue;
@@ -2578,8 +2626,8 @@ for (const c of cityCells) {
             const two = rnd() < 0.4, h = two ? U(7.5, 9) : U(5, 6.5), col = pick(COLS.house), tr = rnd();
             const type = tr < 0.5 ? 'gable' : 'hip';
             building(type, cs, cz, w, dd, h, col, 0, true, 3, dir === 1 ? 1 : 2);
-            if (tr > 0.85 && clearOf(cs + w / 2 + 3, cz + dir * 3, 6, 8)) building(type, cs + w / 2 + 2.5, cz + dir * 3, 6, 8, h * 0.8, col);   // sayap rumah L
-            else if (rnd() < 0.3 && clearOf(cs - w / 2 - 3.5, cz, 5.5, 6)) building('flat', cs - w / 2 - 3.5, cz, 5.5, 6, 3, pick(COLS.house), 0, true, 9, dir === 1 ? 1 : 2);  // garasi
+            if (tr > 0.85 && cs + w / 2 + 5.5 < s1 && clearOf(cs + w / 2 + 3, cz + dir * 3, 6, 8)) building(type, cs + w / 2 + 2.5, cz + dir * 3, 6, 8, h * 0.8, col);   // sayap rumah L
+            else if (rnd() < 0.3 && cs - w / 2 - 6.25 > s0 && clearOf(cs - w / 2 - 3.5, cz, 5.5, 6)) building('flat', cs - w / 2 - 3.5, cz, 5.5, 6, 3, pick(COLS.house), 0, true, 9, dir === 1 ? 1 : 2);  // garasi
           }
           s += lot;
         }
@@ -2607,7 +2655,7 @@ for (let s = 20; s < CIRC - 60; s += U(110, 150)) for (let z = UTIL.za0 + 40; z 
 // --- rumah pertanian di ladang -------------------------------------------
 for (const f of fieldList) {
   if (f.noFarm || rnd() > 0.035 || f.s1 - f.s0 < 60 || f.z1 - f.z0 < 60) continue;
-  if (f.meadow || inReal(f.s0 + 20, f.z0 + 20, 40)) continue;
+  if (f.meadow || f.forest || inReal(f.s0 + 20, f.z0 + 20, 40)) continue;   // 15c: tidak ada rumah pertanian di hutan
   const s = f.s0 + 20, z = f.z0 + 20;
   if (!clearOf(s, z, 30, 30)) continue;
   building('gable', s, z, 12, 9, 7.5, pick(COLS.house), 0, true, 3, 1);
@@ -2957,10 +3005,11 @@ function tree(s, za, k) {
 for (let i = 0; i < 26; i++) {
   const s = i * ART, blvd = Math.abs(wrapS(s - TRAM.s)) < 1;
   if (Math.abs(wrapS(s - SKY_S)) < 1) continue;
-  const off = (blvd ? ROAD.boulevard : ROAD.art) / 2 + 3;
+  const off = (blvd ? ROAD.boulevard : ROAD.art) / 2 + 1;           // 15c: lajur pohon trotoar (dulu +3, di jalur pejalan kaki)
   for (let z = CITY.za0 + 20; z < CITY.za1; z += 24) {
     if (Math.abs(((z % ART_Z) + ART_Z) % ART_Z - ART_Z / 2) > ART_Z / 2 - 16) continue;
-    tree(s - off, z, U(0.75, 1)); tree(s + off, z, U(0.75, 1));
+    const zl = (sd) => { const ph = sd > 0 ? 0 : 22.5, q = ((z - 150 - ph) % 45 + 45) % 45; return Math.min(q, 45 - q) < 3.5 ? z + 4 : z; };   // jauhi tiang lampu
+    tree(s - off, zl(-1), U(0.75, 1)); tree(s + off, zl(1), U(0.75, 1));
   }
 }
 for (const [s0, z0, s1, z1, plaza] of parkBlocks) {              // taman dan plaza kota
@@ -5193,6 +5242,7 @@ const VEG_COMMON = /* glsl */`
   bool isCorn(vec2 P) { return abs(fieldData(P).b - 0.784) < 0.03; }
   float windAt(vec2 P) { return vnoise(P / 14.0 + vec2(uTime * 0.35, uTime * 0.12)); }
   ${MEADOW_GLSL}
+  ${SIDEWALK_GLSL}
   #ifndef DEPTH_ONLY
   ${LIGHT_GLSL}
   vec3 vegLight(vec3 p, vec3 n, vec2 P, float shadeK) {            // cahaya stasiun + bayangan tajuk dan awan
@@ -5292,7 +5342,7 @@ const GRASS_VS = /* glsl */`
       float veg = smoothstep(0.15, 0.2, (mx - mn) / max(mx, 1e-3)) * step(sb.r, sb.g * 1.02) * (1.0 - smoothstep(0.04, 0.1, sb.b - max(sb.r, sb.g)));
       float kS = floor(P.x / uArt + 0.5);
       if (P.y > uFieldZ.x && mod(kS, 2.0) < 0.5 && abs(P.x - kS * uArt) < 3.8) veg = 0.0;   // jalan tanah ladang
-      if (veg < 0.5) { ${CLIP_AWAY} }
+      if (veg < 0.5 || sidewalkD(P, uArt) >= 0.0) { ${CLIP_AWAY} }   // 15c: tidak ada rumput di trotoar
       if (uMeadowOn > 0.5 && meadowMask(terrainH(P)) > 0.55) { ${CLIP_AWAY} }   // 14b: diganti rumput tinggi
     }
     bool yard = kind == 0 && inRect(P, uYard);
@@ -8223,21 +8273,68 @@ await bootStep(BOOT_W[22], 'Pejalan kaki...');
    - Tiap frame hanya orang dalam radius preset yang dikirim ke GPU. Kepadatan mengikuti jam (pagi dan sore ramai,
      malam sepi) dan preset. Pejalan kaki tidak menghindari pemain.
    ===================================================================== */
+// 15c: jalan setapak taman. Jaringan jalur lurus di taman besar (sepanjang s di beberapa za, sepanjang za tiap sepertiga ART)
+// dipotong di air, lapangan baseball, Skyway, boulevard, dan pohon; plus keliling taman kota (4 m dari tepi, sama dengan walker 'loop').
+// Digambar sebagai pita tipis mengikuti tinggi tanah (satu mesh), dan dipakai rute pejalan kaki 'seg'.
+function colAt(s, za, m) {                                          // 15c: ada collider (gedung, pohon, perabot) dalam m meter
+  const cs = ((Math.floor(modS(s) / COL.cell) % 1000) + 1000) % 1000, cz = Math.floor(za / COL.cell), arr = COL.grid.get(cs * 1000 + cz);
+  if (!arr) return false;
+  for (const i of arr) { const [a, b, hs, hz] = COL.items[i]; if (Math.abs(wrapS(s - a)) < hs + m && Math.abs(za - b) < hz + m) return true; }
+  return false;
+}
+const PARK_PATHS = { runs: [], w: 2.6, mesh: null };
+{
+  const treeAt = (s, za) => colAt(s, za, 1.2);                      // batang pohon atau benda lain dalam 1,2 m
+  const good = (s, za) => za > PARKZ.za0 + 4 && za < PARKZ.za1 - 6 && !inWater(s, za, 3) && !inRiver(s, za, 4) && !inBallpark(s, za, 4)
+    && Math.abs(wrapS(s - SKY_S)) > 32 && Math.abs(wrapS(s - TRAM.s)) > ROAD.boulevard / 2 + 6 && !treeAt(s, za);
+  const trace = (s0, z0, ds, dz, n, step) => {                        // simpan ruas yang bersih sepanjang minimal 30 m
+    let st = -1;
+    for (let i = 0; i <= n; i++) {
+      const ok = i < n && good(s0 + ds * i * step, z0 + dz * i * step);
+      if (ok && st < 0) st = i;
+      if (!ok && st >= 0) { if ((i - 1 - st) * step >= 30) PARK_PATHS.runs.push([s0 + ds * st * step, s0 + ds * (i - 1) * step, z0 + dz * st * step, z0 + dz * (i - 1) * step]); st = -1; }
+    }
+  };
+  for (const z of [2700, 2880, 3060]) trace(0, z, 1, 0, Math.floor(CIRC / 3), 3);
+  for (let k = 0; k < 52; k++) trace(k * ART / 2 + ART / 4, PARKZ.za0 + 6, 0, 1, Math.floor((PARKZ.za1 - PARKZ.za0 - 12) / 3), 3);
+  const cityLoops = [];
+  for (const [s0, z0, s1, z1, plaza] of parkBlocks) if (!plaza && !inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) cityLoops.push([s0 + 4, z0 + 4, s1 - 4, z1 - 4]);
+  // pita: titik tiap 3 m di tinggi tanah + 5 cm
+  const pos = [], m4 = new THREE.Matrix4(), v = new THREE.Vector3(), hw = PARK_PATHS.w / 2;
+  const ribbon = (a0, a1, b0, b1) => {
+    const L = Math.hypot(a1 - a0, b1 - b0), n = Math.max(1, Math.ceil(L / 3)), us = (a1 - a0) / L, uz = (b1 - b0) / L;
+    let prev = null;
+    for (let i = 0; i <= n; i++) {
+      const s = a0 + (a1 - a0) * i / n, za = b0 + (b1 - b0) * i / n;
+      surfaceMatrix(m4, s / R, za, groundH(s, za) + 0.05);
+      const L0 = v.set(uz * hw, 0, -us * hw).applyMatrix4(m4).toArray(), R0 = v.set(-uz * hw, 0, us * hw).applyMatrix4(m4).toArray();
+      if (prev) pos.push(...prev[0], ...prev[1], ...L0, ...prev[1], ...R0, ...L0);
+      prev = [L0, R0];
+    }
+  };
+  for (const [a0, a1, b0, b1] of PARK_PATHS.runs) ribbon(a0, a1, b0, b1);
+  for (const [s0, z0, s1, z1] of cityLoops) { ribbon(s0, s1, z0, z0); ribbon(s1, s1, z0, z1); ribbon(s1, s0, z1, z1); ribbon(s0, s0, z1, z0); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+  { const P = g.attributes.position.array, N = g.attributes.normal.array;   // normal menghadap sumbu (atas lokal) untuk patchLit
+    for (let i = 0; i < N.length; i += 3) if (N[i] * -P[i] + N[i + 1] * -P[i + 1] < 0) { N[i] = -N[i]; N[i + 1] = -N[i + 1]; N[i + 2] = -N[i + 2]; } }
+  const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xb8ad94, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, side: THREE.DoubleSide }));
+  mesh.frustumCulled = false; mesh.userData.noShadow = true; scene.add(mesh); PARK_PATHS.mesh = mesh;
+}
 const PEDS = { list: [], walk: [], near: [], nearAt: 0, nearS: 1e9, nearZ: 1e9, frame: 0, max: 4000, n: 0, radius: 300, dens: 1, user: 1, users: [1, 0.4, 0], names: ['nyala', 'sedikit', 'mati'] };
 try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'); if (sv && [1, 0.4, 0].includes(sv.user)) PEDS.user = sv.user; } catch (e) { /* abaikan */ }
 {
   let sd = 424243; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
-  const ok = (s, za) => !inWater(s, za, 2) && !inRiver(s, za, 3);
+  const ok = (s, za) => !inWater(s, za, 2) && !inRiver(s, za, 3) && !inBallpark(s, za, 2) && !colAt(s, za, 0.4);
   const look = (kid) => ({ shirt: Math.floor(r() * 14), pants: Math.floor(r() * 8), skin: Math.floor(r() * 6), scale: kid ? 0.55 + 0.1 * r() : 0.9 + 0.17 * r(), bag: !kid && r() < 0.25 ? 1 : 0, thr: r() });
   const walker = (o) => { const p = Object.assign({ dir: r() < 0.5 ? 1 : -1, v0: 1.1 + 0.5 * r(), ph: r() * TAU, wait: false, elev: 0, zone: 0 }, look(o.kid), o); PEDS.list.push(p); PEDS.walk.push(p); return p; };
   const still = (o) => { const p = Object.assign({ elev: 0, zone: 0, ph: r() * TAU }, look(o.kid), o); PEDS.list.push(p); return p; };
-  const LAT = ROAD.art / 2 + 2.6;                                   // jalur trotoar: 14,6 m dari as jalan (+ 0-1,2 m)
+  const LAT = SIDEWALK.in + 2.3;                                    // 15c: lajur jalan trotoar: 14,3-16,3 m dari as jalan (trotoar 12-17 m)
   const ringM = []; for (let m = 1; m <= 10; m++) if (!nearRing(m * ART_Z, 1)) ringM.push(m);
   // 1) trotoar arteri keliling (berjalan sepanjang za), menyeberangi arteri melingkar
   for (let k = 1; k < 26; k++) {
     if (k === 13) continue;
     for (const side of [-1, 1]) for (let z0 = CITY.za0; z0 < CITY.za1; z0 += ART_Z) {
-      const s = k * ART + side * (LAT + r() * 1.2), n = Math.round(cityDensity(s, z0 + 125) * 40 * (0.6 + 0.8 * r()));
+      const s = k * ART + side * (LAT + r() * 2.0), n = Math.round(cityDensity(s, z0 + 125) * 40 * (0.6 + 0.8 * r()));
       for (let q = 0; q < n; q++) {
         const nb = 1 + Math.floor(r() * 3), a = z0 + 16, b = Math.min(CITY.za1 - 16, z0 + nb * ART_Z - 16);
         let good = true; for (let z = a; z <= b; z += 20) if (!ok(s, z)) { good = false; break; }
@@ -8250,7 +8347,7 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
   // 2) trotoar arteri melingkar (berjalan sepanjang s), menyeberangi arteri keliling; tidak melewati boulevard trem atau Skyway
   for (const m of ringM) for (const side of [-1, 1]) for (let k = 1; k < 25; k++) {
     if (k === 12 || k === 13) continue;
-    const za = m * ART_Z + side * (LAT + r() * 1.2), n = Math.round(cityDensity(k * ART + 120, za) * 32 * (0.6 + 0.8 * r()));
+    const za = m * ART_Z + side * (LAT + r() * 2.0), n = Math.round(cityDensity(k * ART + 120, za) * 32 * (0.6 + 0.8 * r()));
     for (let q = 0; q < n; q++) {
       const kEnd = Math.min(k + 1 + Math.floor(r() * 3), k < 13 ? 12 : 25), a = k * ART + 16, b = kEnd * ART - 16;
       let good = b > a + 20; for (let x = a; good && x <= b; x += 20) if (!ok(x, za)) good = false;
@@ -8269,14 +8366,12 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
       for (let q = 0; q < nn; q++) { const a = q / nn * TAU + r() * 0.3; still({ pose: 1, s: cs + Math.sin(a) * 0.75, za: cz + Math.cos(a) * 0.75, hd: a + Math.PI }); }
     }
   }
-  // 4) taman besar (za 2.600-3.200): jalan-jalan bolak-balik di ruas acak yang tidak melewati air atau lapangan baseball
-  for (let q = 0, tries = 0; q < 1000 && tries < 12000; tries++) {
-    const s0 = r() * CIRC, z0 = PARKZ.za0 + 20 + r() * (PARKZ.za1 - PARKZ.za0 - 40), ang = r() * TAU, L = 40 + r() * 90;
-    const s1 = s0 + Math.sin(ang) * L, z1 = Math.max(PARKZ.za0 + 10, Math.min(PARKZ.za1 - 10, z0 + Math.cos(ang) * L));
-    if (Math.abs(wrapS(s0 - SKY_S)) < 30 || Math.abs(wrapS(s0)) < 25) continue;
-    let good = true; for (let t = 0; t <= 1; t += 0.1) { const x = s0 + (s1 - s0) * t, z = z0 + (z1 - z0) * t; if (!ok(x, z) || inBallpark(x, z, 4)) { good = false; break; } }
-    if (!good) continue;
-    walker({ kind: 'seg', p0: [s0, z0], p1: [s1, z1], L: Math.hypot(s1 - s0, z1 - z0), u: r(), zone: 1, kid: r() < 0.2 }); q++;
+  // 4) taman besar (za 2.600-3.200), 15c: berjalan di jalan setapak (PARK_PATHS), tidak lagi di rumput acak
+  for (let q = 0, tries = 0; q < 1000 && tries < 5000 && PARK_PATHS.runs.length; tries++) {
+    const [a0, a1, b0, b1] = PARK_PATHS.runs[Math.floor(r() * PARK_PATHS.runs.length)], RL = Math.hypot(a1 - a0, b1 - b0);
+    const L = Math.min(RL, 40 + r() * 90), t0 = r() * (RL - L) / RL, t1 = t0 + L / RL, off = (r() - 0.5) * 1.6;
+    const ns = (b1 - b0) / RL * off, nz = -(a1 - a0) / RL * off;         // sedikit ke kiri/kanan di lebar jalur
+    walker({ kind: 'seg', p0: [a0 + (a1 - a0) * t0 + ns, b0 + (b1 - b0) * t0 + nz], p1: [a0 + (a1 - a0) * t1 + ns, b0 + (b1 - b0) * t1 + nz], L, u: r(), zone: 1, kid: r() < 0.2 }); q++;
   }
   // 5) duduk di bangku kota, taman, tepi sungai dan danau, promenade
   for (const [s0, za, ang] of FURN.benchList) {
@@ -9407,7 +9502,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

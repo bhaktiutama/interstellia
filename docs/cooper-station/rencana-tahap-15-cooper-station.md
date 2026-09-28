@@ -49,6 +49,20 @@ Tiap sub-tahap: commit dan push sendiri ke branch dan `main`, hasil dicatat di d
 - Jalan setapak taman: jaringan jalur (loop tepi taman kota, jalur lurus di taman besar PARKZ, jalan tepi sungai) dibuat sebagai pita geometri tipis mengikuti `groundH` (satu mesh gabungan, lebar 2,5-3 m, `polygonOffset`). Walker `loop` dan `seg` taman diambil dari jalur ini, bukan garis acak.
 - Jalan lokal (10 m) di permukiman: pita trotoar 1,5 m di tekstur tanah cukup sebagai tepi abu (tanpa pejalan).
 
+**Hasil 15c (selesai):**
+
+| Bagian | Hasil |
+| --- | --- |
+| Trotoar | `SIDEWALK_GLSL` / `SIDEWALK.d()`: pita 5 m di semua arteri kota (12-17 m, boulevard 20-25 m), kerb terang 0,3 m, lajur pohon dan tiang lebih gelap, beton bernat. Rumput 3D tidak tumbuh di trotoar |
+| Blok | Sisi arteri mundur 3 m (tepi blok 17 m dari sumbu, boulevard 25 m). Sayap rumah dan garasi tidak lagi menjorok ke luar blok |
+| Pohon jalan | Pindah ke lajur pohon (13 m, boulevard 21 m), digeser 4 m bila dekat tiang lampu |
+| Pejalan kaki trotoar | Lajur 14,3-16,3 m. 94.939 titik rute: 100% di trotoar, 0 di dalam gedung atau pohon. Rute tidak lewat lapangan baseball dan collider |
+| Taman besar | `PARK_PATHS`: 90 ruas jalan setapak lurus (48 km, 3 jalur sepanjang s dan jalur tiap setengah ART sepanjang za), dipotong di air, lapangan, Skyway, boulevard, dan pohon; pita 2,6 m mengikuti tanah (41 rb segitiga). Keliling taman kota juga diberi jalur. 1.000 pejalan kaki taman berjalan di jalur |
+| Jalan lokal | Tepi abu 1,5 m di tekstur tanah |
+| Biaya | Kota Ultra 2,94 jt segitiga (Hemat 1,00 jt), taman Ultra 3,77 jt (Hemat 1,71 jt) |
+
+Uji `tools/uji_trotoar.py`. Uji lama tetap lulus (pejalan kaki, lalu lintas, peta, suasana, bahasa, rel, pohon, hutan, 12d, boulevard, burung, hujan); rumah pertanian kini juga tidak ditempatkan di petak hutan.
+
 ### 15d Permukiman padat bertingkat
 - Sel tepi dibagi n = 2 (ada jalan lokal) seperti permukiman.
 - Blok permukiman/tepi yang dalamnya lebih dari 60 m diberi gang 6 m sepanjang s di tengah, jadi 4 baris rumah: 2 menghadap jalan tepi blok, 2 menghadap gang (kavling bertolak belakang, dalam sekitar 24 m: muka 4-6 m, rumah 8-12 m, halaman belakang 6-10 m).

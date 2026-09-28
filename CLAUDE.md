@@ -28,6 +28,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_interior.py` | Uji Copper Corn Station 14c: ruangan di balik jendela per preset, tanpa nilai tidak valid siang dan malam |
 | `tools/uji_trem_malam.py` | Uji Copper Corn Station 15a: lampu kabin dan strip plafon trem malam, kolam cahaya tanah |
 | `tools/uji_boulevard.py` | Uji Copper Corn Station 15b: mobil boulevard samping rel trem, 30 menit tanpa tabrakan trem dan konflik simpang |
+| `tools/uji_trotoar.py` | Uji Copper Corn Station 15c: rute pejalan kaki di trotoar dan jalan setapak taman, tidak di gedung atau pohon |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
@@ -86,6 +87,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Peta (13d) | `MAPV` (zoom, cx = za, cy = s), `MAP_MARKS` (key, name, at, go), `drawMapStatic()` (latar 4000 x 3142), `drawMap()` (vektor tiap frame), `mapZoomAt()`, `mapCenterMe()`, `mapGo()`, `buildMapLegend()` |
 | Hutan (14a) | `FOREST` (s0, s1, z0, z1, trailW, k, fernR, list, mesh), `forestTrail(za)`, `inForest()`, pohon `t.forest` (langkah 4 di blok TREES, RNG sendiri), `TREES.forestLod` + uniform `uLodF` / `uForest` (impostor lebih dekat), `updateForest()` (kabut, pakis), `applyForestPreset()`, `SPOTS.forest` (tombol 0) |
 | Rumput bukit (14b) | `MEADOW_GLSL` (`meadowMask(h)`, `meadowGust(P, off)`, dipakai rumput 3D dan shader tanah; uniform `uWindSlow`, `uGustOff` diintegrasikan di `updateWind()`: jangan pakai fase waktu x kecepatan angin), `MEADOW` (near, mid, nearR, midR, active), `MEADOW_VS`, `applyMeadowRadii()`, uniform `uMeadowOn` (rumput pendek disembunyikan di bukit), `tuftGeo(..., heads)` |
+| Trotoar dan jalan setapak (15c) | `SIDEWALK_GLSL` (`sidewalkD(P, art)`, di shader tanah dan rumput) = `SIDEWALK.d(s, za)` di JS (ubah keduanya bersama), `PARK_PATHS` (runs, mesh pita), `colAt(s, za, m)`; tepi blok arteri 17 m dari sumbu |
 | Bangunan | `building(type, s, za, w, d, h, color, elev, collider, style, front)`, gaya 0-11, `BUILD_U.uNight`, varying flat (perbaikan GTX 1060) |
 | Interior jendela (14c) | Di `BUILD_FS` blok "14c" (ruangan = bay x lantai, sinar dari varying `vDirO` di `BUILD_VS`, arah kamera ke titik dalam ruang objek berskala), `kI` (campur dengan kaca lama lewat `detail`), `BUILD_U.uInterior`, `applyInteriorPreset()` (mati di Rendah dan Hemat) |
 | Kolisi | `COL`, `addCollider(s, za, hs, hz)` (AABB di bidang s-za), `LATE_COLLIDERS` |
