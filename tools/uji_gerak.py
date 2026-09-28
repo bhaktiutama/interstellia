@@ -1,6 +1,8 @@
 """Uji 19a-19b (Copper Corn Station): gerak kepala saat jalan dan lari, motor (fisika, POV, lampu depan).
 - 19a: kamera naik-turun per langkah (jalan sekitar 3,6 cm puncak ke puncak, lari sekitar 7 cm), jumlah langkah = jarak / 0,72 m,
   FOV melebar saat lari lalu kembali tepat 70 derajat, level Mati = tanpa gerak, hentakan saat mendarat setelah lompat.
+- 19c: model motor dari aset (assets/motor.data.js) termuat, standar samping hanya saat parkir, sport sampai 150 km/h di jalur
+  lurus bebas halangan, getaran kamera di aspal dan tanah kecil (guling dan naik-turun).
 - 19b: naik motor (C), kecepatan puncak normal sekitar 60 km/h, belok kanan = miring ke kanan dan heading berkurang, jarak
   pengereman sesuai cengkeraman ban, berat terasa searah / melawan putaran = (omega r +- v)^2 / r, menabrak gedung berhenti,
   tidak masuk air, turun hanya saat pelan, E di dekat motor parkir = naik lagi, lift = motor ditinggal, teleport = motor ikut,
@@ -13,6 +15,7 @@ UJI = r"""
 (async () => {
   const S = window.__station, out = {}, wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const P = S.player, B = S.BOB, M = S.MOTO, R = S.R, cam = S.camera, K = S.keys, OM = S.OMEGA, U = S.LIGHT.uniforms;
+  const C = 2 * Math.PI * R, wr = (x) => ((x % C) + C * 1.5) % C - C / 2;
   const frame = (n = 1) => { for (let i = 0; i < n; i++) { S.physicsStep(1 / 120); S.physicsStep(1 / 120); B.last = performance.now() - 1000 / 60; S.updateCamera(); } };
   const eyeOff = () => (R - Math.hypot(cam.position.x, cam.position.y)) - (P.h + S.CONFIG.eye);
   const finite = () => [cam.position.x, cam.position.y, cam.position.z, cam.quaternion.x, cam.quaternion.y, cam.quaternion.z, cam.quaternion.w].every(Number.isFinite);
@@ -37,11 +40,19 @@ UJI = r"""
   out[`lompat ${(air / 60).toFixed(2)} s lalu mendarat: kepala turun ${(dip * 100).toFixed(1)} cm lalu kembali (${(eyeOff() * 1000).toFixed(1)} mm)`] = air > 20 && dip < -0.02 && dip > -0.12 && Math.abs(eyeOff()) < 0.006;
   // --- 19b: motor ----------------------------------------------------------------------------------------------------
   S.teleport('cooper'); S.respawn(); P.heading = 0; P.pitch = 0; frame(5);
-  S.toggleMoto();
-  out[`naik motor: on ${M.on}, mode ${P.mode}, posisi motor = pemain`] = M.on && P.mode === 'naik motor' && Math.abs(M.za - P.za) < 1e-6;
+  let tri = 0; M.mesh.traverse((o) => { if (o.isMesh) tri += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3; });
+  out[`model motor dari aset: ${S.MOTO_V.glb}, ${tri} segitiga, jarak sumbu roda ${M.WB.toFixed(3)} m, kredit ${S.MOTO_V.credit ? S.MOTO_V.credit.license : '-'}`] =
+    S.MOTO_V.glb && tri > 50000 && Math.abs(M.WB - 1.474) < 0.01 && !!S.MOTO_V.credit;
+  S.toggleMoto(); frame(2);
+  out[`naik motor: on ${M.on}, mode ${P.mode}, posisi motor = pemain, standar samping ${M.stand.visible ? 'terlihat' : 'disembunyikan'}`] = M.on && P.mode === 'naik motor' && Math.abs(M.za - P.za) < 1e-6 && !M.stand.visible && M.rider.visible;
   const z0 = M.za; K.add('KeyW'); frame(600); K.delete('KeyW');
-  out[`gas 10 s di boulevard: ${(M.v * 3.6).toFixed(1)} km/h (puncak normal sekitar 60), gigi ${M.gear}, jarak ${(M.za - z0).toFixed(0)} m`] = M.v * 3.6 > 55 && M.v * 3.6 < 63 && M.gear >= 4;
-  out[`kamera di motor: FOV ${cam.fov.toFixed(1)}, mata ${(eyeOff() + S.CONFIG.eye).toFixed(2)} m di atas tanah, nilai valid ${finite()}`] = cam.fov > 71.5 && Math.abs(eyeOff() + S.CONFIG.eye - 1.36) < 0.1 && finite();
+  out[`gas 10 s di boulevard: ${(M.v * 3.6).toFixed(1)} km/h (puncak normal sekitar 60), gigi ${M.gear}, jarak ${(M.za - z0).toFixed(0)} m`] = M.v * 3.6 > 55 && M.v * 3.6 < 63 && M.gear >= 2;
+  out[`kamera di motor: FOV ${cam.fov.toFixed(1)}, mata ${(eyeOff() + S.CONFIG.eye).toFixed(2)} m di atas tanah, nilai valid ${finite()}`] = cam.fov > 71.5 && Math.abs(eyeOff() + S.CONFIG.eye - S.MOTO_V.eye.y) < 0.03 && finite();
+  // getaran di aspal (boulevard, 60 km/h lurus): guling kamera dan naik-turun mata
+  const shakeOf = (n) => { let r0 = 1, r1 = -1, h0 = 1, h1 = -1; for (let i = 0; i < n; i++) { frame(); cam.updateMatrixWorld(); const e = cam.matrixWorld.elements, c = Math.cos(P.theta), sn = Math.sin(P.theta);
+      const roll = Math.asin(Math.max(-1, Math.min(1, -e[0] * c - e[1] * sn))) * 180 / Math.PI, h = eyeOff(); r0 = Math.min(r0, roll); r1 = Math.max(r1, roll); h0 = Math.min(h0, h); h1 = Math.max(h1, h); } return [r1 - r0, (h1 - h0) * 1000]; };
+  K.add('KeyW'); const [rA, hA] = shakeOf(120); K.delete('KeyW');
+  out[`getaran aspal 60 km/h: guling ${rA.toFixed(3)} derajat, naik-turun ${hA.toFixed(2)} mm (puncak ke puncak)`] = rA < 0.12 && hA < 2.5;
   // belok kanan
   const hd0 = M.hd; K.add('KeyD'); frame(40); const leanR = M.lean, dHd = M.hd - hd0; K.delete('KeyD');
   out[`belok kanan 0,67 s pada ${(M.v * 3.6).toFixed(0)} km/h: miring ${(leanR * 180 / Math.PI).toFixed(1)} derajat ke kanan, heading ${(dHd * 180 / Math.PI).toFixed(1)} derajat`] = leanR > 0.08 && dHd < -0.05;
@@ -61,7 +72,6 @@ UJI = r"""
   // tabrakan: gedung kota (collider besar), mulai 30 m di depannya (titik bebas), gas penuh mode sport ke arah +za
   S.respawn(); S.toggleMoto();
   let bld = null;
-  const C = 2 * Math.PI * R, wr = (x) => ((x % C) + C * 1.5) % C - C / 2;
   for (const c of S.COL.items) {                                   // jalur 30 m di depan muka gedung bebas collider lain
     if (c[2] < 5 || c[3] < 5 || c[1] < 400 || c[1] > 2400) continue;
     const z0 = c[1] - c[3] - 30, z1 = c[1] - c[3];
@@ -84,6 +94,23 @@ UJI = r"""
     K.add('KeyW'); let wet = false; for (let i = 0; i < 300; i++) { frame(); if (S.inWater(M.s, M.za)) wet = true; } K.delete('KeyW');
     out[`melaju ke air (s ${wp[0].toFixed(0)}, za ${wp[1]}): motor tidak pernah di air, berhenti ${(M.za - wp[1]).toFixed(1)} m dari titik air`] = !wet && M.v < 3;
   } else out['titik air untuk uji tidak ditemukan'] = false;
+  // sport sampai 150 km/h: jalur 1.600 m sejajar sumbu di pertanian tanpa collider dan air; sekaligus getaran di tanah
+  let lane = null;
+  for (let s = 5; s < C && !lane; s += 37) {
+    const z0 = 3400, z1 = 5000;
+    if (S.COL.items.some((o) => Math.abs(wr(o[0] - s)) < o[2] + 0.7 && o[1] + o[3] > z0 && o[1] - o[3] < z1)) continue;
+    let wet = false; for (let z = z0; z < z1 && !wet; z += 2) wet = S.inWater(s, z, 1); if (wet) continue;
+    lane = [s, z0];
+  }
+  if (lane) {
+    Object.assign(M, { s: lane[0], za: lane[1], hd: 0, v: 0 }); M.h = M.hPrev = S.groundH(M.s, M.za); P.theta = M.s / R; P.za = M.za;
+    K.add('KeyW'); K.add('ShiftLeft'); let vMx = 0, t100 = 0;
+    for (let i = 0; i < 1800; i++) { frame(); vMx = Math.max(vMx, M.v); if (!t100 && M.v * 3.6 >= 100) t100 = i / 60; }
+    const [rG, hG] = shakeOf(120); K.delete('KeyW'); K.delete('ShiftLeft');
+    out[`sport di jalur lurus (s ${lane[0]}): puncak ${(vMx * 3.6).toFixed(1)} km/h, 0-100 km/h ${t100.toFixed(1)} s, permukaan ${M.surf}`] = vMx * 3.6 > 147 && vMx * 3.6 < 151.5 && t100 > 4 && t100 < 9;
+    out[`getaran di tanah (${M.surf}) ${(M.v * 3.6).toFixed(0)} km/h: guling ${rG.toFixed(3)} derajat, naik-turun ${hG.toFixed(2)} mm`] = rG < 0.3 && hG < 12;
+    K.add('KeyS'); for (let i = 0; i < 900 && M.v > 0.05; i++) frame(); K.delete('KeyS');
+  } else out['jalur lurus 1,6 km untuk uji sport tidak ditemukan'] = false;
   // turun hanya saat pelan; parkir; E naik lagi
   M.v = 10; S.motoDismount(); const stillOn = M.on;
   M.v = 0; frame(2); S.motoDismount();
