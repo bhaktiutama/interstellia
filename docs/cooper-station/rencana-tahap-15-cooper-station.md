@@ -40,6 +40,8 @@ Tiap sub-tahap: commit dan push sendiri ke branch dan `main`, hasil dicatat di d
 - Lampu jalan boulevard di kota (tiang di tepi luar, 45 m), `lampPool` disesuaikan.
 - Cek tabrakan pemain dengan mobil (sekitar L7006) memasukkan k = 0.
 
+**Hasil 15b (selesai):** 4 lajur boulevard (`BLVD`: 11,0 dan 14,8 m dari as rel, za 160-7850), 134 mobil (awal 80 di kota, 54 di pertanian). Simpang boulevard di kota ikut lampu lalu lintas; mobil arteri melingkar di k = 0 berhenti untuk palang trem dan lampu merah. Marka median 9,1 m dan garis putus 12,9 m, lampu jalan boulevard di 21,5 m (kota) dengan kolam cahaya. Simulasi 30 menit: 0 tabrakan dengan trem, 0 konflik simpang. Uji `tools/uji_boulevard.py`; `uji_lalu_lintas`, `uji_pejalan_kaki`, `uji_rel_trem`, `uji_skyway` tetap lulus.
+
 ### 15c Trotoar dan jalan setapak
 - Trotoar analitik di shader tanah (tajam, tidak bergantung tekstur 3 m per piksel): untuk tiap arteri kota (sepanjang za k = 1-25 kecuali 13, dan arteri melingkar di `ringM`), pita 12-17 m dari sumbu: kerb 12-12,3 m, lajur pohon dan perabot 12,3-13,8 m, lajur jalan 13,8-17 m, beton bernat 1,5 m. Boulevard: trotoar 20-25 m.
 - Blok bangunan mundur: tepi blok dari tepi jalan +2 m menjadi +5 m (17 m dari sumbu arteri) supaya fasad menengah dan pusat tidak masuk trotoar. Pohon jalan dari 15 m ke 13 m (lajur pohon). Perabot tetap di 13 m.

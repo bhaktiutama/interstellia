@@ -1284,11 +1284,13 @@ const groundMat = new THREE.ShaderMaterial({
       float skyS = CIRC * 0.5;
       if (za > 140.0 && za < 2610.0) {
         float kS = floor(sp / uArt + 0.5), dS = sp - kS * uArt, km = mod(kS, 26.0);
-        if (km > 0.5 && km < 25.5 && abs(km - 13.0) > 0.5 && abs(abs(dS) - OFF) < 12.0) {
+        bool bl = km < 0.5 || km > 25.5;                             // 15b: boulevard, tiang di 21,5 m
+        float offK = bl ? 21.5 : OFF;
+        if (abs(km - 13.0) > 0.5 && abs(abs(dS) - offK) < 12.0) {
           float side = sign(dS), ph = side > 0.0 ? 0.0 : SP * 0.5;
           float zl = 150.0 + ph + floor((za - 150.0 - ph) / SP + 0.5) * SP;
           float dz = abs(zl - floor(zl / 250.0 + 0.5) * 250.0);
-          if (dz >= 16.0 && zl >= 150.0 && zl < 2600.0) pool += exp(-((abs(dS) - OFF) * (abs(dS) - OFF) + (za - zl) * (za - zl)) / RR);
+          if (dz >= 16.0 && zl >= 150.0 && zl < 2600.0) pool += exp(-((abs(dS) - offK) * (abs(dS) - offK) + (za - zl) * (za - zl)) / RR);
         }
         float kZ = floor(za / 250.0 + 0.5), dZ = za - kZ * 250.0;
         if (kZ >= 1.0 && kZ <= 10.0 && abs(kZ - 4.0) > 0.5 && abs(kZ - 8.0) > 0.5 && abs(abs(dZ) - OFF) < 12.0) {
@@ -1420,6 +1422,10 @@ const groundMat = new THREE.ShaderMaterial({
         if (za > uCityZ.x - 13.0 && za < uCityZ.y + 13.0 && abs(dZ) < 13.0 && abs(dS) > (blvd ? 21.0 : 13.0))
           mark = max(mark, roadMarks(dZ, s, 12.0, fp));
         if (blvd && za > 150.0 && abs(dS) < 21.0) mark = max(mark, lineAA(abs(dS) - 19.3, 0.1, fp));   // tepi boulevard
+        if (blvd && za > 150.0 && za < 7850.0 && !(abs(dZ) < 13.0 && za < uCityZ.y + 13.0)) {   // 15b: median 9,1 m dan garis putus antar lajur 12,9 m
+          mark = max(mark, lineAA(abs(dS) - 9.1, 0.1, fp));
+          mark = max(mark, lineAA(abs(dS) - 12.9, 0.07, fp) * step(0.45, fract(za / 9.0)));
+        }
         vec3 asphCol = col * asph;
         asphCol = mix(asphCol, vec3(0.62, 0.62, 0.58), mark * 0.85 * detail);
         col = mix(col, asphCol, asphM);
@@ -6252,6 +6258,7 @@ await bootStep(BOOT_W[15], 'Jalan dan lalu lintas...');
    aspal (kolam cahaya dihitung analitik di shader tanah dengan aturan posisi yang sama).
    ===================================================================== */
 const LAMP = { spacing: 45, off: ROAD.art / 2 + 1.5, z0: 150, z1: 2600 };
+const BLVD = { lanes: [11.0, 14.8], z0: 160, z1: 7850, lampOff: 21.5 };   // 15b: lajur boulevard (jarak dari as rel), lampu di tepi luar
 // 12b-1: lampu lalu lintas. Simpang (k, m) = arteri keliling s = k x ART dengan arteri melingkar za = m x 250.
 // Siklus 60 s: hijau arteri keliling 26 s, kuning 3 s, merah semua 1 s, hijau arteri melingkar 26 s, kuning 3 s, merah semua 1 s.
 // Fase digeser 18,5 s per simpang sepanjang za dan 17,9 s sepanjang s: gelombang hijau untuk mobil sekitar 13,5 m/s di satu arah.
@@ -6305,6 +6312,17 @@ const TRAFFIC = {};
   for (let k = 1; k < 26; k++) {                                     // arteri keliling (bergerak sepanjang za)
     if (k === 13) continue;
     for (const dir of [1, -1]) for (const lat of [3.2, 7.0]) add(0, k * ART, lat, dir, 160, 3030, lat < 5 ? 110 : 190);
+  }
+  // 15b: boulevard samping rel trem (k = 0), dua lajur per arah di luar koridor trem dan peron, seluruh panjang za 160-7850.
+  // Awalnya lebih rapat di kota; di pertanian mobil melaju bebas, di kota tertahan lampu, jadi kota tetap lebih padat.
+  for (const dir of [1, -1]) for (const lat of BLVD.lanes) {
+    const L = BLVD.z1 - BLVD.z0;
+    for (let p = r() * 90; p < L; ) {
+      lanes.push(0, TRAM.s, lat, dir); moves.push(p, 12 + 5 * r(), BLVD.z0, L);
+      const c = new THREE.Color(PAINT[Math.floor(r() * PAINT.length)]); paints.push(c.r, c.g, c.b);
+      const za = BLVD.z0 + (dir > 0 ? p : L - p);
+      p += (za < CITY.za1 + 700 ? (lat < 13 ? 110 : 170) : 420) * (0.6 + 0.8 * r());
+    }
   }
   for (let k = 1; k <= 10; k++) if (!nearRing(k * 250, 1)) for (const dir of [1, -1]) for (const lat of [3.2, 7.0])   // arteri melingkar kota (bukan di cincin)
     add(1, k * 250, lat, dir, SKY_S + 30, CIRC, lat < 5 ? 130 : 230);   // 13c: satu keliling penuh lewat jembatan Skyway
@@ -6400,6 +6418,11 @@ const TRAFFIC = {};
       lamps.push([k * ART + side * LAMP.off, z, -side, 0]);
     }
   }
+  for (const side of [-1, 1]) for (let z = LAMP.z0 + (side > 0 ? 0 : LAMP.spacing / 2); z < LAMP.z1; z += LAMP.spacing) {   // 15b: boulevard
+    const dz = Math.abs(z - Math.round(z / ART_Z) * ART_Z), sL = TRAM.s + side * BLVD.lampOff;
+    if (dz < 16 || nearRing(z, 14) || inWater(sL, z, 2) || inRiver(sL, z, 6)) continue;
+    lamps.push([sL, z, -side, 0]);
+  }
   for (let k = 1; k <= 10; k++) if (!nearRing(k * 250, 1)) for (const side of [-1, 1]) for (let s = (side > 0 ? 0 : LAMP.spacing / 2); s < CIRC; s += LAMP.spacing) {
     const ds = Math.abs(wrapS(s - Math.round(s / ART) * ART));
     if (ds < 16 || Math.abs(wrapS(s - SKY_S)) < 40) continue;
@@ -6452,8 +6475,10 @@ function stepTraffic(dt, t = clock.sim) {
         let st = ln.stops[c.si], ds = (st.u - c.u + L) % L;
         if (ds > L - 40) { c.si = (c.si + 1) % NS; st = ln.stops[c.si]; ds = (st.u - c.u + L) % L; }   // baru melewati garis henti
         let block = false;
-        if (st.kind === 'tram') block = XING.closed[st.j] && ds > c.v * c.v / 14;
-        else { const sg = sigState(st.k, st.m, st.axis, t); block = sg === 2 ? ds > c.v * c.v / 14 : sg === 1 ? ds > c.v * c.v / 7 + 1 : false; }
+        if (st.kind === 'tram') {                                        // 15b: perlintasan boulevard: palang trem dan lampu lalu lintas
+          const sg = sigState(st.k, st.m, st.axis, t);
+          block = (XING.closed[st.j] || sg === 2) ? ds > c.v * c.v / 14 : sg === 1 ? ds > c.v * c.v / 7 + 1 : false;
+        } else { const sg = sigState(st.k, st.m, st.axis, t); block = sg === 2 ? ds > c.v * c.v / 14 : sg === 1 ? ds > c.v * c.v / 7 + 1 : false; }
         if (block && ds < A.look) add = Math.min(add, ob(ds, 0, 0.8));
       }
       acc += add;
@@ -7015,7 +7040,7 @@ function updateAudio(dt) {
     if (inside && player.state === 'ground') {
       const act = pedAct(h, 0) * PEDS.user * PEDS.dens;
       for (const p of PEDS.near) if (p.thr < act && Math.abs(wrapS(p.s - s)) < 25 && Math.abs(p.za - za) < 25) crowd++;
-      if (za < CITY.za1 + 700) for (const c of TRAFFIC.carList) {
+      if (za < CITY.za1 + 700 || Math.abs(wrapS(s - TRAM.s)) < 80) for (const c of TRAFFIC.carList) {
         if (!c.on) continue; const ln = c.ln, al = ln.seg0 + (ln.dir > 0 ? c.u : ln.L - c.u);
         const cs = ln.type === 0 ? ln.line : al, cz = ln.type === 0 ? al : ln.line, d = Math.hypot(wrapS(cs - s), cz - za);
         if (d < dCar) { dCar = d; vCar = c.v; }
@@ -9382,7 +9407,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

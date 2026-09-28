@@ -27,6 +27,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_rumput_bukit.py` | Uji Copper Corn Station 14b: rumput tinggi bukit aktif di bukit, mati di kota, radius per preset |
 | `tools/uji_interior.py` | Uji Copper Corn Station 14c: ruangan di balik jendela per preset, tanpa nilai tidak valid siang dan malam |
 | `tools/uji_trem_malam.py` | Uji Copper Corn Station 15a: lampu kabin dan strip plafon trem malam, kolam cahaya tanah |
+| `tools/uji_boulevard.py` | Uji Copper Corn Station 15b: mobil boulevard samping rel trem, 30 menit tanpa tabrakan trem dan konflik simpang |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
@@ -96,7 +97,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | Post | `POST`, `postBegin()`, `postEnd()`: HDR, SSAO, bloom 6 tingkat, ACES, FXAA |
 | Audio | `AUDIO`, `startAudio()`, `updateAudio(dt)` (semua disintesis) |
 | Preset | `PRESETS` (Ultra/Tinggi/Sedang/Rendah/Hemat; Hemat untuk MacBook M1), `applyPreset(i)`, turun otomatis bila FPS < 30 selama 4 s, tersimpan di localStorage, `?preset=hemat` |
-| Lalu lintas | `TRAFFIC` (gambar di GPU, posisi dari simulasi CPU `stepTraffic()` model IDM, atribut `aSim`), `SIG` + `sigState(k, m, axis, t)` (lampu lalu lintas), `XING` + `updateCrossings()` + `XVIS` (perlintasan trem, palang, bel), `LAMP` |
+| Lalu lintas | `TRAFFIC` (gambar di GPU, posisi dari simulasi CPU `stepTraffic()` model IDM, atribut `aSim`), `SIG` + `sigState(k, m, axis, t)` (lampu lalu lintas), `BLVD` (15b: lajur boulevard k = 0, lampu di 21,5 m; simpang k = 0 = palang trem + lampu), `XING` + `updateCrossings()` + `XVIS` (perlintasan trem, palang, bel), `LAMP` |
 | Trem | `TRAM`, `TRAM_CAR`, `TRAM_SEATS`, `tram`, `TRAM_PARTS` (lights, cabinLamp, doors), `updateTramVisual()`; malam (15a): `CABIN_LIGHT.uCabin` (material `userData.cabin` di `patchLit`), `tramPool()` + uniform `uTram` di `groundMat` |
 | Lift/hub | `LIFT`, `HUB`, `CABIN`, `enterLift()`, `stepFloat()` |
 | Lokasi | `SPOTS` + `teleport(key)`: cooper, hill, corn, wheat, skyway, baseball, spaceport, fountain, forest |
