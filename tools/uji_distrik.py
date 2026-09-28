@@ -29,6 +29,25 @@ UJI = r"""
   const dStop = (m, za) => Math.hypot(((m.s + CIRC_H) % (2 * CIRC_H)) - CIRC_H, m.za - za);
   out[`pasar ${M.list.length} (besar ${M.list.filter((m) => m.big).length}), lapak ${M.stalls.length}; Pasar New York ${ny ? dStop(ny, 1125).toFixed(0) : '-'} m dari halte, pasar tani ${tani ? dStop(tani, 2950).toFixed(0) : '-'} m`] =
     M.list.length >= 14 && M.list.filter((m) => m.big).length === 5 && M.stalls.length > 200 && ny && dStop(ny, 1125) < 150 && tani && dStop(tani, 2950) < 80;
+  // revisi 16: atap lengkung di atas gedung pasar (6,5 m), lapak ikut tinggi tanah, tanah terinjak di pasar permukiman
+  const roofs = M.list.filter((m) => m.big).map((m) => m.roofY);
+  out[`atap pasar besar: lengkung ${roofs.map((y) => y[0].toFixed(1) + '-' + y[1].toFixed(1)).join(', ')} m`] = roofs.length === 5 && roofs.every((y) => y[0] >= 6.4 && y[1] > 12);
+  // dasar meja lapak pasar tani (tanah tidak datar) = tinggi tanah: titik terendah mesh lapak di sekitar tiap lapak
+  const gp = S.MOSQUE.meshG.geometry.attributes.position.array, farm = M.list.find((m) => m.farm);
+  const nil = M.stalls.filter(([s, za]) => Math.abs(za - farm.za) < 40 && Math.abs(((s - farm.s + 3 * CIRC_H) % (2 * CIRC_H)) - CIRC_H) < 40);
+  let worst = 0, slope = 0;
+  for (const [s, za] of nil) {
+    let lo = 1e9;
+    for (let i = 0; i < gp.length; i += 3) {
+      const x = gp[i], y = gp[i + 1], vz = gp[i + 2] + 4000, vs = Math.atan2(y, x) * S.R, h = S.R - Math.hypot(x, y);
+      if (Math.abs(vz - za) < 0.8 && Math.abs(((vs - s + 3 * CIRC_H) % (2 * CIRC_H)) - CIRC_H) < 1.4) lo = Math.min(lo, h);
+    }
+    const g = S.groundH(s, za); worst = Math.max(worst, Math.abs(lo - g)); slope = Math.max(slope, g);
+  }
+  out[`lapak pasar tani ikut tanah: ${nil.length} lapak, tanah sampai ${slope.toFixed(2)} m, selisih dasar maks ${worst.toFixed(3)} m`] = nil.length > 10 && worst < 0.05;
+  const worn = M.list.filter((m) => m.worn), lc = S.landCanvas.getContext('2d');
+  const isGreen = (m) => { const LW = S.landCanvas.width, LH = S.landCanvas.height, x = Math.floor((((m.spot.s % (2 * CIRC_H)) + 2 * CIRC_H) % (2 * CIRC_H)) / (2 * CIRC_H) * LW), y = Math.floor((1 - m.spot.za / 8000) * LH), p = lc.getImageData(x, y, 1, 1).data; return p[1] > p[0] * 1.02 && (Math.max(...p.slice(0, 3)) - Math.min(...p.slice(0, 3))) / Math.max(...p.slice(0, 3)) > 0.15; };
+  out[`pasar di permukiman bertanah terinjak: ${worn.length}, masih hijau ${worn.filter(isGreen).length}`] = worn.length > 0 && worn.filter(isGreen).length === 0;
   // 16e: taman distrik, sekolah, rumah sakit
   out[`taman distrik ${site('taman').length}, sekolah ${site('sekolah').length}, rumah sakit ${site('rs').length}`] = site('taman').length === 14 && site('sekolah').length === 9 && site('rs').length === 2;
   // 16f: peta: penanda baru, ikon fasilitas, legenda distrik

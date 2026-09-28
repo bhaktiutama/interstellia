@@ -31,6 +31,11 @@ UJI = r"""
   const off = shoot(); S.CABIN_LIGHT.uCabin.value.copy(keep);
   out[`render trem malam: dengan lampu kabin ${on.mean.toFixed(4)} > tanpa ${off.mean.toFixed(4)}`] = on.mean > off.mean * 1.3;
   out[`render trem: tanpa nilai tidak valid (${on.bad + off.bad})`] = on.bad + off.bad === 0;
+  // revisi 16: lampu halte (strip di bawah atap + kolam cahaya di peron): menyala malam, padam siang
+  const sl = S.STOP_LIGHT, nightStrip = sl.strip.material.color.r, nightPool = sl.pool.material.color.r;
+  S.clock.hour = 12; S.updateLighting(); await wait(1500);
+  const dayStrip = sl.strip.material.color.r, dayPool = sl.pool.material.color.r;
+  out[`lampu halte: strip malam ${nightStrip.toFixed(2)} / siang ${dayStrip.toFixed(2)}, kolam peron malam ${nightPool.toFixed(2)} / siang ${dayPool.toFixed(2)}`] = nightStrip > S.POST.bloomThr && dayStrip < 1 && nightPool > 0.3 && dayPool < 0.01;
   rt.dispose(); S.clock.hour = 12;
   return out;
 })()

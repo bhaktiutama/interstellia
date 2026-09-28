@@ -36,6 +36,9 @@ UJI = r"""
   out[`30 menit: konflik di simpang boulevard ${conflict}`] = conflict === 0;
   out[`mobil boulevard berhenti di garis henti (${redStops} sampel)`] = redStops > 50;
   out['lampu jalan boulevard ada di kota'] = S.TRAFFIC.lamps > 0;
+  // revisi 16: sorot lampu depan mobil di aspal: mesh instanced memakai atribut simulasi mobil yang sama
+  const B = S.TRAFFIC.beams, bg = B.geometry, cg = S.TRAFFIC.cars.geometry;
+  out[`sorot lampu depan: ${bg.instanceCount} instance, atribut sama dengan mobil`] = bg.instanceCount === cg.instanceCount && bg.attributes.aSim === cg.attributes.aSim && bg.attributes.aLane === cg.attributes.aLane && B.material.blending === 2;
   return out;
 })()
 """

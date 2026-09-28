@@ -123,6 +123,20 @@ Per baris za: puncak 90 rumah per sel (za 750), turun ke 53 (za 1500), 27 (za 20
 
 Biaya (segitiga, draw call): pasar New York Ultra 3,22 jt / 749, Hemat 1,14 jt / 438; pusat New York Ultra 3,35 jt / 814, Hemat 1,24 jt / 497. Uji `tools/uji_distrik.py` (semua cek 16b-16f) dan uji lama lulus.
 
+### Revisi 16 (setelah uji pemilik)
+
+Posisi, kepadatan, dan tata letak tidak diubah; hanya objek yang ada diperbaiki.
+
+| Masalah | Penyebab | Perbaikan |
+| --- | --- | --- |
+| Pasar di atas rumput segar | Lapak hanya ditaruh di atas tanah blok permukiman | Area lapak di sel permukiman/tepi dicat tanah terinjak (tengah cokelat keabuan, tepi rumput layu); rumput 3D tidak tumbuh di atasnya. 11 pasar |
+| Atap lengkung pasar besar terputar 90 derajat | Setengah silinder yang dipilih menghadap samping setelah diputar | Setengah silinder menghadap ke atas: lengkung 6,5-13,4 m di atas gedung pasar |
+| Tenda pasar tani Taman Nil tenggelam di sisi jauh dari jalan | Potongan lapak digabung di tinggi 0, tanah di sana naik sampai 1,5 m | Lapak digabung ke mesh terpisah setelah tanah dibuat, tiap lapak di `groundH`; selisih dasar meja dengan tanah maksimal 0,001 m |
+| Halte trem gelap saat malam | Halte hanya kotak peron, atap, tiang, bangku tanpa lampu | Strip lampu di sisi bawah atap halte (malam 3,6, di atas ambang bloom) dan kolam cahaya hangat bergradasi di lantai peron (`STOP_LIGHT`) |
+| Lampu depan mobil selalu gelap | Kotak lampu sebenarnya menyala (diukur 4,4 dari dekat) tetapi kecil, dan tidak ada cahaya di jalan | Kotak lampu depan sedikit lebih besar; sorot lampu di aspal sampai 14 m di depan tiap mobil saat malam (`TRAFFIC.beams`, mesh instanced aditif memakai atribut simulasi mobil yang sama, hanya malam dan dalam 350 m) |
+
+Biaya titik awal kota: Ultra 3,30 jt, Hemat 1,21 jt segitiga (siang). Uji `uji_distrik` (atap, lapak ikut tanah, tanah terinjak), `uji_trem_malam` (lampu halte), `uji_boulevard` (sorot lampu) dan uji lama lulus.
+
 ## Berkas
 
 - `experiences/cooper-station/index.html`: `DISTRICTS`, loop penempatan kota (CBD, balai, pasar, taman, sekolah), `TRAM.stops`, HUD, `drawMap`/`buildMapLegend`/`MAP_MARKS`, `I18N.en`.
