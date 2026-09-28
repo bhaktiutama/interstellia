@@ -33,6 +33,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 | `tools/uji_distrik.py` | Uji Copper Corn Station 16: distrik (sel kota, nama, halte, notifikasi), fasilitas, peta |
 | `tools/uji_bahasa.py` | Uji M3: kamus English lengkap (teks statis dan `t()`), label berganti bahasa tanpa muat ulang |
 | `tools/uji_gerhana.py` | Uji Copper Corn Station 17a: Matahari 25 derajat dari sumbu di bidang orbit, lompat ke gerhana, lama gerhana dan penumbra, sinar padam, cahaya tepi Saturnus |
+| `tools/uji_pantulan.py` | Uji Copper Corn Station 17b + 17d: pantulan daratan seberang (arah atas hijau, ke end cap berkabut, sunline), tanpa nilai tidak valid, ambient warna daratan, material berkilap |
 | `tools/uji_ladang_foto_tur.py` | Uji Copper Corn Station 12d: siklus tanam, mesin ladang, mode foto (kembali normal saat keluar), tur sinematik |
 | `shared/` | (belum ada) kode bersama akan dipindahkan ke sini bertahap |
 
@@ -77,6 +78,7 @@ Simulasi silinder O'Neill yang mengorbit Saturnus. Satu file HTML (`experiences/
 | --- | --- |
 | Konfigurasi | `CONFIG`, `HALF_L`, `R`, `CIRC`, `ART` (arteri keliling tiap 241,7 m), `ART_Z` (250 m), `ROAD`, `CITY`, `PARKZ`, `FARMS`, `RINGS_Z`, `nearRing()` |
 | Cahaya | `LIGHT_GLSL` / `stationLight()`, `LIGHT.uniforms` (uL_Sunline, uL_SunDir, uL_CapI), `patchLit()` untuk MeshBasicMaterial, `updateLighting()` |
+| Pantulan dan kilap (17b, 17d) | `farEnv(P, Rd, rough, lineK)` di `LIGHT_GLSL` (daratan seberang dari `uL_Land`, end cap, sunline, kabut; tidak ada langit biru), uniform `uL_FarLight` / `uL_FarAvg` / `uL_FogCol` / `uL_FogD` / `uL_Night`, `FAR.land` (rata-rata warna daratan, ambient siang), `specMat(m, rough, f0, metal, glass)` + `SPEC_GLSL` di `patchLit()` (uniform per material `uSpec`, `userData.specU`) |
 | Bayangan | `SHADOW`, pass layer 1; alpha caster layer 2 (`ALPHA_CASTERS`) |
 | Tanah | heightmap `TER` (half-float, sama CPU/GPU), `groundH(s, za)`, `groundMat` (uLand, uFieldTex, uCloudTex, uShadeTex, lampPool) |
 | Vegetasi | `VEG_COMMON`, `TREES` (LOD + impostor, 16 template: oak, elm, poplar, maple, birch, pine, willow, bunga), `TREE_KINDS`, `GRASS`, `CORN` |
@@ -153,8 +155,9 @@ W A S D, Shift, Space, B, G, L, T, E, M, V, [ ], Z (kecepatan waktu), N (cuaca),
 | 15a-15e | Trem menyala malam, mobil di boulevard samping rel, trotoar dan jalan setapak taman, permukiman padat bertingkat (gang, rumah deret, pohon halaman), setengah gereja diganti masjid (Utsmani, Maroko, Saudi) |
 | 16a-16f | Gradasi kepadatan permukiman (deret sampai desa), 14 distrik kota (megacity dan astronom) + zona luar kota bernama, pusat New York dengan menara ikon 221 m, balai distrik, 15 pasar, taman distrik, sekolah, rumah sakit, peta dengan distrik dan ikon fasilitas |
 | 17a | Sumbu stasiun dimiringkan ulang: sinar Matahari masuk end cap B 25 derajat (jangkauan 4,3 km), gerhana Saturnus tiap orbit (sinar padam, cahaya tepi atmosfer, notifikasi, tombol I) |
+| 17b, 17d | Kaca gedung, air, jalan basah, dan mobil memantulkan daratan seberang (bukan langit biru), ambient siang ikut warna daratan, kilap dan Fresnel untuk cat, logam, dan kaca |
 
-Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Tahap 15 selesai: `docs/cooper-station/rencana-tahap-15-cooper-station.md` (15a lampu trem, 15b lalu lintas boulevard, 15c trotoar, 15d permukiman padat, 15e masjid). Tahap 16 selesai: `docs/cooper-station/rencana-tahap-16-cooper-station.md`. Tahap 17: `docs/cooper-station/rencana-tahap-17-cooper-station.md` (17a orbit dan gerhana selesai, 17b-17f pencahayaan rencana).
+Tahap 12, 13, dan 14 selesai (rencana: `docs/cooper-station/rencana-tahap-13-14-cooper-station.md`). Tahap 15 selesai: `docs/cooper-station/rencana-tahap-15-cooper-station.md` (15a lampu trem, 15b lalu lintas boulevard, 15c trotoar, 15d permukiman padat, 15e masjid). Tahap 16 selesai: `docs/cooper-station/rencana-tahap-16-cooper-station.md`. Tahap 17: `docs/cooper-station/rencana-tahap-17-cooper-station.md` (17a orbit dan gerhana, 17b kilap, 17d pantulan daratan seberang selesai; 17c, 17e, 17f rencana).
 
 Catatan muat (M1): modul memakai `await bootStep(...)` di tingkat atas di antara bagian besar. Bagian baru ditambah di tingkat atas modul (bukan di dalam fungsi) dan diberi titik jeda bila berat; `window.__stationReady` baru true setelah shader dikompilasi.
 

@@ -5,7 +5,8 @@ Per 28 September 2026 · Bhakti · gambar penjelasan: artifact "Gerhana Saturnus
 ## Ringkasan
 
 - **17a (selesai):** sumbu stasiun dimiringkan ulang agar sinar Matahari masuk lewat end cap B dengan sudut landai 25 derajat, dan stasiun lewat bayangan Saturnus sekali tiap orbit (gerhana sekitar 2,8 jam).
-- **17b-17f (rencana):** peningkatan realisme pencahayaan dari usulan sebelumnya.
+- **17b dan 17d (selesai):** kaca, air, jalan basah, dan mobil memantulkan daratan seberang (bukan langit biru); ambient siang ikut warna daratan; material cat, logam, dan kaca berkilap dengan Fresnel.
+- **17c, 17e, 17f (rencana):** adaptasi mata, lampu malam menerangi objek, bayangan sunline.
 - Kota, ladang, dan fitur lain tidak berubah.
 
 ## 17a: orbit dan gerhana Saturnus (selesai)
@@ -44,13 +45,38 @@ Lama gerhana per kecepatan orbit (tombol T):
 
 Cara melihat: tekan I, lalu 1 (rumah Cooper, dekat end cap B) dan lihat ke kaca end cap, atau V (kamera luar). Saturnus tampak berputar mengelilingi kaca end cap sekali tiap 63,4 detik karena stasiun berputar.
 
-## 17b-17f: pencahayaan (rencana, belum dikerjakan)
+## 17b dan 17d: pantulan daratan seberang dan kilap material (selesai)
+
+Masalah yang ditemukan Bhakti: kaca gedung tinggi memantulkan biru seperti langit Bumi. Di dalam silinder tidak ada langit; di atas kepala ada daratan seberang 2 km. Kode lama memakai warna kabut (biru muda) sebagai "langit".
+
+| Warna (linear, jam 13.00) | R | G | B |
+| --- | --- | --- | --- |
+| Kabut (dulu dipakai sebagai pantulan) | 0,420 | 0,538 | 0,711 |
+| Rata-rata peta daratan | 0,312 | 0,352 | 0,140 |
+| Ambient siang lama | 0,17 | 0,20 | 0,25 |
+| Ambient siang baru (kecerahan sama) | 0,178 | 0,208 | 0,139 |
+
+Yang dibuat:
+
+| Bagian | Isi |
+| --- | --- |
+| `farEnv(P, Rd, rough, lineK)` di `LIGHT_GLSL` | Sinar pantul dihitung sampai kena dinding silinder (ambil warna dari peta daratan x cahaya di sana) atau end cap (ruang gelap, cincin lampu keemasan, Matahari lewat kaca), lalu dikabutkan sesuai panjang sinar. Sunline = garis terang saat sinar lewat dekat sumbu. Kekasaran mengaburkan (mip peta, garis melebar) |
+| Uniform baru | `uL_Land` (peta daratan), `uL_FarLight` (cahaya di daratan seberang), `uL_FarAvg`, `uL_FogCol`, `uL_FogD`, `uL_Night` (kota seberang menyala samar saat malam), diisi di `updateLighting()` |
+| Kaca gedung | `sky = farEnv(...)` menggantikan warna kabut; tambahan biru ke arah atas dihapus |
+| Jalan basah, air | Memantulkan daratan seberang; kilau sunline di air tetap memakai hitungan lama |
+| Mobil | Cat (clearcoat tipis) dan kaca memantulkan daratan seberang, per verteks |
+| Ambient siang | 70% warna daratan + 30% udara, luminans sama dengan nilai lama (0,197) |
+| 17b: `specMat(m, kekasaran, F0, logam, kaca)` | Material dasar bertanda mendapat pantulan `farEnv` x Fresnel Schlick; logam mewarnai pantulan; kaca bening menaikkan alpha mengikuti Fresnel. Hemat energi: difus dikurangi sebesar bagian yang dipantulkan |
+| Material bertanda | Trem (badan, strip, atap, rangka kursi, tiang kuning, baja, kaca), halte, lift, hub, rumah Cooper (atap seng, kaca, truk, krom), lapangan baseball (baja, aluminium), kaca terminal, tiang bendera, tiang lampu jalan, air mancur |
+| Uji | `tools/uji_pantulan.py` |
+
+Catatan: cat yang dilihat tegak lurus hanya memantul sekitar 4%, jadi kilap paling terlihat di sudut miring, pada logam, dan pada kaca. Pantulan tidak memperhitungkan objek dekat selain siluet gedung seberang yang sudah ada (14c).
+
+## 17c, 17e, 17f: pencahayaan lanjutan (rencana, belum dikerjakan)
 
 | Tahap | Isi | Biaya GPU (perkiraan) |
 | --- | --- | --- |
-| 17b | Specular dan Fresnel di `stationLight()`, kekasaran per material lewat `userData` | Rendah |
 | 17c | Adaptasi mata (eksposur otomatis dari mip bloom terkecil) | Sangat rendah |
-| 17d | Ambient dua arah khas silinder: pantulan dari daratan seberang di atas kepala | Hampir nol |
 | 17e | Lampu jalan, mobil, trem menerangi objek saat malam (bukan hanya tanah) | Rendah sampai sedang |
 | 17f | Bayangan sunline di dekat pemain: tajam ke arah keliling, kabur ke arah sumbu | Sedang (mati di Hemat) |
 

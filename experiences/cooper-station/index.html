@@ -863,12 +863,48 @@ const LIGHT = { uniforms: {
   uL_CapI: { value: 0.3 }, uL_CapCol: { value: new THREE.Vector3(1.0, 0.7, 0.36) },
   uL_SunDir: { value: new THREE.Vector3(0, 0, 1) }, uL_SunI: { value: 0.12 }, uL_SunCol: { value: new THREE.Vector3(1.0, 0.96, 0.9) },
   uL_ShadowMap: { value: null }, uL_ShadowMat: { value: new THREE.Matrix4() }, uL_ShadowOn: { value: 0 }, uL_ShadowCap: { value: 0 },
+  // 17d: pantulan daratan seberang (peta daratan, cahaya yang sampai ke sana, kabut sepanjang sinar pantul, malam)
+  uL_Land: { value: null }, uL_FarLight: { value: new THREE.Vector3(1, 1, 1) }, uL_FarAvg: { value: new THREE.Vector3(0.3, 0.33, 0.2) },
+  uL_FogCol: { value: new THREE.Vector3(0.66, 0.71, 0.77) }, uL_FogD: { value: 0.00015 }, uL_Night: { value: 0 },
 } };
 const LIGHT_GLSL = /* glsl */`
   uniform float uL_R, uL_HalfL, uL_CapRingR, uL_Sunline, uL_CapI, uL_SunI, uL_ShadowOn, uL_ShadowCap;
   uniform vec3 uL_SunlineCol, uL_AmbCol, uL_CapCol, uL_SunDir, uL_SunCol;
-  uniform sampler2D uL_ShadowMap;
+  uniform sampler2D uL_ShadowMap, uL_Land;
   uniform mat4 uL_ShadowMat;
+  uniform vec3 uL_FarLight, uL_FarAvg, uL_FogCol;
+  uniform float uL_FogD, uL_Night;
+  // 17d: apa yang terlihat sepanjang sinar pantul Rd dari titik P (kerangka stasiun). Di dalam silinder tidak ada langit:
+  // sinar kena daratan seberang (peta daratan x cahaya di sana), atau kena end cap (ruang gelap, cincin lampu keemasan,
+  // Matahari lewat kaca), lalu dikabutkan sesuai panjang sinar. Sunline = garis terang di sumbu (jarak terdekat sinar ke sumbu).
+  // rough 0..1 mengaburkan (mip peta daratan, garis sunline dan cincin melebar, energi dijaga). lineK = bobot sunline.
+  // Aman NaN: P di dalam silinder (c < 0) sehingga diskriminan >= 0; pembagi dijaga; kuadrat ditulis x * x (bukan pow).
+  vec3 farEnv(vec3 P, vec3 Rd, float rough, float lineK) {
+    float a = dot(Rd.xy, Rd.xy), b = dot(P.xy, Rd.xy), c = dot(P.xy, P.xy) - uL_R * uL_R;
+    float tW = a > 1e-6 ? (-b + sqrt(max(b * b - a * c, 0.0))) / a : 1e7;
+    float tC = abs(Rd.z) > 1e-5 ? ((Rd.z > 0.0 ? uL_HalfL : -uL_HalfL) - P.z) / Rd.z : 1e7;
+    float t = max(min(tW, tC), 0.0);
+    vec3 H = P + Rd * t, col;
+    if (tW <= tC) {
+      float u = fract(atan(H.y, H.x) / 6.2831853 + 1.0), v = clamp((H.z + uL_HalfL) / (2.0 * uL_HalfL), 0.0, 1.0);
+      vec3 land = textureLod(uL_Land, vec2(u, v), 2.0 + 5.0 * rough).rgb;
+      float sat = max(land.r, max(land.g, land.b)) - min(land.r, min(land.g, land.b));
+      col = land * uL_FarLight + vec3(1.0, 0.7, 0.4) * 0.05 * uL_Night * (1.0 - smoothstep(0.03, 0.12, sat));   // malam: kota seberang
+    } else {
+      float rr = length(H.xy), wr = 25.0 + 300.0 * rough, dr = (rr - uL_CapRingR) / wr;
+      col = vec3(0.003, 0.004, 0.007) + uL_CapCol * uL_CapI * 1.5 * (25.0 / wr) * exp(-dr * dr);
+      float shn = mix(4000.0, 40.0, rough), glassK = 1.0 - smoothstep(uL_R * 0.9, uL_R * 0.95, rr);
+      col += uL_SunCol * uL_SunI * 40.0 * glassK * pow(max(dot(Rd, uL_SunDir), 0.0), shn) * shn / 4000.0;
+    }
+    if (a > 1e-6 && lineK > 0.0) {
+      float tm = clamp(-b / a, 0.0, t);
+      vec2 q = P.xy + Rd.xy * tm;
+      float d2 = dot(q, q), w = 6.0 + 400.0 * rough * rough, w2 = w * w;
+      col += uL_SunlineCol * uL_Sunline * lineK * (1.5 * (36.0 / w2) * exp(-d2 / w2) + 0.12 * exp(-d2 / (w2 + 2500.0)));
+    }
+    float f = 1.0 - exp(-uL_FogD * uL_FogD * t * t);
+    return mix(col, uL_FogCol, f);
+  }
   float stationShadow(vec3 p) {
     vec4 sc = uL_ShadowMat * vec4(p, 1.0);
     vec3 c = sc.xyz / sc.w * 0.5 + 0.5;
@@ -885,7 +921,7 @@ const LIGHT_GLSL = /* glsl */`
     vec3 up = r > 1.0 ? vec3(-p.xy / r, 0.0) : vec3(0.0, 0.0, 1.0);
     float d = dot(n, up);
     vec3 col = uL_SunlineCol * uL_Sunline * max(0.55 + 0.45 * d, 0.1);     // sunline (cahaya garis di sumbu)
-    col += uL_AmbCol * (0.7 + 0.3 * d);                                     // pantulan dari sisi seberang
+    col += uL_AmbCol * (0.7 + 0.3 * d);                                     // pantulan dari sisi seberang (17d: warna daratan)
     vec2 rim = r > 1.0 ? p.xy / r : vec2(1.0, 0.0);
     for (int k = 0; k < 2; k++) {                                           // cincin lampu end cap A dan B
       float sz = k == 0 ? -uL_HalfL : uL_HalfL;
@@ -906,13 +942,30 @@ const LIGHT_GLSL = /* glsl */`
   }
 `;
 const CABIN_LIGHT = { uCabin: { value: new THREE.Color(0, 0, 0) } };   // 15a: lampu kabin trem malam (material userData.cabin)
+// 17b: kilap dan Fresnel untuk material dasar yang ditandai specMat() (cat, logam, kaca, air). uSpec = (kekasaran, F0, logam).
+// Pantulan = farEnv (daratan seberang, sunline, end cap, Matahari) dikali Fresnel Schlick; logam mewarnai pantulan dengan warna
+// dasarnya dan mengurangi difus. Kaca bening: alpha naik mengikuti Fresnel agar pantulan tidak ikut transparan.
+const SPEC_GLSL = (glass) => `{
+  vec3 Vv = cameraPosition - vLitWorld; Vv *= inversesqrt(max(dot(Vv, Vv), 1e-8));
+  float cosV = clamp(dot(litN, Vv), 0.0, 1.0), om = 1.0 - cosV;
+  float Fr = uSpec.y + (1.0 - uSpec.y) * om * om * om * om * om * (1.0 - 0.7 * uSpec.x);
+  vec3 envS = farEnv(vLitWorld, reflect(-Vv, litN), uSpec.x, 1.0 - uSpec.x);
+  float mx = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
+  vec3 tintS = mix(vec3(1.0), diffuseColor.rgb / max(mx, 1e-3), uSpec.z);
+  float kS = mix(Fr, 0.5 + 0.5 * Fr, uSpec.z);
+  outgoingLight = outgoingLight * (1.0 - kS * mix(1.0, 0.7, uSpec.z)) + envS * tintS * kS;
+  ${glass ? 'diffuseColor.a = mix(diffuseColor.a, 1.0, Fr);' : ''}
+}
+`;
+function specMat(m, r, f0 = 0.04, metal = 0, glass = false) { m.userData.spec = { r, f0, metal, glass }; return m; }
 function patchLit(mat) {
   if (mat.userData.lit) return;
   mat.userData.lit = true;
-  const cabin = !!mat.userData.cabin;
+  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = !!(sp && sp.glass);
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, LIGHT.uniforms);
     if (cabin) Object.assign(sh.uniforms, CABIN_LIGHT);
+    if (sp) { sh.uniforms.uSpec = { value: new THREE.Vector3(sp.r, sp.f0, sp.metal) }; mat.userData.specU = sh.uniforms.uSpec; }
     sh.vertexShader = 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
       {
         vec4 lw = vec4(transformed, 1.0); vec3 ln = normal;
@@ -923,10 +976,11 @@ function patchLit(mat) {
         vec3 wn = mat3(modelMatrix) * ln; vLitNormal = wn * inversesqrt(max(dot(wn, wn), 1e-12));   // normal nol tetap nol (tanpa NaN)
       }`);
     sh.fragmentShader = 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + LIGHT_GLSL +
-      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\noutgoingLight *= stationLight(vLitWorld, litN);\n' + (cabin ? 'outgoingLight += diffuseColor.rgb * uCabin;\n' : '') + '#include <opaque_fragment>');
+      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\noutgoingLight *= stationLight(vLitWorld, litN);\n' + (cabin ? 'outgoingLight += diffuseColor.rgb * uCabin;\n' : '') + (sp ? SPEC_GLSL(glass) : '') + '#include <opaque_fragment>');
     if (cabin) sh.fragmentShader = 'uniform vec3 uCabin;\n' + sh.fragmentShader;
+    if (sp) sh.fragmentShader = 'uniform vec3 uSpec;\n' + sh.fragmentShader;
   };
-  mat.customProgramCacheKey = () => cabin ? 'stationLitCabin' : 'stationLit';
+  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass ? 'Glass' : 'Spec') : '');
   mat.needsUpdate = true;
 }
 
@@ -1698,7 +1752,7 @@ const groundMat = new THREE.ShaderMaterial({
       if (uWet > 0.01 && waterM < 0.5) {                          // 12c revisi: pantulan Fresnel (kuat saat dilihat miring), lampu jalan, riak hujan
         vec3 V = cameraPosition - vWorld; float vl = length(V); V = vl > 1e-4 ? V / vl : up;
         float cosT = clamp(dot(V, up), 0.0, 1.0), F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
-        vec3 refl = fogColor * 1.1 + vec3(1.0, 0.72, 0.42) * 2.2 * uNight * lampPool(s, za);
+        vec3 refl = farEnv(vWorld, reflect(-V, up), 0.15, 0.7) + vec3(1.0, 0.72, 0.42) * 2.2 * uNight * lampPool(s, za);   // 17d
         float ring = 0.0;
         if (puddle > 0.01 && uRainNow > 0.05) {                   // riak tetes hujan: cincin melebar di sel 0,5 m
           vec2 g = P * 2.0, c = floor(g), f = fract(g) - 0.5;
@@ -1730,8 +1784,8 @@ const groundMat = new THREE.ShaderMaterial({
         float cosT = max(dot(N, V), 0.0);
         float F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
         vec3 deep = vec3(0.012, 0.045, 0.07) * light * 2.2;
-        vec3 sky = mix(vec3(0.22, 0.30, 0.20) * light, fogColor, 0.55);   // yang terpantul: sisi seberang + udara
         vec3 Rf = reflect(-V, N);
+        vec3 sky = farEnv(vWorld, Rf, 0.1, 0.0);                     // 17d: daratan seberang (kilau sunline dihitung terpisah di bawah)
         float g = dot(normalize(Rf.xy + vec2(1e-5)), up.xy) * step(0.0, dot(Rf, up));
         float glint = pow(max(g, 0.0), 900.0) * 6.0 + pow(max(g, 0.0), 40.0) * 0.25;
         vec3 wcol = mix(deep, sky, F) + uL_SunlineCol * uL_Sunline * glint * (0.3 + F);
@@ -2086,8 +2140,8 @@ surfaceMatrix(liftTower.matrix, LIFT.theta, LIFT.za, 0);
   lampMesh.frustumCulled = false; lampMesh.userData.noLight = true; lampMesh.userData.noShadow = true; liftTower.add(lampMesh);
   liftTower.userData.lamps = lampMesh;
   // lobi berkaca di kaki menara (pintu di sisi +z), papan nama
-  const frame = new THREE.MeshBasicMaterial({ color: 0x3b4148 }), roofM = new THREE.MeshBasicMaterial({ color: 0x5b626b });
-  const glassM = new THREE.MeshBasicMaterial({ color: 0x9fb6c4, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+  const frame = specMat(new THREE.MeshBasicMaterial({ color: 0x3b4148 }), 0.4, 0.05), roofM = new THREE.MeshBasicMaterial({ color: 0x5b626b });
+  const glassM = specMat(new THREE.MeshBasicMaterial({ color: 0x9fb6c4, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }), 0.03, 0.06, 0, true);   // 17b
   const lb = (sx, sy, sz, x, y, z, mat) => { const mm = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); mm.position.set(x, y, z); if (mat === glassM) mm.userData.noShadow = true; liftTower.add(mm); return mm; };
   const LX0 = -6, LX1 = 6, LZ0 = -3.5, LZ1 = 7, LH = 4.2;
   lb(0.05, LH, LZ1 - LZ0, LX0, LH / 2, (LZ0 + LZ1) / 2, glassM); lb(0.05, LH, LZ1 - LZ0, LX1, LH / 2, (LZ0 + LZ1) / 2, glassM);
@@ -2112,9 +2166,9 @@ scene.add(liftTower);
 // kabin kapsul kaca: lantai, atap, tiang sudut, kaca 4 sisi, pegangan, bangku, panel kontrol, lampu plafon
 const cabin = new THREE.Group(); cabin.matrixAutoUpdate = false;
 {
-  const metal = new THREE.MeshBasicMaterial({ color: 0x8a9199 }), dark = new THREE.MeshBasicMaterial({ color: 0x2a2f35 }), rail = new THREE.MeshBasicMaterial({ color: 0xc9ced4 });
+  const metal = specMat(new THREE.MeshBasicMaterial({ color: 0x8a9199 }), 0.35, 0.6, 1), dark = new THREE.MeshBasicMaterial({ color: 0x2a2f35 }), rail = specMat(new THREE.MeshBasicMaterial({ color: 0xc9ced4 }), 0.2, 0.7, 1);   // 17b
   const seat = new THREE.MeshBasicMaterial({ color: 0x26466e }), lamp = new THREE.MeshBasicMaterial({ color: 0xfff1d8 }), screen = new THREE.MeshBasicMaterial({ color: 0x4fd1a5 });
-  const glassM = new THREE.MeshBasicMaterial({ color: 0xa9c0cc, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide });
+  const glassM = specMat(new THREE.MeshBasicMaterial({ color: 0xa9c0cc, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide }), 0.03, 0.06, 0, true);
   const cb = (sx, sy, sz, x, y, z, mat, flag) => { const mm = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), mat); mm.position.set(x, y, z); if (flag) mm.userData[flag] = true; if (mat === glassM) mm.userData.noShadow = true; cabin.add(mm); };
   cb(3.1, 0.15, 3.1, 0, -0.075, 0, dark); cb(3.1, 0.18, 3.1, 0, 2.6, 0, metal);
   for (const x of [-1.5, 1.5]) for (const z of [-1.5, 1.5]) cb(0.12, 2.6, 0.12, x, 1.3, z, metal);
@@ -2132,7 +2186,7 @@ scene.add(cabin);
 const hub = new THREE.Group();
 {
   const zc = (za) => za - HALF_L, len = HUB.zaMax - HUB.zaMin;
-  const ringM = new THREE.MeshBasicMaterial({ color: 0x7a828c }), cableM = new THREE.MeshBasicMaterial({ color: 0xe0b020 }), lampM = new THREE.MeshBasicMaterial({ color: 0xcfe6ff });
+  const ringM = specMat(new THREE.MeshBasicMaterial({ color: 0x7a828c }), 0.4, 0.6, 1), cableM = new THREE.MeshBasicMaterial({ color: 0xe0b020 }), lampM = new THREE.MeshBasicMaterial({ color: 0xcfe6ff });
   for (const za of [HUB.zaMin, 12, 22, 32, 42, 52, HUB.zaMax]) { const t = new THREE.Mesh(new THREE.TorusGeometry(HUB.r, 0.35, 8, 72), ringM); t.position.z = zc(za); hub.add(t); }
   for (let i = 0; i < 16; i++) {
     const a = i / 16 * TAU, bx = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, len), ringM);
@@ -2515,6 +2569,7 @@ landTex.colorSpace = THREE.SRGBColorSpace;
 landTex.wrapS = THREE.RepeatWrapping; landTex.wrapT = THREE.ClampToEdgeWrapping;
 landTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
 groundMat.uniforms.uLand.value = landTex;
+LIGHT.uniforms.uL_Land.value = landTex;                            // 17d: pantulan daratan seberang
 
 // --- tahap 6: data petak ladang untuk shader (arah baris, jarak baris, jenis), 3,07 m per piksel ---
 {
@@ -3136,7 +3191,7 @@ const BUILD_FS = /* glsl */`
     vec3 V = normalize(cameraPosition - vW);
     float F = pow(1.0 - clamp(abs(dot(N, V)), 0.0, 1.0), 4.0);
     vec3 light = stationLight(vW, N);
-    vec3 sky = fogColor;
+    vec3 sky = farEnv(vW, reflect(-V, N), 0.08, 0.9);                 // 17d: yang terpantul = daratan seberang, end cap, sunline (bukan langit biru)
     vec3 col; vec3 emit = vec3(0.0);
     bool roof = vPart > 0.5;
     if (n.y < -0.9) { gl_FragColor = vec4(vec3(0.05), 1.0); return; }
@@ -3325,7 +3380,7 @@ const BUILD_FS = /* glsl */`
           float dl = max(length(vDirO), 1e-4), tilt = (hash1(vec2(wid, 17.0)) - 0.5) * 0.03;   // panel tidak sebidang sempurna
           float e = clamp(dv / dl + tilt, -1.0, 1.0), ang = atan(da, dd) + tilt * 3.0;          // elevasi dan sudut datar arah pantul
           float skyH = 0.04 + 0.22 * vn(vec2(ang * 5.0 + vSeed * 9.0, 1.0));                   // tinggi siluet gedung seberang
-          vec3 skyR = mix(sky, sky * vec3(0.8, 0.92, 1.15) + vec3(0.02, 0.04, 0.08) * (1.0 - uNight), smoothstep(0.0, 0.6, e));
+          vec3 skyR = sky;                                                                     // 17d: tanpa tambahan biru ke arah atas
           vec3 bldR = light * 0.28 * (0.8 + 0.4 * hash1(vec2(floor(ang * 5.0 + vSeed * 9.0), 3.0)));
           bldR += warm * 0.35 * uNight * step(0.9, hash1(vec2(floor(ang * 60.0), floor(e * 40.0))));   // jendela seberang menyala
           vec3 env = mix(bldR, skyR, smoothstep(skyH - 0.015, skyH + 0.015, e));
@@ -3449,6 +3504,15 @@ treeList.forEach(([s, za, k]) => { rnd(); rnd(); rnd(); if (!nearRing(za)) addCo
 for (let q = 0; q < treeSkipped * 3; q++) rnd();                  // 13a/13c: pohon yang dibuang tetap memakai 3 angka acak
 // kanvas lahan diperbarui setelah taman/plaza ditambahkan
 landTex.needsUpdate = true;
+// 17d: rata-rata warna daratan (linear), dipakai untuk warna ambient siang (pantulan sisi seberang) dan pantulan kasar
+const FAR = { land: [0.311, 0.351, 0.14] };
+{
+  const d = landCanvas.getContext('2d').getImageData(0, 0, landCanvas.width, landCanvas.height).data;
+  const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  let r = 0, g = 0, b = 0, n = 0;
+  for (let i = 0; i < d.length; i += 64) { r += lin(d[i]); g += lin(d[i + 1]); b += lin(d[i + 2]); n++; }
+  if (n) FAR.land = [r / n, g / n, b / n];
+}
 
 // --- kotak lain: rel trem, peron, rumah Cooper, base, plakat, tiang lampu cincin ---
 const propList = [];   // [s, za, sx, sy, sz, h, hex, collide]
@@ -3556,14 +3620,14 @@ const COOPER_HOUSE = new THREE.Group();
     }, true),
   };
   const M = {
-    siding: new THREE.MeshBasicMaterial({ map: T.siding }), metal: new THREE.MeshBasicMaterial({ map: T.metal, side: THREE.DoubleSide }),
+    siding: new THREE.MeshBasicMaterial({ map: T.siding }), metal: specMat(new THREE.MeshBasicMaterial({ map: T.metal, side: THREE.DoubleSide }), 0.45, 0.5, 1),
     brick: new THREE.MeshBasicMaterial({ map: T.brick }), deck: new THREE.MeshBasicMaterial({ map: T.deck }),
     floor: new THREE.MeshBasicMaterial({ map: T.floor }), plaster: new THREE.MeshBasicMaterial({ map: T.plaster }),
-    trim: new THREE.MeshBasicMaterial({ color: 0xf2f0ea }), glass: new THREE.MeshBasicMaterial({ map: T.glass }),
+    trim: new THREE.MeshBasicMaterial({ color: 0xf2f0ea }), glass: specMat(new THREE.MeshBasicMaterial({ map: T.glass }), 0.04, 0.06),
     rail: new THREE.MeshBasicMaterial({ map: T.rail, alphaTest: 0.5, side: THREE.DoubleSide }),
     stone: new THREE.MeshBasicMaterial({ color: 0x8c877d }), door: new THREE.MeshBasicMaterial({ color: 0x6a4a32 }),
-    truck: new THREE.MeshBasicMaterial({ color: 0x46677f }), tire: new THREE.MeshBasicMaterial({ color: 0x1c1c1c }),
-    chrome: new THREE.MeshBasicMaterial({ color: 0xb8bcc0 }), dark: new THREE.MeshBasicMaterial({ color: 0x20262b }),
+    truck: specMat(new THREE.MeshBasicMaterial({ color: 0x46677f }), 0.3, 0.05), tire: new THREE.MeshBasicMaterial({ color: 0x1c1c1c }),
+    chrome: specMat(new THREE.MeshBasicMaterial({ color: 0xb8bcc0 }), 0.08, 0.8, 1), dark: new THREE.MeshBasicMaterial({ color: 0x20262b }),
   };
   // kotak dengan UV sesuai ukuran (1 petak tekstur = tile meter)
   const box = (sx, sy, sz, mat, x, y, z, tile = 1, rotX = 0, rotY = 0) => {
@@ -3759,9 +3823,9 @@ function ballparkModel() {
     white: new THREE.MeshBasicMaterial({ color: 0xf4f2ea }), dirt: new THREE.MeshBasicMaterial({ color: 0xa57b52 }),
     wood: new THREE.MeshBasicMaterial({ map: tex(128, 128, (g, w, h) => { for (let i = 0; i < 8; i++) { const v = 95 + Math.random() * 30; g.fillStyle = `rgb(${v},${v * 0.72},${v * 0.48})`; g.fillRect(i * 16, 0, 15, h); g.fillStyle = 'rgba(30,20,10,0.6)'; g.fillRect(i * 16 + 15, 0, 1, h); } }) }),
     chain: new THREE.MeshBasicMaterial({ map: tex(64, 64, (g, w, h) => { g.clearRect(0, 0, w, h); g.strokeStyle = '#c8ccd0'; g.lineWidth = 2; for (let k = -64; k < 128; k += 16) { g.beginPath(); g.moveTo(k, 0); g.lineTo(k + 64, 64); g.stroke(); g.beginPath(); g.moveTo(k + 64, 0); g.lineTo(k, 64); g.stroke(); } }), alphaTest: 0.4, side: THREE.DoubleSide, transparent: false }),
-    steel: new THREE.MeshBasicMaterial({ color: 0x9aa0a6 }), dark: new THREE.MeshBasicMaterial({ color: 0x2c3136 }),
+    steel: specMat(new THREE.MeshBasicMaterial({ color: 0x9aa0a6 }), 0.4, 0.6, 1), dark: new THREE.MeshBasicMaterial({ color: 0x2c3136 }),
     yellow: new THREE.MeshBasicMaterial({ color: 0xe0c030 }), green: new THREE.MeshBasicMaterial({ color: 0x1f4a2e }), bench: new THREE.MeshBasicMaterial({ color: 0x6b4a33 }),
-    alu: new THREE.MeshBasicMaterial({ color: 0xc5cacf }), lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }),
+    alu: specMat(new THREE.MeshBasicMaterial({ color: 0xc5cacf }), 0.3, 0.8, 1), lamp: new THREE.MeshBasicMaterial({ color: 0xffffff }),
   };
   const box = (sx, sy, sz, mat, x, y, z, rotY = 0, tile = 0, flag) => {
     const g = new THREE.BoxGeometry(sx, sy, sz);
@@ -3875,12 +3939,12 @@ const TRAM_PARTS = {};
   const seatTex = tx(64, 64, (g, w, h) => { g.fillStyle = '#26466e'; g.fillRect(0, 0, w, h);
     for (let k = 0; k < 90; k++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '230,170,60' : '120,160,210'},0.5)`; g.fillRect(Math.random() * w, Math.random() * h, 2, 2); } });
   const M = {
-    body: new THREE.MeshBasicMaterial({ color: 0xe9e7e2 }), stripe: new THREE.MeshBasicMaterial({ color: 0xd8a24a }),
-    dark: new THREE.MeshBasicMaterial({ color: 0x24272b }), roof: new THREE.MeshBasicMaterial({ color: 0xb9bcc0 }),
+    body: specMat(new THREE.MeshBasicMaterial({ color: 0xe9e7e2 }), 0.25, 0.05), stripe: specMat(new THREE.MeshBasicMaterial({ color: 0xd8a24a }), 0.25, 0.05),
+    dark: new THREE.MeshBasicMaterial({ color: 0x24272b }), roof: specMat(new THREE.MeshBasicMaterial({ color: 0xb9bcc0 }), 0.45, 0.6, 1),
     inner: new THREE.MeshBasicMaterial({ color: 0xd9dadb }), floor: new THREE.MeshBasicMaterial({ map: floorTex }),
-    seat: new THREE.MeshBasicMaterial({ map: seatTex }), seatFrame: new THREE.MeshBasicMaterial({ color: 0x8d9298 }),
-    pole: new THREE.MeshBasicMaterial({ color: 0xe0b020 }), steel: new THREE.MeshBasicMaterial({ color: 0x6d7278 }),
-    glass: new THREE.MeshBasicMaterial({ color: 0x8fa6b3, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }),
+    seat: new THREE.MeshBasicMaterial({ map: seatTex }), seatFrame: specMat(new THREE.MeshBasicMaterial({ color: 0x8d9298 }), 0.3, 0.6, 1),
+    pole: specMat(new THREE.MeshBasicMaterial({ color: 0xe0b020 }), 0.25, 0.7, 1), steel: specMat(new THREE.MeshBasicMaterial({ color: 0x6d7278 }), 0.35, 0.6, 1),
+    glass: specMat(new THREE.MeshBasicMaterial({ color: 0x8fa6b3, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }), 0.03, 0.06, 0, true),
     lamp: new THREE.MeshBasicMaterial({ color: 0xfff4e0 }),
   };
   for (const k of ['inner', 'floor', 'seat', 'seatFrame', 'pole']) M[k].userData.cabin = true;   // 15a: diterangi lampu kabin saat malam
@@ -5399,7 +5463,10 @@ function updateLighting() {
   const ov = WEATHER.ov, cov = WEATHER.cover;                       // tahap 11a: mendung meredupkan sunline, cahaya jadi rata
   U.uL_Sunline.value = (0.04 + 0.9 * day) * (1 - 0.5 * ov);
   U.uL_SunlineCol.value.set(1.0, 0.97 - 0.14 * golden, 0.92 - 0.32 * golden);
-  let amb = mixV(mixV([0.02, 0.025, 0.045], [0.17, 0.2, 0.25], day), [0.2, 0.14, 0.09], golden * 0.6 * (1 - 0.6 * ov));
+  // 17d: ambient siang = pantulan daratan seberang (70% warna daratan, 30% udara), kecerahan sama dengan nilai lama (luminans 0,197)
+  const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2], Lc = FAR.land, lL = Math.max(lum(Lc), 1e-3);
+  const tint = [0, 1, 2].map((i) => 0.7 * Lc[i] / lL + 0.3 * [0.8, 1.024, 1.353][i]), ambDay = tint.map((x) => x * 0.197 / lum(tint));
+  let amb = mixV(mixV([0.02, 0.025, 0.045], ambDay, day), [0.2, 0.14, 0.09], golden * 0.6 * (1 - 0.6 * ov));
   amb = mixV(amb, [0.16 * (0.15 + day), 0.17 * (0.15 + day), 0.19 * (0.15 + day)], 0.6 * ov);
   U.uL_AmbCol.value.set(amb[0], amb[1], amb[2]);
   U.uL_CapI.value = 0.05 + 0.25 * day + 1.1 * golden * (1 - 0.35 * ov);
@@ -5415,6 +5482,14 @@ function updateLighting() {
   scene.fog.color.setRGB(fog[0], fog[1], fog[2], THREE.SRGBColorSpace);
   const mist = Math.exp(-(((h - 6.6) / 0.9) ** 2)) * (1 - ov);        // 12b-5: kabut tipis pagi
   if (!ext.active) scene.fog.density = CONFIG.fogDensity * (1 + 0.25 * cov + 0.9 * ov + 1.2 * mist);
+  // 17d: masukan farEnv. Cahaya di daratan seberang = sunline + ambient + cincin lampu cap (rata-rata jarak)
+  U.uL_FogCol.value.set(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b);
+  U.uL_FogD.value = ext.active ? CONFIG.fogDensity : scene.fog.density;
+  const SC = U.uL_SunlineCol.value, AC = U.uL_AmbCol.value, CC = U.uL_CapCol.value, sl = U.uL_Sunline.value * (1 - 0.35 * WEATHER.cover), ci = U.uL_CapI.value * 0.35;
+  U.uL_FarLight.value.set(SC.x * sl + AC.x + CC.x * ci, SC.y * sl + AC.y + CC.y * ci, SC.z * sl + AC.z + CC.z * ci);
+  const FL = U.uL_FarLight.value, fk = 0.108;                         // kabut 2 km sekitar 10,8%
+  U.uL_FarAvg.value.set(FAR.land[0] * FL.x * (1 - fk) + U.uL_FogCol.value.x * fk, FAR.land[1] * FL.y * (1 - fk) + U.uL_FogCol.value.y * fk, FAR.land[2] * FL.z * (1 - fk) + U.uL_FogCol.value.z * fk);
+  U.uL_Night.value = BUILD_U.uNight.value;
   // visual sunline, cincin lampu, awan
   const I = 0.04 + 0.9 * day;                                        // sunline sendiri tidak meredup, hanya cahaya yang sampai ke tanah
   sunCore.material.color.setRGB(0.25 + 1.2 * I, 0.24 + 1.15 * I * (1 - 0.1 * golden), 0.22 + 1.05 * I * (1 - 0.3 * golden));
@@ -6904,7 +6979,6 @@ const TRAFFIC = {};
     attribute vec3 aPaint;
     attribute float aKind;
     uniform float uNight, uTraffic;
-    uniform vec3 fogColor;
     varying vec3 vCol;
     void main() {
       if (aSim.z < 0.5) { ${CLIP_AWAY} }
@@ -6925,7 +6999,11 @@ const TRAFFIC = {};
       vec3 L = vegLight(p3, n, P, 1.0);
       vec3 c = aKind < 0.5 ? aPaint : aKind < 1.5 ? vec3(0.03, 0.04, 0.05) : aKind < 2.5 ? vec3(0.02) : aKind < 3.5 ? vec3(0.9) : aKind < 4.5 ? vec3(0.35, 0.02, 0.02) : vec3(0.6);
       vCol = c * L;
-      if (aKind < 1.5 && aKind > 0.5) vCol += fogColor * 0.25;               // pantulan langit di kaca
+      if (aKind < 1.5) {                                                     // 17b/17d: cat (clearcoat) dan kaca memantulkan daratan seberang
+        vec3 Vc = cameraPosition - p3; Vc *= inversesqrt(max(dot(Vc, Vc), 1e-6));
+        float oc = 1.0 - clamp(dot(n, Vc), 0.0, 1.0), Fc = oc * oc * oc * oc * oc;
+        vCol += farEnv(p3, reflect(-Vc, n), aKind < 0.5 ? 0.25 : 0.05, 0.6) * (aKind < 0.5 ? 0.04 + 0.5 * Fc : 0.12 + 0.85 * Fc);
+      }
       if (aKind > 2.5 && aKind < 3.5) vCol += vec3(1.0, 0.92, 0.75) * (0.3 + 4.0 * uNight);
       if (aKind > 3.5 && aKind < 4.5) vCol += vec3(1.0, 0.05, 0.03) * (0.2 + 2.0 * uNight + 2.5 * aSim.y);   // lampu rem
       if (aKind > 5.5) vCol = vec3(1.0, 0.86, 0.64) * uNight * (aKind - 6.0) * 0.55;   // revisi 16: sorot lampu depan di aspal (aditif)
@@ -7021,7 +7099,7 @@ const TRAFFIC = {};
     { geo: new THREE.BoxGeometry(0.34, 0.14, 0.6).translate(0, 7.85, 1.5), color: [0.3, 0.32, 0.34] },
   ]);
   const headGeo = new THREE.BoxGeometry(0.28, 0.04, 0.5).translate(0, 7.77, 1.5);
-  const poles = new THREE.InstancedMesh(poleGeo, new THREE.MeshBasicMaterial({ vertexColors: true }), lamps.length);
+  const poles = new THREE.InstancedMesh(poleGeo, specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.4, 0.05), lamps.length);   // 17b: cat logam
   const heads = new THREE.InstancedMesh(headGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), lamps.length + propRingLampCount());
   const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4();
   lamps.forEach(([s, za, fs, fz], i) => {                             // lengan lampu mengarah ke tengah jalan
@@ -8342,7 +8420,7 @@ placeShip(SHIPS.cargo, BERTH_P[2].p, BERTH_P[2].q);
   // papan keberangkatan (bingkai)
   P.push({ geo: bx(11, 3.8, 0.35, 0, 6.6, 4), color: [0.12, 0.13, 0.14] }, { geo: bx(0.2, 5, 0.2, -4, h - 2.4, 4), color: MUL }, { geo: bx(0.2, 5, 0.2, 4, h - 2.4, 4), color: MUL });
   const mesh = new THREE.Mesh(mergeSimple(P.map(({ geo, color }) => ({ geo, color }))), new THREE.MeshBasicMaterial({ vertexColors: true }));
-  const glass = new THREE.Mesh(mergeSimple(GL.map((geo) => ({ geo, color: [1, 1, 1] }))), new THREE.MeshBasicMaterial({ color: 0xa8cfe0, transparent: true, opacity: 0.16, depthWrite: false, vertexColors: true }));
+  const glass = new THREE.Mesh(mergeSimple(GL.map((geo) => ({ geo, color: [1, 1, 1] }))), specMat(new THREE.MeshBasicMaterial({ color: 0xa8cfe0, transparent: true, opacity: 0.16, depthWrite: false, vertexColors: true }), 0.03, 0.06, 0, true));
   glass.renderOrder = 7; glass.userData.noShadow = true;
   // papan keberangkatan (kanvas) + papan nama gedung
   const bc = document.createElement('canvas'); bc.width = 1024; bc.height = 352;
@@ -8770,7 +8848,7 @@ const VIBE = { cafeSeats: [], bulbMat: null, cafeBulbMat: null, kites: [] };
   VIBE.flags.frustumCulled = false; VIBE.flags.userData.noLight = true; realGroup.add(VIBE.flags);
   VIBE.nFlags = F.length;
   // tiang bendera depan terminal
-  const pole = new THREE.CylinderGeometry(0.06, 0.08, 9.2, 8).translate(0, 4.6, 0), pm = new THREE.InstancedMesh(pole, new THREE.MeshBasicMaterial({ color: 0xd8dadc }), 6), m4 = new THREE.Matrix4();
+  const pole = new THREE.CylinderGeometry(0.06, 0.08, 9.2, 8).translate(0, 4.6, 0), pm = new THREE.InstancedMesh(pole, specMat(new THREE.MeshBasicMaterial({ color: 0xd8dadc }), 0.25, 0.7, 1), 6), m4 = new THREE.Matrix4();
   F.slice(0, 6).forEach(([s, za], i) => { surfaceMatrix(m4, s / R, za, groundH(s, za)); pm.setMatrixAt(i, m4); });
   pm.frustumCulled = false; scene.add(pm);
   addCollider(TERM.s - 20, TERM.za + 37, 6.2, 0.15); addCollider(TERM.s + 20, TERM.za + 37, 6.2, 0.15);
@@ -9503,7 +9581,7 @@ const FOUNT = { jets: [], plaque: null };
     { geo: new THREE.CylinderGeometry(0.5, 0.7, 0.9, 16).translate(0, 0.45, 0), color: STONE },
     { geo: new THREE.BoxGeometry(0.9, 1.1, 0.12).translate(0, 0.55, 5.6), color: [0.3, 0.32, 0.34] },   // plakat di sisi +za
   ]), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
-  const water = new THREE.Mesh(new THREE.CircleGeometry(4.2, 40).rotateX(-Math.PI / 2).translate(0, 0.42, 0), new THREE.MeshBasicMaterial({ color: 0x3f6f86 }));
+  const water = new THREE.Mesh(new THREE.CircleGeometry(4.2, 40).rotateX(-Math.PI / 2).translate(0, 0.42, 0), specMat(new THREE.MeshBasicMaterial({ color: 0x3f6f86 }), 0.05, 0.02));
   G.add(basin, water); scene.add(G);
   addCollider(modS(S), Z, 4.6, 4.6);
   FOUNT.plaque = { s: S, za: Z + 6.4 };
@@ -10052,7 +10130,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
