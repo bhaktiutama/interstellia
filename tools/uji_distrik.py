@@ -24,6 +24,21 @@ UJI = r"""
   out[`menara ikon ${S.LANDMARK.h.toFixed(0)} m, menara CBD ${cbd.length} (tertinggi ${Math.max(...cbd).toFixed(0)} m), alun-alun ${site('alun').length}`] = S.LANDMARK.h > 200 && Math.max(...cbd) > 120 && site('alun').length === 1;
   const balai = site('balai');
   out[`balai distrik ${balai.length}, tiap distrik kota satu`] = balai.length === 14 && new Set(balai.map((x) => x.district.name)).size === 14 && balai.every((x) => S.districtAt(x.q.bs, x.q.bz) === x.district);
+  // 16d: pasar di tempat strategis (Pasar New York dekat halte 1125, pasar tani dekat halte Taman Nil), lapak dan pedagang
+  const M = S.MARKET, ny = M.list.find((m) => m.name === 'Pasar New York'), tani = M.list.find((m) => m.farm);
+  const dStop = (m, za) => Math.hypot(((m.s + CIRC_H) % (2 * CIRC_H)) - CIRC_H, m.za - za);
+  out[`pasar ${M.list.length} (besar ${M.list.filter((m) => m.big).length}), lapak ${M.stalls.length}; Pasar New York ${ny ? dStop(ny, 1125).toFixed(0) : '-'} m dari halte, pasar tani ${tani ? dStop(tani, 2950).toFixed(0) : '-'} m`] =
+    M.list.length >= 14 && M.list.filter((m) => m.big).length === 5 && M.stalls.length > 200 && ny && dStop(ny, 1125) < 150 && tani && dStop(tani, 2950) < 80;
+  // 16e: taman distrik, sekolah, rumah sakit
+  out[`taman distrik ${site('taman').length}, sekolah ${site('sekolah').length}, rumah sakit ${site('rs').length}`] = site('taman').length === 14 && site('sekolah').length === 9 && site('rs').length === 2;
+  // 16f: peta: penanda baru, ikon fasilitas, legenda distrik
+  S.setLang('id'); S.toggleMap(); await wait(400);
+  const leg = document.getElementById('mapLegend') || document.querySelector('.mapLegend, #map .legend');
+  const legText = leg ? leg.textContent : '';
+  const nFac = S.MAPV.fac ? S.MAPV.fac.length : 0;
+  S.mapZoomAt(2); await wait(300);
+  const nFac2 = S.MAPV.fac ? S.MAPV.fac.length : 0; S.toggleMap();
+  out[`peta: penanda ${S.MAP_MARKS.length}, ikon fasilitas ${nFac2}, legenda memuat distrik dan fasilitas`] = S.MAP_MARKS.length === 14 && nFac2 > 60 && /Kepler/.test(legText) && /Pasar/.test(legText);
   S.setLang('id'); S.teleport('cooper'); await wait(1500); S.teleport('baseball');
   const here = S.districtAt(S.player.theta * S.R, S.player.za);
   let toast = ''; for (let q = 0; q < 40 && toast !== `Distrik ${here && here.name}`; q++) { await wait(250); toast = document.getElementById('toast').textContent; }   // HUD diperbarui berkala

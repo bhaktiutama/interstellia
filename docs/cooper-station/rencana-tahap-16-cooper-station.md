@@ -1,6 +1,6 @@
 # Rencana Tahap 16 Copper Corn Station: distrik, fasilitas kota, peta baru
 
-Status: disetujui pemilik, dikerjakan berurutan 16a-16f.
+Status: selesai (16a-16f), menunggu uji visual pemilik.
 
 ## Latar belakang
 
@@ -105,15 +105,23 @@ Per baris za: puncak 90 rumah per sel (za 750), turun ke 53 (za 1500), 27 (za 20
 - Pasar tani Taman Nil di halte Taman Nil (2950), di tepi pertanian.
 - Lapak: meja dan tenda warna-warni sebagai satu `InstancedMesh` dengan LOD radius (pola `FURN`); pedagang dan pembeli = pejalan kaki `still` dan `seg` di pasar (pola `PEDS`).
 
+**Hasil 16d (selesai):** 15 pasar. Pasar besar (gedung pasar beratap lengkung hijau + 4 baris lapak): Pasar New York (81 m dari halte Pasar New York), Tokyo, Shanghai, Delhi, Kairo. Pasar lapak kecil di 9 distrik astronom. Pasar tani Taman Nil di samping halte Taman Nil (50 m). Total 592 lapak bertenda warna (meja, 4 tiang, tenda limas), area lapak dibatasi sekitar 42 m x 3-4 baris supaya ringan. Pedagang berdiri di belakang meja (70% lapak), pembeli berjalan di lorong.
+
 ### 16e Taman distrik, sekolah, rumah sakit
 - Tiap distrik satu taman distrik di blok dekat pusat distrik (bukan blok pasar/balai), dengan jalur keliling dan jalur silang (`PARK_PATHS`), pohon, bangku, kolam kecil di megacity. Taman acak lama tetap dipertahankan.
 - Sekolah (gedung rendah + lapangan) satu per distrik astronom; rumah sakit di New York dan Delhi. Menggantikan bangunan `#d9c9a8` acak lama secara terarah.
+
+**Hasil 16e (selesai):** 14 taman distrik (jalur keliling + jalur silang, pohon tidak di jalur, pejalan kaki di jalur), 9 sekolah (gedung 2 lantai + lapangan dengan lintasan) di distrik astronom, 2 rumah sakit (blok 6 lantai + dua sayap) di New York dan Delhi. Semua dipesan lewat `reserveSite()` di blok terdekat ke titik sasaran di distrik masing-masing.
 
 ### 16f Peta
 - Batas distrik (garis putus tipis) dan nama distrik di pusat distrik (megacity lebih besar), tampil saat zoom cukup; nama zona luar kota baru.
 - Ikon fasilitas: pasar, balai, taman distrik, sekolah, rumah sakit, masjid, gereja, menara ikon; tombol lapisan di legenda (Distrik, Fasilitas).
 - Penanda klik-pindah baru: Pusat New York, Pasar New York, Pasar tani Taman Nil (huruf, bukan tombol keyboard).
 - Legenda: bagian Distrik (daftar, klik = pindah ke pusat distrik) dan Fasilitas.
+
+**Hasil 16f (selesai):** peta menampilkan batas distrik (garis putus) dan nama distrik (megacity lebih besar, mulai zoom 1,2), ikon 70 fasilitas (pasar oranye persegi, balai biru belah ketupat, taman hijau bulat, sekolah ungu persegi, rumah sakit merah bulat, masjid hijau toska, gereja krem, menara ikon kuning segitiga; mulai zoom 1,5). Legenda: tombol lapisan Distrik dan Fasilitas, daftar 20 distrik (klik = pindah ke trotoar dekat pusat distrik), daftar arti ikon. Penanda klik-pindah baru: N Pusat New York (alun-alun menghadap menara ikon), P Pasar New York, T Pasar tani Taman Nil.
+
+Biaya (segitiga, draw call): pasar New York Ultra 3,22 jt / 749, Hemat 1,14 jt / 438; pusat New York Ultra 3,35 jt / 814, Hemat 1,24 jt / 497. Uji `tools/uji_distrik.py` (semua cek 16b-16f) dan uji lama lulus.
 
 ## Berkas
 

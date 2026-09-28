@@ -554,6 +554,20 @@ Object.assign(I18N.en, {
   "Pasar New York": "New York Market",
   "Taman Nil": "Nile Park",
   "Taman Mekong": "Mekong Park",
+  "Pusat New York": "New York downtown",
+  "Pasar tani Taman Nil": "Nile Park farmers' market",
+  "Pasar": "Market",
+  "Balai distrik": "District hall",
+  "Taman distrik": "District park",
+  "Sekolah": "School",
+  "Rumah sakit": "Hospital",
+  "Masjid": "Mosque",
+  "Gereja": "Church",
+  "Menara ikon": "Landmark tower",
+  "Lapisan": "Layers",
+  "Distrik": "Districts",
+  "Fasilitas": "Facilities",
+  "Distrik (klik = pindah)": "Districts (click = go)",
   "Permukiman": "Residential",
   "Taman": "Park",
   "Lift": "Lift",
@@ -2181,7 +2195,7 @@ const DISTRICTS = [];
   DISTRICTS.push({ name: 'Taman Nil', kind: 'taman', half: 0, z0: 2600, z1: 3200, c: { s: CIRC * 0.25, za: 2900 } });
   DISTRICTS.push({ name: 'Taman Mekong', kind: 'taman', half: 1, z0: 2600, z1: 3200, c: { s: CIRC * 0.75, za: 2900 } });
   for (const [name, z0, z1] of [['Punjab', 3200, 4000], ['Pampas', 4000, 5000], ['Iowa', 5000, 6000], ['Ukraina', 6000, 6400]])
-    DISTRICTS.push({ name, kind: 'tani', z0, z1, c: { s: 0, za: (z0 + z1) / 2 } });
+    DISTRICTS.push({ name, kind: 'tani', z0, z1, c: { s: CIRC * 0.25, za: (z0 + z1) / 2 } });
 }
 const HUD_DIST = { cur: undefined };
 function districtAt(s, za) {                                        // null di luar distrik (spaceport, utilitas, museum, engineering)
@@ -2784,7 +2798,65 @@ reserveSite('menara', { s: 75, za: 540 }, 32, 32);                 // menara iko
 reserveSite('alun', { s: 45, za: 640 }, 20, 20);                  // alun-alun di depan halte New York
 for (const D of DISTRICTS) if (D.kind === 'mega' || D.kind === 'astro')
   reserveSite('balai', { s: D.c.s + 40, za: D.c.za + 30 }, 40, 30, { district: D });   // balai distrik dekat pusat distrik
+// 16d: pasar. Besar (gedung pasar beratap lengkung + lapak) di Pasar New York (halte 1125) dan tiap megacity lain;
+// kecil (lapak saja) di tiap distrik astronom; pasar tani di halte Taman Nil. Lapak: meja + tenda warna, digabung ke MOSQUE.parts.
+const MARKET = { list: [], stalls: [], aisles: [] };
+reserveSite('pasar', { s: 70, za: 1125 }, 45, 40, { big: true, name: 'Pasar New York' });
+for (const D of DISTRICTS) if ((D.kind === 'mega' || D.kind === 'astro') && D.name !== 'New York')
+  reserveSite('pasar', { s: D.c.s - 60, za: D.c.za - 50 }, D.kind === 'mega' ? 40 : 30, D.kind === 'mega' ? 35 : 25, { district: D, big: D.kind === 'mega', name: 'Pasar ' + D.name });
+const TENT = [[0.78, 0.18, 0.15], [0.92, 0.72, 0.2], [0.2, 0.42, 0.72], [0.25, 0.58, 0.32], [0.92, 0.5, 0.18], [0.9, 0.88, 0.82]];
+function marketStalls(s0, z0, s1, z1, seed, rows = 3) {             // lapak dalam persegi (s0..s1, z0..z1), lorong 3 m
+  const P = MOSQUE.parts, WOOD = [0.42, 0.3, 0.2], POLE = [0.35, 0.36, 0.38];
+  const cs = (s0 + s1) / 2, hw = Math.min(21, (s1 - s0) / 2); s0 = cs - hw; s1 = cs + hw; z1 = Math.min(z1, z0 + rows * 6 + 3);   // area lapak dibatasi (biaya)
+  let n = 0; const first = MARKET.aisles.length;
+  for (let z = z0 + 2.5; z < z1 - 2; z += 6) {
+    MARKET.aisles.push([s0 + 1, z + 3, s1 - 1, z + 3]);
+    for (let s = s0 + 2; s < s1 - 2; s += 3.4, n++) {
+      if (colAt(s, z, 0.6)) continue;
+      const col = TENT[(n * 7 + seed) % TENT.length];
+      P.push({ geo: new THREE.BoxGeometry(2.4, 0.9, 1.1).translate(0, 0.45, 0), col: WOOD, s, za: z });
+      for (const [x, zz] of [[-1.3, -0.7], [1.3, -0.7], [-1.3, 0.9], [1.3, 0.9]]) P.push({ geo: new THREE.BoxGeometry(0.06, 2.3, 0.06).translate(x, 1.15, zz), col: POLE, s, za: z });
+      P.push({ geo: new THREE.ConeGeometry(Math.SQRT1_2, 1, 4).rotateY(Math.PI / 4).scale(3.0, 0.6, 2.2).translate(0, 2.6, 0.1), col, s, za: z });
+      addCollider(s, z, 1.3, 0.6); MARKET.stalls.push([s, z]);
+    }
+  }
+  const A = MARKET.aisles[first] || [s0, z0, s1];                  // titik berdiri di lorong pertama (untuk peta)
+  return { s: (A[0] + A[2]) / 2, za: A[1] };
+}
+function buildMarket(site) {
+  const { s0, z0, s1, z1, bs, bz } = site.q;
+  if (site.big) {                                                   // gedung pasar beratap lengkung di sisi -za, lapak di sisanya
+    const W = Math.min(44, s1 - s0 - 6), hz = z0 + 15;
+    building('flat', bs, hz, W, 24, 6.5, '#d9c9a8', 0, true, 8, 1);
+    MOSQUE.parts.push({ geo: new THREE.CylinderGeometry(12.5, 12.5, W + 1, 24, 1, false, -Math.PI / 2, Math.PI).rotateZ(Math.PI / 2).scale(1, 0.55, 1).translate(0, 6.5, 0), col: [0.36, 0.52, 0.46], s: bs, za: hz });
+    site.spot = marketStalls(s0 + 3, hz + 16, s1 - 3, z1 - 3, MARKET.list.length, 4);
+  } else site.spot = marketStalls(s0 + 3, z0 + 3, s1 - 3, z1 - 3, MARKET.list.length);
+  MARKET.list.push({ name: site.name, s: bs, za: bz, big: !!site.big, spot: site.spot });
+}
+// 16e: taman distrik (jalur keliling + silang), sekolah (gedung + lapangan dengan lintasan) di distrik astronom,
+// rumah sakit di New York dan Delhi
+for (const D of DISTRICTS) if (D.kind === 'mega' || D.kind === 'astro') reserveSite('taman', { s: D.c.s + 70, za: D.c.za - 70 }, 45, 40, { district: D });
+for (const D of DISTRICTS) if (D.kind === 'astro') reserveSite('sekolah', { s: D.c.s - 70, za: D.c.za + 60 }, 55, 45, { district: D });
+for (const n of ['New York', 'Delhi']) { const D = DISTRICTS.find((x) => x.name === n); reserveSite('rs', { s: D.c.s + 150, za: D.c.za + 40 }, 55, 50, { district: D }); }
+function buildCivic(site) {
+  const { s0, z0, s1, z1, bs, bz, bw, bd } = site.q;
+  if (site.type === 'taman') { parkBlocks.push([s0, z0, s1, z1, false, true]); return; }
+  if (site.type === 'sekolah') {                                   // gedung 2 lantai di sisi -za, lapangan di belakang
+    const W = Math.min(46, bw - 6);
+    building('flat', bs, z0 + 10, W, 16, 8, '#d9c9a8', 0, true, 8, 1);
+    const fz0 = z0 + 22, fz1 = Math.min(z1 - 3, fz0 + 34), fs0 = bs - Math.min(26, bw / 2 - 4), fs1 = bs + Math.min(26, bw / 2 - 4);
+    if (fz1 - fz0 > 16) { lrect(fs0, fz0, fs1, fz1, '#b0845a'); lrect(fs0 + 4, fz0 + 4, fs1 - 4, fz1 - 4, '#6fa64c'); }   // lintasan + lapangan
+    return;
+  }
+  if (site.type === 'rs') {                                        // rumah sakit: blok utama 6 lantai + dua sayap rendah
+    const W = Math.min(52, bw - 8);
+    building('flat', bs, bz, W, 22, 24, '#eceeee', 0, true, 0, 1);
+    for (const e of [-1, 1]) building('flat', bs + e * (W / 2 - 8), bz + 17, 16, 12, 9, '#e2e6e6', 0, true, 0, 2);
+  }
+}
 function buildSite(site) {
+  if (site.type === 'pasar') { buildMarket(site); return; }
+  if (site.type === 'taman' || site.type === 'sekolah' || site.type === 'rs') { buildCivic(site); return; }
   const { s0, z0, s1, z1, bw, bd, bs, bz } = site.q, P = MOSQUE.parts;
   const add = (geo, col, x, y, z) => P.push({ geo: geo.translate(x, y, z), col, s: bs, za: bz });
   if (site.type === 'alun') { parkBlocks.push([s0, z0, s1, z1, true]); return; }
@@ -2854,7 +2926,14 @@ for (const c of cityCells) {
     }
   }
 }
-buildMosqueMesh();                                                  // juga potongan fasilitas 16c (pilar, mahkota menara)
+{ // 16d: pasar tani Taman Nil, di samping halte Taman Nil (boulevard, za 2950), sisi peron
+  const s0 = TRAM.s + 28, s1 = s0 + 44, z0 = 2926, z1 = 2972;
+  if (!inWater((s0 + s1) / 2, (z0 + z1) / 2, 30) && !inRiver((s0 + s1) / 2, (z0 + z1) / 2, 30)) {
+    lrect(s0 - 2, z0 - 2, s1 + 2, z1 + 2, PAL.plaza); const spot = marketStalls(s0, z0, s1, z1, 3);
+    MARKET.list.push({ name: 'Pasar tani Taman Nil', s: (s0 + s1) / 2, za: (z0 + z1) / 2, big: false, farm: true, spot });
+  }
+}
+buildMosqueMesh();                                                  // juga potongan fasilitas 16c-16d (pilar, mahkota menara, lapak)
 if (LANDMARK.h) {                                                    // 16c: lampu penanda pesawat di puncak menara ikon (berkedip malam)
   LANDMARK.beacon = new THREE.Mesh(new THREE.SphereGeometry(0.6, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff2010 }));
   surfaceMatrix(LANDMARK.beacon.matrix, LANDMARK.s / R, LANDMARK.za, LANDMARK.h); LANDMARK.beacon.matrixAutoUpdate = false;
@@ -3237,10 +3316,14 @@ for (let i = 0; i < 26; i++) {
     tree(s - off, zl(-1), U(0.75, 1)); tree(s + off, zl(1), U(0.75, 1));
   }
 }
-for (const [s0, z0, s1, z1, plaza] of parkBlocks) {              // taman dan plaza kota
+for (const [s0, z0, s1, z1, plaza, cross] of parkBlocks) {       // taman dan plaza kota
   if (!inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) lrect(s0, z0, s1, z1, plaza ? PAL.plaza : PAL.park);
-  const n = Math.round((s1 - s0) * (z1 - z0) / (plaza ? 900 : 350));
-  for (let q = 0; q < n; q++) tree(U(s0 + 3, s1 - 3), U(z0 + 3, z1 - 3), U(0.8, 1.2));
+  const n = Math.round((s1 - s0) * (z1 - z0) / (plaza ? 900 : 350)), cs = (s0 + s1) / 2, cz = (z0 + z1) / 2;
+  for (let q = 0; q < n; q++) {
+    const ts = U(s0 + 3, s1 - 3), tz = U(z0 + 3, z1 - 3), k = U(0.8, 1.2);
+    if (cross && (Math.abs(ts - cs) < 3 || Math.abs(tz - cz) < 3 || ts < s0 + 6 || ts > s1 - 6 || tz < z0 + 6 || tz > z1 - 6)) continue;   // 16e: jalur taman distrik
+    tree(ts, tz, k);
+  }
 }
 for (let q = 0; q < 2600; q++) {                                 // taman & sungai: kelompok pohon dari noise
   const s = U(0, CIRC), za = U(PARKZ.za0 - 90, PARKZ.za1 - 10);
@@ -4287,7 +4370,27 @@ const MAP_MARKS = [
   { key: '9', name: 'Air mancur Coriolis', at: () => SPOTS.fountain, go: () => teleport('fountain') },
   { key: '0', name: 'Hutan lebat', at: () => SPOTS.forest, go: () => teleport('forest') },
   { key: 'L', name: 'Lift ke sumbu', at: () => ({ s: LIFT.theta * R, za: LIFT.za + 14 }), go: () => enterLift() },
+  // 16f: fasilitas (huruf penanda, bukan tombol keyboard)
+  { key: 'N', name: 'Pusat New York', at: () => SPOTS.nyc, go: () => teleport('nyc') },
+  { key: 'P', name: 'Pasar New York', at: () => SPOTS.market, go: () => teleport('market') },
+  { key: 'T', name: 'Pasar tani Taman Nil', at: () => SPOTS.farmmarket, go: () => teleport('farmmarket') },
 ];
+// 16f: lapisan peta (distrik, fasilitas) dan ikon fasilitas: warna + bentuk, dijelaskan di legenda
+MAPV.layers = { dist: true, fac: true };
+const FAC_ICON = { pasar: ['#f08a24', 'sq'], balai: ['#4f86d9', 'dia'], taman: ['#3fa34d', 'ci'], sekolah: ['#9b6bd6', 'sq'], rs: ['#e04f5f', 'ci'], masjid: ['#23a39a', 'dia'], gereja: ['#c9b27a', 'dia'], menara: ['#ffd84a', 'tri'] };
+const FAC_NAME = { pasar: 'Pasar', balai: 'Balai distrik', taman: 'Taman distrik', sekolah: 'Sekolah', rs: 'Rumah sakit', masjid: 'Masjid', gereja: 'Gereja', menara: 'Menara ikon' };
+function facilityList() {                                            // [jenis, s, za]
+  const L = [];
+  for (const x of SITES) if (FAC_ICON[x.type] || x.type === 'menara') L.push([x.type, x.q.bs, x.q.bz]);
+  for (const m of MARKET.list) if (m.farm) L.push(['pasar', m.s, m.za]);
+  for (const [s, za] of MOSQUE.list) L.push(['masjid', s, za]);
+  for (const b of BUILD.gablez) if (b[6] === '#e9e4da') L.push(['gereja', b[0], b[1]]);
+  return L;
+}
+function goDistrict(D) {                                             // pindah ke trotoar arteri terdekat pusat distrik
+  const city = D.kind === 'mega' || D.kind === 'astro', s = city ? Math.round(D.c.s / ART) * ART + 15 : D.c.s + 30;
+  SPOTS._d = { s, za: D.c.za, heading: 0, pitch: 3, name: D.name }; teleport('_d');
+}
 function drawMapStatic() {                                          // latar sekali: 1 px = 2 m
   const MW = 4000, MH = Math.round(CIRC / 2), c = MAPV.static || (MAPV.static = document.createElement('canvas'));
   c.width = MW; c.height = MH; const g = c.getContext('2d');
@@ -4331,10 +4434,38 @@ function drawMap() {
   g.fillStyle = '#ffcf6a'; g.fillRect(mapX(tram.za) - 9 * k - 2 * d, ry - 4 * d, 18 * k + 4 * d, 8 * d);   // trem
   g.font = `600 ${12 * d}px system-ui, sans-serif`;
   for (const z of CONFIG.zones) if ((z.to - z.from) * k > 60 * d) text(t(z.name), mapX((z.from + z.to) / 2), 14 * d, '#e8e2d0', 'center');
+  // 16f: distrik (batas garis putus + nama) dan ikon fasilitas
+  if (MAPV.layers.dist) {
+    g.save(); g.setLineDash([6 * d, 5 * d]); g.strokeStyle = 'rgba(255,240,210,0.5)'; g.lineWidth = 1.2 * d;
+    const hl = (s, za0, za1) => { for (const n of [-1, 0, 1]) { const yy = mapY(s) + n * CIRC * k; g.beginPath(); g.moveTo(mapX(za0), yy); g.lineTo(mapX(za1), yy); g.stroke(); } };
+    const vl = (za) => { g.beginPath(); g.moveTo(mapX(za), 0); g.lineTo(mapX(za), H); g.stroke(); };
+    for (const kk of [2, 6, 10, 13, 16, 20, 24]) hl(kk * ART, 150, 2600);
+    hl(0, 2600, 3200); for (const za of [1250, 4000, 5000, 6000]) vl(za);
+    g.restore();
+    if (MAPV.zoom >= 1.2) for (const D of DISTRICTS) {
+      const mega = D.kind === 'mega'; g.font = `${mega ? 700 : 600} ${(mega ? 13 : 11) * d}px system-ui, sans-serif`;
+      text(t(D.name), mapX(D.c.za), mapY(D.c.s), mega ? '#ffe2a0' : D.kind === 'astro' ? '#f2ecdc' : '#d8f0c8', 'center');
+    }
+  }
+  if (MAPV.layers.fac && MAPV.zoom >= 1.5) {
+    const L = MAPV.fac || (MAPV.fac = facilityList()), r = 4.5 * d;
+    g.strokeStyle = '#14171c'; g.lineWidth = 1.2 * d;
+    for (const [ty, s, za] of L) {
+      const [col, sh] = FAC_ICON[ty], px = mapX(za), py = mapY(s);
+      if (px < -10 || px > W + 10 || py < -10 || py > H + 10) continue;
+      g.fillStyle = col; g.beginPath();
+      if (sh === 'ci') g.arc(px, py, r, 0, TAU);
+      else if (sh === 'sq') g.rect(px - r, py - r, 2 * r, 2 * r);
+      else if (sh === 'dia') { g.moveTo(px, py - r * 1.3); g.lineTo(px + r * 1.3, py); g.lineTo(px, py + r * 1.3); g.lineTo(px - r * 1.3, py); g.closePath(); }
+      else { g.moveTo(px, py - r * 1.5); g.lineTo(px + r * 1.3, py + r); g.lineTo(px - r * 1.3, py + r); g.closePath(); }
+      g.fill(); g.stroke();
+    }
+  }
   // penanda lokasi
   g.font = `700 ${11 * d}px system-ui, sans-serif`;
   MAP_MARKS.forEach((m, i) => {
-    const p = m.at(), r = (i === MAPV.hover ? 12 : 10) * d, px = mapX(p.za), py = Math.max(r + 2 * d, Math.min(H - r - 2 * d, mapY(p.s))); m.px = px; m.py = py;   // Skyway ada di tepi: tetap di dalam bingkai
+    const p = m.at(); if (!p) return;
+    const r = (i === MAPV.hover ? 12 : 10) * d, px = mapX(p.za), py = Math.max(r + 2 * d, Math.min(H - r - 2 * d, mapY(p.s))); m.px = px; m.py = py;   // Skyway ada di tepi: tetap di dalam bingkai
     g.fillStyle = i === MAPV.hover ? '#fff' : '#e8b765'; g.strokeStyle = '#14171c'; g.lineWidth = 2 * d;
     g.beginPath(); g.arc(px, py, r, 0, TAU); g.fill(); g.stroke();
     g.fillStyle = '#14171c'; g.textAlign = 'center'; g.fillText(m.key, px, py + 0.5 * d);
@@ -4359,6 +4490,24 @@ function buildMapLegend() {
   h(t('Tanda'));
   for (const [c, tx] of [['#ff5a3c', 'Anda'], ['#d8a24a', 'Rel trem dan halte'], ['#ffcf6a', 'Trem'], ['#10141c', 'Skyway (jendela kaca)'], ['#6d7680', 'Jembatan jalan'], ['#4c7d96', 'Sungai dan akuaduk']]) {
     const d = document.createElement('div'); d.className = 'sw'; d.innerHTML = `<i style="background:${c};border:1px solid #555"></i>`; d.appendChild(document.createTextNode(t(tx))); mapLegend.appendChild(d);
+  }
+  // 16f: lapisan, distrik (klik = pindah ke pusat distrik), fasilitas
+  h(t('Lapisan'));
+  for (const [key, tx] of [['dist', 'Distrik'], ['fac', 'Fasilitas']]) {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.layer = key;
+    b.innerHTML = `<b>${MAPV.layers[key] ? '✓' : '·'}</b>`; b.appendChild(document.createTextNode(t(tx)));
+    b.addEventListener('click', () => { MAPV.layers[key] = !MAPV.layers[key]; buildMapLegend(); drawMap(); }); mapLegend.appendChild(b);
+  }
+  h(t('Distrik (klik = pindah)'));
+  for (const D of DISTRICTS) {
+    const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<b>${D.kind === 'mega' ? '★' : D.kind === 'astro' ? '•' : '◦'}</b>`;
+    b.appendChild(document.createTextNode(t(D.name))); b.addEventListener('click', () => { toggleMap(); goDistrict(D); }); mapLegend.appendChild(b);
+  }
+  h(t('Fasilitas'));
+  for (const [ty, [c, sh]] of Object.entries(FAC_ICON)) {
+    const d = document.createElement('div'); d.className = 'sw';
+    d.innerHTML = `<i style="background:${c};border:1px solid #333;${sh === 'ci' ? 'border-radius:50%;' : sh === 'dia' ? 'transform:rotate(45deg) scale(0.8);' : sh === 'tri' ? 'clip-path:polygon(50% 0,100% 100%,0 100%);' : ''}"></i>`;
+    d.appendChild(document.createTextNode(t(FAC_NAME[ty]))); mapLegend.appendChild(d);
   }
 }
 LANG.hooks.push(() => { if (!mapEl.hidden) buildMapLegend(); });
@@ -6519,6 +6668,13 @@ const SPOTS = {
   skyway: { s: SKY_S + 2, za: 1400, heading: 0, pitch: -62, name: 'Skyway (jendela ke angkasa)' },   // 13b: berdiri di lantai kaca, memandang ke bawah
   baseball: { s: FIELD.s - 7, za: FIELD.za, heading: 90, pitch: 1, name: 'Lapangan baseball' },
 };
+{ // 16f: lokasi fasilitas untuk peta: alun-alun New York (menghadap menara ikon), Pasar New York, pasar tani Taman Nil
+  const al = SITES.find((x) => x.type === 'alun');
+  if (al) SPOTS.nyc = { s: al.q.bs, za: al.q.bz, heading: Math.atan2(wrapS(LANDMARK.s - al.q.bs), LANDMARK.za - al.q.bz) / DEG, pitch: 18, name: 'Pusat New York' };
+  const mk = MARKET.list.find((m) => m.name === 'Pasar New York'), mf = MARKET.list.find((m) => m.farm);
+  if (mk) SPOTS.market = { s: mk.spot.s, za: mk.spot.za, heading: 90, pitch: 0, name: 'Pasar New York' };
+  if (mf) SPOTS.farmmarket = { s: mf.spot.s, za: mf.spot.za, heading: 90, pitch: 0, name: 'Pasar tani Taman Nil' };
+}
 function teleport(key) {
   const T = SPOTS[key];
   if (ext.active) toggleExterior();
@@ -8529,7 +8685,10 @@ const PARK_PATHS = { runs: [], w: 2.6, mesh: null };
   for (const z of [2700, 2880, 3060]) trace(0, z, 1, 0, Math.floor(CIRC / 3), 3);
   for (let k = 0; k < 52; k++) trace(k * ART / 2 + ART / 4, PARKZ.za0 + 6, 0, 1, Math.floor((PARKZ.za1 - PARKZ.za0 - 12) / 3), 3);
   const cityLoops = [];
-  for (const [s0, z0, s1, z1, plaza] of parkBlocks) if (!plaza && !inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) cityLoops.push([s0 + 4, z0 + 4, s1 - 4, z1 - 4]);
+  for (const [s0, z0, s1, z1, plaza, cross] of parkBlocks) if (!plaza && !inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) {
+    cityLoops.push([s0 + 4, z0 + 4, s1 - 4, z1 - 4]);
+    if (cross) { const cs = (s0 + s1) / 2, cz = (z0 + z1) / 2; PARK_PATHS.runs.push([s0 + 4, s1 - 4, cz, cz], [cs, cs, z0 + 4, z1 - 4]); }   // 16e: jalur silang taman distrik
+  }
   // pita: titik tiap 3 m di tinggi tanah + 5 cm
   const pos = [], m4 = new THREE.Matrix4(), v = new THREE.Vector3(), hw = PARK_PATHS.w / 2;
   const ribbon = (a0, a1, b0, b1) => {
@@ -8619,6 +8778,10 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     const x0 = -52 + r() * 30, x1 = 22 + r() * 30;
     walker({ kind: 'seg', p0: [TERM.s + x0, TERM.za + z + (r() - 0.5) * 2], p1: [TERM.s + x1, TERM.za + z + (r() - 0.5) * 2], L: x1 - x0, u: r(), elev: 0.08, zone: 2 });
   }
+  // 16d: pasar: pedagang di belakang meja lapak, pembeli berjalan di lorong
+  for (const [s, za] of MARKET.stalls) if (r() < 0.7) still({ pose: 1, s: s + (r() - 0.5) * 1.2, za: za - 0.95, hd: 0, zone: 0 });
+  for (const [a0, z, a1] of MARKET.aisles) for (let q = 0, n = Math.round((a1 - a0) / 6); q < n; q++)
+    walker({ kind: 'seg', p0: [a0, z + (r() - 0.5) * 1.2], p1: [a1, z + (r() - 0.5) * 1.2], L: a1 - a0, u: r(), v0: 0.6 + 0.4 * r(), zone: 0, kid: r() < 0.1 });
   // 7) menunggu di halte trem (menghadap rel)
   for (const st of TRAM.stops) { const n = 1 + Math.floor(r() * 4); for (let q = 0; q < n; q++) still({ pose: 1, s: TRAM.s + 3.2 + r() * 2.2, za: st.za + (r() - 0.5) * 20, hd: -Math.PI / 2 + (r() - 0.5) * 0.6, elev: 0.35, zone: 0 }); }
   for (const p of PEDS.list) { p.lt = -20; p.isNear = false; if (p.kind === 'z') p.s = p.fix; if (p.kind === 's') p.za = p.fix; p.s = p.s ?? 0; p.za = p.za ?? 0; p.hd = p.hd ?? 0; p.pose = p.pose ?? 0; }
@@ -9733,7 +9896,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
