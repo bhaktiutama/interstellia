@@ -1,6 +1,6 @@
 # Rencana Tahap 16 Copper Corn Station: distrik, fasilitas kota, peta baru
 
-Status: rencana, menunggu persetujuan pemilik untuk mulai.
+Status: disetujui pemilik, dikerjakan berurutan 16a-16f.
 
 ## Latar belakang
 
@@ -73,6 +73,17 @@ Per baris za rata-rata 53-62 rumah per sel dari za 250 sampai 2000, baru turun d
 
 - Target: rumah per sel turun bertahap dari sekitar 70 ke sekitar 20. Uji: rata-rata rumah per sel turun menurut kelompok `d` (monoton), dan per baris za dari pusat ke sungai.
 
+**Hasil 16a (selesai):** fungsi baru `homeDensity(s, za)`: pengaruh keempat pusat dengan jari-jari 1,6x dan tanpa lantai 0,34, jadi turun terus menjauhi pusat dan ke arah sungai. Ambang tingkat dikalibrasi ke kuintil sel permukiman (0,47 / 0,33 / 0,21 / 0,07), tiap tingkat sekitar 20% sel. Lingkar terluar (desa) tanpa baris samping, dengan kebun buah di belakang rumah.
+
+| Tingkat | Sel | Rumah per sel (sebelum 16a: rata 53-70) |
+| --- | --- | --- |
+| Rumah deret | 40 | 117 |
+| Rumah tunggal 16-20 m | 43 | 74 |
+| Rumah berhalaman 20-26 m | 40 | 50 |
+| Rumah besar 26-34 m | 44 | 34 |
+| Desa berkebun 36-50 m | 41 | 14 |
+
+Per baris za: puncak 90 rumah per sel (za 750), turun ke 53 (za 1500), 27 (za 2000), 16 (za 2250 di tepi sungai). Total rumah permukiman sama (sekitar 12.600). Biaya titik awal kota Ultra 3,20 jt, Hemat 1,14 jt segitiga. Uji `tools/uji_permukiman.py` (cek gradasi baru), `uji_trotoar` dan uji lama lulus.
 
 ### 16b Data distrik, nama, HUD
 - `DISTRICTS` (id, nama, jenis mega/astro/taman/tani/lain, rentang kolom dan za, pusat) dan `districtAt(s, za)`.

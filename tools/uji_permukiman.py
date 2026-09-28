@@ -22,10 +22,20 @@ UJI = r"""
   let onSw = 0; const sw = [];
   for (const [s, za, w, d] of res) for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]]) if (S.SIDEWALK.d(s + x * w / 2, za + z * d / 2) >= 0.2) { onSw++; if (sw.length < 3) sw.push([+s.toFixed(0), +za.toFixed(0)]); break; }
   out[`rumah di trotoar: ${onSw}` + (sw.length ? ` ${JSON.stringify(sw)}` : '')] = onSw === 0;
-  // tanah kosong: titik sampel tiap 10 m di sel permukiman/tepi yang bukan jalan, trotoar, air, atau lapangan; jarak ke rumah terdekat
+  // 16a: gradasi kepadatan: rata-rata rumah per sel turun dari tingkat terpadat ke lingkar terluar (homeDensity)
+  const ART = S.ART, cnt = new Map();
+  for (const [s, za, w, d, h] of res) { const k = Math.floor((((s % CIRC) + CIRC) % CIRC) / ART), m = Math.floor(za / 250); cnt.set(k + '|' + m, (cnt.get(k + '|' + m) || 0) + 1); }
+  const tiers = [[], [], [], [], []], TH = [0.47, 0.33, 0.21, 0.07];
+  for (const c of S.cityCells) { if (c.cls === 'pusat' || c.cls === 'menengah') continue;
+    const hd = S.homeDensity(c.s0 + ART / 2, c.z0 + 125), ti = TH.findIndex((x) => hd > x);
+    tiers[ti < 0 ? 4 : ti].push(cnt.get(Math.round(c.s0 / ART) % 26 + '|' + Math.round(c.z0 / 250)) || 0); }
+  const avg = tiers.map((a) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+  out[`rumah per sel: deret ${avg[0].toFixed(0)}, tunggal ${avg[1].toFixed(0)}, halaman ${avg[2].toFixed(0)}, besar ${avg[3].toFixed(0)}, desa ${avg[4].toFixed(0)}`] = avg.every((v, i) => i === 0 || v < avg[i - 1]) && avg[4] < 25;
+  // tanah kosong di permukiman padat (bukan lingkar luar): titik sampel tiap 10 m; jarak ke rumah terdekat
   let pts = 0, far = 0;
   for (const c of S.cityCells) {
     if (c.cls !== 'permukiman' && c.cls !== 'tepi') continue;
+    if (S.homeDensity(c.s0 + ART / 2, c.z0 + 125) < 0.21) continue;
     for (let s = c.s0 + 20; s < c.s0 + S.ART - 20; s += 10) for (let za = c.z0 + 20; za < c.z0 + 230; za += 10) {
       if (S.inWater(s, za, 3) || S.inRiver(s, za, 3) || S.SIDEWALK.d(s, za) >= 0) continue;
       pts++;
@@ -33,7 +43,7 @@ UJI = r"""
       if (best > 25) far++;
     }
   }
-  out[`sel permukiman: titik lebih dari 25 m dari rumah ${(far / pts * 100).toFixed(1)}% dari ${pts}`] = far / pts < 0.2;
+  out[`sel permukiman padat: titik lebih dari 25 m dari rumah ${(far / pts * 100).toFixed(1)}% dari ${pts}`] = far / pts < 0.2;
   // 15e: masjid menggantikan setengah gereja, tiga gaya, normal geometri sah (tanpa NaN atau nol)
   const M = S.MOSQUE, churches = S.BUILD.gablez.filter((b) => b[6] === '#e9e4da').length, kinds = new Set(M.list.map((q) => q[2]));
   out[`masjid ${M.list.length} (gaya ${[...kinds].map((k) => M.names[k]).join(', ')}), gereja ${churches}`] = M.list.length >= 3 && kinds.size === 3 && Math.abs(M.list.length - churches) <= 2;
