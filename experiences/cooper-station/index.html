@@ -1211,7 +1211,8 @@ function patchLit(mat) {
       {
         vec4 lw = vec4(transformed, 1.0); vec3 ln = normal;
         #ifdef USE_INSTANCING
-          lw = instanceMatrix * lw; ln = transpose(inverse(mat3(instanceMatrix))) * ln;
+          lw = instanceMatrix * lw;
+          { mat3 im = mat3(instanceMatrix); ln = im * (ln / max(vec3(dot(im[0], im[0]), dot(im[1], im[1]), dot(im[2], im[2])), vec3(1e-12))); }   // 20b: sama dengan inverse-transpose untuk rotasi x skala (semua matriks instance), tanpa inverse() per vertex
         #endif
         vLitWorld = (modelMatrix * lw).xyz;
         vec3 wn = mat3(modelMatrix) * ln; vLitNormal = wn * inversesqrt(max(dot(wn, wn), 1e-12));   // normal nol tetap nol (tanpa NaN)
@@ -2863,6 +2864,48 @@ function mergeSimple(parts) {
   out.computeVertexNormals();
   return out;
 }
+// 20b: gabung anak langsung sebuah grup per material (satu draw call per material), seperti yang sudah dilakukan rumah Cooper.
+// Hanya mesh buram tanpa anak dengan atribut position, normal, uv; ember dibedakan juga oleh noShadow, noLight, renderOrder.
+// Mesh transparan, InstancedMesh, dan mesh yang dirujuk kode lain (userData.keep) tidak disentuh. Geometri tetap sama.
+function mergeByMaterial(G) {
+  const buckets = new Map();
+  for (const o of G.children) {
+    if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || o.material.transparent || o.children.length || o.userData.keep || !o.visible) continue;
+    const at = Object.keys(o.geometry.attributes).sort().join(',');
+    if (at !== 'normal,position,uv') continue;
+    const key = `${o.material.uuid}|${!!o.userData.noShadow}|${!!o.userData.noLight}|${o.renderOrder}`;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(o);
+  }
+  for (const list of buckets.values()) {
+    if (list.length < 2) continue;
+    const geos = list.map((o) => { if (o.matrixAutoUpdate) o.updateMatrix(); return (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrix); });
+    const n = geos.reduce((a, g) => a + g.attributes.position.count, 0), pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+    let k = 0;
+    for (const g of geos) { pos.set(g.attributes.position.array, k * 3); nrm.set(g.attributes.normal.array, k * 3); uv.set(g.attributes.uv.array, k * 2); k += g.attributes.position.count; }
+    const mg = new THREE.BufferGeometry();
+    mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); mg.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    const m = new THREE.Mesh(mg, list[0].material);
+    m.userData.noShadow = !!list[0].userData.noShadow; m.userData.noLight = !!list[0].userData.noLight; m.renderOrder = list[0].renderOrder;
+    for (const o of list) G.remove(o);
+    G.add(m);
+  }
+}
+// 20b: frustum culling untuk grup (dulu frustumCulled = false: digambar tiap frame di 3 pass walau jauh atau di belakang kamera).
+// Bola batas diperbesar pad meter: peta bayangan dirender dalam koordinat silinder terbuka (shUnroll), jadi posisi yang
+// dilihat kamera bayangan bergeser dari posisi dunia sampai sekitar 110 m di tepi kotak bayangan; dengan pad tidak ada yang terbuang keliru.
+function enableCull(G, pad) {
+  G.traverse((o) => {
+    if (!o.isMesh) return;
+    if (o.isInstancedMesh) { o.computeBoundingSphere(); o.boundingSphere.radius += pad; }
+    else {
+      const g = o.geometry;
+      if (!g.boundingSphere) g.computeBoundingSphere();
+      if (!g.userData.cullPad) { g.boundingSphere.radius += pad; g.userData.cullPad = pad; }
+    }
+    o.frustumCulled = true;
+  });
+}
 function shadeFaces(g, base = 0.55, step = 0.25) {              // variasi terang per segitiga (atap)
   const n = g.toNonIndexed(); const pp = n.attributes.position.array, cc = [];
   for (let i = 0; i < pp.length; i += 9) { const sh = base + step * ((i / 9) % 2); cc.push(sh, sh, sh, sh, sh, sh, sh, sh, sh); }
@@ -3489,11 +3532,11 @@ const BUILD_FS = /* glsl */`
     vec3 N = normalize(vNw);
     vec3 V = normalize(cameraPosition - vW);
     float F = pow(1.0 - clamp(abs(dot(N, V)), 0.0, 1.0), 4.0);
+    if (n.y < -0.9) { gl_FragColor = vec4(vec3(0.05), 1.0); return; }   // 20b: muka bawah keluar sebelum cahaya dihitung
     vec3 light = stationLight(vW, N) + nightLight(vW, N);             // 17e: lampu jalan malam juga menerangi gedung
-    vec3 sky = farEnv(vW, reflect(-V, N), 0.08, 0.9);                 // 17d: yang terpantul = daratan seberang, end cap, sunline (bukan langit biru)
+    vec3 sky = vec3(0.0);                                             // 17d: pantulan (farEnv), 20b: dihitung hanya bila ada kaca (lihat di bawah)
     vec3 col; vec3 emit = vec3(0.0);
     bool roof = vPart > 0.5;
-    if (n.y < -0.9) { gl_FragColor = vec4(vec3(0.05), 1.0); return; }
     if (roof) {
       // ---- atap ----
       vec3 rc;
@@ -3620,6 +3663,7 @@ const BUILD_FS = /* glsl */`
         wall = mix(wall, vec3(0.25, 0.27, 0.29), rail * 0.7 * detail);
       }
       // kaca: interior gelap + pantulan langit (Fresnel); malam: sebagian menyala
+      if (max(winM, shopM) > 0.0) sky = farEnv(vW, reflect(-V, N), 0.08, 0.9);   // 20b: yang terpantul = daratan seberang, end cap, sunline; dinding tanpa kaca tidak memakainya
       float wid = hash1(vec2(bi + vSeed * 97.0, fi + (fz ? 13.0 : 71.0)));
       vec3 inner = vec3(0.06, 0.06, 0.065) * (0.6 + 0.9 * mix(wid, 0.5, max(ax, ay)));
       if (code == 1.0) inner = mix(inner, base * 0.25, 0.5);
@@ -3807,6 +3851,7 @@ landTex.needsUpdate = true;
 const FAR = { land: [0.311, 0.351, 0.14] };
 {
   const d = landCanvas.getContext('2d').getImageData(0, 0, landCanvas.width, landCanvas.height).data;
+  FAR.landData = d;                                                // 20b: dipakai lagi untuk langkah kaki dan permukaan motor (surfaceAt), tidak dibaca ulang
   const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
   let r = 0, g = 0, b = 0, n = 0;
   for (let i = 0; i < d.length; i += 64) { r += lin(d[i]); g += lin(d[i + 1]); b += lin(d[i + 2]); n++; }
@@ -4608,7 +4653,7 @@ function stepGround(dt) {
 // Berat terasa di kerangka berputar: g' = (omega r + v_t)^2 / r, v_t = komponen kecepatan searah putaran (+theta).
 // Cengkeraman ban = mu x g' (basah lebih licin, tanah lebih licin dari aspal): membatasi gas, rem, dan belok (miring).
 function motoSurface(s, za) {
-  if (!AUDIO.land && !MOTO.landTried) { MOTO.landTried = true; try { AUDIO.land = landCanvas.getContext('2d').getImageData(0, 0, LAND_W, LAND_H).data; } catch (e) { AUDIO.land = null; } }
+  if (!AUDIO.land) AUDIO.land = FAR.landData || null;               // 20b: salinan data lahan dari saat muat
   return surfaceAt(s, za);
 }
 function stepMoto(dt) {
@@ -6024,6 +6069,24 @@ const CLOUD = { groups: [], mesh: null, aA: null, n: 0 };
   };
 }
 const sstep0 = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// 20b: nilai peta bayangan awan (0..1) di satu titik, dihitung dari gumpalan dengan rumus yang sama dengan drawShadow (cakram
+// gradien 90/255 di pusat -> 0 di tepi, dijumlah 'lighter', alpha = w x a). Pengganti getImageData yang memaksa CPU menunggu GPU.
+function cloudCoverAt(s, za) {
+  const CW = CLOUD.CW, CH = CLOUD.CH, x = modS(s) / CIRC * CW, y = (1 - za / CONFIG.L) * CH;
+  let v = 0;
+  for (const g of CLOUD.groups) {
+    if (g.w < 0.02) continue;
+    for (const p of g.puffs) {
+      const sz = p.cur; if (!sz) continue;
+      const th = g.th + p.ds / (R - g.h), h = g.h + p.dh;
+      const rx = (0.35 * sz / CIRC) * CW, ry = (0.35 * sz * (1 + h / 300)) / CONFIG.L * CH;
+      const dy = (y - (1 - (g.za + p.dz) / CONFIG.L) * CH) / ry; if (dy * dy >= 1) continue;
+      let dx = x - ((th / TAU) % 1 + 1) % 1 * CW; dx -= CW * Math.round(dx / CW); dx /= rx;
+      const d = Math.sqrt(dx * dx + dy * dy); if (d < 1) v += Math.min(1, g.w * p.a) * 90 * (1 - d);
+    }
+  }
+  return Math.min(255, v) / 255;
+}
 function updateClouds(dt) {
   const W = WEATHER;
   const k = Math.max(1, Math.min(20, (clock.hourRate || 0) * 60));        // waktu dipercepat -> cuaca ikut dipercepat
@@ -8240,8 +8303,9 @@ function updateAdaptLabel() {
   let s = t(ADAPT.on ? 'nyala' : 'mati');
   if (ADAPT.on && POST.mode === 2) s += t(' (butuh efek layar)');
   else if (ADAPT.on && !ADAPT.init) {
-    renderer.readRenderTargetPixels(POST_R.lum[ADAPT.cur], 0, 0, 1, 1, _adPx);
-    const L = THREE.DataUtils.fromHalfFloat(_adPx[0]);
+    // 20b: baca asinkron (dulu readRenderTargetPixels: CPU menunggu GPU tiap 0,25 s saat panel terbuka); label memakai hasil terakhir
+    if (!ADAPT.reading) { ADAPT.reading = true; renderer.readRenderTargetPixelsAsync(POST_R.lum[ADAPT.cur], 0, 0, 1, 1, _adPx).then(() => { ADAPT.lastL = THREE.DataUtils.fromHalfFloat(_adPx[0]); }).catch(() => {}).finally(() => { ADAPT.reading = false; }); }
+    const L = ADAPT.lastL || 0;
     if (L > 0) s += ` (x${fmtN(Math.min(ADAPT.max, Math.max(ADAPT.min, Math.pow(ADAPT.key / L, ADAPT.pow))), 2)})`;
   }
   uiLabel('labAdapt', () => t('Adaptasi mata: {s}', { s }));
@@ -8315,7 +8379,7 @@ function startAudio() {
   for (const [f, a] of [[120, 1], [240, 0.35], [1830, 0.04]]) { const o = ctx.createOscillator(); o.frequency.value = f; const g = ctx.createGain(); g.gain.value = a; o.connect(g).connect(AUDIO.cabHum); o.start(); }
   AUDIO.musicBus = ctx.createGain(); AUDIO.musicBus.gain.value = 0.45; AUDIO.musicBus.connect(master); AUDIO.musicBus.connect(verb);
   // data permukaan untuk langkah kaki (dibaca sekali dari kanvas lahan)
-  try { AUDIO.land = landCanvas.getContext('2d').getImageData(0, 0, LAND_W, LAND_H).data; } catch (e) { AUDIO.land = null; }
+  AUDIO.land = FAR.landData || null;                                 // 20b: salinan dari saat muat (dulu dibaca ulang saat tombol Mulai: jeda)
   AUDIO.started = true;
   if (AUDIO.fileEl) AUDIO.fileEl.play().catch(() => {});
 }
@@ -10328,8 +10392,7 @@ function updateRain(dt) {
   const fc = scene.fog.color; RAIN.U.uRainCol.value.setRGB(Math.min(1, fc.r * 1.35 + 0.02), Math.min(1, fc.g * 1.35 + 0.02), Math.min(1, fc.b * 1.35 + 0.03));
   if (performance.now() > (RAIN.nextLocal || 0) && CLOUD.cg) {        // awan di atas pemain (untuk suara hujan)
     RAIN.nextLocal = performance.now() + 400;
-    const s = modS(player.theta * R), x = Math.min(CLOUD.CW - 1, Math.floor(s / CIRC * CLOUD.CW)), y = Math.min(CLOUD.CH - 1, Math.max(0, Math.floor((1 - player.za / CONFIG.L) * CLOUD.CH)));
-    const v = CLOUD.cg.getImageData(x, y, 1, 1).data[0] / 255;
+    const v = cloudCoverAt(player.theta * R, player.za);              // 20b: dulu getImageData kanvas awan (sinkron dengan GPU)
     RAIN.localT = sstep(0.02, 0.12, v);
   }
   RAIN.local = (RAIN.local || 0) + ((RAIN.localT || 0) - (RAIN.local || 0)) * Math.min(1, dt / 3);
@@ -11009,6 +11072,10 @@ on('labBob', () => cycleBob());
 on('btnMoto', () => toggleMoto());
 motoLabel(); bobLabel();
 
+// 20b: grup kecil (lapangan baseball 173 mesh, kabin lift, hub, lobi menara lift) digabung per material, lalu semua grup kecil
+// (juga rumah Cooper dan trem) memakai frustum culling. Terukur sebelumnya: 784 dari 1.114 draw call per frame di spawn.
+for (const G of [BALLPARK_G, cabin, hub, liftTower]) mergeByMaterial(G);
+for (const G of [BALLPARK_G, cabin, hub, liftTower, COOPER_HOUSE, tramMesh]) enableCull(G, 120);
 // --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
 hub.userData.noLight = true;
 ballMesh.userData.noShadow = true; markMesh.userData.noShadow = true;
@@ -11320,7 +11387,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 }
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
-window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
+window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
   jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>

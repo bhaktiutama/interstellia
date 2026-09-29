@@ -189,6 +189,21 @@ Dikerjakan: O2, O4, O11, O12, alat ukur GPU, ditambah satu bug yang ditemukan sa
 | Uji | `qc_load` tanpa error; `uji_bahasa`, `uji_rumput_bukit`, `uji_trem_malam`, `uji_hujan`, `uji_hutan`, `uji_ladang_foto_tur`, `uji_spaceport`, `uji_cahaya_lanjut` semua OK |
 | Alat ukur GPU | Baris HUD lengkap: GPU total, bayangan, scene, post (ms, dihaluskan). Aktif hanya saat HUD lengkap. Didukung juga di SwiftShader (angkanya waktu render perangkat lunak, tidak bermakna); di GTX 1060 dan M1 menunjukkan ms nyata |
 
+## 7c. Hasil tahap 20b (29 September 2026)
+
+Dikerjakan: O1, O5, O6, O7.
+
+| Butir | Hasil |
+| --- | --- |
+| O1 grup kecil | `mergeByMaterial()` menggabung lapangan baseball, kabin lift, hub, lobi menara lift per material; `enableCull()` menyalakan frustum culling untuk keenam grup (juga rumah Cooper dan trem) dengan bola batas +120 m (aman untuk pergeseran koordinat silinder terbuka di pass bayangan) |
+| Draw call per frame (Ultra, 11.00) | Spawn kota: 1.108 menjadi 505 (-54%). Lapangan baseball: 1.001 menjadi 251 (-75%) |
+| Segitiga per frame | Spawn kota: 4.994.638 menjadi 4.963.667; lapangan baseball: 4.191.023 menjadi 4.151.927 (objek di luar pandangan dibuang) |
+| O5 shader gedung | Pantulan `farEnv` hanya di piksel kaca, muka bawah keluar sebelum cahaya |
+| O6 normal instance | `inverse()` per vertex diganti rumus rotasi x skala (hasil sama) |
+| O7 baca-balik | Tutupan awan untuk suara hujan dari `cloudCoverAt()` (selisih dengan piksel kanvas rata-rata 0,0004, maksimum 0,0101, 0,007 ms per panggilan); data lahan dibaca sekali saat muat (`FAR.landData`) dan dipakai langkah kaki dan motor, tidak dibaca ulang saat tombol Mulai; label adaptasi mata membaca asinkron |
+| Uji | `qc_load` tanpa error; `uji_cahaya_lanjut`, `uji_spaceport`, `uji_hujan`, `uji_trem_malam`, `uji_gerak`, `uji_suasana`, `uji_bahasa`, `uji_ladang_foto_tur`, `uji_pantulan`, `uji_interior` OK. `uji_menara`: 2 butir gagal ("bola belum mendarat" dalam 30 s waktu nyata). Uji itu bergantung kecepatan frame SwiftShader: di dek, waktu simulasi hanya maju 0,031-0,034 s per detik nyata di 20a dan 20b (sama), dan versi 20a juga pernah gagal/lolos bergantian. Belum dipastikan tuntas (pengujian dihentikan atas permintaan); mohon dicek di PC |
+| Cek visual otomatis | Render beku (jam, awan, vegetasi, objek bergerak disembunyikan) di 5 sudut (lapangan baseball, spawn, dekat lift, rumah Cooper, dek menara), 192.000 nilai warna per sudut. 20a vs 20b: 25-682 nilai berbeda di piksel stabil; 20a vs 20a (derau metode): 202-4.883. Tidak ada perubahan yang terdeteksi di atas derau |
+
 ## 8. Cara ukur
 
 | Item | Nilai |
