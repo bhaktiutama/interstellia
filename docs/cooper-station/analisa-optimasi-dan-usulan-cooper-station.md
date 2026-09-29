@@ -204,6 +204,20 @@ Dikerjakan: O1, O5, O6, O7.
 | Uji | `qc_load` tanpa error; `uji_cahaya_lanjut`, `uji_spaceport`, `uji_hujan`, `uji_trem_malam`, `uji_gerak`, `uji_suasana`, `uji_bahasa`, `uji_ladang_foto_tur`, `uji_pantulan`, `uji_interior` OK. `uji_menara`: 2 butir gagal ("bola belum mendarat" dalam 30 s waktu nyata). Uji itu bergantung kecepatan frame SwiftShader: di dek, waktu simulasi hanya maju 0,031-0,034 s per detik nyata di 20a dan 20b (sama), dan versi 20a juga pernah gagal/lolos bergantian. Belum dipastikan tuntas (pengujian dihentikan atas permintaan); mohon dicek di PC |
 | Cek visual otomatis | Render beku (jam, awan, vegetasi, objek bergerak disembunyikan) di 5 sudut (lapangan baseball, spawn, dekat lift, rumah Cooper, dek menara), 192.000 nilai warna per sudut. 20a vs 20b: 25-682 nilai berbeda di piksel stabil; 20a vs 20a (derau metode): 202-4.883. Tidak ada perubahan yang terdeteksi di atas derau |
 
+## 7d. Hasil tahap 20c (29 September 2026)
+
+Dikerjakan: O8, O9. O10 dicoba lalu dibatalkan.
+
+| Butir | 20b | 20c |
+| --- | --- | --- |
+| Muat total | 7.259 ms | 4.190 ms (-42%) |
+| Peta tinggi tanah | 2.426 ms | 854 ms |
+| Pohon | 1.526 ms | 513 ms |
+| Kota, sungai, ladang | 1.406 ms | 1.335 ms (O10 dibatalkan) |
+| Sidik data dunia (peta tinggi, tekstur tinggi, 22.008 pohon, 44.685 collider, kanvas lahan) | | sama persis dengan 20b |
+
+O10 (`willReadFrequently` pada kanvas lahan) sempat memangkas bagian kota ke 626 ms, tetapi raster CPU membuat 9,4% piksel kanvas berbeda (51% di antaranya selisih 1/255, 4.479 piksel lebih dari 10/255, maksimum 46) di tepi anti-alias. Kanvas ini menentukan jalan, trotoar, dan rumput di shader, jadi dibatalkan. Alternatif yang masih identik: hitung `FAR.land` dari salinan kanvas yang diperkecil di GPU, atau tunda pembacaan data lahan ke saat pertama dibutuhkan.
+
 ## 8. Cara ukur
 
 | Item | Nilai |
