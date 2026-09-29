@@ -50,7 +50,7 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 
 - Menambah experience: buat `experiences/<id>/index.html` + `preview.jpg`, lalu tambahkan entri di `EXPERIENCES` (ready: true). Tiap experience wajib punya tautan kembali ke `../../index.html`.
 - Tiap experience tetap halaman terpisah (memori GPU bersih saat pindah). Kode bersama dipindah ke `shared/` bertahap, jangan membongkar Copper Corn Station sekaligus.
-- Rencana experience berikutnya: Millar's World (dunia air, dilatasi waktu; konsep `docs/millar/konsep-millar.md`, prototipe low poly `docs/millar/prototipe-low-poly-millar.md`), Penerbangan Kestrel (shuttle KS-07 dari Copper Corn Station). Usulan nama: `docs/app/penamaan.md`.
+- Rencana experience berikutnya: Millar's World (dunia air, dilatasi waktu; konsep `docs/millar/konsep-millar.md`, prototipe low poly `docs/millar/prototipe-low-poly-millar.md`, rencana versi realistis R1-R5 `docs/millar/rencana-realistis-millar.md`), Penerbangan Kestrel (shuttle KS-07 dari Copper Corn Station). Usulan nama: `docs/app/penamaan.md`.
 - Jangan memakai judul film, logo, huruf judul, musik, cuplikan, atau desain kendaraan film.
 - Bahasa aplikasi: Indonesia dan English (Jepang dan Mandarin ditunda). Semua halaman berbagi pilihan lewat localStorage `lazarus.lang` dan `?lang=id|en`, dan tautan antarhalaman meneruskan `?lang=`. Menu utama: teks di `APP`, `EXPERIENCES` (field `en`) dan `TXT`. Gargantua: sumber English, kamus `ID`, fungsi `txt()`.
 
