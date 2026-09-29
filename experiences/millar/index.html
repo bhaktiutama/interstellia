@@ -130,13 +130,19 @@ const CONFIG = {
 const W = CONFIG.wave, DEG = Math.PI / 180;
 
 /* ---------------- Preset kualitas (pola sama dengan Copper Corn Station) ----------------
-   R1: semua preset memakai ombak Gerstner (jumlah berbeda); FFT menyusul di R2 untuk Ultra sampai Rendah. */
+   R1: semua preset memakai ombak Gerstner (jumlah berbeda); FFT menyusul di R2 untuk Ultra sampai Rendah.
+   R1b: g* = lensa Gargantua (resolusi cubemap, langkah ray tracing, oktaf noise piringan; gLive = piringan bergerak). */
 const PRESETS = [
-  { name: 'Ultra',  dpr: 2.0,  msaa: 4, bloom: 6, grain: 1, cube: 512, faceEvery: 1, steps: 48, layers: 2, oct: 5, nw: 16, nm: 12, cell: 0.35, near: 70 },
-  { name: 'Tinggi', dpr: 1.5,  msaa: 4, bloom: 6, grain: 1, cube: 384, faceEvery: 1, steps: 32, layers: 2, oct: 4, nw: 16, nm: 8,  cell: 0.45, near: 70 },
-  { name: 'Sedang', dpr: 1.25, msaa: 0, bloom: 4, grain: 1, cube: 256, faceEvery: 1, steps: 0,  layers: 2, oct: 5, nw: 14, nm: 6,  cell: 0.6,  near: 72 },
-  { name: 'Rendah', dpr: 1.0,  msaa: 0, bloom: 2, grain: 1, cube: 192, faceEvery: 2, steps: 0,  layers: 1, oct: 5, nw: 12, nm: 4,  cell: 0.8,  near: 72 },
-  { name: 'Hemat',  dpr: 0.85, msaa: 0, bloom: 2, grain: 0, cube: 128, faceEvery: 2, steps: 0,  layers: 1, oct: 4, nw: 10, nm: 2,  cell: 1.0,  near: 70 },
+  { name: 'Ultra',  dpr: 2.0,  msaa: 4, bloom: 6, grain: 1, cube: 512, faceEvery: 1, steps: 48, layers: 2, oct: 5, nw: 16, nm: 12, cell: 0.35, near: 70,
+    gSize: 512, gSteps: 320, gStepK: 0.04, gOct: 5, gLive: true },
+  { name: 'Tinggi', dpr: 1.5,  msaa: 4, bloom: 6, grain: 1, cube: 384, faceEvery: 1, steps: 32, layers: 2, oct: 4, nw: 16, nm: 8,  cell: 0.45, near: 70,
+    gSize: 384, gSteps: 240, gStepK: 0.05, gOct: 4, gLive: true },
+  { name: 'Sedang', dpr: 1.25, msaa: 0, bloom: 4, grain: 1, cube: 256, faceEvery: 1, steps: 0,  layers: 2, oct: 5, nw: 14, nm: 6,  cell: 0.6,  near: 72,
+    gSize: 384, gSteps: 200, gStepK: 0.06, gOct: 4, gLive: false },
+  { name: 'Rendah', dpr: 1.0,  msaa: 0, bloom: 2, grain: 1, cube: 192, faceEvery: 2, steps: 0,  layers: 1, oct: 5, nw: 12, nm: 4,  cell: 0.8,  near: 72,
+    gSize: 256, gSteps: 150, gStepK: 0.075, gOct: 3, gLive: false },
+  { name: 'Hemat',  dpr: 0.85, msaa: 0, bloom: 2, grain: 0, cube: 128, faceEvery: 2, steps: 0,  layers: 1, oct: 4, nw: 10, nm: 2,  cell: 1.0,  near: 70,
+    gSize: 256, gSteps: 120, gStepK: 0.085, gOct: 3, gLive: false },
 ];
 const PRESET = { idx: 1, auto: true, low: 0 };
 const MOODS = [
@@ -322,18 +328,155 @@ vec3 seaShade(vec3 r, vec3 n, float depth, float foam, vec2 P) {
 const LOG_VS = '#include <common>\n#include <logdepthbuf_pars_vertex>\n';
 const LOG_FS = '#include <common>\n#include <logdepthbuf_pars_fragment>\n';
 
+/* ---------------- Gargantua: lensa gravitasi (R1b), porting dari experiences/gargantua ----------------
+   Ray tracing Schwarzschild (percepatan foton dari persamaan Binet, velocity Verlet, piringan tipis dengan aliran Kepler,
+   palet film) dirender ke cubemap sendiri GCUBE: rgb = cahaya piringan, a = bagian latar yang terlihat (0 = bayangan).
+   Hanya arah dalam kerucut sekitar Gargantua yang di-trace. Pengamat di jarak D (satuan rs) dengan radius bayangan
+   tampak CONFIG.garg.rad: sin(alpha) = b_c / D * sqrt(1 - 1/D), b_c = 3 sqrt(3) / 2. */
+const LENS = { inc: 6, rin: 3.0, rout: 9.0, cone: 0.6 };
+{
+  const bc = 1.5 * Math.sqrt(3), sa = Math.sin(G.rad * DEG); let D = bc / sa;
+  for (let i = 0; i < 30; i++) D = bc * Math.sqrt(1 - 1 / D) / sa;
+  LENS.D = D;
+  const cam = new THREE.Vector3(0, Math.sin(LENS.inc * DEG), -Math.cos(LENS.inc * DEG)).multiplyScalar(D);   // sedikit di atas bidang piringan
+  const fwd = cam.clone().multiplyScalar(-1 / D), rt0 = new THREE.Vector3().crossVectors(fwd, new THREE.Vector3(0, 1, 0)).normalize();
+  const up0 = new THREE.Vector3().crossVectors(rt0, fwd), c = Math.cos(G.tilt * DEG), sn = Math.sin(G.tilt * DEG);
+  LENS.cam = cam; LENS.fwd = fwd;
+  LENS.right = rt0.clone().multiplyScalar(c).addScaledVector(up0, sn);        // piringan dimiringkan tilt derajat di langit
+  LENS.up = up0.clone().multiplyScalar(c).addScaledVector(rt0, -sn);
+}
+const GU_ = {
+  uTime: { value: 0 }, uStepK: { value: 0.05 }, uGBright: { value: 3.5 },
+  uGDir: { value: GDIR }, uGU: { value: GU }, uGV: { value: GV },
+  uBRight: { value: LENS.right }, uBUp: { value: LENS.up }, uBFwd: { value: LENS.fwd }, uBCam: { value: LENS.cam },
+};
+const GARG_FS = /* glsl */`
+uniform float uTime, uStepK, uGBright;
+uniform vec3 uGDir, uGU, uGV, uBRight, uBUp, uBFwd, uBCam;
+varying vec3 vDir;
+const float RS = 1.0, M = 0.5, RIN = ${LENS.rin.toFixed(2)}, ROUT = ${LENS.rout.toFixed(2)}, TURB = 0.75, OPAC = 0.9, FLOWP = 30.0;
+uvec3 pcg3d(uvec3 v) {
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  v ^= v >> 16u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  return v;
+}
+float hash13(vec3 p) { uvec3 u = pcg3d(uvec3(ivec3(floor(p)) + 1048576)); return float(u.x) * (1.0 / 4294967295.0); }
+float vnoise(vec3 p) {
+  vec3 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash13(i), hash13(i + vec3(1, 0, 0)), u.x), mix(hash13(i + vec3(0, 1, 0)), hash13(i + vec3(1, 1, 0)), u.x), u.y),
+             mix(mix(hash13(i + vec3(0, 0, 1)), hash13(i + vec3(1, 0, 1)), u.x), mix(hash13(i + vec3(0, 1, 1)), hash13(i + vec3(1, 1, 1)), u.x), u.y), u.z);
+}
+float fbm(vec3 p) { float s = 0.0, a = 0.5, n = 0.0; for (int i = 0; i < GOCT; i++) { s += a * vnoise(p); n += a; p = p * 2.03 + vec3(1.7, 9.2, 3.1); a *= 0.5; } return s / n; }
+vec3 filmRamp(float t) {
+  vec3 c = mix(vec3(0.42, 0.11, 0.02), vec3(1.00, 0.46, 0.12), smoothstep(0.30, 0.55, t));
+  c = mix(c, vec3(1.00, 0.78, 0.52), smoothstep(0.55, 0.80, t));
+  return mix(c, vec3(1.00, 0.95, 0.88), smoothstep(0.80, 1.00, t));
+}
+// Percepatan foton Schwarzschild: a = -(3/2) rs h^2 r / r^5, h = |r x v| tetap
+vec3 accel(vec3 p, float h2) { float r2 = dot(p, p), r = sqrt(r2); return -1.5 * RS * h2 * p / (r2 * r2 * r); }
+float diskPattern(float r, float ang, float seed) {
+  vec2 cs = vec2(cos(ang), sin(ang));
+  float n = fbm(vec3(r * 1.6, cs * 2.2) + seed);
+  float f = fbm(vec3(r * 5.5, cs * 4.5) + seed * 1.7 + n * 0.8);
+  return clamp(0.45 * n + 0.75 * f - 0.1, 0.0, 1.0);
+}
+float diskDensity(float r, float phi, float t) {      // rotasi Kepler, dua lapis bergantian agar tidak terpilin tak hingga
+  float omega = sqrt(M / (r * r * r)), c1 = fract(t / FLOWP), c2 = fract(t / FLOWP + 0.5), w1 = 1.0 - abs(2.0 * c1 - 1.0);
+  return mix(diskPattern(r, phi - omega * c2 * FLOWP, 37.0), diskPattern(r, phi - omega * c1 * FLOWP, 0.0), w1);
+}
+vec4 shadeDisk(vec3 hit, float r) {
+  float x = r / RIN;
+  float Tn = pow(x, -0.75) * pow(max(1.0 - 0.85 * inversesqrt(x), 0.0), 0.25) / 0.62233;
+  float edge = smoothstep(0.0, 0.3, r - RIN) * (1.0 - smoothstep(ROUT - 0.35 * (ROUT - RIN), ROUT, r));
+  float pat = diskDensity(r, atan(hit.z, hit.x), uTime);
+  float alpha = clamp(mix(1.0, pow(pat, 1.5) * 2.6, TURB) * OPAC, 0.0, 1.0) * edge;
+  float I = (0.05 + 2.2 * pow(Tn, 3.0)) * mix(1.0, pow(pat * 1.7, 2.0), TURB);
+  float g = sqrt(max(1.0 - RS / r, 1e-4)) / sqrt(1.0 - RS / length(uBCam));   // pergeseran merah gravitasi
+  return vec4(filmRamp(Tn) * I * g * g, alpha);
+}
+void main() {
+  float l = length(vDir); vec3 d = l > 1e-6 ? vDir / l : vec3(0.0, 1.0, 0.0);
+  float z = dot(d, uGDir);
+  if (z < ${LENS.cone.toFixed(2)}) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  vec3 dir = dot(d, uGU) * uBRight + dot(d, uGV) * uBUp + z * uBFwd;
+  vec3 pos = uBCam, vel = normalize(dir);
+  vec3 Lm = cross(pos, vel); float h2 = dot(Lm, Lm);
+  vec3 col = vec3(0.0); float trans = 1.0; int state = 0;
+  for (int i = 0; i < GSTEPS; i++) {
+    float r = length(pos);
+    float dt = min(uStepK * r * mix(0.4, 1.0, clamp(abs(r - 1.5) / 1.5, 0.0, 1.0)), 2.5);
+    vec3 prev = pos, a0 = accel(pos, h2);
+    pos += vel * dt + 0.5 * a0 * dt * dt;
+    vel += 0.5 * (a0 + accel(pos, h2)) * dt;
+    if (prev.y * pos.y < 0.0) {                                    // melintas piringan (bidang y = 0)
+      vec3 hit = mix(prev, pos, prev.y / (prev.y - pos.y));
+      float rh = length(hit.xz);
+      if (rh > RIN && rh < ROUT) {
+        vec4 dc = shadeDisk(hit, rh);
+        col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
+        if (trans < 0.01) { state = 3; break; }
+      }
+    }
+    float rn = length(pos);
+    if (rn < RS) { state = 1; break; }
+    if (rn > 40.0 && dot(pos, vel) > 0.0) { state = 2; break; }
+  }
+  if (state == 0 && length(pos) > 4.0 && dot(pos, vel) > 0.0) state = 2;
+  gl_FragColor = vec4(col * uGBright, state == 2 ? trans : 0.0);
+}`;
+const gScene = new THREE.Scene();
+const gMat = new THREE.ShaderMaterial({
+  uniforms: GU_, side: THREE.BackSide, depthTest: false, depthWrite: false, defines: { GSTEPS: 200, GOCT: 4 },
+  vertexShader: 'varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: GARG_FS,
+});
+{ const m = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), gMat); m.frustumCulled = false; gScene.add(m); }
+const GCUBE = { rt: null, cam: null, faces: [], k: 0, tick: 0, live: false, pending: [] };
+{   // sisi cubemap yang memuat kerucut Gargantua (arah sisi: +x, -x, +y, -y, +z, -z seperti CubeCamera three.js)
+  const ax = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]], v = new THREE.Vector3();
+  ax.forEach((n, f) => {
+    const N = new THREE.Vector3(...n), A = new THREE.Vector3(n[1], n[2], n[0]), B = new THREE.Vector3().crossVectors(N, A);
+    let hit = false;
+    for (let i = -8; i <= 8 && !hit; i++) for (let j = -8; j <= 8 && !hit; j++) { v.copy(N).addScaledVector(A, i / 8).addScaledVector(B, j / 8).normalize(); if (v.dot(GDIR) > LENS.cone - 0.05) hit = true; }
+    if (hit) GCUBE.faces.push(f);
+  });
+}
+function makeGCube(P) {
+  if (GCUBE.rt) GCUBE.rt.dispose();
+  GCUBE.rt = new THREE.WebGLCubeRenderTarget(P.gSize, { type: THREE.HalfFloatType, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
+  GCUBE.cam = new THREE.CubeCamera(0.1, 100, GCUBE.rt);
+  GCUBE.cam.coordinateSystem = renderer.coordinateSystem; GCUBE.cam.updateCoordinateSystem(); GCUBE.cam.updateMatrixWorld(true);
+  gMat.defines.GSTEPS = P.gSteps; gMat.defines.GOCT = P.gOct; gMat.needsUpdate = true; GU_.uStepK.value = P.gStepK;
+  GCUBE.live = P.gLive; GCUBE.pending = GCUBE.faces.slice();       // semua sisi yang perlu dirender dulu sekali
+  renderer.setClearColor(0x000000, 1);                             // sebelum di-trace: latar terlihat penuh, tanpa piringan
+  for (let f = 0; f < 6; f++) { renderer.setRenderTarget(GCUBE.rt, f); renderer.clear(); }
+  SKYU.uGCube.value = GCUBE.rt.texture;
+}
+function updateGCube() {        // pertama: semua sisi relevan; sesudahnya (Ultra/Tinggi) satu sisi tiap 3 frame agar piringan bergerak
+  let f = null;
+  if (GCUBE.pending.length) f = GCUBE.pending.shift();
+  else if (GCUBE.live && ++GCUBE.tick % 3 === 0) f = GCUBE.faces[GCUBE.k++ % GCUBE.faces.length];
+  if (f === null) return false;
+  renderer.setRenderTarget(GCUBE.rt, f); renderer.render(gScene, GCUBE.cam.children[f]);
+  if (!GCUBE.pending.length && !GCUBE.live) SKYCUBE.full = true;   // statis: langit diperbarui penuh sekali setelah selesai
+  return true;
+}
+
 /* ---------------- Langit: shader awan mendung + Gargantua, dirender ke cubemap bergilir ----------------
-   Cubemap dipakai untuk latar dan pantulan air. Goyangan planet tidak dimasukkan ke cubemap (uWob saat mengambil). */
+   Cubemap dipakai untuk latar dan pantulan air. Goyangan planet tidak dimasukkan ke cubemap (uWob saat mengambil).
+   Cerah = awan pecah merata di seluruh langit yang terbawa angin (bukan lubang ke arah Gargantua). */
 const SKYU = {
   uTime: { value: 0 }, uCover: { value: 0.93 }, uBreak: { value: 0 }, uMood: { value: 0 },
-  uGDir: { value: GDIR }, uGU: { value: GU }, uGV: { value: GV }, uSunL: { value: SUNL },
-  uRs: { value: Math.tan(G.rad * DEG) }, uTilt: { value: G.tilt * DEG },
+  uGDir: { value: GDIR }, uSunL: { value: SUNL }, uGCube: { value: null },
   uHaze: { value: new THREE.Color() }, uZen: { value: new THREE.Color() }, uCloudHi: { value: new THREE.Color() }, uCloudLo: { value: new THREE.Color() },
   uGlow: { value: new THREE.Color() }, uWarm: { value: new THREE.Color() },
 };
 const SKY_FS = /* glsl */`
-uniform float uTime, uCover, uBreak, uMood, uRs, uTilt;
-uniform vec3 uGDir, uGU, uGV, uSunL, uHaze, uZen, uCloudHi, uCloudLo, uGlow, uWarm;
+uniform float uTime, uCover, uBreak, uMood;
+uniform vec3 uGDir, uSunL, uHaze, uZen, uCloudHi, uCloudLo, uGlow, uWarm;
+uniform samplerCube uGCube;
 varying vec3 vDir;
 float h13(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
 float vn3(vec3 p) {
@@ -342,32 +485,17 @@ float vn3(vec3 p) {
              mix(mix(h13(i + vec3(0, 0, 1)), h13(i + vec3(1, 0, 1)), f.x), mix(h13(i + vec3(0, 1, 1)), h13(i + vec3(1, 1, 1)), f.x), f.y), f.z);
 }
 float fbm3(vec3 p) { float s = 0.0, a = 0.5; for (int i = 0; i < OCT; i++) { s += a * vn3(p); p = p * 2.03 + vec3(1.7, 9.2, 3.1); a *= 0.5; } return s; }
-// Gargantua di balik atmosfer (bukan lensa gravitasi sungguhan; porting shader lensa menyusul)
-vec3 garg(vec3 d, vec3 base, vec3 glow) {                        // glow: cahaya piringan di atmosfer, tidak ada di depan bayangan
-  float c = dot(d, uGDir); if (c < 0.3) return base + glow;
-  vec2 p = vec2(dot(d, uGU), dot(d, uGV)) / c;
-  float r = length(p), rs = uRs, cs = cos(uTilt), sn = sin(uTilt);
-  vec2 q = vec2(cs * p.x + sn * p.y, -sn * p.x + cs * p.y);
-  float er = length(vec2(q.x, q.y / 0.14)), rin = 1.35 * rs, rout = 3.3 * rs;
-  float disk = smoothstep(rin, rin * 1.06, er) * (1.0 - smoothstep(rin * 1.1, rout, er));
-  float dop = 1.0 - 0.5 * clamp(q.x / rout, -1.0, 1.0);          // sisi kiri mendekat: lebih terang
-  vec3 dcol = mix(vec3(6.0, 5.3, 4.4), vec3(1.4, 0.75, 0.35), smoothstep(rin, rout, er)) * dop;
-  float sh = 1.0 - smoothstep(rs * 0.985, rs, r);
-  float halo = r > rs ? exp(-(r - rs) / (0.2 * rs)) * (1.0 - 0.35 * clamp(q.x / rs, -1.0, 1.0)) : 0.0;
-  vec3 col = base + glow + vec3(3.0, 2.4, 1.7) * halo;
-  col = mix(col, base * 0.15, sh);                                // bayangan gelap, tidak hitam pekat: atmosfer di depannya
-  float front = step(q.y, 0.0);
-  col += dcol * disk * (front + (1.0 - front) * (1.0 - sh));
-  col += vec3(5.0, 4.4, 3.6) * exp(-abs(r - rs * 1.01) / (0.008 * rs));
-  return mix(col, base + glow * (1.0 - sh), 0.15);
-}
-vec3 above(vec3 d) {                                              // langit di atas awan (terlihat lewat celah)
+// Langit di atas awan: kabut atmosfer + Gargantua dari GCUBE (latar hanya terlihat di luar bayangan dan di sela piringan)
+vec3 above(vec3 d) {
   vec3 c = mix(uHaze, uZen, sqrt(max(d.y, 0.0)));
   c += uWarm * uMood * pow(max(dot(d, uSunL), 0.0), 6.0);
   float cg = max(dot(d, uGDir), 0.0);
-  return garg(d, c, uGlow * (pow(cg, 8.0) * 0.6 + pow(cg, 64.0) * 1.5));
+  vec3 glow = uGlow * (pow(cg, 8.0) * 0.6 + pow(cg, 64.0) * 1.5);
+  vec4 g = textureCube(uGCube, d);
+  float a = clamp(g.a, 0.0, 1.0);
+  vec3 col = c * mix(0.06, 1.0, a) + glow * a + max(g.rgb, vec3(0.0));
+  return col * 0.9 + (c + glow) * 0.1;                            // tabir tipis atmosfer di depan Gargantua
 }
-float breakMask(vec3 d) { return uBreak * smoothstep(0.80, 0.97, dot(d, uGDir)); }
 vec3 cloudLight(float n, vec3 d, float thin) {                  // warna bawah awan: tebal gelap, tipis terang, bersinar dekat Gargantua
   vec3 c = mix(uCloudLo, uCloudHi, clamp(n, 0.0, 1.0));
   float cg = max(dot(d, uGDir), 0.0);
@@ -380,18 +508,18 @@ void main() {
   if (d.y < 0.0) { gl_FragColor = vec4(uHaze * (0.92 + 0.08 * exp(d.y * 8.0)), 1.0); return; }
   float dy = max(d.y, 0.015), t0 = ${CONFIG.cloud.h0.toFixed(1)} / dy;
   vec2 wind = vec2(1.0, 0.35) * uTime * 6.0;
-  float cov = uCover - breakMask(d) * 0.95;
+  float cov = uCover - uBreak * 0.5;                              // cerah: tutupan turun merata, awan pecah dan menipis
   vec3 res;
 #if STEPS > 0
   // Awan volumetrik: ray-march di lapisan h0-h1, cahaya dari atas (satu sampel ke atas untuk bayangan diri)
   float t1 = min(${CONFIG.cloud.h1.toFixed(1)} / dy, t0 + 7000.0), dt = (t1 - t0) / float(STEPS);
-  float T = 1.0; vec3 acc = vec3(0.0);
-  float t = t0 + dt * h13(d * 917.0);
+  float T = 1.0; vec3 acc = vec3(0.0), wind3 = vec3(wind.x, 0.0, wind.y);
+  float t = t0 + dt * h13(d * 917.0), dk = 0.004 * mix(1.0, 0.55, uBreak);
   for (int i = 0; i < STEPS; i++) {
-    vec3 P = d * t; P.xz += wind;
+    vec3 P = d * t + wind3;
     float hf = clamp((P.y - ${CONFIG.cloud.h0.toFixed(1)}) / ${(CONFIG.cloud.h1 - CONFIG.cloud.h0).toFixed(1)}, 0.0, 1.0);
     float n = fbm3(P / ${CONFIG.cloud.scale.toFixed(1)});
-    float den = clamp((n - (1.0 - cov) * 0.9) * 2.2, 0.0, 1.0) * smoothstep(0.0, 0.15, hf) * (1.0 - smoothstep(0.7, 1.0, hf)) * 0.004;
+    float den = clamp((n - (1.0 - cov) * 0.9) * 2.2, 0.0, 1.0) * smoothstep(0.0, 0.15, hf) * (1.0 - smoothstep(0.7, 1.0, hf)) * dk;
     if (den > 0.0) {
       float nu = fbm3((P + vec3(0.0, 300.0, 0.0)) / ${CONFIG.cloud.scale.toFixed(1)});
       float up = exp(-max(nu - (1.0 - cov) * 0.9, 0.0) * 3.0);
@@ -407,13 +535,13 @@ void main() {
   // Awan 2D: satu atau dua lapisan fbm di bidang h0
   vec2 uv = (d.xz * t0 + wind) / ${CONFIG.cloud.scale.toFixed(1)};
   float n = fbm3(vec3(uv, 0.3));
-  float den = smoothstep(1.0 - cov - 0.12, 1.0 - cov + 0.28, n);
+  float den = smoothstep(1.0 - cov - 0.08, 1.0 - cov + mix(0.28, 0.16, uBreak), n);   // cerah: tepi awan lebih tegas
 #if LAYERS > 1
   float n2 = fbm3(vec3(uv * 2.7 + 5.1, 1.7));
   den = clamp(den * 0.8 + smoothstep(1.0 - cov, 1.0 - cov + 0.3, n2) * 0.35, 0.0, 1.0);
   n = n * 0.7 + n2 * 0.3;
 #endif
-  float T = exp(-den * 4.0 - cov * 0.15);
+  float T = exp(-den * mix(4.0, 3.2, uBreak) - cov * 0.15);
   res = cloudLight(0.2 + 1.1 * (n - 0.3) * (1.0 - den * 0.4), d, 1.0 - den) * (1.0 - T) + above(d) * T;
 #endif
   res = mix(uHaze, res, exp(-t0 / 35000.0));                    // cakrawala berkabut
@@ -754,6 +882,7 @@ function applyPreset(i) {
   skyMat.defines.STEPS = P.steps; skyMat.defines.LAYERS = P.layers; skyMat.defines.OCT = P.oct; skyMat.needsUpdate = true;
   buildSea(P);
   makeSkyCube(P.cube);
+  makeGCube(P);
   M_FINAL.uniforms.uGrain.value = P.grain;
   resize();
   try { localStorage.setItem('millar.preset', JSON.stringify({ idx: i, auto: PRESET.auto })); } catch (e) { /* abaikan */ }
@@ -954,7 +1083,7 @@ function frame(now) {
   wobQ.setFromAxisAngle(WOB_AXIS, -wob * DEG);          // arah di tanah -> arah di langit (kebalikan putaran langit)
   U.uWob.value.setFromMatrix4(wobM4.makeRotationFromQuaternion(wobQ));
   updateMood(dt, STATE.visT);
-  SKYU.uTime.value = STATE.visT;
+  SKYU.uTime.value = STATE.visT; GU_.uTime.value = STATE.visT * 1.5;   // waktu piringan (satuan rs/c), sekitar 30 s per putaran di tepi dalam
 
   camera.position.set(P.x, P.y, P.z);
   camera.rotation.set(P.pitch, P.yaw, 0);
@@ -967,16 +1096,16 @@ function frame(now) {
   whiteEl.style.opacity = CLK.white.toFixed(3);
   if ((hudT -= dt) <= 0) { hudT = 0.2; updateHud(depthNow, dist, wob); }
 
-  gpuBegin('sk'); updateSkyCube(); gpuEnd();
+  gpuBegin('sk'); updateGCube(); updateSkyCube(); gpuEnd();
   gpuBegin('sc'); renderer.setRenderTarget(POST.hdr); renderer.clear(); renderer.render(scene, camera); gpuEnd();
   gpuBegin('po'); postRender(now / 1000); gpuEnd();
   gpuFrameEnd();
   requestAnimationFrame(frame);
 }
-try { renderer.compile(scene, camera); renderer.compile(skyScene, camera); } catch (e) { /* lanjut tanpa pra-kompilasi */ }
+try { renderer.compile(scene, camera); renderer.compile(skyScene, camera); renderer.compile(gScene, camera); } catch (e) { /* lanjut tanpa pra-kompilasi */ }
 requestAnimationFrame(frame);
 window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
-  frontX, waveTop, waterAt, seabed, chopAt, CHOP, stepPlayer, simStep, start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE };
+  frontX, waveTop, waterAt, seabed, chopAt, CHOP, stepPlayer, simStep, start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_ };
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>
 </body>

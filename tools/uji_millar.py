@@ -1,6 +1,6 @@
-"""Uji Millar's World R1: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
+"""Uji Millar's World R1 + R1b: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
 tidak ada daratan (dasar laut selalu di bawah air terendah), fisika (1,3 g, lompat 77%), gelombang 125 m/s, jam dilatasi,
-tersapu = kembali dengan penalti waktu, tidak ada nilai tidak valid (NaN/Inf) di render HDR tiap preset.
+tersapu = kembali dengan penalti waktu, lensa Gargantua (radius bayangan, busur terbelokkan), tidak ada nilai tidak valid (NaN/Inf) di render HDR tiap preset.
 Pakai: python tools/uji_millar.py   (butuh: pip install playwright && playwright install chromium)
 Tanpa akses CDN langsung: THREE_LOCAL=<folder berisi three.module.js dan three.core.js> python tools/uji_millar.py
 Chromium sendiri: CHROMIUM=<jalur executable>"""
@@ -52,12 +52,32 @@ UJI = r"""
   out[`tersapu: kembali ke awal (x ${P.x}), waktu di luar bertambah ${lost.toFixed(2)} tahun`] = M.CLK.swept > 0 && P.x === 0 && lost > 0.77;
   M.CLK.white = 0; M.U.uWX.value += 12000 - M.frontX(0);
 
-  // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala
+  // 5b. lensa Gargantua (R1b): render GCUBE ke kamera sempit ke arah Gargantua, ukur radius bayangan ke atas
+  //     (harapan CONFIG.garg.rad), ada busur piringan terbelokkan di atas bayangan, pusat gelap
+  {
+    const from = M.THREE.DataUtils.fromHalfFloat;
+    const TH = M.THREE, N = 256, fov = 40, rt = new TH.WebGLRenderTarget(N, N, { type: TH.HalfFloatType });
+    const cam = new TH.PerspectiveCamera(fov, 1, 0.1, 100); cam.position.set(0, 0, 0); cam.up.set(0, 1, 0);
+    cam.lookAt(M.GU_.uGDir.value); cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+    M.renderer.setRenderTarget(rt); M.renderer.render(M.gScene, cam); M.renderer.setRenderTarget(null);
+    const buf = new Uint16Array(N * N * 4); M.renderer.readRenderTargetPixels(rt, 0, 0, N, N, buf);
+    const px = (x, y) => { const k = (y * N + x) * 4; return [from(buf[k]), from(buf[k + 1]), from(buf[k + 2]), from(buf[k + 3])]; };
+    const hole = (p) => p[3] < 0.01 && p[0] + p[1] + p[2] < 0.05;
+    const c = N / 2; let k = 0; while (k < c - 1 && hole(px(c, c + k))) k++;
+    const ang = Math.atan(k / c * Math.tan(fov / 2 * Math.PI / 180)) * 180 / Math.PI;
+    let arc = 0; for (let j = k; j < Math.min(c - 1, 2 * k); j++) { const p = px(c, c + j); arc = Math.max(arc, p[0] + p[1] + p[2]); }
+    let bad = 0; for (let i = 0; i < buf.length; i++) if (!Number.isFinite(from(buf[i]))) bad++;
+    out[`lensa: radius bayangan ${ang.toFixed(2)} derajat (harapan ${M.CONFIG.garg.rad}), D = ${M.LENS.D.toFixed(2)} rs`] = Math.abs(ang - M.CONFIG.garg.rad) < 0.8;
+    out[`lensa: pusat gelap, busur piringan di atas bayangan (terang ${arc.toFixed(2)}), tidak valid ${bad}`] = hole(px(c, c)) && arc > 0.3 && bad === 0;
+    rt.dispose();
+  }
+
+  // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua
   //    (dulu: dengan MSAA, kedalaman air diekstrapolasi negatif di segitiga kecil cakrawala -> nilai meledak)
   const r = M.renderer, from = M.THREE.DataUtils.fromHalfFloat;
-  M.P.pitch = 0.02; M.P.yaw = -Math.PI / 2 + 0.25;
+  M.P.pitch = 0.32; M.P.yaw = -Math.PI / 2 + 0.45; M.MOOD.brk = 1; M.STATE.visT = 137;   // cerah, Gargantua dan cakrawala di layar
   for (let i = 0; i < M.PRESETS.length; i++) {
-    M.applyPreset(i); await wait(900);
+    M.applyPreset(i); for (let w = 0; w < 40 && M.GCUBE.pending.length; w++) await wait(300); M.SKYCUBE.full = true; await wait(900);
     const T = M.POST.hdr, w = T.width, h = T.height;
     let bad = 0, hot = 0, mx = 0;
     const buf = new Uint16Array(w * h * 4); r.readRenderTargetPixels(T, 0, 0, w, h, buf);

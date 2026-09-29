@@ -1,6 +1,6 @@
 # Rencana Millar's World Versi Realistis
 
-Per 29 September 2026 · Status: R1 selesai (lihat "Status R1"), berikutnya R2
+Per 29 September 2026 · Status: R1 dan R1b selesai (lihat "Status R1" dan "Status R1b"), berikutnya R2
 
 ## Ringkasan
 
@@ -129,4 +129,21 @@ Belum diukur: FPS dan waktu GPU di GTX 1060 dan M1 (sandbox tanpa GPU). Angka pr
 
 Catatan: Gargantua di R1 masih pengganti sementara (cincin prosedural, tidak terdistorsi). Porting lensa dari experience Gargantua ada di rencana (baris Gargantua di tabel preset) tapi tidak masuk daftar tahapan; kini dijadikan tahap R1b.
 
-Berikutnya R1b (lensa Gargantua), lalu R2: ombak FFT untuk Ultra sampai Rendah (Hemat tetap Gerstner), kaustik dasar laut, buih yang tersisa dan memudar.
+## Status R1b
+
+Selesai 29 September 2026.
+
+| Bagian | Isi |
+| --- | --- |
+| Lensa | Porting ray tracing Schwarzschild dari `experiences/gargantua/`: percepatan foton dari persamaan Binet, velocity Verlet dengan langkah adaptif, piringan tipis r 3-9 rs dengan aliran Kepler, suhu Novikov-Thorne, palet film, pergeseran merah gravitasi. Belakang piringan kini tampak sebagai busur di atas dan di bawah bayangan |
+| Posisi pengamat | Jarak 16,08 rs dihitung dari radius bayangan 9 derajat: sin(alpha) = b_c / D x sqrt(1 - 1/D), b_c = 3 sqrt(3) / 2 rs. 6 derajat di atas bidang piringan, piringan dimiringkan 9 derajat di langit |
+| Cubemap sendiri | `GCUBE`: rgb = cahaya piringan, alpha = latar yang terlihat (0 di bayangan). Hanya arah dalam sekitar 53 derajat dari Gargantua yang di-trace (3 sisi cubemap) |
+| Per preset | Ultra 512 / 320 langkah dan Tinggi 384 / 240: piringan bergerak (satu sisi diperbarui tiap 3 frame). Sedang 384 / 200, Rendah 256 / 150, Hemat 256 / 120: di-trace sekali saat muat, piringan diam |
+| Atmosfer | Tabir 10% dan awan tetap di depan Gargantua; bayangan tidak hitam pekat |
+| Awan cerah | Dulu: celah awan berupa lubang yang selalu mengarah ke Gargantua. Kini: saat cerah, tutupan awan turun merata di seluruh langit, awan pecah bertepi tegas dan terbawa angin; Gargantua terlihat di sela awan yang lewat |
+
+Uji: `tools/uji_millar.py` kini 16 pemeriksaan, semua lulus. Radius bayangan terukur 9,37 derajat (harapan 9, toleransi 0,8; selisih dari ukuran piksel dan langkah integrasi), pusat gelap, busur terbelokkan ada di atas bayangan, tidak ada nilai tidak valid; 5 preset tanpa titik menyala saat Gargantua terlihat (nilai HDR tertinggi 3,95-4,95).
+
+Belum diukur: biaya GPU ray tracing di GTX 1060 dan M1. Bila Ultra/Tinggi berat, piringan bergerak bisa diperlambat (sisi diperbarui lebih jarang) atau langkah dikurangi.
+
+Berikutnya R2: ombak FFT untuk Ultra sampai Rendah (Hemat tetap Gerstner), kaustik dasar laut, buih yang tersisa dan memudar.
