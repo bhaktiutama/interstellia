@@ -72,6 +72,7 @@ Cadangan: bila browser tidak mendukung render ke tekstur float (`EXT_color_buffe
 | Tahap | Isi | Yang diuji pemilik |
 | --- | --- | --- |
 | R1 Fondasi dan tone | Sistem preset (pilihan di layar awal, turun otomatis, `?preset=`), pipeline post (HDR, bloom, ACES, FXAA, grading dingin, grain, vinyet), langit mendung prosedural + cubemap pantulan, kabut ketinggian, alat ukur GPU di HUD. Laut sementara tetap versi prototipe tapi diberi warna dan kabut baru | Tone langit dan cakrawala mirip acuan, FPS tiap preset |
+| R1b Lensa Gargantua | Porting shader ray tracing Schwarzschild dari `experiences/gargantua/` (lintasan cahaya dibelokkan, piringan akresi, Doppler) ke shader langit, dirender ke cubemap. Menggantikan Gargantua prosedural R1 (cincin utuh tanpa distorsi). Bagian atas dan bawah bayangan memperlihatkan belakang piringan yang terbelokkan, seperti di experience Gargantua | Bentuk sama dengan experience Gargantua, FPS tiap preset |
 | R2 Laut realistis | FFT 2-3 kaskade di GPU, grid LOD mengikuti kamera (tidak "berenang"), shading: Fresnel, pantulan cubemap, hamburan di puncak ombak, penyerapan warna, buih; dasar laut selalu terendam, samar; kaustik di Ultra/Tinggi. Ombak ikut angin, tidak tergantung FPS | Laut dekat dan jauh mirip foto, tanpa NaN, FPS |
 | R3 Pemain di air | Riak lokal (simulasi tinggi air di sekitar kaki), cipratan tiap langkah, jejak air, langkah berat 1,3 g, gerak kepala di air (pola `BOB` Cooper), kedalaman di HUD mengikuti ombak | Rasa berjalan di air setinggi lutut |
 | R4 Gelombang raksasa | Muka gelombang beresolusi tinggi dekat pemain, normal detail berskala besar, buih mengalir turun, kabut di kaki dan puncak, air surut tanpa daratan (arus terlihat di permukaan), langit bergoyang, urutan tersapu (buih putih, kamera terguling, di bawah air, kembali) | Kesan skala dan ketegangan |
@@ -126,4 +127,6 @@ Perbaikan yang ditemukan saat uji: dengan MSAA, kedalaman air di segitiga kecil 
 
 Belum diukur: FPS dan waktu GPU di GTX 1060 dan M1 (sandbox tanpa GPU). Angka preset bisa berubah setelah diukur.
 
-Berikutnya R2: ombak FFT untuk Ultra sampai Rendah (Hemat tetap Gerstner), kaustik dasar laut, buih yang tersisa dan memudar.
+Catatan: Gargantua di R1 masih pengganti sementara (cincin prosedural, tidak terdistorsi). Porting lensa dari experience Gargantua ada di rencana (baris Gargantua di tabel preset) tapi tidak masuk daftar tahapan; kini dijadikan tahap R1b.
+
+Berikutnya R1b (lensa Gargantua), lalu R2: ombak FFT untuk Ultra sampai Rendah (Hemat tetap Gerstner), kaustik dasar laut, buih yang tersisa dan memudar.
