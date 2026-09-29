@@ -8,7 +8,7 @@ Per 29 September 2026 · Bhakti
 - **21b kaca rumah Cooper:** dari dalam rumah kaca tidak lagi memantulkan seluruh silinder. Yang terpantul hanya ruangan yang redup (lemah), jadi luar terlihat jelas. Dari luar pantulan daratan seberang tetap ada.
 - **21c gedung kaca malam:** gedung jauh tidak lagi putih rata. Lampu menyala per lantai dan per blok kantor (tetap bervariasi dari jauh), warna putih dingin kantor vs kuning hangat hunian, banyak kaca gelap, jumlah lampu ikut jam, lampu mahkota di sebagian menara, lampu merah penanda di atap.
 
-Urutan kerja: 1) 21a-1 (selesai), 2) 21b, 3) 21c, 4) 21a-2 + 21a-3 (paling besar).
+Urutan kerja: 1) 21a-1 (selesai), 2) 21b (selesai), 3) 21c, 4) 21a-2 + 21a-3 (paling besar).
 
 ## Penyebab di kode
 
@@ -96,7 +96,7 @@ Teks plakat (`FOUNT_TEXT`), titik tur, dan tombol 9 tidak berubah.
 
 Aturan GPU tetap: tidak `normalize()` vektor yang bisa nol, tidak `pow()` bilangan negatif, `sqrt()` dijaga (NaN di M1).
 
-## 21b: kaca rumah Cooper
+## 21b: kaca rumah Cooper (selesai)
 
 Fisika singkat: kaca biasa memantulkan sekitar 4% cahaya saat dilihat tegak lurus (F0 = ((n - 1) / (n + 1))^2 = (0,5 / 2,5)^2 = 0,04 untuk n = 1,5), naik hanya di sudut sangat miring. Dari dalam, yang terpantul adalah ruangan; yang tembus adalah luar. Karena luar siang jauh lebih terang daripada ruangan, pantulan ruangan nyaris tidak terlihat (kesimpulan kualitatif, belum diukur di adegan). Malam kebalikannya: luar gelap, kaca mulai jadi cermin ruangan.
 
@@ -111,6 +111,22 @@ Fisika singkat: kaca biasa memantulkan sekitar 4% cahaya saat dilihat tegak luru
 | Adaptasi mata | `ADAPT` sudah ada | Di dalam rumah yang lebih redup mata beradaptasi, jadi luar tampak lebih terang (dicek di uji) |
 
 Hanya `M.glassClear` rumah Cooper yang memakai material ini (dicek dengan grep). Kaca terminal dan gedung tidak berubah.
+
+### Hasil 21b
+
+Penyebab utama ternyata lebih parah dari dugaan: kaca lama hampir pejal dari KEDUA sisi (alpha 0,986 tegak lurus, diukur). Kaca transparan dua sisi digambar three.js dalam dua lintasan; di lintasan sisi belakang urutan muka dibalik, jadi shader mengira kaca dilihat dari sudut 90 derajat (Fresnel 1) dan menggambarnya sebagai cermin silinder pejal. Kini sisi penonton ditentukan dari arah kamera terhadap normal keluar.
+
+| Cek (`tools/uji_kaca_cooper.py`, baru) | Sebelum | Sesudah |
+| --- | --- | --- |
+| Alpha kaca dilihat tegak lurus dari dalam | 0,986 | 0,078 |
+| Alpha kaca dilihat tegak lurus dari luar | 0,986 | 0,078 |
+| Alpha dari dalam, miring 85 derajat (batas 0,35) | diukur hanya di versi baru | 0,350 |
+| Alpha dari luar, miring 85 derajat (pantulan daratan tetap) | diukur hanya di versi baru | 0,666 |
+| Nilai tidak valid siang dan malam | | 0 |
+| Panel kaca | 22 kotak | 22 bidang (1 mesh) |
+
+Alpha diukur dengan kaca saja (tekstur kisi putih diganti sementara saat uji). Kisi putih tetap pejal. `tools/uji_menara.py`: hitungan panel disesuaikan (6 verteks per bidang, dulu 36 per kotak). Uji lama `qc_load`, `uji_pantulan`, `uji_bahasa` lolos; `uji_menara` lolos kecuali 2 cek jatuhkan bola dari dek yang juga gagal di commit sebelum Tahap 21 (bola belum mendarat dalam batas tunggu 30 s di sandbox SwiftShader yang lambat), jadi bukan dari perubahan ini.
+
 
 ## 21c: gedung kaca malam
 

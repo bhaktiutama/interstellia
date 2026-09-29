@@ -1186,23 +1186,30 @@ const CABIN_LIGHT = { uCabin: { value: new THREE.Color(0, 0, 0) } };   // 15a: l
 // 17b: kilap dan Fresnel untuk material dasar yang ditandai specMat() (cat, logam, kaca, air). uSpec = (kekasaran, F0, logam).
 // Pantulan = farEnv (daratan seberang, sunline, end cap, Matahari) dikali Fresnel Schlick; logam mewarnai pantulan dengan warna
 // dasarnya dan mengurangi difus. Kaca bening: alpha naik mengikuti Fresnel agar pantulan tidak ikut transparan.
+// 21b: glass = 2 (jendela rumah, satu bidang dengan normal menghadap keluar). Dilihat dari dalam: yang terpantul ruangan yang
+// redup (plester x cahaya setempat x 0,35), bukan seluruh silinder, dan alpha paling tinggi 0,35, jadi luar tetap jelas.
+// Sisi penonton dari arah kamera terhadap normal, bukan gl_FrontFacing: lintasan BackSide three.js (transparan DoubleSide)
+// membalik urutan muka, sehingga gl_FrontFacing true juga dari dalam (dulu: cosV 0, Fresnel 1, kaca pejal memantulkan silinder).
 const SPEC_GLSL = (glass) => `{
   vec3 Vv = cameraPosition - vLitWorld; Vv *= inversesqrt(max(dot(Vv, Vv), 1e-8));
-  float cosV = clamp(dot(litN, Vv), 0.0, 1.0), om = 1.0 - cosV;
+  ${glass === 2 ? 'bool inS = dot(litN, Vv) < 0.0; vec3 nS = inS ? -litN : litN;' : 'vec3 nS = litN;'}
+  float cosV = clamp(dot(nS, Vv), 0.0, 1.0), om = 1.0 - cosV;
   float Fr = uSpec.y + (1.0 - uSpec.y) * om * om * om * om * om * (1.0 - 0.7 * uSpec.x);
-  vec3 envS = farEnv(vLitWorld, reflect(-Vv, litN), uSpec.x, 1.0 - uSpec.x);
+  vec3 envS;
+  ${glass === 2 ? 'if (inS) envS = vec3(0.89, 0.85, 0.74) * (stationLight(vLitWorld, nS) + nightLight(vLitWorld, nS)) * 0.35; else' : ''}
+  envS = farEnv(vLitWorld, reflect(-Vv, nS), uSpec.x, 1.0 - uSpec.x);
   float mx = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
   vec3 tintS = mix(vec3(1.0), diffuseColor.rgb / max(mx, 1e-3), uSpec.z);
   float kS = mix(Fr, 0.5 + 0.5 * Fr, uSpec.z);
   outgoingLight = outgoingLight * (1.0 - kS * mix(1.0, 0.7, uSpec.z)) + envS * tintS * kS;
-  ${glass ? 'diffuseColor.a = mix(diffuseColor.a, 1.0, Fr);' : ''}
+  ${glass === 2 ? 'diffuseColor.a = inS ? max(diffuseColor.a, min(mix(diffuseColor.a, 1.0, Fr), 0.35)) : mix(diffuseColor.a, 1.0, Fr);' : glass ? 'diffuseColor.a = mix(diffuseColor.a, 1.0, Fr);' : ''}
 }
 `;
 function specMat(m, r, f0 = 0.04, metal = 0, glass = false) { m.userData.spec = { r, f0, metal, glass }; return m; }
 function patchLit(mat) {
   if (mat.userData.lit) return;
   mat.userData.lit = true;
-  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = !!(sp && sp.glass), noTram = !!mat.userData.noTramLight;   // 20a: trem tidak disinari cahayanya sendiri
+  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = sp && sp.glass ? (sp.glass === 2 ? 2 : 1) : 0, noTram = !!mat.userData.noTramLight;   // 20a: trem tidak disinari cahayanya sendiri
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, LIGHT.uniforms);
     if (cabin) Object.assign(sh.uniforms, CABIN_LIGHT);
@@ -1222,7 +1229,7 @@ function patchLit(mat) {
     if (cabin) sh.fragmentShader = 'uniform vec3 uCabin;\n' + sh.fragmentShader;
     if (sp) sh.fragmentShader = 'uniform vec3 uSpec;\n' + sh.fragmentShader;
   };
-  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass ? 'Glass' : 'Spec') : '') + (noTram ? 'NoTram' : '');
+  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass === 2 ? 'Win' : glass ? 'Glass' : 'Spec') : '') + (noTram ? 'NoTram' : '');
   mat.needsUpdate = true;
 }
 
@@ -3968,7 +3975,7 @@ const COOPER_HOUSE = new THREE.Group();
       g.fillStyle = gr; g.fillRect(0, 0, W, H); g.fillStyle = '#f2f0ea'; g.fillRect(W / 2 - 3, 0, 6, H); g.fillRect(0, H / 2 - 3, W, 6);
     }, false, false),
     glassClear: tex(128, 128, (g, W, H) => {                      // 18b: kaca bening berkisi putih (tembus pandang, alfa)
-      g.clearRect(0, 0, W, H); g.fillStyle = 'rgba(150,172,186,0.14)'; g.fillRect(0, 0, W, H);
+      g.clearRect(0, 0, W, H); g.fillStyle = 'rgba(150,176,172,0.04)'; g.fillRect(0, 0, W, H);   // 21b: tint tipis (dulu 0,14)
       g.fillStyle = '#f2f0ea'; g.fillRect(W / 2 - 3, 0, 6, H); g.fillRect(0, H / 2 - 3, W, 6);
     }, true, false),
     rail: tex(128, 64, (g, W, H) => {                             // jeruji pagar beranda (alfa)
@@ -3980,7 +3987,7 @@ const COOPER_HOUSE = new THREE.Group();
     brick: new THREE.MeshBasicMaterial({ map: T.brick }), deck: new THREE.MeshBasicMaterial({ map: T.deck }),
     floor: new THREE.MeshBasicMaterial({ map: T.floor }), plaster: new THREE.MeshBasicMaterial({ map: T.plaster }),
     trim: new THREE.MeshBasicMaterial({ color: 0xf2f0ea }), glass: specMat(new THREE.MeshBasicMaterial({ map: T.glass }), 0.04, 0.06),
-    glassClear: specMat(new THREE.MeshBasicMaterial({ map: T.glassClear, transparent: true, depthWrite: false, side: THREE.DoubleSide }), 0.03, 0.06, 0, true),   // 18b
+    glassClear: specMat(new THREE.MeshBasicMaterial({ map: T.glassClear, transparent: true, depthWrite: false, side: THREE.DoubleSide }), 0.03, 0.04, 0, 2),   // 18b; 21b: F0 kaca 0,04, sisi dalam lihat SPEC_GLSL
     rail: new THREE.MeshBasicMaterial({ map: T.rail, alphaTest: 0.5, side: THREE.DoubleSide }),
     stone: new THREE.MeshBasicMaterial({ color: 0x8c877d }), door: new THREE.MeshBasicMaterial({ color: 0x6a4a32 }),
     truck: specMat(new THREE.MeshBasicMaterial({ color: 0x46677f }), 0.3, 0.05), tire: new THREE.MeshBasicMaterial({ color: 0x1c1c1c }),
@@ -4043,8 +4050,9 @@ const COOPER_HOUSE = new THREE.Group();
         else { box(0.06, fb, ww + 2 * fb, M.trim, px, y + e * (hh + fb) / 2, pz); box(0.06, hh, fb, M.trim, px, y, pz + e * (ww + fb) / 2); }
       }
     }
-    const gm = axis === 'z' ? box(ww, hh, 0.02, M.glassClear, x, y, z, 0) : box(0.02, hh, ww, M.glassClear, x, y, z, 0);   // kaca bening di tengah dinding
-    gm.userData.noShadow = true;
+    const gm = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), M.glassClear);   // 21b: kaca = satu bidang, normal menghadap keluar (dulu kotak 2 cm, pantulan dobel)
+    gm.position.set(x, y, z); gm.rotation.y = axis === 'z' ? (out > 0 ? 0 : Math.PI) : out * Math.PI / 2;
+    gm.userData.noShadow = true; COOPER_HOUSE.add(gm);
     if (axis === 'z') box(ww + 0.4, 0.08, 0.2, M.trim, x, y - hh / 2 - 0.14, z + out * (t / 2 + 0.08));   // ambang
     else box(0.2, 0.08, ww + 0.4, M.trim, x + out * (t / 2 + 0.08), y - hh / 2 - 0.14, z);
   };

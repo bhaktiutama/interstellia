@@ -58,7 +58,7 @@ UJI = r"""
   out[`pasar besar: ${big.length}, atap dasar ${big[0] ? big[0].roofY[0].toFixed(2) : '-'} m (dinding 6,5 m), puncak ${big[0] ? big[0].roofY[1].toFixed(2) : '-'} m`] =
     big.length > 0 && big.every((m) => m.roofY[0] > 6.0 && m.roofY[0] < 6.5);
   const glass = []; S.COOPER_HOUSE.traverse((o) => { if (o.material && o.material.transparent && o.material.userData.spec && o.material.userData.spec.glass) glass.push(o); });
-  const panes = glass.reduce((a, o) => a + o.geometry.attributes.position.count, 0) / 36;   // mesh rumah digabung per material; 36 verteks per kotak
+  const panes = glass.reduce((a, o) => a + o.geometry.attributes.position.count, 0) / 6;   // mesh rumah digabung per material; 21b: 1 bidang = 6 verteks (dulu kotak 36)
   out[`rumah Cooper: ${panes} panel kaca bening (mesh digabung per material)`] = panes >= 20;
   S.teleport('cooper');
   return out;
