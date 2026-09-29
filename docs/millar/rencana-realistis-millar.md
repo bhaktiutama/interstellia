@@ -1,6 +1,6 @@
 # Rencana Millar's World Versi Realistis
 
-Per 29 September 2026 · Status: R1 dan R1b selesai (lihat "Status R1" dan "Status R1b"), berikutnya R2
+Per 29 September 2026 · Status: R1, R1b, dan R2 selesai (lihat bagian "Status"), berikutnya R3
 
 ## Ringkasan
 
@@ -146,4 +146,26 @@ Uji: `tools/uji_millar.py` kini 16 pemeriksaan, semua lulus. Radius bayangan ter
 
 Belum diukur: biaya GPU ray tracing di GTX 1060 dan M1. Bila Ultra/Tinggi berat, piringan bergerak bisa diperlambat (sisi diperbarui lebih jarang) atau langkah dikurangi.
 
-Berikutnya R2: ombak FFT untuk Ultra sampai Rendah (Hemat tetap Gerstner), kaustik dasar laut, buih yang tersisa dan memudar.
+## Status R2
+
+Selesai 29 September 2026.
+
+| Bagian | Isi |
+| --- | --- |
+| Spektrum | Dibuat sekali di CPU: spektrum arah angin (puncak 4,5 m, sebaran cos² searah angin, sedikit ke arah berlawanan, redaman kapiler di bawah 6 cm), dispersi air dangkal (kedalaman 0,6 m, g 12,75). Pita panjang gelombang tiap kaskade tidak tumpang tindih; semua dinormalisasi agar tinggi signifikan = `CONFIG.chop.Hs` (0,35 m) |
+| GPU tiap frame | Evolusi waktu h(k,t) dan turunannya: 8 medan (tinggi, perpindahan horizontal x dan z, kemiringan x dan z, tiga suku Jacobian) dikemas jadi 4 bilangan kompleks di 2 tekstur (render ke banyak target sekaligus), lalu IFFT 2D Stockham radix-2 (baris lalu kolom), lalu tekstur perpindahan dan kemiringan ber-mipmap dan anisotropik |
+| Kaskade | Ultra 3 x 256 (petak 37 / 8,3 / 1,9 m), Tinggi 2 x 256 (37 / 6,1 m), Sedang 2 x 128 (31 / 5,3 m), Rendah 1 x 64 (19 m), Hemat tetap Gerstner. Panjang petak tidak berkelipatan agar pengulangan tidak terlihat |
+| Bentuk ombak | Puncak tajam lewat perpindahan horizontal (choppy, lambda 0,9); vertex dekat memakai mip sesuai ukuran sel grid (tanpa aliasing); normal per piksel dari kemiringan semua kaskade |
+| Buih | Buih baru di lipatan ombak (Jacobian < 0,7) dari semua kaskade + buih sisa di kaskade pertama yang memudar (waktu paruh sekitar 1,7 s, e-fold 2,5 s) |
+| Kaustik | Ultra dan Tinggi: cahaya di dasar laut dikalikan exp(-k x kedalaman x laplasian permukaan), dijepit halus. Lemah saat mendung (cahaya menyebar), kuat saat cerah |
+| Cadangan | Browser tanpa render ke tekstur float memakai Gerstner seperti Hemat |
+
+Uji: `tools/uji_millar.py` kini 24 pemeriksaan, semua lulus. Tinggi dari IFFT di GPU sama dengan DFT langsung di CPU dari spektrum yang sama (selisih maksimum 0,82 mm di 6 titik, dari presisi half float); tinggi signifikan terukur 0,350 m (Ultra) dan 0,360 m (Rendah) untuk target 0,35 m; Hemat tetap Gerstner; 5 preset tanpa nilai tidak valid atau titik menyala.
+
+Perbaikan saat pengecekan visual: rumus kaustik awal (1/x dijepit keras) membuat petak bertepi tajam di dasar laut saat cerah; diganti bentuk halus. Kontras noise dasar laut diturunkan.
+
+Catatan: kedalaman air di HUD dan kecepatan jalan masih memakai ombak Gerstner di CPU sebagai perkiraan (bukan hasil FFT; membaca balik tekstur GPU tiap frame akan memperlambat). Ombak yang terlihat dan angka HUD bisa sedikit berbeda di titik yang sama.
+
+Belum diukur: waktu GPU FFT di GTX 1060 dan M1 (baris HUD "GPU (langit / FFT / scene / post)"). Ultra menjalankan sekitar 3 x 18 lintasan 256 x 256 per frame.
+
+Berikutnya R3: pemain di air (riak di sekitar kaki, cipratan, jejak air, langkah berat 1,3 g, gerak kepala).

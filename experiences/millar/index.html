@@ -107,7 +107,9 @@ const CONFIG = {
     dir: 25,            // arah angin (derajat dari +X)
     q: 0.72,            // ketajaman puncak Gerstner (jumlah Q k a; < 1 agar tidak melipat)
     depth: 0.6,         // kedalaman untuk dispersi air dangkal (m)
+    peak: 4.5,          // panjang ombak puncak spektrum FFT (m)
   },
+  fft: { lam: 0.9, foamJ: 0.7, foamTau: 2.5 },   // R2: kecuraman horizontal (choppy), ambang Jacobian buih, waktu pudar buih (s)
   wave: {               // gelombang raksasa (konsep: sekitar 1.200 m)
     H: 1200,            // tinggi (m)
     v: 125,             // kecepatan muka (m/s), parameter desain
@@ -131,18 +133,24 @@ const W = CONFIG.wave, DEG = Math.PI / 180;
 
 /* ---------------- Preset kualitas (pola sama dengan Copper Corn Station) ----------------
    R1: semua preset memakai ombak Gerstner (jumlah berbeda); FFT menyusul di R2 untuk Ultra sampai Rendah.
-   R1b: g* = lensa Gargantua (resolusi cubemap, langkah ray tracing, oktaf noise piringan; gLive = piringan bergerak). */
+   R1b: g* = lensa Gargantua (resolusi cubemap, langkah ray tracing, oktaf noise piringan; gLive = piringan bergerak).
+   R2: fftN / fftL = ombak FFT (resolusi, panjang petak tiap kaskade dalam meter; Hemat 0 = tetap Gerstner), caust = kaustik dasar laut. */
 const PRESETS = [
   { name: 'Ultra',  dpr: 2.0,  msaa: 4, bloom: 6, grain: 1, cube: 512, faceEvery: 1, steps: 48, layers: 2, oct: 5, nw: 16, nm: 12, cell: 0.35, near: 70,
-    gSize: 512, gSteps: 320, gStepK: 0.04, gOct: 5, gLive: true },
+    gSize: 512, gSteps: 320, gStepK: 0.04, gOct: 5, gLive: true,
+    fftN: 256, fftL: [37, 8.3, 1.9], caust: 1 },
   { name: 'Tinggi', dpr: 1.5,  msaa: 4, bloom: 6, grain: 1, cube: 384, faceEvery: 1, steps: 32, layers: 2, oct: 4, nw: 16, nm: 8,  cell: 0.45, near: 70,
-    gSize: 384, gSteps: 240, gStepK: 0.05, gOct: 4, gLive: true },
+    gSize: 384, gSteps: 240, gStepK: 0.05, gOct: 4, gLive: true,
+    fftN: 256, fftL: [37, 6.1], caust: 1 },
   { name: 'Sedang', dpr: 1.25, msaa: 0, bloom: 4, grain: 1, cube: 256, faceEvery: 1, steps: 0,  layers: 2, oct: 5, nw: 14, nm: 6,  cell: 0.6,  near: 72,
-    gSize: 384, gSteps: 200, gStepK: 0.06, gOct: 4, gLive: false },
+    gSize: 384, gSteps: 200, gStepK: 0.06, gOct: 4, gLive: false,
+    fftN: 128, fftL: [31, 5.3], caust: 0 },
   { name: 'Rendah', dpr: 1.0,  msaa: 0, bloom: 2, grain: 1, cube: 192, faceEvery: 2, steps: 0,  layers: 1, oct: 5, nw: 12, nm: 4,  cell: 0.8,  near: 72,
-    gSize: 256, gSteps: 150, gStepK: 0.075, gOct: 3, gLive: false },
+    gSize: 256, gSteps: 150, gStepK: 0.075, gOct: 3, gLive: false,
+    fftN: 64, fftL: [19], caust: 0 },
   { name: 'Hemat',  dpr: 0.85, msaa: 0, bloom: 2, grain: 0, cube: 128, faceEvery: 2, steps: 0,  layers: 1, oct: 4, nw: 10, nm: 2,  cell: 1.0,  near: 70,
-    gSize: 256, gSteps: 120, gStepK: 0.085, gOct: 3, gLive: false },
+    gSize: 256, gSteps: 120, gStepK: 0.085, gOct: 3, gLive: false,
+    fftN: 0, fftL: [], caust: 0 },
 ];
 const PRESET = { idx: 1, auto: true, low: 0 };
 const MOODS = [
@@ -173,7 +181,7 @@ const I18N = { en: {
   'Waktu planet': 'Planet time', 'Waktu di luar': 'Time outside', 'Gravitasi': 'Gravity', 'Kedalaman air': 'Water depth',
   'Gelombang': 'Wave', 'Tiba dalam': 'Arrives in', 'sudah lewat': 'passed', 'di luar': 'outside', 'Goyangan planet': 'Planet wobble',
   'Tampilan': 'View', 'Kecepatan waktu': 'Time speed', 'Jalan kaki': 'On foot', 'Drone 60 m': 'Drone 60 m', 'Tinggi 1,5 km': 'High 1.5 km',
-  'Grafik': 'Graphics', 'GPU (langit / scene / post)': 'GPU (sky / scene / post)',
+  'Grafik': 'Graphics', 'GPU (langit / FFT / scene / post)': 'GPU (sky / FFT / scene / post)',
   'tahun': 'y', 'hari': 'd', 'jam': 'h', 'mnt': 'min', 'dtk': 's',
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
   'Gelombang dipanggil: {d} km': 'Wave summoned: {d} km',
@@ -221,7 +229,7 @@ const U = {   // uniform bersama material permukaan (objek uniform dipakai bersa
   uWX: { value: W.start }, uWH: { value: W.H }, uLean: { value: W.lean },
   uSky: { value: null }, uWob: { value: new THREE.Matrix3() }, uFogD: { value: CONFIG.fogD }, uPix: { value: 0.001 },
   uAmb: { value: new THREE.Color() }, uScat: { value: new THREE.Color(0.10, 0.135, 0.155) }, uAbs: { value: new THREE.Vector3(2.0, 1.6, 1.45) },
-  uBed: { value: new THREE.Color(0.32, 0.29, 0.24) }, uFoamC: { value: new THREE.Color(0.95, 0.97, 0.98) },
+  uBed: { value: new THREE.Color(0.32, 0.29, 0.24) }, uCaustK: { value: 0.2 }, uFoamC: { value: new THREE.Color(0.95, 0.97, 0.98) },
   uWA: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uWB: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
   uMA: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) }, uMB: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) },
 };
@@ -306,7 +314,7 @@ vec3 chopNormal(vec2 p, float t, float foot, out float J) {
   return normalize(vec3(nx, max(ny, 0.05), nz));     // ny >= 1 - q > 0: tidak pernah vektor nol
 }
 // Shading air: pantulan langit (cubemap), Fresnel, dasar laut samar lewat air keruh, buih, kabut ke warna cakrawala
-vec3 seaShade(vec3 r, vec3 n, float depth, float foam, vec2 P) {
+vec3 seaShade(vec3 r, vec3 n, float depth, float foam, vec2 P, float caust) {   // caust: pengali cahaya di dasar (kaustik)
   // Kedalaman dijepit: dengan MSAA, varying di tepi segitiga kecil (cakrawala) bisa diekstrapolasi negatif -> exp() meledak
   depth = clamp(depth, 0.03, 100.0);
   float dist = max(length(r), 1e-3); vec3 V = -r / dist;
@@ -317,7 +325,7 @@ vec3 seaShade(vec3 r, vec3 n, float depth, float foam, vec2 P) {
   float cosT = sqrt(max(1.0 - (1.0 - nv * nv) / 1.777, 0.05));
   vec3 tr = exp(-uAbs * (depth / cosT));
   float bn = vn2(P * 0.35) * 0.6 + vn2(P * 1.7) * 0.4;
-  vec3 bed = uBed * (0.7 + 0.6 * bn) * uAmb * exp(-uAbs * depth);    // cahaya turun sampai dasar lalu naik lagi
+  vec3 bed = uBed * (0.85 + 0.3 * bn) * uAmb * exp(-uAbs * depth) * caust;    // cahaya turun sampai dasar lalu naik lagi
   vec3 body = bed * tr + uScat * uAmb * (1.0 - tr);
   vec3 c = mix(body, env, F);
   c = mix(c, uFoamC * uAmb, clamp(foam, 0.0, 1.0));
@@ -577,7 +585,148 @@ const bgMat = new THREE.ShaderMaterial({
 });
 { const m = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), bgMat); m.frustumCulled = false; m.renderOrder = -100; scene.add(m); }
 
-/* ---------------- Laut: dekat = grid persegi rapat (Gerstner), jauh = cincin polar sampai 270 km ----------------
+/* ---------------- Ombak FFT (R2): spektrum di CPU, evolusi waktu + IFFT 2D di GPU ----------------
+   Tiap kaskade (petak berulang L meter, N x N): spektrum arah angin dengan dispersi air dangkal, pita k tidak tumpang
+   tindih antar kaskade, dinormalisasi agar tinggi signifikan = CONFIG.chop.Hs. Per frame: h(k,t) dan turunannya
+   (8 medan riil dikemas jadi 4 bilangan kompleks di 2 tekstur, MRT) -> IFFT Stockham radix-2 baris lalu kolom ->
+   tekstur perpindahan (Dx, h, Dz, Jacobian) dan kemiringan (dh/dx, dh/dz) ber-mipmap. Buih kaskade pertama menumpuk
+   lalu memudar (tekstur ping-pong). Hemat, atau browser tanpa render ke float, tetap memakai Gerstner. */
+const OCEAN = { on: false, ok: false, N: 0, casc: [], foam: [], fi: 0, t: 0, lastT: 0 };
+try { OCEAN.ok = renderer.extensions.has('EXT_color_buffer_float'); } catch (e) { OCEAN.ok = false; }
+const FFT_VS = 'precision highp float; in vec3 position; void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }';
+const FFT_HEAD = 'precision highp float; precision highp int; precision highp sampler2D;\n' +
+  'vec2 cm(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }\nvec2 ci(vec2 a) { return vec2(-a.y, a.x); }\n';
+const fftMat = (fs, uniforms) => new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, uniforms, vertexShader: FFT_VS, fragmentShader: FFT_HEAD + fs, depthTest: false, depthWrite: false });
+const M_SPEC = fftMat(/* glsl */`
+  uniform sampler2D tH0; uniform float uL, uN, uT, uG, uD;
+  layout(location = 0) out vec4 oA; layout(location = 1) out vec4 oB;
+  void main() {
+    vec2 id = floor(gl_FragCoord.xy);
+    vec2 nn = vec2(id.x < uN * 0.5 ? id.x : id.x - uN, id.y < uN * 0.5 ? id.y : id.y - uN);
+    vec2 k = nn * 6.28318530718 / uL; float kl = length(k);
+    vec4 h0 = texelFetch(tH0, ivec2(id), 0);
+    float ph = sqrt(uG * kl * tanh(min(kl * uD, 20.0))) * uT;     // dispersi air dangkal
+    vec2 e = vec2(cos(ph), sin(ph));
+    vec2 h = cm(h0.xy, e) + cm(h0.zw, vec2(e.x, -e.y));
+    vec2 kn = kl > 1e-6 ? k / kl : vec2(0.0);
+    vec2 dx = ci(h) * kn.x, dz = ci(h) * kn.y, sx = ci(h) * k.x, sz = ci(h) * k.y;
+    vec2 jxx = -h * (k.x * kn.x), jzz = -h * (k.y * kn.y), jxz = -h * (k.x * kn.y);
+    oA = vec4(h + ci(dx), dz + ci(sx));                           // Z = P + iQ: IFFT memberi P dan Q riil sekaligus
+    oB = vec4(sz + ci(jxx), jzz + ci(jxz));
+  }`, { tH0: { value: null }, uL: { value: 1 }, uN: { value: 1 }, uT: { value: 0 }, uG: { value: CONFIG.g }, uD: { value: CONFIG.chop.depth } });
+const M_BFLY = fftMat(/* glsl */`
+  uniform sampler2D tA, tB; uniform int uQ, uHoriz, uN;
+  layout(location = 0) out vec4 oA; layout(location = 1) out vec4 oB;
+  void main() {                                                   // satu tahap Stockham radix-2, tanda + (IFFT tanpa normalisasi)
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    int i = uHoriz == 1 ? p.x : p.y, Ls = 1 << uQ;
+    int b = (i >> uQ) & 1, k = i & (Ls - 1), t = ((i >> (uQ + 1)) << uQ) + k;
+    ivec2 p0 = uHoriz == 1 ? ivec2(t, p.y) : ivec2(p.x, t), p1 = uHoriz == 1 ? ivec2(t + uN / 2, p.y) : ivec2(p.x, t + uN / 2);
+    float ang = 3.14159265359 * float(k) / float(Ls), s = b == 1 ? -1.0 : 1.0;
+    vec2 w = vec2(cos(ang), sin(ang));
+    vec4 a0 = texelFetch(tA, p0, 0), a1 = texelFetch(tA, p1, 0), b0 = texelFetch(tB, p0, 0), b1 = texelFetch(tB, p1, 0);
+    oA = vec4(a0.xy + s * cm(a1.xy, w), a0.zw + s * cm(a1.zw, w));
+    oB = vec4(b0.xy + s * cm(b1.xy, w), b0.zw + s * cm(b1.zw, w));
+  }`, { tA: { value: null }, tB: { value: null }, uQ: { value: 0 }, uHoriz: { value: 1 }, uN: { value: 1 } });
+const M_ASM = fftMat(/* glsl */`
+  uniform sampler2D tA, tB; uniform float uLam;
+  layout(location = 0) out vec4 oD; layout(location = 1) out vec4 oS;
+  void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    vec4 A = texelFetch(tA, p, 0), B = texelFetch(tB, p, 0);   // A = (h, Dx, Dz, dh/dx), B = (dh/dz, Jxx, Jzz, Jxz)
+    float jxx = 1.0 + uLam * B.y, jzz = 1.0 + uLam * B.z, jxz = uLam * B.w;
+    oD = vec4(uLam * A.y, A.x, uLam * A.z, jxx * jzz - jxz * jxz);
+    oS = vec4(A.w, B.x, 0.0, 1.0);
+  }`, { tA: { value: null }, tB: { value: null }, uLam: { value: 0.9 } });
+const M_FOAM = fftMat(/* glsl */`
+  uniform sampler2D tD, tPrev; uniform float uDecay, uJ;
+  layout(location = 0) out vec4 oF;
+  void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    float gen = smoothstep(uJ, uJ - 0.3, texelFetch(tD, p, 0).w);        // lipatan ombak (Jacobian kecil) = buih baru
+    oF = vec4(max(texelFetch(tPrev, p, 0).r * uDecay, gen), 0.0, 0.0, 1.0);
+  }`, { tD: { value: null }, tPrev: { value: null }, uDecay: { value: 0.98 }, uJ: { value: 0.6 } });
+function oceanSpectrum(N, Ls) {
+  const C = CONFIG.chop, wind = C.dir * DEG, kp = 2 * Math.PI / C.peak, kcap = 2 * Math.PI / 0.06, r = rng(11);
+  const gauss = () => { let u = 0; while (u === 0) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
+  const lo = Ls.map((L, c) => (c === 0 ? 0 : 2 * Math.PI / L * 6)), raw = []; let sum = 0;
+  Ls.forEach((L, c) => {
+    const hi = c + 1 < Ls.length ? lo[c + 1] : Infinity, dk = 2 * Math.PI / L, h = new Float32Array(N * N * 2);
+    for (let m = 0; m < N; m++) for (let n = 0; n < N; n++) {
+      const kx = (n < N / 2 ? n : n - N) * dk, kz = (m < N / 2 ? m : m - N) * dk, k = Math.hypot(kx, kz);
+      if (k <= lo[c] || k >= hi || k === 0) continue;
+      const cth = Math.cos(Math.atan2(kz, kx) - wind), spread = cth > 0 ? cth * cth : 0.06 * cth * cth;
+      const psi = Math.exp(-1.25 * (kp / k) ** 4) / k ** 4 * spread * Math.exp(-((k / kcap) ** 2));
+      const amp = Math.sqrt(psi * dk * dk / 2), i = (m * N + n) * 2;
+      h[i] = gauss() * amp; h[i + 1] = gauss() * amp; sum += h[i] * h[i] + h[i + 1] * h[i + 1];
+    }
+    raw.push(h);
+  });
+  const sc = Math.sqrt((C.Hs / 4) ** 2 / (2 * sum));                // ragam h(x) = 2 sum |h0|^2  ->  Hs = 4 sigma
+  return raw.map((h) => {
+    const d = new Float32Array(N * N * 4);
+    for (let m = 0; m < N; m++) for (let n = 0; n < N; n++) {
+      const i = (m * N + n) * 2, j = (((N - m) % N) * N + (N - n) % N) * 2, o = (m * N + n) * 4;
+      d[o] = h[i] * sc; d[o + 1] = h[i + 1] * sc; d[o + 2] = h[j] * sc; d[o + 3] = -h[j + 1] * sc;   // h0(k), conj(h0(-k))
+    }
+    return d;
+  });
+}
+function makeOcean(P) {
+  for (const c of OCEAN.casc) { c.h0.dispose(); c.a.dispose(); c.b.dispose(); c.out.dispose(); }
+  for (const f of OCEAN.foam) f.dispose();
+  OCEAN.casc = []; OCEAN.foam = [];
+  OCEAN.on = !!(P.fftN && OCEAN.ok);
+  for (const m of [seaNear.material, seaFar.material]) {
+    m.defines.FFT = OCEAN.on ? 1 : 0; m.defines.NC = OCEAN.on ? P.fftL.length : 1; m.defines.CAUST = OCEAN.on && P.caust ? 1 : 0; m.needsUpdate = true;
+  }
+  if (!OCEAN.on) return;
+  const N = P.fftN, spec = oceanSpectrum(N, P.fftL), aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  const fOpt = { count: 2, type: THREE.FloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, generateMipmaps: false };
+  const oOpt = { count: 2, type: THREE.HalfFloatType, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, depthBuffer: false, generateMipmaps: true, anisotropy: aniso };
+  OCEAN.N = N;
+  P.fftL.forEach((L, i) => {
+    const h0 = new THREE.DataTexture(spec[i], N, N, THREE.RGBAFormat, THREE.FloatType); h0.needsUpdate = true;
+    const c = { L, h0, raw: spec[i], a: new THREE.WebGLRenderTarget(N, N, fOpt), b: new THREE.WebGLRenderTarget(N, N, fOpt), out: new THREE.WebGLRenderTarget(N, N, oOpt) };
+    for (const tx of c.out.textures) { tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.anisotropy = aniso; }
+    OCEAN.casc.push(c);
+  });
+  const fo = { type: THREE.HalfFloatType, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, depthBuffer: false, generateMipmaps: true };
+  OCEAN.foam = [new THREE.WebGLRenderTarget(N, N, fo), new THREE.WebGLRenderTarget(N, N, fo)];
+  for (const f of OCEAN.foam) { f.texture.wrapS = f.texture.wrapT = THREE.RepeatWrapping; renderer.setRenderTarget(f); renderer.setClearColor(0x000000, 1); renderer.clear(); }
+  for (const m of [seaNear.material, seaFar.material]) {
+    const u = m.uniforms, L = P.fftL;
+    u.uLc.value.set(L[0], L[1] || 1, L[2] || 1); u.uTexel.value.set(L[0] / N, (L[1] || 1) / N, (L[2] || 1) / N);
+    ['tD0', 'tD1', 'tD2'].forEach((k, i) => { u[k].value = OCEAN.casc[i] ? OCEAN.casc[i].out.textures[0] : TEX0; });
+    ['tS0', 'tS1', 'tS2'].forEach((k, i) => { u[k].value = OCEAN.casc[i] ? OCEAN.casc[i].out.textures[1] : TEX0; });
+  }
+  OCEAN.lastT = -1;
+}
+function updateOcean() {
+  if (!OCEAN.on) return;
+  const t = STATE.visT, dt = OCEAN.lastT < 0 ? 0 : Math.max(0, t - OCEAN.lastT), N = OCEAN.N, LOG = Math.log2(N);
+  OCEAN.lastT = t; OCEAN.t = t;
+  for (const c of OCEAN.casc) {
+    M_SPEC.uniforms.tH0.value = c.h0; M_SPEC.uniforms.uL.value = c.L; M_SPEC.uniforms.uN.value = N; M_SPEC.uniforms.uT.value = t;
+    pass(M_SPEC, c.a);
+    let src = c.a, dst = c.b;
+    M_BFLY.uniforms.uN.value = N;
+    for (const horiz of [1, 0]) for (let q = 0; q < LOG; q++) {
+      M_BFLY.uniforms.tA.value = src.textures[0]; M_BFLY.uniforms.tB.value = src.textures[1]; M_BFLY.uniforms.uQ.value = q; M_BFLY.uniforms.uHoriz.value = horiz;
+      pass(M_BFLY, dst); [src, dst] = [dst, src];
+    }
+    M_ASM.uniforms.tA.value = src.textures[0]; M_ASM.uniforms.tB.value = src.textures[1]; M_ASM.uniforms.uLam.value = CONFIG.fft.lam;
+    pass(M_ASM, c.out);
+  }
+  const f0 = OCEAN.foam[OCEAN.fi], f1 = OCEAN.foam[1 - OCEAN.fi];
+  M_FOAM.uniforms.tD.value = OCEAN.casc[0].out.textures[0]; M_FOAM.uniforms.tPrev.value = f0.texture;
+  M_FOAM.uniforms.uDecay.value = Math.exp(-dt / CONFIG.fft.foamTau); M_FOAM.uniforms.uJ.value = CONFIG.fft.foamJ;
+  pass(M_FOAM, f1); OCEAN.fi = 1 - OCEAN.fi;
+  for (const m of [seaNear.material, seaFar.material]) m.uniforms.tFoam.value = f1.texture;
+}
+const TEX0 = new THREE.DataTexture(new Float32Array([0, 0, 0, 1]), 1, 1, THREE.RGBAFormat, THREE.FloatType); TEX0.needsUpdate = true;
+
+/* ---------------- Laut: dekat = grid persegi rapat (FFT atau Gerstner), jauh = cincin polar sampai 270 km ----------------
    Permukaan per piksel dihitung dari posisi dunia yang sama, jadi sambungan dekat/jauh tidak terlihat. Tidak ada mesh
    dasar laut: dasar dihitung di shader air (selalu terendam, samar lewat air keruh). */
 function polarGeo(r0, N, segs, a, b) {
@@ -597,18 +746,54 @@ function polarGeo(r0, N, segs, a, b) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
   return g;
 }
+// Pengambilan tekstur FFT per kaskade (tanpa larik sampler: NC ditulis di #if)
+const FFT_GLSL = /* glsl */`
+uniform sampler2D tD0, tD1, tD2, tS0, tS1, tS2, tFoam;
+uniform vec3 uLc, uTexel; uniform float uFoamJ, uCaustK;
+vec3 fftDisp(vec2 p, float cell) {                    // perpindahan di titik grid, mip dipilih dari ukuran sel (tanpa aliasing)
+  vec3 o = textureLod(tD0, p / uLc.x, max(0.0, log2(2.0 * cell / uTexel.x))).xyz;
+#if NC > 1
+  o += textureLod(tD1, p / uLc.y, max(0.0, log2(2.0 * cell / uTexel.y))).xyz;
+#endif
+#if NC > 2
+  o += textureLod(tD2, p / uLc.z, max(0.0, log2(2.0 * cell / uTexel.z))).xyz;
+#endif
+  return o;
+}
+vec2 fftSlope(vec2 p, out float J) {                  // kemiringan total dan Jacobian gabungan (1 - jumlah kompresi tiap kaskade)
+  vec2 s = texture(tS0, p / uLc.x).xy; float jd = 1.0 - texture(tD0, p / uLc.x).w;
+#if NC > 1
+  s += texture(tS1, p / uLc.y).xy; jd += 1.0 - texture(tD1, p / uLc.y).w;
+#endif
+#if NC > 2
+  s += texture(tS2, p / uLc.z).xy; jd += 1.0 - texture(tD2, p / uLc.z).w;
+#endif
+  J = 1.0 - jd;
+  return s;
+}
+float lapS(sampler2D t, vec2 p, float L, float e) {   // laplasian tinggi = divergensi kemiringan (beda pusat)
+  vec2 u = p / L, d = vec2(e / L, 0.0);
+  return (texture(t, u + d.xy).x - texture(t, u - d.xy).x + texture(t, u + d.yx).y - texture(t, u - d.yx).y) / (2.0 * e);
+}
+`;
 function seaMat(near) {
-  const u = { ...U, uOff: { value: new THREE.Vector3() }, uCell: { value: 1 }, uNearR: { value: 70 } };
+  const u = { ...U, uOff: { value: new THREE.Vector3() }, uCell: { value: 1 }, uNearR: { value: 70 },
+    tD0: { value: null }, tD1: { value: null }, tD2: { value: null }, tS0: { value: null }, tS1: { value: null }, tS2: { value: null }, tFoam: { value: null },
+    uLc: { value: new THREE.Vector3(1, 1, 1) }, uTexel: { value: new THREE.Vector3(1, 1, 1) }, uFoamJ: { value: CONFIG.fft.foamJ }, uCaustK: U.uCaustK };
   return new THREE.ShaderMaterial({
-    uniforms: u, defines: { NW: 16, NM: 12, NEAR: near ? 1 : 0 },
-    vertexShader: LOG_VS + COMMON + /* glsl */`
+    uniforms: u, defines: { NW: 16, NM: 12, NEAR: near ? 1 : 0, FFT: 0, NC: 1, CAUST: 0 },
+    vertexShader: LOG_VS + COMMON + FFT_GLSL + /* glsl */`
       uniform vec3 uOff; uniform float uCell, uNearR;
       varying vec3 vR; varying vec2 vP; varying float vDepth;
       void main() {
         vec3 w = vec3(position.x + uOff.x, 0.0, position.z + uOff.z);
       #if NEAR
-        float d = length(w.xz - uCam.xz);
-        w += gerstner(w.xz, uT, 1.0 - smoothstep(uNearR * 0.45, uNearR * 0.9, d), uCell);
+        float fade = 1.0 - smoothstep(uNearR * 0.45, uNearR * 0.9, length(w.xz - uCam.xz));
+      #if FFT
+        w += fftDisp(w.xz, uCell) * fade;
+      #else
+        w += gerstner(w.xz, uT, fade, uCell);
+      #endif
       #endif
         w.y += drawdown(w.x - frontX(w.z));
         vP = w.xz; vDepth = max(w.y - seabed(w.xz), 0.03);
@@ -617,7 +802,7 @@ function seaMat(near) {
         gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
         #include <logdepthbuf_vertex>
       }`,
-    fragmentShader: LOG_FS + COMMON + /* glsl */`
+    fragmentShader: LOG_FS + COMMON + FFT_GLSL + /* glsl */`
       uniform float uNearR;
       varying vec3 vR; varying vec2 vP; varying float vDepth;
       void main() {
@@ -625,10 +810,26 @@ function seaMat(near) {
       #if NEAR
         if (length(vR.xz) > uNearR) discard;
       #endif
-        float dist = length(vR), J;
+        float dist = length(vR), J, caust = 1.0;
+      #if FFT
+        vec2 s = fftSlope(vP, J);
+        vec3 n = normalize(vec3(-s.x, 1.0, -s.y));
+        float inst = smoothstep(uFoamJ, uFoamJ - 0.3, J), stay = texture(tFoam, vP / uLc.x).r;   // buih baru + buih sisa yang memudar
+        float foam = clamp(max(inst, stay * 0.85), 0.0, 1.0) * (0.55 + 0.45 * vn2(vP * 3.1)) * 0.85;
+      #if CAUST
+        // Kaustik: permukaan cembung memfokuskan cahaya ke dasar (1 / (1 + d x laplasian)); kuat saat langit cerah
+        float lap = lapS(tS0, vP, uLc.x, uTexel.x * 1.5);
+      #if NC > 1
+        lap += lapS(tS1, vP, uLc.y, uTexel.y * 1.5);
+      #endif
+        // bentuk halus exp(-k d lap) dijepit lembut (dulu 1/x dijepit keras -> petak bertepi tajam)
+        caust = mix(1.0, exp(1.1 * tanh(-0.35 * clamp(vDepth, 0.03, 2.0) * lap)), uCaustK * (1.0 - smoothstep(20.0, 120.0, dist)));
+      #endif
+      #else
         vec3 n = chopNormal(vP, uT, dist * uPix, J);
         float foam = smoothstep(0.5, 0.28, J) * 0.7 * (0.6 + 0.4 * vn2(vP * 2.3));
-        gl_FragColor = vec4(seaShade(vR, n, vDepth, foam, vP), 1.0);
+      #endif
+        gl_FragColor = vec4(seaShade(vR, n, vDepth, foam, vP, caust), 1.0);
       }`,
   });
 }
@@ -711,7 +912,7 @@ const waveMat = new THREE.ShaderMaterial({
       float streak = smoothstep(0.62, 0.8, fbm2(wp * 1.3)) * face;
       float base = smoothstep(0.03, 0.12, vG) * (1.0 - smoothstep(0.12, 0.3, vG)) * step(vU, 0.0) * smoothstep(0.45, 0.7, fbm2(vec2(vZ / 30.0, uT * 0.2)));
       float foam = clamp(crest * (0.6 + 0.4 * h0) + streak * 0.7 + base * 0.7, 0.0, 1.0) * smoothstep(1.0, 30.0, vG * uWH);
-      vec3 c = seaShade(vR, n, 40.0, foam, vec2(vZ, vU)) * mix(0.7, 1.0, smoothstep(0.05, 0.8, vG));   // kaki dinding lebih gelap
+      vec3 c = seaShade(vR, n, 40.0, foam, vec2(vZ, vU), 1.0) *mix(0.7, 1.0, smoothstep(0.05, 0.8, vG));   // kaki dinding lebih gelap
       gl_FragColor = vec4(c, 1.0);
     }`,
 });
@@ -840,7 +1041,7 @@ function postRender(time) {
 }
 
 /* ---------------- Ukur GPU (pola GPUT Copper Corn Station) ---------------- */
-const GPUT = { ext: null, pool: [], pend: [], cur: null, frame: 0, acc: {}, ms: { sk: 0, sc: 0, po: 0 }, n: 0 };
+const GPUT = { ext: null, pool: [], pend: [], cur: null, frame: 0, acc: {}, ms: { sk: 0, oc: 0, sc: 0, po: 0 }, n: 0 };
 try { GPUT.ext = renderer.getContext().getExtension('EXT_disjoint_timer_query_webgl2'); } catch (e) { GPUT.ext = null; }
 function gpuBegin(key) { if (!GPUT.ext) return; const gl = renderer.getContext(), q = GPUT.pool.pop() || gl.createQuery(); gl.beginQuery(GPUT.ext.TIME_ELAPSED_EXT, q); GPUT.cur = { q, key, f: GPUT.frame }; }
 function gpuEnd() { if (!GPUT.cur) return; renderer.getContext().endQuery(GPUT.ext.TIME_ELAPSED_EXT); GPUT.pend.push(GPUT.cur); GPUT.cur = null; }
@@ -852,7 +1053,7 @@ function gpuFrameEnd() {
     const e = GPUT.pend[0];
     if (e.end) {
       const A = GPUT.acc[e.f]; delete GPUT.acc[e.f];
-      if (A && !A.bad) { const k = GPUT.n ? 0.1 : 1; for (const key of ['sk', 'sc', 'po']) GPUT.ms[key] += ((A[key] || 0) - GPUT.ms[key]) * k; GPUT.n++; }
+      if (A && !A.bad) { const k = GPUT.n ? 0.1 : 1; for (const key of ['sk', 'oc', 'sc', 'po']) GPUT.ms[key] += ((A[key] || 0) - GPUT.ms[key]) * k; GPUT.n++; }
       GPUT.pend.shift(); continue;
     }
     if (!gl.getQueryParameter(e.q, gl.QUERY_RESULT_AVAILABLE)) break;
@@ -881,6 +1082,7 @@ function applyPreset(i) {
   for (const m of [seaNear.material, seaFar.material, waveMat]) { m.defines.NW = P.nw; m.defines.NM = P.nm; m.needsUpdate = true; }
   skyMat.defines.STEPS = P.steps; skyMat.defines.LAYERS = P.layers; skyMat.defines.OCT = P.oct; skyMat.needsUpdate = true;
   buildSea(P);
+  makeOcean(P);
   makeSkyCube(P.cube);
   makeGCube(P);
   M_FINAL.uniforms.uGrain.value = P.grain;
@@ -911,6 +1113,7 @@ function updateMood(dt, simT) {
   SKYU.uHaze.value.setRGB(...L('haze')); SKYU.uZen.value.setRGB(...L('zen')); SKYU.uCloudHi.value.setRGB(...L('hi')); SKYU.uCloudLo.value.setRGB(...L('lo'));
   SKYU.uGlow.value.setRGB(...L('glow')); SKYU.uWarm.value.setRGB(...L('warm')); U.uAmb.value.setRGB(...L('amb'));
   SKYU.uMood.value = MOOD.k; SKYU.uCover.value = MOOD.cover; SKYU.uBreak.value = MOOD.brk;
+  U.uCaustK.value = 0.15 + 0.75 * MOOD.brk;                        // kaustik lemah saat mendung (cahaya menyebar), kuat saat cerah
 }
 function setMood(i) {
   MOOD.idx = i;
@@ -1041,7 +1244,7 @@ function updateHud(depth, dist, wob) {
     [t('Suasana'), t(MOODS[MOOD.idx].key)],
     ['FPS', fmtN(fps)],
   ];
-  if (GPUT.ext && GPUT.n) rows.push([t('GPU (langit / scene / post)'), `${fmtN(GPUT.ms.sk, 1)} / ${fmtN(GPUT.ms.sc, 1)} / ${fmtN(GPUT.ms.po, 1)} ms`]);
+  if (GPUT.ext && GPUT.n) rows.push([t('GPU (langit / FFT / scene / post)'), `${fmtN(GPUT.ms.sk, 1)} / ${fmtN(GPUT.ms.oc, 1)} / ${fmtN(GPUT.ms.sc, 1)} / ${fmtN(GPUT.ms.po, 1)} ms`]);
   rowsEl.innerHTML = rows.map(([a, b, c]) => `<div>${a}</div><div class="${c || ''}">${b}</div>`).join('');
 }
 
@@ -1097,6 +1300,7 @@ function frame(now) {
   if ((hudT -= dt) <= 0) { hudT = 0.2; updateHud(depthNow, dist, wob); }
 
   gpuBegin('sk'); updateGCube(); updateSkyCube(); gpuEnd();
+  gpuBegin('oc'); updateOcean(); gpuEnd();
   gpuBegin('sc'); renderer.setRenderTarget(POST.hdr); renderer.clear(); renderer.render(scene, camera); gpuEnd();
   gpuBegin('po'); postRender(now / 1000); gpuEnd();
   gpuFrameEnd();
@@ -1105,7 +1309,7 @@ function frame(now) {
 try { renderer.compile(scene, camera); renderer.compile(skyScene, camera); renderer.compile(gScene, camera); } catch (e) { /* lanjut tanpa pra-kompilasi */ }
 requestAnimationFrame(frame);
 window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
-  frontX, waveTop, waterAt, seabed, chopAt, CHOP, stepPlayer, simStep, start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_ };
+  frontX, waveTop, waterAt, seabed, chopAt, CHOP, stepPlayer, simStep, start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_, OCEAN, makeOcean, updateOcean };
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>
 </body>

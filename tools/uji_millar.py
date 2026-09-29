@@ -72,6 +72,41 @@ UJI = r"""
     rt.dispose();
   }
 
+  // 5c. ombak FFT (R2): tinggi dari GPU = DFT di CPU (dari spektrum yang sama), tinggi signifikan, cakupan buih
+  {
+    const from = M.THREE.DataUtils.fromHalfFloat, O = M.OCEAN;
+    const readC = (c) => { const N = O.N, b = new Uint16Array(N * N * 4); M.renderer.readRenderTargetPixels(c.out, 0, 0, N, N, b); return b; };
+    for (const pi of [3, 0]) {
+      M.applyPreset(pi); await wait(1500);
+      const name = M.PRESETS[pi].name;
+      out[`FFT aktif di ${name}: ${O.on}, ${O.casc.length} kaskade N ${O.N}`] = O.on && O.casc.length === M.PRESETS[pi].fftL.length;
+      if (!O.on) continue;
+      let v = 0, foam = 0, n = 0; const bufs = O.casc.map(readC);
+      bufs.forEach((b) => { let s = 0, s2 = 0; for (let k = 0; k < b.length; k += 4) { const h = from(b[k + 1]); s += h; s2 += h * h; } const m = s / (b.length / 4); v += s2 / (b.length / 4) - m * m; });
+      for (let k = 0; k < bufs[0].length; k += 4) { if (from(bufs[0][k + 3]) < M.CONFIG.fft.foamJ - 0.15) foam++; n++; }
+      const hs = 4 * Math.sqrt(v);
+      out[`FFT ${name}: tinggi signifikan ${hs.toFixed(3)} m (CONFIG ${M.CONFIG.chop.Hs})`] = Math.abs(hs / M.CONFIG.chop.Hs - 1) < 0.08;
+      out[`FFT ${name}: buih baru ${(100 * foam / n).toFixed(1)}% permukaan kaskade 1 (info)`] = true;
+      if (pi === 3) {                                           // bandingkan dengan DFT langsung di 6 titik (N 64)
+        const c = O.casc[0], N = O.N, L = c.L, t = O.t, b = bufs[0], g = M.CONFIG.g, dd = M.CONFIG.chop.depth; let err = 0;
+        for (let q = 0; q < 6; q++) {
+          const mx = (q * 37 + 5) % N, mz = (q * 23 + 11) % N, x = mx * L / N, z = mz * L / N; let re = 0;
+          for (let m = 0; m < N; m++) for (let nn = 0; nn < N; nn++) {
+            const o = (m * N + nn) * 4, kx = (nn < N / 2 ? nn : nn - N) * 2 * Math.PI / L, kz = (m < N / 2 ? m : m - N) * 2 * Math.PI / L, kl = Math.hypot(kx, kz);
+            const w = Math.sqrt(g * kl * Math.tanh(Math.min(kl * dd, 20))), ph = w * t, cs = Math.cos(ph), sn = Math.sin(ph);
+            const hr = c.raw[o] * cs - c.raw[o + 1] * sn + c.raw[o + 2] * cs + c.raw[o + 3] * sn;
+            const hi = c.raw[o] * sn + c.raw[o + 1] * cs - c.raw[o + 2] * sn + c.raw[o + 3] * cs;
+            const a = kx * x + kz * z; re += hr * Math.cos(a) - hi * Math.sin(a);
+          }
+          err = Math.max(err, Math.abs(re - from(b[(mz * N + mx) * 4 + 1])));
+        }
+        out[`FFT GPU = DFT CPU di 6 titik: selisih maks ${(err * 1000).toFixed(2)} mm`] = err < 0.003;
+      }
+    }
+    M.applyPreset(4); await wait(800);
+    out[`Hemat tetap Gerstner (FFT ${M.OCEAN.on})`] = !M.OCEAN.on && M.seaNear.material.defines.FFT === 0;
+  }
+
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua
   //    (dulu: dengan MSAA, kedalaman air diekstrapolasi negatif di segitiga kecil cakrawala -> nilai meledak)
   const r = M.renderer, from = M.THREE.DataUtils.fromHalfFloat;
