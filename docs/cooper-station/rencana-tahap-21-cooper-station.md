@@ -8,14 +8,14 @@ Per 29 September 2026 · Bhakti
 - **21b kaca rumah Cooper:** dari dalam rumah kaca tidak lagi memantulkan seluruh silinder. Yang terpantul hanya ruangan yang redup (lemah), jadi luar terlihat jelas. Dari luar pantulan daratan seberang tetap ada.
 - **21c gedung kaca malam:** gedung jauh tidak lagi putih rata. Lampu menyala per lantai dan per blok kantor (tetap bervariasi dari jauh), warna putih dingin kantor vs kuning hangat hunian, banyak kaca gelap, jumlah lampu ikut jam, lampu mahkota di sebagian menara, lampu merah penanda di atap.
 
-Urutan kerja yang disarankan: 1) 21a-1 (kecil), 2) 21b (kecil), 3) 21c (sedang), 4) 21a-2 + 21a-3 (paling besar).
+Urutan kerja: 1) 21a-1 (selesai), 2) 21b, 3) 21c, 4) 21a-2 + 21a-3 (paling besar).
 
 ## Penyebab di kode
 
 | Keluhan | Penyebab | Lokasi (cari nama) |
 | --- | --- | --- |
 | Gambar 1: orang terjebak di kolam | Kelompok mengobrol di plaza (`still({ pose: 1 })`, 2 kelompok per plaza) ditaruh acak di setengah tengah plaza, lalu diam selamanya. `PEDS` dibangun sebelum `FOUNT`, jadi posisi kolam belum diketahui. Blok plaza kecil (dipotong jalan lokal), jadi peluang jatuh di radius kolam 4,8 m cukup besar | `PEDS` langkah 3 "taman dan plaza kota"; `FOUNT` |
-| Gambar 1: pohon di tengah kolam (temuan tambahan) | Pohon plaza ditanam acak di seluruh blok plaza (1 pohon per 900 m2) tanpa zona larangan kolam | loop `parkBlocks` di blok pohon ("taman dan plaza kota") |
+| Gambar 1: pohon di tengah kolam (dugaan awal, keliru) | Diukur di 21a-1: tidak ada pohon dalam 10 m dari pusat kolam; pohon di gambar 1 berdiri di belakang kolam. Pohon plaza tetap diberi zona larangan agar tidak terjadi bila tata letak berubah | loop `parkBlocks` di blok pohon ("taman dan plaza kota") |
 | Merpati mematuk di dalam air (temuan tambahan) | Titik kawanan merpati = tepat pusat tiap plaza, sama dengan pusat air mancur | `BIRDS`, "tempat merpati" |
 | Gambar 1: busa cuma zigzag | 3.600 kotak datar 6 x 6 cm tanpa tepi lembut, alfa rata 0,55, warna rata. Tiap semburan 400 partikel pada satu garis lintasan dengan geser acak kecil (+-6 cm) yang tetap per partikel, jadi terbaca sebagai garis bergerigi, bukan kolom air | `FOUNT` (VS dengan `aJet`) |
 | Gambar 1: air diam seperti kaca | Air = `CircleGeometry` datar dengan `specMat` kekasaran 0,05: cermin sempurna `farEnv`, tanpa riak, tanpa dasar kolam, tanpa gerak | `FOUNT`, `water` |
@@ -24,17 +24,39 @@ Urutan kerja yang disarankan: 1) 21a-1 (kecil), 2) 21b (kecil), 3) 21c (sedang),
 
 ## 21a: air mancur
 
-### 21a-1: orang, pohon, merpati
+### 21a-1: orang, pohon, merpati (selesai)
+
+Terukur sebelum perbaikan: 5 orang diam di 3,3-5,0 m dari pusat kolam (dinding kolam 4,8 m, jadi di dalam kolam) dan titik kawanan merpati tepat di pusat kolam (0 m). Plaza air mancur 31,4 x 41,2 m. Tidak ada pohon atau perabot dalam 9 m.
 
 | Bagian | Perubahan |
 | --- | --- |
-| Posisi kolam lebih awal | Hitung `FOUNT.s`, `FOUNT.za` (rumus sama: plaza terdekat ke s 14, za 625) tepat setelah `parkBlocks` terisi, sebelum pohon dan pejalan kaki. Tinggi `FOUNT.h` tetap dihitung di tempat lama (butuh `TER`) |
-| Zona larangan | Radius 7,0 m dari pusat (dinding kolam 4,8 m + jalur 2,2 m) |
-| Pohon plaza | Pohon di dalam zona didorong keluar sepanjang garis dari pusat sampai 7,0 m. Tidak dibuang, jadi jumlah dan urutan acak tetap sama (aturan `treeSkipped`) |
-| Kelompok mengobrol | Pusat kelompok yang jatuh di zona didorong keluar ke 8,5 m. Pemanggilan `r()` tidak berubah, jadi orang lain di kota tidak ikut pindah |
-| Merpati | Titik kawanan plaza air mancur digeser 10 m ke sisi -za (plakat ada di sisi +za) |
-| Pengunjung air mancur (baru) | Jenis pejalan kaki baru `kind: 'fount'`, 8 orang: jalan dari tepi plaza ke titik acak di bibir kolam (radius 5,3 m), berdiri menghadap air 20-90 s (sebagian duduk di bibir kolam, tinggi 0,55 m), lalu jalan pergi ke jalur keliling plaza; orang berikutnya datang. Jumlah ikut `pedAct()` (malam lebih sepi) |
-| Kelompok di plaza lain (usulan) | Tiap 3-8 menit waktu simulasi satu kelompok bubar (anggota berjalan pergi) dan kelompok baru terbentuk di tempat lain di plaza yang sama |
+| Posisi kolam lebih awal | `FOUNT.s`, `FOUNT.za`, `FOUNT.block` dihitung di blok pohon (rumus sama: plaza pusat kota terdekat ke s 14, za 625), sebelum pohon, pejalan kaki, dan merpati. `FOUNT.h` dan kolam tetap dibangun di bagian air mancur (butuh `TER`). Fungsi bantu `fountDist()`, `fountPush(s, za, r)` |
+| Zona larangan | `FOUNT.clear` 7,0 m dari pusat (dinding kolam 4,8 m + jalur 2,2 m) |
+| Pohon plaza | Pohon di dalam zona didorong keluar sepanjang garis dari pusat sampai 7,0 m, tidak dibuang (jumlah dan urutan acak sama) |
+| Kelompok mengobrol | Pusat kelompok di zona didorong ke 8,5 m. Kelompok kini bergerak (`VIS.groups`): diam mengobrol 3-8 menit, bubar (anggota kembali ke jalur keliling plaza 40-150 s), lalu berkumpul lagi di tempat baru di plaza yang sama (jauh dari kolam, pohon, dan kelompok lain). Yang datang lebih dulu menunggu temannya, berkumpul paling lama 4 menit |
+| Pengunjung air mancur (baru) | 8 orang (`VIS.fount`): keliling plaza 30-120 s, jalan lurus ke tepi kolam (5,05 m, dekat arah datang, tidak berebut tempat: jarak busur minimal 0,9 m), berdiri menghadap air atau (1 dari 3) duduk di bibir kolam menghadap keluar (4,5 m, tinggi 0,55 m), 20-90 s, lalu jalan ke titik lain di jalur keliling. Tidak pernah muncul atau hilang tiba-tiba. Kepadatan tetap ikut `pedAct()` (malam lebih sepi) |
+| Jalur lurus | `visPathOK()`: tiap 0,7 m dicek tidak masuk lingkaran 5,0 m kolam dan tidak menabrak collider (pohon, perabot); bila gagal, coba titik lain atau tunggu 3 s |
+| Merpati | Titik kawanan plaza air mancur digeser 10 m ke sisi -za (plakat di sisi +za). Merpati yang turun didorong menjauh dari kolam dalam 7 m; merpati di tanah tidak pernah di dalam 5,2 m |
+| Mesin keadaan | `stepVisit(p, dt)` dipanggil dari `stepPeds()` untuk `kind: 'visit'` ('loop', 'in', 'stay', 'out'); generator acak sendiri `visRnd()` |
+| Dunia lain | Tidak berubah: angka acak setup pejalan kaki, pohon, dan merpati tetap. Dicek terhadap main: 15.032 pohon, 11.641 rute pejalan kaki, 10 kawanan merpati lain, 44.685 collider, penampilan 13.094 orang, semua identik. Yang berubah hanya 41 anggota kelompok mengobrol (kini bergerak) dan 8 pengunjung baru |
+
+Hasil `tools/uji_air_mancur.py` (baru, 30 menit simulasi, sandbox SwiftShader):
+
+| Cek | Hasil |
+| --- | --- |
+| Geser Coriolis 10 m/s dan 6 m/s | 1,372 m dan 0,296 m (tidak berubah) |
+| Orang di dalam kolam saat muat | 0 (sebelumnya 5) |
+| Pohon dalam 7 m | 0 |
+| Titik merpati terdekat | 10,0 m dari pusat kolam (sebelumnya 0 m) |
+| Pengunjung air mancur | 8 dari 8 pernah di tepi kolam, 8 pernah duduk |
+| Lama di tepi kolam paling lama | 90 s |
+| 30 menit: posisi di dalam kolam / nilai tidak valid | 0 / 0 |
+| 30 menit: titik jalur lurus di dalam pohon atau benda | 0 |
+| Kelompok mengobrol | 16 kelompok: 16 bubar, 16 berkumpul lagi |
+| Pusat kelompok terdekat | 8,5 m dari pusat kolam |
+| Merpati dikejutkan lalu hinggap lagi | 6 dari 6 terbang, 6 hinggap, 0 di dalam kolam |
+
+Uji lama yang dijalankan ulang, semua lolos tanpa error: `qc_load.py`, `uji_pejalan_kaki.py`, `uji_trotoar.py`, `uji_burung.py`, `uji_hujan.py`, `uji_ladang_foto_tur.py`, `uji_bahasa.py`. Catatan: di uji merpati, kawanan terbang menjauhi kolam (arah pemain), jadi dorongan saat mendarat hanya teruji lewat batas keras 5,2 m.
 
 ### 21a-2: semburan
 

@@ -3803,6 +3803,20 @@ function tree(s, za, k) {
   if (inBallpark(s, za, 1)) return;
   treeList.push([modS(s), za, k]);
 }
+// 21a-1: lokasi air mancur Coriolis (plaza pusat kota terdekat ke s 14, za 625) ditentukan sebelum pohon, pejalan kaki,
+// dan merpati, agar kolam (dinding 4,8 m) dan jalur di sekelilingnya kosong. Kolam sendiri dibangun di bagian air mancur.
+const FOUNT = { jets: [], plaque: null, clear: 7, block: null };
+{
+  let bd = 1e9;
+  for (const b of parkBlocks) { if (!b[4]) continue; const cs = (b[0] + b[2]) / 2, cz = (b[1] + b[3]) / 2, d = Math.hypot(wrapS(cs - 14), cz - 625); if (d < bd) { bd = d; FOUNT.s = cs; FOUNT.za = cz; FOUNT.block = b; } }
+  if (!FOUNT.block) { FOUNT.s = 60; FOUNT.za = 700; }
+}
+function fountDist(s, za) { return Math.hypot(wrapS(s - FOUNT.s), za - FOUNT.za); }
+function fountPush(s, za, r) {                                      // titik dalam radius r didorong keluar searah garis dari pusat kolam
+  const ds = wrapS(s - FOUNT.s), dz = za - FOUNT.za, d = Math.hypot(ds, dz);
+  if (d >= r) return [s, za];
+  return d > 1e-3 ? [FOUNT.s + ds * r / d, FOUNT.za + dz * r / d] : [FOUNT.s, FOUNT.za + r];
+}
 // pohon jalan di arteri kota (tidak di persimpangan)
 for (let i = 0; i < 26; i++) {
   const s = i * ART, blvd = Math.abs(wrapS(s - TRAM.s)) < 1;
@@ -3820,7 +3834,8 @@ for (const [s0, z0, s1, z1, plaza, cross] of parkBlocks) {       // taman dan pl
   for (let q = 0; q < n; q++) {
     const ts = U(s0 + 3, s1 - 3), tz = U(z0 + 3, z1 - 3), k = U(0.8, 1.2);
     if (cross && (Math.abs(ts - cs) < 3 || Math.abs(tz - cz) < 3 || ts < s0 + 6 || ts > s1 - 6 || tz < z0 + 6 || tz > z1 - 6)) continue;   // 16e: jalur taman distrik
-    tree(ts, tz, k);
+    const [ps, pz] = fountPush(ts, tz, FOUNT.clear);                 // 21a-1: tidak ada pohon di kolam air mancur
+    tree(ps, pz, k);
   }
 }
 for (let q = 0; q < 2600; q++) {                                 // taman & sungai: kelompok pohon dari noise
@@ -9782,11 +9797,108 @@ const PARK_PATHS = { runs: [], w: 2.6, mesh: null };
   mesh.frustumCulled = false; mesh.userData.noShadow = true; scene.add(mesh); PARK_PATHS.mesh = mesh;
 }
 const PEDS = { list: [], walk: [], near: [], nearAt: 0, nearS: 1e9, nearZ: 1e9, frame: 0, max: 4000, n: 0, radius: 300, dens: 1, user: 1, users: [1, 0.4, 0], names: ['nyala', 'sedikit', 'mati'] };
+// 21a-1: pengunjung plaza (kind 'visit'). Keadaan: 'loop' keliling tepi dalam plaza, 'in' jalan lurus ke tujuan, 'stay' diam
+// (berdiri / duduk), 'out' jalan lurus kembali ke jalur keliling. Dua jenis: pengunjung air mancur (VIS.fount, berdiri di tepi
+// kolam atau duduk di bibir kolam 20-90 s) dan anggota kelompok mengobrol (VIS.groups, bubar tiap 3-8 menit, berkumpul lagi di
+// tempat lain di plaza yang sama). Generator acak sendiri, jadi pejalan kaki lain tidak ikut berubah.
+const VIS = { sd: 20260929, fount: [], groups: [], rimR: 5.05, sitR: 4.5, sitElev: 0.08, minR: 5.0 };
+const visRnd = () => ((VIS.sd = (VIS.sd * 16807) % 2147483647) / 2147483647);
+function rectPoint(R4, u) {                                         // titik di keliling persegi [s0, z0, w, d] + arah jalan (dir +1)
+  const [s0, z0, w, d] = R4;
+  if (u < w) return [s0 + u, z0, 1, 0];
+  if ((u -= w) < d) return [s0 + w, z0 + u, 0, 1];
+  if ((u -= d) < w) return [s0 + w - u, z0 + d, -1, 0];
+  u -= w; return [s0, z0 + d - u, 0, -1];
+}
+function visPathOK(s0, z0, s1, z1) {                                // jalur lurus: tidak masuk kolam, tidak menabrak pohon atau benda
+  const ds = wrapS(s1 - s0), dz = z1 - z0, n = Math.max(1, Math.ceil(Math.hypot(ds, dz) / 0.7));
+  for (let i = 1; i <= n; i++) {
+    const s = s0 + ds * i / n, za = z0 + dz * i / n, dF = fountDist(s, za);
+    if (dF < VIS.minR - 1e-6) return false;
+    if (dF > 7.5 && colAt(s, za, 0.3)) return false;                 // collider kolam (kotak 4,6 m) diwakili lingkaran di atas
+  }
+  return true;
+}
+function visGo(p, s, za, st) { p.st = st; p.a0 = [p.s, p.za]; p.a1 = [s, za]; p.L = Math.max(0.1, Math.hypot(wrapS(s - p.s), za - p.za)); p.k = 0; }
+function visLoop(p, tm) {                                           // kembali ke jalur keliling pada titik terdekat
+  const [s0, z0, w, d] = p.rect, cs = Math.min(Math.max(p.s, s0), s0 + w), cz = Math.min(Math.max(p.za, z0), z0 + d);
+  const e = [cz - z0, s0 + w - cs, z0 + d - cz, cs - s0], m = e.indexOf(Math.min(...e));   // sisi terdekat: bawah, kanan, atas, kiri
+  p.u = m === 0 ? cs - s0 : m === 1 ? w + cz - z0 : m === 2 ? w + d + s0 + w - cs : 2 * w + d + z0 + d - cz;
+  p.st = 'loop'; p.tm = tm; p.dir = visRnd() < 0.5 ? 1 : -1;
+}
+function visTaken(p, a) {                                           // tempat di tepi kolam sudah dipakai pengunjung lain (jarak busur < 0,9 m)
+  for (const q of VIS.fount) if (q !== p && (q.st === 'in' || q.st === 'stay') && Math.abs(Math.atan2(Math.sin(q.fa - a), Math.cos(q.fa - a))) * VIS.rimR < 0.9) return true;
+  return false;
+}
+function visExit(p) {                                               // pilih titik di jalur keliling yang bisa dicapai lurus
+  const [, , w, d] = p.rect;
+  for (let k = 0; k < 12; k++) {
+    const u = visRnd() * 2 * (w + d), [s, za] = rectPoint(p.rect, u);
+    if (visPathOK(p.s, p.za, s, za)) { visGo(p, s, za, 'out'); return true; }
+  }
+  return false;
+}
+function visChatSpot(G) {                                           // tempat kelompok baru: setengah tengah plaza, jauh dari kolam, pohon, kelompok lain
+  const [s0, z0, w, d] = G.rect, cs0 = s0 + w / 2, cz0 = z0 + d / 2;
+  for (let k = 0; k < 12; k++) {
+    const [cs, cz] = fountPush(cs0 + (visRnd() - 0.5) * w * 0.5, cz0 + (visRnd() - 0.5) * d * 0.5, 8.5);
+    if (colAt(cs, cz, 1.4) && fountDist(cs, cz) > 7.5) continue;
+    if (VIS.groups.some((o) => o !== G && Math.hypot(wrapS(o.c[0] - cs), o.c[1] - cz) < 3.5)) continue;
+    G.c = [cs, cz]; return;
+  }
+}
+function visSlot(p) { const G = p.g; return [G.c[0] + Math.sin(p.ga) * 0.75, G.c[1] + Math.cos(p.ga) * 0.75]; }
+function stepVisit(p, dt) {
+  const G = p.g;
+  if (G && p === G.members[0] && G.st !== 'apart' && (G.tm -= dt) <= 0) {   // kelompok bubar; berkumpul paling lama 4 menit
+    if (G.st === 'gather') { G.st = 'talk'; G.tm = 60; } else G.st = 'apart';
+  }
+  if (p.st === 'loop') {
+    const [, , w, d] = p.rect, P = 2 * (w + d);
+    p.u = ((p.u + p.dir * p.v0 * dt) % P + P) % P;
+    const [s, za, ds, dz] = rectPoint(p.rect, p.u); p.s = s; p.za = za; p.hd = Math.atan2(ds * p.dir, dz * p.dir);
+    p.pose = 0; p.elev = 0; p.ph += p.v0 / 1.45 * TAU * dt;
+    if ((p.tm -= dt) > 0) return;
+    if (G) {                                                         // anggota kelompok: berkumpul di tempat (baru)
+      if (G.st === 'apart') { visChatSpot(G); G.st = 'gather'; G.arr = 0; G.tm = 240; }
+      const [ts, tz] = visSlot(p);
+      if (visPathOK(p.s, p.za, ts, tz)) visGo(p, ts, tz, 'in'); else p.tm = 3;
+    } else {                                                         // pengunjung air mancur: pilih tempat di tepi kolam, dekat arah datang
+      const a0 = Math.atan2(wrapS(p.s - FOUNT.s), p.za - FOUNT.za);
+      for (let k = 0; k < 8; k++) {
+        const a = a0 + (visRnd() - 0.5) * 1.8;
+        if (visTaken(p, a)) continue;
+        const ts = FOUNT.s + Math.sin(a) * VIS.rimR, tz = FOUNT.za + Math.cos(a) * VIS.rimR;
+        if (!visPathOK(p.s, p.za, ts, tz)) continue;
+        p.fa = a; p.sit = visRnd() < 1 / 3; visGo(p, ts, tz, 'in'); return;
+      }
+      p.tm = 3;
+    }
+  } else if (p.st === 'in' || p.st === 'out') {
+    const v = p.v0; p.k = Math.min(1, p.k + v * dt / p.L);
+    const ds = wrapS(p.a1[0] - p.a0[0]), dz = p.a1[1] - p.a0[1];
+    p.s = p.a0[0] + ds * p.k; p.za = p.a0[1] + dz * p.k; p.hd = Math.atan2(ds, dz);
+    p.pose = 0; p.elev = 0; p.ph += v / 1.45 * TAU * dt;
+    if (p.k < 1) return;
+    if (p.st === 'out') { visLoop(p, G ? 40 + 110 * visRnd() : 30 + 90 * visRnd()); return; }
+    p.st = 'stay'; p.pose = 1;
+    if (G) { p.hd = p.ga + Math.PI; if (G.st === 'gather' && ++G.arr >= G.members.length) { G.st = 'talk'; G.tm = 180 + 300 * visRnd(); } }
+    else {
+      p.tm = 20 + 70 * visRnd();
+      if (p.sit) { p.pose = 2; p.elev = VIS.sitElev; p.s = FOUNT.s + Math.sin(p.fa) * VIS.sitR; p.za = FOUNT.za + Math.cos(p.fa) * VIS.sitR; p.hd = p.fa; }   // duduk di bibir kolam, kaki di luar
+      else p.hd = p.fa + Math.PI;                                    // berdiri menghadap air
+    }
+  } else if (p.st === 'stay') {
+    if (G ? G.st !== 'apart' : (p.tm -= dt) > 0) return;
+    if (!G && p.sit) { p.s = FOUNT.s + Math.sin(p.fa) * VIS.rimR; p.za = FOUNT.za + Math.cos(p.fa) * VIS.rimR; p.pose = 1; p.elev = 0; }   // berdiri dulu
+    if (!visExit(p) && !G) p.tm = 3;
+  }
+}
 try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'); if (sv && [1, 0.4, 0].includes(sv.user)) PEDS.user = sv.user; } catch (e) { /* abaikan */ }
 {
   let sd = 424243; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const ok = (s, za) => !inWater(s, za, 2) && !inRiver(s, za, 3) && !inBallpark(s, za, 2) && !colAt(s, za, 0.4);
-  const look = (kid) => ({ shirt: Math.floor(r() * 14), pants: Math.floor(r() * 8), skin: Math.floor(r() * 6), scale: kid ? 0.55 + 0.1 * r() : 0.9 + 0.17 * r(), bag: !kid && r() < 0.25 ? 1 : 0, thr: r() });
+  const look = (kid, rr = r) => ({ shirt: Math.floor(rr() * 14), pants: Math.floor(rr() * 8), skin: Math.floor(rr() * 6), scale: kid ? 0.55 + 0.1 * rr() : 0.9 + 0.17 * rr(), bag: !kid && rr() < 0.25 ? 1 : 0, thr: rr() });
   const walker = (o) => { const p = Object.assign({ dir: r() < 0.5 ? 1 : -1, v0: 1.1 + 0.5 * r(), ph: r() * TAU, wait: false, elev: 0, zone: 0 }, look(o.kid), o); PEDS.list.push(p); PEDS.walk.push(p); return p; };
   const still = (o) => { const p = Object.assign({ elev: 0, zone: 0, ph: r() * TAU }, look(o.kid), o); PEDS.list.push(p); return p; };
   const LAT = SIDEWALK.in + 2.3;                                    // 15c: lajur jalan trotoar: 14,3-16,3 m dari as jalan (trotoar 12-17 m)
@@ -9818,14 +9930,26 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     }
   }
   // 3) taman dan plaza kota: keliling tepi dalam (4 m dari tepi), kelompok mengobrol di plaza
-  for (const [s0, z0, s1, z1, plaza] of parkBlocks) {
+  const visitor = (p, rect) => {                                     // 21a-1: jadikan pengunjung plaza (angka acak setup tidak berubah)
+    Object.assign(p, { kind: 'visit', rect, v0: 1.0 + 0.4 * visRnd(), dir: 1, zone: 0, st: 'stay', tm: 0 });
+    PEDS.walk.push(p); return p;
+  };
+  for (const B of parkBlocks) {
+    const [s0, z0, s1, z1, plaza] = B;
     if (inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) continue;
-    const w = s1 - s0 - 8, d = z1 - z0 - 8, n = Math.min(24, Math.round(w * d / (plaza ? 220 : 350)));
-    for (let q = 0; q < n; q++) walker({ kind: 'loop', rect: [s0 + 4, z0 + 4, w, d], u: r() * 2 * (w + d), zone: plaza ? 0 : 1, kid: !plaza && r() < 0.12 });
-    if (plaza) for (let g = 0; g < 2; g++) {
-      const cs = (s0 + s1) / 2 + (r() - 0.5) * w * 0.5, cz = (z0 + z1) / 2 + (r() - 0.5) * d * 0.5, nn = 2 + Math.floor(r() * 2);
-      for (let q = 0; q < nn; q++) { const a = q / nn * TAU + r() * 0.3; still({ pose: 1, s: cs + Math.sin(a) * 0.75, za: cz + Math.cos(a) * 0.75, hd: a + Math.PI }); }
+    const w = s1 - s0 - 8, d = z1 - z0 - 8, n = Math.min(24, Math.round(w * d / (plaza ? 220 : 350))), rect = [s0 + 4, z0 + 4, w, d];
+    for (let q = 0; q < n; q++) walker({ kind: 'loop', rect, u: r() * 2 * (w + d), zone: plaza ? 0 : 1, kid: !plaza && r() < 0.12 });
+    if (plaza) for (let g = 0; g < 2; g++) {                        // 21a-1: kelompok mengobrol bubar dan berkumpul lagi (VIS.groups)
+      let cs = (s0 + s1) / 2 + (r() - 0.5) * w * 0.5, cz = (z0 + z1) / 2 + (r() - 0.5) * d * 0.5; const nn = 2 + Math.floor(r() * 2);
+      [cs, cz] = fountPush(cs, cz, 8.5);                             // tidak di kolam air mancur
+      const G = { c: [cs, cz], rect, st: 'talk', tm: 480 * visRnd(), arr: nn, members: [] };
+      for (let q = 0; q < nn; q++) {
+        const a = q / nn * TAU + r() * 0.3, p = visitor(still({ pose: 1, s: cs + Math.sin(a) * 0.75, za: cz + Math.cos(a) * 0.75, hd: a + Math.PI }), rect);
+        p.g = G; p.ga = a; G.members.push(p);
+      }
+      VIS.groups.push(G);
     }
+    if (B === FOUNT.block) VIS.rect = rect;
   }
   // 4) taman besar (za 2.600-3.200), 15c: berjalan di jalan setapak (PARK_PATHS), tidak lagi di rumput acak
   for (let q = 0, tries = 0; q < 1000 && tries < 5000 && PARK_PATHS.runs.length; tries++) {
@@ -9855,6 +9979,13 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     walker({ kind: 'seg', p0: [a0, z + (r() - 0.5) * 1.2], p1: [a1, z + (r() - 0.5) * 1.2], L: a1 - a0, u: r(), v0: 0.6 + 0.4 * r(), zone: 0, kid: r() < 0.1 });
   // 7) menunggu di halte trem (menghadap rel)
   for (const st of TRAM.stops) { const n = 1 + Math.floor(r() * 4); for (let q = 0; q < n; q++) still({ pose: 1, s: TRAM.s + 3.2 + r() * 2.2, za: st.za + (r() - 0.5) * 20, hd: -Math.PI / 2 + (r() - 0.5) * 0.6, elev: 0.35, zone: 0 }); }
+  // 21a-1: pengunjung air mancur (8 orang): keliling plaza, datang ke tepi kolam, berdiri atau duduk 20-90 s, lalu pergi
+  if (VIS.rect) for (let q = 0; q < 8; q++) {
+    const [, , w, d] = VIS.rect, u = visRnd() * 2 * (w + d), [s, za] = rectPoint(VIS.rect, u);
+    const p = Object.assign({ pose: 0, s, za, hd: 0, elev: 0, ph: visRnd() * TAU }, look(false, visRnd)); PEDS.list.push(p); visitor(p, VIS.rect);
+    Object.assign(p, { u, st: 'loop', tm: q < 4 ? 2 * q : 20 + 100 * visRnd(), dir: visRnd() < 0.5 ? 1 : -1 });
+    VIS.fount.push(p);
+  }
   for (const p of PEDS.list) { p.lt = -20; p.isNear = false; if (p.kind === 'z') p.s = p.fix; if (p.kind === 's') p.za = p.fix; p.s = p.s ?? 0; p.za = p.za ?? 0; p.hd = p.hd ?? 0; p.pose = p.pose ?? 0; }
 }
 // --- model orang: kotak-kotak dengan id bagian (aPart) untuk animasi dan warna ---
@@ -9954,6 +10085,7 @@ function stepPeds(dt, t = clock.sim) {
     const p = PEDS.walk[i];
     if (!p.isNear && i % 10 !== fr) continue;
     dt = Math.min(3, t - p.lt); p.lt = t; if (dt <= 0) continue;
+    if (p.kind === 'visit') { stepVisit(p, dt); continue; }         // 21a-1: pengunjung plaza (pose dan langkah diatur sendiri)
     let v = p.v0;
     if (p.kind === 'z' || p.kind === 's') {
       const onRoad = p.cross.some((c) => Math.abs(p.u - c.c) < 12.6);
@@ -9971,12 +10103,10 @@ function stepPeds(dt, t = clock.sim) {
       const [s0, z0] = p.p0, [s1, z1] = p.p1;
       p.s = s0 + (s1 - s0) * p.u; p.za = z0 + (z1 - z0) * p.u; p.hd = Math.atan2((s1 - s0) * p.dir, (z1 - z0) * p.dir);
     } else if (p.kind === 'loop') {
-      const [s0, z0, w, d] = p.rect, P = 2 * (w + d);
+      const [, , w, d] = p.rect, P = 2 * (w + d);
       p.u = ((p.u + p.dir * v * dt) % P + P) % P;
-      let u = p.u, ds = 0, dz = 0;
-      if (u < w) { p.s = s0 + u; p.za = z0; ds = 1; } else if ((u -= w) < d) { p.s = s0 + w; p.za = z0 + u; dz = 1; }
-      else if ((u -= d) < w) { p.s = s0 + w - u; p.za = z0 + d; ds = -1; } else { u -= w; p.s = s0; p.za = z0 + d - u; dz = -1; }
-      p.hd = Math.atan2(ds * p.dir, dz * p.dir);
+      const [s, za, ds, dz] = rectPoint(p.rect, p.u);
+      p.s = s; p.za = za; p.hd = Math.atan2(ds * p.dir, dz * p.dir);
     }
     p.pose = v > 0 ? 0 : 1;
     if (v > 0) p.ph += v / 1.45 * TAU * dt;
@@ -10176,7 +10306,7 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.birds') || 'null
   BIRDS.mesh.frustumCulled = false; BIRDS.mesh.userData.noLight = true;
   realGroup.add(BIRDS.mesh);
   // tempat merpati: plaza kota, plaza spaceport, taman besar dekat lapangan baseball
-  const spots = parkBlocks.filter((b) => b[4]).map(([s0, z0, s1, z1]) => [(s0 + s1) / 2, (z0 + z1) / 2]);
+  const spots = parkBlocks.filter((b) => b[4]).map((b) => [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2 - (b === FOUNT.block ? 10 : 0)]);   // 21a-1: plaza air mancur: 10 m di sisi -za kolam
   spots.push([TERM.s + 14, TERM.za + 33], [TERM.s - 26, TERM.za + 33],   // trotoar antara pintu selatan terminal dan jalan (jalan mulai za + 42)
      [FIELD.s - 60, FIELD.za - 70]);
   let sd = 91357; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
@@ -10269,7 +10399,10 @@ function stepBirds(dt) {
         b.s += b.vs * dt; b.za += b.vz * dt; b.h = Math.max(0, b.h + b.vh * dt); b.ph += 16 * dt;
         if (age > 4 && b.h <= 0.01) { b.fly = false; b.h = 0; }
         if (Math.hypot(wrapS(b.s - G.s), b.za - G.za) > 25 && age > 4) { b.vs += wrapS(G.s - b.s) * 0.02; b.vz += (G.za - b.za) * 0.02; }   // kembali ke plaza
+        const dF = fountDist(b.s, b.za);                               // 21a-1: saat turun, menjauh dari kolam air mancur
+        if (age > 4 && dF < 7 && dF > 1e-3) { const k = 6 * dt / dF; b.vs += wrapS(b.s - FOUNT.s) * k; b.vz += (b.za - FOUNT.za) * k; }
       }
+      if (b.h <= 0.01) { const [ps, pz] = fountPush(b.s, b.za, 5.2); b.s = ps; b.za = pz; }   // 21a-1: tidak berjalan atau mendarat di dalam kolam
     }
   }
 }
@@ -10402,13 +10535,9 @@ function updateRain(dt) {
 }
 PRESET_HOOKS.push((i) => { RAIN.presetN = [12000, 9000, 6000, 3000, 1500][i]; });
 RAIN.presetN = [12000, 9000, 6000, 3000, 1500][PRESET.idx];
-// --- air mancur Coriolis ---
-const FOUNT = { jets: [], plaque: null };
+// --- air mancur Coriolis (lokasi FOUNT.s / FOUNT.za ditentukan di blok pohon, 21a-1) ---
 {
-  let best = null, bd = 1e9;
-  for (const [s0, z0, s1, z1, plaza] of parkBlocks) { if (!plaza) continue; const cs = (s0 + s1) / 2, cz = (z0 + z1) / 2, d = Math.hypot(wrapS(cs - 14), cz - 625); if (d < bd) { bd = d; best = [cs, cz]; } }
-  if (!best) best = [60, 700];
-  const [S, Z] = best; FOUNT.s = S; FOUNT.za = Z; FOUNT.h = groundH(S, Z);
+  const S = FOUNT.s, Z = FOUNT.za; FOUNT.h = groundH(S, Z);
   const m4 = new THREE.Matrix4(), G = new THREE.Group(); surfaceMatrix(m4, S / R, Z, FOUNT.h); G.matrixAutoUpdate = false; G.matrix.copy(m4);
   const STONE = [0.72, 0.7, 0.66];
   const basin = new THREE.Mesh(mergeSimple([
@@ -11488,7 +11617,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>
