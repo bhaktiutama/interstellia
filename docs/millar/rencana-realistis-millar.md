@@ -1,6 +1,6 @@
 # Rencana Millar's World Versi Realistis
 
-Per 29 September 2026 · Status: rencana, menunggu keputusan pemilik (bagian akhir)
+Per 29 September 2026 · Status: R1 selesai (lihat "Status R1"), berikutnya R2
 
 ## Ringkasan
 
@@ -21,14 +21,21 @@ Foto acuan hanya dipakai untuk warna dan suasana. Kendaraan dan pakaian di foto 
 | Di sekitar kaki | Cipratan putih dan riak melingkar | Simulasi riak lokal + partikel cipratan |
 | Gelombang raksasa | Dinding abu gelap bertekstur halus, garis buih putih mengalir turun, kaki gelombang berkabut | Normal detail berskala besar, tekstur buih mengalir, kabut semburan di kaki dan puncak |
 
-Catatan: tinggi ombak kecil sekitar 0,2-0,4 m dan panjang 2-6 m adalah perkiraan dari foto, bukan angka dari sumber. Dijadikan parameter di `CONFIG`.
+Ada dua jenis gelombang, jangan tertukar:
+
+| Jenis | Tinggi | Asal | Di kode |
+| --- | --- | --- | --- |
+| Gelombang raksasa (tsunami goyangan planet) | sekitar 1.200 m, tidak berubah dari konsep | Konsep (film, Interstellar Wiki) | `CONFIG.wave.H` |
+| Ombak angin sehari-hari di sekitar kaki | tinggi signifikan 0,35 m, panjang 0,9-6,5 m | Perkiraan dari foto acuan, bukan dari sumber | `CONFIG.chop.Hs`, bisa diatur |
+
+Ombak angin dibatasi kedalaman air (0,4-0,8 m): di air sedangkal ini ombak pecah bila lebih tinggi dari sekitar 0,8 x kedalaman.
 
 ## Perubahan dari prototipe
 
 | Bagian | Prototipe | Versi realistis |
 | --- | --- | --- |
 | Gaya | Low poly, warna per segi | Realistis, HDR, ACES, color grading dingin |
-| Laut | Riak sinus di bawah 10 cm, grid 2 m | FFT (Tessendorf) 2-3 kaskade, ombak 0,2-0,4 m, grid LOD rapat (sekitar 10-25 cm di dekat kaki) |
+| Laut | Riak sinus di bawah 10 cm, grid 2 m | FFT (Tessendorf) 2-3 kaskade, ombak angin 0,35 m (gelombang raksasa tetap 1.200 m), grid LOD rapat (sekitar 10-25 cm di dekat kaki) |
 | Dasar laut | Gosong pasir dan dasar yang muncul saat air surut | Selalu di bawah air (paling dangkal sekitar 0,15 m saat surut), samar lewat air keruh |
 | Langit | Kubah bersegi, Gargantua jelas | Awan mendung prosedural; Gargantua sesuai keputusan 1 |
 | Cahaya | Satu arah dari Gargantua | Cahaya langit menyebar (mendung), kilau lemah dari arah Gargantua, pantulan dari cubemap langit |
@@ -82,7 +89,11 @@ Tiap tahap ditutup dengan skrip uji di `tools/` (pola `uji_*.py`): halaman termu
 | Skala 0,1 m sampai 270 km | Z-fighting | Tetap depth logaritmik seperti prototipe |
 | Sandbox tanpa GPU | Tampilan dan FPS tidak bisa dinilai di sini | Pemilik menilai visual; di sini hanya cek muat, angka, dan nilai tidak valid |
 
-## Keputusan yang perlu kamu pilih
+## Keputusan
+
+Pemilik meminta mulai implementasi tanpa memilih; R1 memakai pilihan yang disarankan (1a + senja sebagai pilihan, 2 disimpan, 3 dan 4 seperti saran). Masih bisa diganti.
+
+Daftar pilihan semula:
 
 1. Langit dan Gargantua. Di foto acuan langit tertutup awan dan Gargantua tidak tampak, padahal di konsep Gargantua memenuhi langit.
    - a. Mendung dengan Gargantua samar menembus awan, dan sesekali ada celah awan yang memperlihatkannya (disarankan)
@@ -93,4 +104,26 @@ Tiap tahap ditutup dengan skrip uji di `tools/` (pola `uji_*.py`): halaman termu
 3. Interval gelombang: mode permainan 4-6 menit sebagai bawaan dengan opsi mode realistis (disarankan, sama dengan konsep)?
 4. Tersapu: sampai shuttle ada di M3, kembali ke titik awal dengan penalti waktu seperti prototipe (disarankan)?
 
-Setelah keputusan dipilih, kerja dimulai dari R1.
+## Status R1
+
+Selesai 29 September 2026. File: `experiences/millar/index.html`; prototipe low poly disimpan di `experiences/millar/prototipe.html` (tanpa kartu menu).
+
+| Bagian | Isi |
+| --- | --- |
+| Preset | Ultra, Tinggi, Sedang, Rendah, Hemat; pilihan di layar awal, P untuk ganti, turun otomatis bila FPS < 30 selama 4 s, `?preset=hemat`, tersimpan di localStorage `millar.preset` |
+| Post | HDR half float, MSAA 4x di Ultra/Tinggi, bloom 6/6/4/2/2 tingkat, ACES, grading pudar dingin, vinyet, grain (mati di Hemat), FXAA |
+| Langit | Cubemap 512/384/256/192/128 diperbarui satu sisi per frame (per 2 frame di Rendah/Hemat). Awan volumetrik 48/32 langkah di Ultra/Tinggi, 2D dua lapis di Sedang, satu lapis di Rendah/Hemat |
+| Gargantua | Samar di balik awan; suasana Otomatis membuka celah awan di sekitarnya sekitar 70 s tiap 5 menit. Bayangan, piringan (sisi kiri lebih terang), cincin terbelokkan, cincin foton. Masih prosedural, bukan lensa gravitasi |
+| Suasana | Otomatis, Mendung, Senja (tombol N atau layar awal), berganti halus 2,5 s |
+| Laut | Ombak angin Gerstner 16/16/14/12/10 gelombang + riak halus 12/8/6/4/2 di normal piksel, grid dekat 0,35-1,0 m sampai 70 m, cincin jauh sampai sekitar 285 km. Pantulan cubemap, Fresnel, air keruh dengan dasar laut samar, buih dari lipatan ombak, kabut ke warna cakrawala |
+| Tanpa daratan | Dasar laut -0,42 sampai -0,78 m, air surut hanya 0,2 m: dasar tertinggi tetap di bawah air terendah (diuji 40.000 titik) |
+| Gelombang raksasa | Tetap 1.200 m. Normal halus, tekstur dinding air, urat buih mengalir turun, kaki gelombang lebih gelap, semburan di puncak, kabut di kaki |
+| Ukur GPU | Baris HUD "GPU (langit / scene / post)" bila browser mendukung `EXT_disjoint_timer_query_webgl2` |
+
+Uji: `tools/uji_millar.py`, 14 pemeriksaan lulus di sandbox (kamus English, tanpa daratan, lompat 76,9%, 1,300 g, gelombang 125,00 m/s, 1 s = 17,04 jam di luar, tersapu +0,78 tahun, 5 preset tanpa nilai tidak valid dan tanpa titik menyala, `?preset=hemat`).
+
+Perbaikan yang ditemukan saat uji: dengan MSAA, kedalaman air di segitiga kecil di cakrawala terekstrapolasi negatif sehingga warna meledak (titik merah menyala di garis cakrawala). Kedalaman kini dijepit di shader dan HDR dijepit sebelum ACES; uji memeriksa tidak ada piksel di atas 50.
+
+Belum diukur: FPS dan waktu GPU di GTX 1060 dan M1 (sandbox tanpa GPU). Angka preset bisa berubah setelah diukur.
+
+Berikutnya R2: ombak FFT untuk Ultra sampai Rendah (Hemat tetap Gerstner), kaustik dasar laut, buih yang tersisa dan memudar.

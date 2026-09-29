@@ -1,6 +1,6 @@
 # Prototipe Low Poly: Millar's World
 
-Per 29 September 2026 · Status: prototipe cepat (mockup), bukan M1
+Per 29 September 2026 · Status: prototipe cepat (mockup), bukan M1. Kini disimpan di `experiences/millar/prototipe.html`; `index.html` diganti versi realistis (`rencana-realistis-millar.md`)
 
 ## Ringkasan
 

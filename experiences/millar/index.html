@@ -5,62 +5,93 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Millar's World</title>
 <style>
-  :root { --ink: #dfe3ea; --muted: #8a919c; --line: rgba(255,255,255,0.12); --panel: rgba(12,14,18,0.58); --accent: #f0c27a; }
+  :root { --ink: #dfe3ea; --muted: #8a919c; --line: rgba(255,255,255,0.12); --panel: rgba(12,14,18,0.58); --accent: #e8b765; }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #9aa5a9; color: var(--ink);
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8e979b; color: var(--ink);
     font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
   canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
   .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
     backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: opacity .25s; }
-  .hide .panel { opacity: 0; pointer-events: none; }
-  #hud { left: 16px; top: 16px; padding: 10px 12px; min-width: 250px; }
+  .hide .panel, .pre .play { opacity: 0; pointer-events: none; }
+  #hud { left: 16px; top: 16px; padding: 10px 12px; min-width: 270px; }
   #hud .top { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
   #hud a { color: var(--ink); text-decoration: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; }
   #hud a:hover { border-color: var(--accent); }
   #hud h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .06em; }
-  #hud h1 span { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 6px; }
   #rows { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; font-variant-numeric: tabular-nums; }
   #rows div:nth-child(odd) { color: var(--muted); }
   #rows div:nth-child(even) { text-align: right; }
   #rows .big { color: var(--accent); font-size: 14px; }
   #rows .warn { color: #ff9d7a; }
-  #keys { right: 16px; bottom: 16px; padding: 8px 12px; color: var(--muted); max-width: 330px; line-height: 1.6; }
+  #keys { right: 16px; bottom: 16px; padding: 8px 12px; color: var(--muted); max-width: 350px; line-height: 1.6; }
   #keys b { color: var(--ink); font-weight: 400; }
-  #lang { right: 16px; top: 16px; display: flex; gap: 4px; padding: 4px; }
+  #lang { right: 16px; top: 16px; display: flex; gap: 4px; padding: 4px; z-index: 5; }
   #lang button { font: inherit; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 8px; cursor: pointer; }
   #lang button.on { border-color: var(--accent); }
   #white { position: fixed; inset: 0; background: #eef3f4; opacity: 0; pointer-events: none; }
-  #msg { position: fixed; left: 50%; top: 38%; transform: translateX(-50%); padding: 10px 16px; font-size: 14px; text-align: center;
+  #msg { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); padding: 10px 16px; font-size: 14px; text-align: center;
     background: var(--panel); border: 1px solid var(--line); border-radius: 10px; opacity: 0; transition: opacity .4s; pointer-events: none; max-width: calc(100vw - 32px); }
   #msg.on { opacity: 1; }
-  #err { position: fixed; inset: 16px; overflow: auto; background: rgba(30,0,0,0.92); color: #ffb4a8; padding: 16px; white-space: pre-wrap; border-radius: 8px; }
+  #start { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(10,12,15,0.25); z-index: 4; }
+  #start[hidden] { display: none; }
+  #start .card { width: min(460px, 100%); padding: 20px; background: rgba(12,14,18,0.78); border: 1px solid var(--line); border-radius: 12px;
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #start h2 { margin: 0; font-weight: 300; letter-spacing: .2em; text-transform: uppercase; font-size: 22px; }
+  #start .sub { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+  #start .plabel { color: var(--muted); font-size: 12px; margin: 12px 0 4px; }
+  .pick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .pick.m3 { grid-template-columns: repeat(3, 1fr); }
+  .pick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
+  .pick button.on { border-color: var(--accent); background: rgba(232,183,101,0.18); color: #fff; }
+  #start label { display: flex; gap: 8px; align-items: center; font-size: 12.5px; margin-top: 8px; color: var(--ink); }
+  #start .pnote { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  #go { margin-top: 16px; width: 100%; font: inherit; font-size: 15px; padding: 10px; border-radius: 8px; border: 1px solid var(--accent);
+    background: rgba(232,183,101,0.2); color: #fff; cursor: pointer; }
+  #start .links { margin-top: 10px; font-size: 12.5px; }
+  #start .links a { color: var(--muted); }
+  #err { position: fixed; inset: 16px; overflow: auto; background: rgba(30,0,0,0.92); color: #ffb4a8; padding: 16px; white-space: pre-wrap; border-radius: 8px; z-index: 9; }
   #err[hidden] { display: none; }
   @media (max-width: 640px) { #keys { display: none; } #hud { right: 16px; min-width: 0; } #lang { top: auto; bottom: 16px; } }
 </style>
 </head>
-<body>
+<body class="pre">
 <canvas id="c"></canvas>
-<div id="hud" class="panel">
-  <div class="top"><a id="back" href="../../index.html" data-t="&lt; Menu">&lt; Menu</a><h1>Millar's World<span data-t="prototipe low poly">prototipe low poly</span></h1></div>
+<div id="hud" class="panel play">
+  <div class="top"><a id="back" href="../../index.html" data-t="&lt; Menu">&lt; Menu</a><h1>Millar's World</h1></div>
   <div id="rows"></div>
 </div>
 <div id="lang" class="panel"></div>
-<div id="keys" class="panel" data-t-html="keys"></div>
+<div id="keys" class="panel play" data-t-html="keys"></div>
 <div id="white"></div>
 <div id="msg"></div>
+<div id="start">
+  <div class="card">
+    <h2>Millar's World</h2>
+    <div class="sub" data-t="Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar">Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar</div>
+    <div class="plabel" data-t="Kualitas grafik">Kualitas grafik</div>
+    <div class="pick" id="presetPick"></div>
+    <label><input id="presetAuto" type="checkbox"> <span data-t="Turunkan otomatis bila FPS di bawah 30">Turunkan otomatis bila FPS di bawah 30</span></label>
+    <div class="pnote" data-t="Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan P.">Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan P.</div>
+    <div class="plabel" data-t="Suasana">Suasana</div>
+    <div class="pick m3" id="moodPick"></div>
+    <button id="go" type="button" data-t="Mulai">Mulai</button>
+    <div class="links"><a id="menuLink" href="../../index.html" data-t="Kembali ke menu utama">Kembali ke menu utama</a></div>
+  </div>
+</div>
 <pre id="err" hidden></pre>
 
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
 </script>
 <script>
-  // Tampilkan error apa pun di layar (prototipe: lebih cepat dilacak di ponsel)
   addEventListener('error', (e) => { const el = document.getElementById('err'); el.hidden = false; el.textContent += (e.message || e) + '\n'; });
 </script>
 <script type="module">
 /* =====================================================================
-   Millar's World, prototipe cepat low poly: langit (Gargantua) + laut dangkal + gelombang raksasa.
-   Konsep: docs/millar/konsep-millar.md. Semua angka yang bisa diatur ada di CONFIG.
+   Millar's World, versi realistis tahap R1 (rencana: docs/millar/rencana-realistis-millar.md).
+   R1: preset kualitas, post HDR (bloom, ACES, grading, grain, FXAA), langit mendung prosedural di cubemap
+   (juga dipakai pantulan air), laut Gerstner halus tanpa daratan, gelombang raksasa diberi shading realistis.
+   Prototipe low poly lama: prototipe.html. Semua angka yang bisa diatur ada di CONFIG.
    ===================================================================== */
 import * as THREE from 'three';
 
@@ -68,27 +99,52 @@ const CONFIG = {
   R: 8282e3,            // radius planet (m), asumsi massa jenis seperti Bumi: 1,3 x 6.371 km
   g: 12.75,             // 1,3 g (m/s^2)
   dil: 61362,           // 1 jam planet = 7 tahun di luar (7 x 365,25 x 24)
-  eye: 1.7,             // tinggi mata (m)
+  eye: 1.7,             // tinggi mata di atas dasar laut (m)
   jumpV: 3.13,          // kecepatan lompat sama dengan lompatan 0,5 m di Bumi -> 0,385 m di sini (77%)
-  wave: {
-    H: 1200,            // tinggi gelombang (m)
-    v: 125,             // kecepatan muka gelombang (m/s), parameter desain
-    start: 30000,       // jarak awal saat halaman dibuka (m), supaya langsung terlihat
+  sea: { bed: -0.6 },   // dasar laut rata-rata (m di bawah muka air); variasi +-0,18 m, lihat seabed()
+  chop: {               // ombak angin sehari-hari di air setinggi lutut (bukan gelombang raksasa)
+    Hs: 0.35,           // tinggi signifikan (m), parameter tampilan, bisa diatur
+    dir: 25,            // arah angin (derajat dari +X)
+    q: 0.72,            // ketajaman puncak Gerstner (jumlah Q k a; < 1 agar tidak melipat)
+    depth: 0.6,         // kedalaman untuk dispersi air dangkal (m)
+  },
+  wave: {               // gelombang raksasa (konsep: sekitar 1.200 m)
+    H: 1200,            // tinggi (m)
+    v: 125,             // kecepatan muka (m/s), parameter desain
+    start: 30000,       // jarak awal saat mulai (m)
     spawn: 150000,      // gelombang berikutnya muncul dari balik cakrawala (m)
     summon: 20000,      // tombol G
-    wf: 350,            // lebar muka curam (m)
-    wc: 600,            // lebar bahu puncak (m)
-    wb: 5000,           // panjang punggung landai (m)
+    wf: 350, wc: 600, wb: 5000,   // lebar muka curam, bahu puncak, punggung landai (m)
     lean: 0.33,         // condong puncak ke depan (x H)
-    dd: 0.9,            // air surut di depan gelombang (m)
+    dd: 0.2,            // air surut di depan gelombang (m); dasar laut tetap terendam
     ddL: 6000,          // jangkauan air surut (m)
   },
-  garg: { az: 28, el: 22, rad: 9, dist: 4000 },   // arah (derajat dari arah datang gelombang), radius bayangan (derajat)
+  garg: { az: 28, el: 22, rad: 9, tilt: 9 },     // arah (derajat dari arah datang gelombang), radius bayangan, miring piringan
   wobble: { period: 40, amp0: 0.35, amp1: 1.4 },  // goyangan planet (s, derajat)
-  fogD: 70000,          // jarak kabut e-fold (m)
+  cloud: { h0: 1500, h1: 3500, scale: 2600 },     // lapisan awan (m)
+  fogD: 30000,          // kabut di atas laut (m, e-fold)
+  exposure: 0.85,
   views: [ { key: 'Jalan kaki', h: 0, sp: 1 }, { key: 'Drone 60 m', h: 60, sp: 18 }, { key: 'Tinggi 1,5 km', h: 1500, sp: 350 } ],
   speeds: [1, 5, 20, 60],
 };
+const W = CONFIG.wave, DEG = Math.PI / 180;
+
+/* ---------------- Preset kualitas (pola sama dengan Copper Corn Station) ----------------
+   R1: semua preset memakai ombak Gerstner (jumlah berbeda); FFT menyusul di R2 untuk Ultra sampai Rendah. */
+const PRESETS = [
+  { name: 'Ultra',  dpr: 2.0,  msaa: 4, bloom: 6, grain: 1, cube: 512, faceEvery: 1, steps: 48, layers: 2, oct: 5, nw: 16, nm: 12, cell: 0.35, near: 70 },
+  { name: 'Tinggi', dpr: 1.5,  msaa: 4, bloom: 6, grain: 1, cube: 384, faceEvery: 1, steps: 32, layers: 2, oct: 4, nw: 16, nm: 8,  cell: 0.45, near: 70 },
+  { name: 'Sedang', dpr: 1.25, msaa: 0, bloom: 4, grain: 1, cube: 256, faceEvery: 1, steps: 0,  layers: 2, oct: 5, nw: 14, nm: 6,  cell: 0.6,  near: 72 },
+  { name: 'Rendah', dpr: 1.0,  msaa: 0, bloom: 2, grain: 1, cube: 192, faceEvery: 2, steps: 0,  layers: 1, oct: 5, nw: 12, nm: 4,  cell: 0.8,  near: 72 },
+  { name: 'Hemat',  dpr: 0.85, msaa: 0, bloom: 2, grain: 0, cube: 128, faceEvery: 2, steps: 0,  layers: 1, oct: 4, nw: 10, nm: 2,  cell: 1.0,  near: 70 },
+];
+const PRESET = { idx: 1, auto: true, low: 0 };
+const MOODS = [
+  { key: 'Otomatis' },          // mendung, sesekali awan terbuka di sekitar Gargantua
+  { key: 'Mendung' },
+  { key: 'Senja' },
+];
+const MOOD = { idx: 0, k: 0, brk: 0, cover: 0.93 };
 
 /* ---------------- Bahasa (sama dengan halaman lain: lazarus.lang dan ?lang=) ---------------- */
 const LANGS = [['id', 'Indonesia'], ['en', 'English']];
@@ -100,20 +156,26 @@ let LANG = 'id';
   if (!ok(c)) c = (navigator.language || 'id').slice(0, 2).toLowerCase();
   LANG = ok(c) ? c : 'id';
 }
+const KEYS_ID = '<b>Klik</b> kunci mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat<br><b>V</b> tampilan &middot; <b>G</b> panggil gelombang &middot; <b>Z</b> kecepatan waktu &middot; <b>P</b> grafik &middot; <b>N</b> suasana &middot; <b>R</b> kembali &middot; <b>H</b> sembunyikan';
 const I18N = { en: {
-  '< Menu': '< Menu', 'prototipe low poly': 'low-poly prototype',
+  '< Menu': '< Menu', 'Kembali ke menu utama': 'Back to main menu', 'Mulai': 'Start',
+  'Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar': 'Water planet near Gargantua · 1.3 g · 1 hour = 7 years outside',
+  'Kualitas grafik': 'Graphics quality', 'Turunkan otomatis bila FPS di bawah 30': 'Lower automatically when FPS drops below 30',
+  'Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan P.': 'Saver: for laptops without a dedicated GPU (MacBook M1). Change any time with P.',
+  'Suasana': 'Mood', 'Otomatis': 'Auto', 'Mendung': 'Overcast', 'Senja': 'Dusk',
+  'Ultra': 'Ultra', 'Tinggi': 'High', 'Sedang': 'Medium', 'Rendah': 'Low', 'Hemat': 'Saver', ' (otomatis)': ' (auto)',
   'Waktu planet': 'Planet time', 'Waktu di luar': 'Time outside', 'Gravitasi': 'Gravity', 'Kedalaman air': 'Water depth',
   'Gelombang': 'Wave', 'Tiba dalam': 'Arrives in', 'sudah lewat': 'passed', 'di luar': 'outside', 'Goyangan planet': 'Planet wobble',
   'Tampilan': 'View', 'Kecepatan waktu': 'Time speed', 'Jalan kaki': 'On foot', 'Drone 60 m': 'Drone 60 m', 'Tinggi 1,5 km': 'High 1.5 km',
-  'tahun': 'y', 'hari': 'd', 'jam': 'h', 'mnt': 'min', 'dtk': 's', 'darat': 'dry',
+  'Grafik': 'Graphics', 'GPU (langit / scene / post)': 'GPU (sky / scene / post)',
+  'tahun': 'y', 'hari': 'd', 'jam': 'h', 'mnt': 'min', 'dtk': 's',
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
   'Gelombang dipanggil: {d} km': 'Wave summoned: {d} km',
-  'keys': '<b>Klik</b> kunci mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat<br><b>V</b> tampilan &middot; <b>G</b> panggil gelombang &middot; <b>Z</b> kecepatan waktu &middot; <b>R</b> kembali &middot; <b>H</b> sembunyikan',
+  'Grafik: {p}': 'Graphics: {p}', 'Suasana: {m}': 'Mood: {m}', 'FPS rendah: grafik diturunkan ke {p}.': 'Low FPS: graphics lowered to {p}.',
+  [KEYS_ID]: '<b>Click</b> lock mouse &middot; <b>WASD</b> walk &middot; <b>Shift</b> run &middot; <b>Space</b> jump<br><b>V</b> view &middot; <b>G</b> summon wave &middot; <b>Z</b> time speed &middot; <b>P</b> graphics &middot; <b>N</b> mood &middot; <b>R</b> reset &middot; <b>H</b> hide',
 } };
-I18N.en.keys = '<b>Click</b> lock mouse &middot; <b>WASD</b> walk &middot; <b>Shift</b> run &middot; <b>Space</b> jump<br><b>V</b> view &middot; <b>G</b> summon wave &middot; <b>Z</b> time speed &middot; <b>R</b> reset &middot; <b>H</b> hide';
-const I18N_ID = { keys: '<b>Klik</b> kunci mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat<br><b>V</b> tampilan &middot; <b>G</b> panggil gelombang &middot; <b>Z</b> kecepatan waktu &middot; <b>R</b> kembali &middot; <b>H</b> sembunyikan' };
 function t(src, vars) {
-  let s = LANG !== 'id' && I18N[LANG] && I18N[LANG][src] !== undefined ? I18N[LANG][src] : (I18N_ID[src] ?? src);
+  let s = LANG !== 'id' && I18N[LANG] && I18N[LANG][src] !== undefined ? I18N[LANG][src] : src;
   if (vars) for (const k in vars) s = s.replace('{' + k + '}', vars[k]);
   return s;
 }
@@ -121,56 +183,78 @@ const fmtN = (x, d = 0) => x.toLocaleString(LANG === 'id' ? 'id-ID' : 'en-US', {
 function translateDom() {
   document.documentElement.lang = LANG;
   document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = t(el.dataset.t); });
-  document.querySelectorAll('[data-t-html]').forEach((el) => { el.innerHTML = t(el.dataset.tHtml); });
-  document.getElementById('back').href = `../../index.html?lang=${LANG}`;
+  document.querySelectorAll('[data-t-html]').forEach((el) => { el.innerHTML = t(el.dataset.tHtml === 'keys' ? KEYS_ID : el.dataset.tHtml); });
+  for (const id of ['back', 'menuLink']) document.getElementById(id).href = `../../index.html?lang=${LANG}`;
   document.querySelectorAll('#lang button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
+  document.querySelectorAll('#presetPick button').forEach((b, i) => { b.textContent = t(PRESETS[i].name); });
+  document.querySelectorAll('#moodPick button').forEach((b, i) => { b.textContent = t(MOODS[i].key); });
 }
 for (const [c, name] of LANGS) {
   const b = document.createElement('button'); b.type = 'button'; b.dataset.lang = c; b.textContent = name;
   b.addEventListener('click', () => { LANG = c; try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ } translateDom(); });
   document.getElementById('lang').appendChild(b);
 }
-translateDom();
 
 /* ---------------- Renderer, kamera ---------------- */
 const canvas = document.getElementById('c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, logarithmicDepthBuffer: true });   // skala 0,1 m sampai 300 km
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, logarithmicDepthBuffer: true, powerPreference: 'high-performance' });  // skala 0,1 m sampai 300 km
 renderer.autoClear = false;
-renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
-renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.outputColorSpace = THREE.LinearSRGBColorSpace;   // konversi sRGB dilakukan sendiri di pass akhir
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 700000);
 camera.rotation.order = 'YXZ';
-function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
-addEventListener('resize', resize); resize();
-
 const col = (hex) => new THREE.Color(hex);    // hex sRGB -> linear
-const DEG = Math.PI / 180;
 
-/* ---------------- Warna dan cahaya ---------------- */
-const PAL = {
-  zenith: col(0x3b444c), horizon: col(0xa9b2b4), below: col(0x8f9a9d), glow: col(0xffe2b8),
-  fog: col(0xa3adb0), water: col(0x35555c), waterDeep: col(0x2a4248), crest: col(0x5f9aa0), foam: col(0xeef4f2),
-  sand: col(0x8e8169), rock: col(0x5b5850), algae: col(0x5d6948),
-  sun: col(0xfff0d8), amb: col(0x6f7c82),
-};
-// Arah Gargantua: az diukur dari +X (arah datang gelombang) memutar ke -Z, el dari cakrawala
+/* ---------------- Arah Gargantua dan uniform bersama ---------------- */
 const G = CONFIG.garg;
 const GDIR = new THREE.Vector3(Math.cos(G.el * DEG) * Math.cos(G.az * DEG), Math.sin(G.el * DEG), -Math.cos(G.el * DEG) * Math.sin(G.az * DEG)).normalize();
-const U = {   // uniform bersama semua material permukaan (satu objek, dipakai ulang)
-  uT: { value: 0 }, uR: { value: CONFIG.R }, uCam: { value: new THREE.Vector3() }, uOff: { value: new THREE.Vector3() },
-  uWX: { value: CONFIG.wave.start }, uWH: { value: CONFIG.wave.H }, uLean: { value: CONFIG.wave.lean },
-  uSunDir: { value: GDIR.clone() }, uSun: { value: PAL.sun }, uAmb: { value: PAL.amb }, uFog: { value: PAL.fog }, uFogD: { value: CONFIG.fogD },
-  uSky: { value: PAL.horizon }, uWater: { value: PAL.water }, uWaterDeep: { value: PAL.waterDeep }, uCrest: { value: PAL.crest }, uFoam: { value: PAL.foam },
-  uSand: { value: PAL.sand }, uRock: { value: PAL.rock }, uAlgae: { value: PAL.algae },
+const GU = new THREE.Vector3().crossVectors(GDIR, new THREE.Vector3(0, 1, 0)).normalize(), GV = new THREE.Vector3().crossVectors(GU, GDIR);
+const SUNL = new THREE.Vector3(GDIR.x, 0, GDIR.z).normalize().multiplyScalar(Math.cos(4 * DEG)).setY(Math.sin(4 * DEG));   // cahaya rendah suasana senja
+const U = {   // uniform bersama material permukaan (objek uniform dipakai bersama lewat spread)
+  uT: { value: 0 }, uR: { value: CONFIG.R }, uCam: { value: new THREE.Vector3() },
+  uWX: { value: W.start }, uWH: { value: W.H }, uLean: { value: W.lean },
+  uSky: { value: null }, uWob: { value: new THREE.Matrix3() }, uFogD: { value: CONFIG.fogD }, uPix: { value: 0.001 },
+  uAmb: { value: new THREE.Color() }, uScat: { value: new THREE.Color(0.10, 0.135, 0.155) }, uAbs: { value: new THREE.Vector3(2.0, 1.6, 1.45) },
+  uBed: { value: new THREE.Color(0.32, 0.29, 0.24) }, uFoamC: { value: new THREE.Color(0.95, 0.97, 0.98) },
+  uWA: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uWB: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
+  uMA: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) }, uMB: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) },
 };
-const W = CONFIG.wave;
 
-/* ---------------- GLSL bersama: gelombang, dasar laut, riak, lengkung planet ----------------
-   Rumus di sini punya kembaran JS di bawah (frontX, waveHz, waveG, drawdown, seabed): ubah keduanya bersama. */
+/* ---------------- Ombak angin (Gerstner): data gelombang, dinormalisasi per preset ---------------- */
+function rng(seed) { return () => { seed = (seed + 0x6D2B79F5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; }; }
+const CHOP = { base: [], micro: [], nw: 0, nm: 0 };
+{
+  const r = rng(7), C = CONFIG.chop, wind = C.dir * DEG;
+  const omega = (k) => Math.sqrt(CONFIG.g * k * Math.tanh(k * C.depth));    // dispersi air dangkal, g = 12,75
+  for (let i = 0; i < 16; i++) {                       // terbesar dulu: preset rendah memakai yang pertama
+    const L = 0.9 * Math.pow(6.5 / 0.9, 1 - i / 15) * (0.9 + 0.2 * r()), k = 2 * Math.PI / L;   // ombak pendek dan tajam (0,9-6,5 m)
+    const th = wind + (r() - 0.5) * (0.6 + 1.2 * i / 15);
+    CHOP.base.push({ dx: Math.cos(th), dz: Math.sin(th), k, w: omega(k), ph: r() * Math.PI * 2, a0: L * (0.7 + 0.6 * r()) });
+  }
+  for (let i = 0; i < 12; i++) {                       // riak halus hanya di normal piksel (0,2-1,0 m)
+    const L = 0.2 + 0.8 * Math.pow(1 - i / 11, 1.3) * (0.85 + 0.3 * r()), k = 2 * Math.PI / L, th = wind + (r() - 0.5) * 2.4;
+    CHOP.micro.push({ dx: Math.cos(th), dz: Math.sin(th), k, w: omega(k), ph: r() * Math.PI * 2, a: 0.08 / k });   // kemiringan k a = 0,08
+  }
+}
+function applyChop(nw, nm) {
+  const C = CONFIG.chop, B = CHOP.base.slice(0, nw);
+  const s2 = B.reduce((s, b) => s + b.a0 * b.a0 / 2, 0), sc = (C.Hs / 4) / Math.sqrt(s2);    // Hs = 4 sigma
+  B.forEach((b, i) => {
+    b.a = b.a0 * sc; b.q = C.q / (b.k * b.a * nw);
+    U.uWA.value[i].set(b.dx, b.dz, b.k, b.a); U.uWB.value[i].set(b.w, b.ph, b.q, 0);
+  });
+  CHOP.micro.slice(0, nm).forEach((m, i) => { U.uMA.value[i].set(m.dx, m.dz, m.k, m.a); U.uMB.value[i].set(m.w, m.ph, 0, 0); });
+  CHOP.nw = nw; CHOP.nm = nm;
+}
+const chopAt = (x, z, t) => { let y = 0; for (let i = 0; i < CHOP.nw; i++) { const b = CHOP.base[i]; y += b.a * Math.sin(b.k * (b.dx * x + b.dz * z) - b.w * t + b.ph); } return y; };
+
+/* ---------------- GLSL bersama: gelombang raksasa, dasar laut, lengkung, ombak ----------------
+   Rumus di sini punya kembaran JS (frontX, waveHz, waveG, drawdown, seabed, chopAt): ubah keduanya bersama. */
 const COMMON = /* glsl */`
-uniform float uT, uR, uWX, uWH, uLean, uFogD;
-uniform vec3 uCam, uOff, uSunDir, uSun, uAmb, uFog, uSky;
+uniform float uT, uR, uWX, uWH, uLean, uFogD, uPix;
+uniform vec3 uCam, uAmb, uScat, uAbs, uBed, uFoamC;
+uniform samplerCube uSky; uniform mat3 uWob;
+uniform vec4 uWA[16], uWB[16], uMA[12], uMB[12];
 float frontX(float z) { return uWX + 2500.0 * sin(z * 4.0e-5 + 1.3) + 900.0 * sin(z * 1.7e-4); }
 float waveHz(float z) { return uWH * (0.82 + 0.18 * sin(z * 9.0e-5 + 0.4)); }
 float waveG(float u) {
@@ -179,148 +263,195 @@ float waveG(float u) {
 }
 float drawdown(float u) { float k = (u + ${W.ddL.toFixed(1)}) / ${W.ddL.toFixed(1)}; return -${W.dd.toFixed(2)} * exp(-k * k); }
 float seabed(vec2 p) {
-  return -0.5 + 0.16 * sin(0.13 * p.x + 0.07 * p.y) + 0.11 * sin(-0.05 * p.x + 0.21 * p.y + 1.7) + 0.05 * sin(0.61 * p.x + 0.43 * p.y)
-    + 0.35 * sin(0.011 * p.x + 0.4) * sin(0.013 * p.y + 1.1) + 0.2 * sin(0.0031 * p.x - 0.0027 * p.y);
-}
-float ripple(vec2 p, float t) {
-  return 0.035 * sin(dot(p, vec2(0.9, 0.4)) * 1.1 + t * 1.6) + 0.03 * sin(dot(p, vec2(-0.3, 1.0)) * 0.8 + t * 1.2)
-       + 0.02 * sin(dot(p, vec2(0.6, -0.8)) * 2.1 + t * 2.3);
+  return ${CONFIG.sea.bed.toFixed(2)} + 0.06 * sin(0.13 * p.x + 0.07 * p.y) + 0.05 * sin(-0.05 * p.x + 0.21 * p.y + 1.7)
+    + 0.03 * sin(0.61 * p.x + 0.43 * p.y) + 0.04 * sin(0.011 * p.x + 0.4) * sin(0.013 * p.y + 1.1);
 }
 float curveDrop(vec3 w) { vec2 d = w.xz - uCam.xz; return dot(d, d) / (2.0 * uR); }
-// Geser titik grid persegi secara acak tetap (dari koordinat dunia): segitiga tidak seragam, tidak berubah saat grid ikut pemain
-vec2 jit(vec2 p, float cell) {
-  vec2 q = mod(p, 1024.0);
-  return (fract(sin(vec2(dot(q, vec2(127.1, 311.7)), dot(q, vec2(269.5, 183.3)))) * 43758.5453) - 0.5) * 0.7 * cell;
+float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+float vn2(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(h12(i), h12(i + vec2(1.0, 0.0)), f.x), mix(h12(i + vec2(0.0, 1.0)), h12(i + vec2(1.0, 1.0)), f.x), f.y); }
+vec3 skyL(vec3 d) { return texture(uSky, uWob * d).rgb; }      // texture(): juga sah di vertex shader (textureCube hanya di fragment)
+// Perpindahan Gerstner (titik grid), gelombang lebih pendek dari 3 sel dibuang agar tidak aliasing
+vec3 gerstner(vec2 p, float t, float fade, float cell) {
+  vec3 o = vec3(0.0);
+  for (int i = 0; i < NW; i++) {
+    vec4 A = uWA[i], B = uWB[i];
+    float f = fade * (1.0 - smoothstep(1.0, 2.0, A.z * cell));
+    float th = A.z * dot(A.xy, p) - B.x * t + B.y, s = sin(th), c = cos(th);
+    o += vec3(B.z * A.w * A.x * c, A.w * s, B.z * A.w * A.y * c) * f;
+  }
+  return o;
 }
-`;
-// Normal datar (low poly) dari turunan layar; dijaga agar tidak normalize() vektor nol (NaN di M1)
-const FLAT_FS = /* glsl */`
-vec3 flatN(vec3 r) {
-  vec3 c = cross(dFdx(r), dFdy(r)); float l = length(c);
-  vec3 n = l > 1e-12 ? c / l : vec3(0.0, 1.0, 0.0);
-  return dot(n, -r) < 0.0 ? -n : n;
+// Normal per piksel dari semua gelombang + riak halus; gelombang di bawah ukuran piksel diredam. J = Jacobian (buih bila kecil)
+vec3 chopNormal(vec2 p, float t, float foot, out float J) {
+  float nx = 0.0, nz = 0.0, ny = 1.0; J = 1.0;
+  for (int i = 0; i < NW; i++) {
+    vec4 A = uWA[i], B = uWB[i];
+    float th = A.z * dot(A.xy, p) - B.x * t + B.y, s = sin(th), c = cos(th);
+    float wa = A.z * A.w * (1.0 - smoothstep(0.35, 1.2, A.z * foot));
+    nx -= A.x * wa * c; nz -= A.y * wa * c; ny -= B.z * wa * s; J -= B.z * wa * s;
+  }
+  for (int i = 0; i < NM; i++) {
+    vec4 A = uMA[i], B = uMB[i];
+    float th = A.z * dot(A.xy, p) - B.x * t + B.y;
+    float wa = A.z * A.w * (1.0 - smoothstep(0.35, 1.2, A.z * foot));
+    float c = cos(th); nx -= A.x * wa * c; nz -= A.y * wa * c;
+  }
+  return normalize(vec3(nx, max(ny, 0.05), nz));     // ny >= 1 - q > 0: tidak pernah vektor nol
 }
-vec3 shadeWater(vec3 n, vec3 r, vec3 base) {
+// Shading air: pantulan langit (cubemap), Fresnel, dasar laut samar lewat air keruh, buih, kabut ke warna cakrawala
+vec3 seaShade(vec3 r, vec3 n, float depth, float foam, vec2 P) {
+  // Kedalaman dijepit: dengan MSAA, varying di tepi segitiga kecil (cakrawala) bisa diekstrapolasi negatif -> exp() meledak
+  depth = clamp(depth, 0.03, 100.0);
   float dist = max(length(r), 1e-3); vec3 V = -r / dist;
-  float ndl = max(dot(n, uSunDir), 0.0);
-  float fres = 0.03 + 0.97 * pow(1.0 - clamp(dot(n, V), 0.0, 1.0), 5.0);
-  vec3 h = uSunDir + V; float hl = length(h); h = hl > 1e-6 ? h / hl : n;
-  float spec = pow(max(dot(n, h), 0.0), 80.0);
-  vec3 c = base * (uAmb + uSun * ndl * 0.7);
-  c = mix(c, uSky, fres * 0.75) + uSun * spec * 0.5;
-  return mix(c, uFog, 1.0 - exp(-dist / uFogD));
+  float nv = clamp(dot(n, V), 0.0, 1.0);
+  vec3 R = reflect(-V, n); R.y = max(R.y, 0.004); R = normalize(R);
+  vec3 env = skyL(R);
+  float F = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
+  float cosT = sqrt(max(1.0 - (1.0 - nv * nv) / 1.777, 0.05));
+  vec3 tr = exp(-uAbs * (depth / cosT));
+  float bn = vn2(P * 0.35) * 0.6 + vn2(P * 1.7) * 0.4;
+  vec3 bed = uBed * (0.7 + 0.6 * bn) * uAmb * exp(-uAbs * depth);    // cahaya turun sampai dasar lalu naik lagi
+  vec3 body = bed * tr + uScat * uAmb * (1.0 - tr);
+  vec3 c = mix(body, env, F);
+  c = mix(c, uFoamC * uAmb, clamp(foam, 0.0, 1.0));
+  vec3 hd = normalize(vec3(-V.x, 0.02, -V.z));
+  return mix(c, skyL(hd), 1.0 - exp(-dist / uFogD));
 }
 `;
 const LOG_VS = '#include <common>\n#include <logdepthbuf_pars_vertex>\n';
 const LOG_FS = '#include <common>\n#include <logdepthbuf_pars_fragment>\n';
 
-/* ---------------- Langit low poly: kubah bersegi + Gargantua ----------------
-   Grup mengikuti posisi kamera (tidak berputar ikut kamera), digambar paling awal tanpa uji kedalaman. */
-const skyScene = new THREE.Scene();                          // digambar lebih dulu, terpisah dari scene utama
-const sky = new THREE.Group(); skyScene.add(sky);
-const skyTilt = new THREE.Group(); sky.add(skyTilt);      // goyangan planet memutar grup ini
-function facet(geo, fn) {   // warna per segitiga (tampilan bersegi), fn(pusat, i) -> [r,g,b,a]
-  geo = geo.index ? geo.toNonIndexed() : geo;
-  const p = geo.attributes.position, n = p.count / 3, c = new Float32Array(p.count * 4), m = new THREE.Vector3();
-  for (let i = 0; i < n; i++) {
-    m.set(0, 0, 0);
-    for (let k = 0; k < 3; k++) m.x += p.getX(i * 3 + k) / 3, m.y += p.getY(i * 3 + k) / 3, m.z += p.getZ(i * 3 + k) / 3;
-    const v = fn(m, i);
-    for (let k = 0; k < 3; k++) c.set([v[0], v[1], v[2], v[3] ?? 1], (i * 3 + k) * 4);
+/* ---------------- Langit: shader awan mendung + Gargantua, dirender ke cubemap bergilir ----------------
+   Cubemap dipakai untuk latar dan pantulan air. Goyangan planet tidak dimasukkan ke cubemap (uWob saat mengambil). */
+const SKYU = {
+  uTime: { value: 0 }, uCover: { value: 0.93 }, uBreak: { value: 0 }, uMood: { value: 0 },
+  uGDir: { value: GDIR }, uGU: { value: GU }, uGV: { value: GV }, uSunL: { value: SUNL },
+  uRs: { value: Math.tan(G.rad * DEG) }, uTilt: { value: G.tilt * DEG },
+  uHaze: { value: new THREE.Color() }, uZen: { value: new THREE.Color() }, uCloudHi: { value: new THREE.Color() }, uCloudLo: { value: new THREE.Color() },
+  uGlow: { value: new THREE.Color() }, uWarm: { value: new THREE.Color() },
+};
+const SKY_FS = /* glsl */`
+uniform float uTime, uCover, uBreak, uMood, uRs, uTilt;
+uniform vec3 uGDir, uGU, uGV, uSunL, uHaze, uZen, uCloudHi, uCloudLo, uGlow, uWarm;
+varying vec3 vDir;
+float h13(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+float vn3(vec3 p) {
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(h13(i), h13(i + vec3(1, 0, 0)), f.x), mix(h13(i + vec3(0, 1, 0)), h13(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(h13(i + vec3(0, 0, 1)), h13(i + vec3(1, 0, 1)), f.x), mix(h13(i + vec3(0, 1, 1)), h13(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+float fbm3(vec3 p) { float s = 0.0, a = 0.5; for (int i = 0; i < OCT; i++) { s += a * vn3(p); p = p * 2.03 + vec3(1.7, 9.2, 3.1); a *= 0.5; } return s; }
+// Gargantua di balik atmosfer (bukan lensa gravitasi sungguhan; porting shader lensa menyusul)
+vec3 garg(vec3 d, vec3 base, vec3 glow) {                        // glow: cahaya piringan di atmosfer, tidak ada di depan bayangan
+  float c = dot(d, uGDir); if (c < 0.3) return base + glow;
+  vec2 p = vec2(dot(d, uGU), dot(d, uGV)) / c;
+  float r = length(p), rs = uRs, cs = cos(uTilt), sn = sin(uTilt);
+  vec2 q = vec2(cs * p.x + sn * p.y, -sn * p.x + cs * p.y);
+  float er = length(vec2(q.x, q.y / 0.14)), rin = 1.35 * rs, rout = 3.3 * rs;
+  float disk = smoothstep(rin, rin * 1.06, er) * (1.0 - smoothstep(rin * 1.1, rout, er));
+  float dop = 1.0 - 0.5 * clamp(q.x / rout, -1.0, 1.0);          // sisi kiri mendekat: lebih terang
+  vec3 dcol = mix(vec3(6.0, 5.3, 4.4), vec3(1.4, 0.75, 0.35), smoothstep(rin, rout, er)) * dop;
+  float sh = 1.0 - smoothstep(rs * 0.985, rs, r);
+  float halo = r > rs ? exp(-(r - rs) / (0.2 * rs)) * (1.0 - 0.35 * clamp(q.x / rs, -1.0, 1.0)) : 0.0;
+  vec3 col = base + glow + vec3(3.0, 2.4, 1.7) * halo;
+  col = mix(col, base * 0.15, sh);                                // bayangan gelap, tidak hitam pekat: atmosfer di depannya
+  float front = step(q.y, 0.0);
+  col += dcol * disk * (front + (1.0 - front) * (1.0 - sh));
+  col += vec3(5.0, 4.4, 3.6) * exp(-abs(r - rs * 1.01) / (0.008 * rs));
+  return mix(col, base + glow * (1.0 - sh), 0.15);
+}
+vec3 above(vec3 d) {                                              // langit di atas awan (terlihat lewat celah)
+  vec3 c = mix(uHaze, uZen, sqrt(max(d.y, 0.0)));
+  c += uWarm * uMood * pow(max(dot(d, uSunL), 0.0), 6.0);
+  float cg = max(dot(d, uGDir), 0.0);
+  return garg(d, c, uGlow * (pow(cg, 8.0) * 0.6 + pow(cg, 64.0) * 1.5));
+}
+float breakMask(vec3 d) { return uBreak * smoothstep(0.80, 0.97, dot(d, uGDir)); }
+vec3 cloudLight(float n, vec3 d, float thin) {                  // warna bawah awan: tebal gelap, tipis terang, bersinar dekat Gargantua
+  vec3 c = mix(uCloudLo, uCloudHi, clamp(n, 0.0, 1.0));
+  float cg = max(dot(d, uGDir), 0.0);
+  c += uGlow * pow(cg, 6.0) * (0.35 + 0.8 * thin);
+  c += uWarm * uMood * pow(max(dot(d, uSunL), 0.0), 3.0) * (0.25 + 0.6 * thin);
+  return c;
+}
+void main() {
+  float l = length(vDir); vec3 d = l > 1e-6 ? vDir / l : vec3(0.0, 1.0, 0.0);
+  if (d.y < 0.0) { gl_FragColor = vec4(uHaze * (0.92 + 0.08 * exp(d.y * 8.0)), 1.0); return; }
+  float dy = max(d.y, 0.015), t0 = ${CONFIG.cloud.h0.toFixed(1)} / dy;
+  vec2 wind = vec2(1.0, 0.35) * uTime * 6.0;
+  float cov = uCover - breakMask(d) * 0.95;
+  vec3 res;
+#if STEPS > 0
+  // Awan volumetrik: ray-march di lapisan h0-h1, cahaya dari atas (satu sampel ke atas untuk bayangan diri)
+  float t1 = min(${CONFIG.cloud.h1.toFixed(1)} / dy, t0 + 7000.0), dt = (t1 - t0) / float(STEPS);
+  float T = 1.0; vec3 acc = vec3(0.0);
+  float t = t0 + dt * h13(d * 917.0);
+  for (int i = 0; i < STEPS; i++) {
+    vec3 P = d * t; P.xz += wind;
+    float hf = clamp((P.y - ${CONFIG.cloud.h0.toFixed(1)}) / ${(CONFIG.cloud.h1 - CONFIG.cloud.h0).toFixed(1)}, 0.0, 1.0);
+    float n = fbm3(P / ${CONFIG.cloud.scale.toFixed(1)});
+    float den = clamp((n - (1.0 - cov) * 0.9) * 2.2, 0.0, 1.0) * smoothstep(0.0, 0.15, hf) * (1.0 - smoothstep(0.7, 1.0, hf)) * 0.004;
+    if (den > 0.0) {
+      float nu = fbm3((P + vec3(0.0, 300.0, 0.0)) / ${CONFIG.cloud.scale.toFixed(1)});
+      float up = exp(-max(nu - (1.0 - cov) * 0.9, 0.0) * 3.0);
+      vec3 S = cloudLight(0.25 + 0.75 * up * (0.5 + 0.5 * hf), d, 1.0 - cov);
+      float a = 1.0 - exp(-den * dt);
+      acc += T * a * S; T *= 1.0 - a;
+      if (T < 0.02) break;
+    }
+    t += dt;
   }
-  geo.setAttribute('color', new THREE.BufferAttribute(c, 4));
-  return geo;
-}
-const hash = (i) => { const s = Math.sin(i * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
-// Semua transparan agar diurutkan bersama menurut renderOrder (kubah, piringan belakang, cincin, bayangan, piringan depan)
-function skyMat() {
-  return new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthTest: false, depthWrite: false, side: THREE.DoubleSide, fog: false });
-}
-function skyMesh(geo, order, mat) { const m = new THREE.Mesh(geo, mat); m.renderOrder = order; m.frustumCulled = false; return m; }
-{
-  const tmp = new THREE.Color();
-  const dome = facet(new THREE.IcosahedronGeometry(6000, 3), (m, i) => {
-    const v = m.clone().normalize(), el = Math.asin(Math.max(-1, Math.min(1, v.y)));
-    if (el < 0) tmp.copy(PAL.horizon).lerp(PAL.below, Math.min(1, -el / 0.3));
-    else tmp.copy(PAL.horizon).lerp(PAL.zenith, Math.pow(Math.min(1, el / (Math.PI / 2)), 0.6));
-    const gd = Math.max(0, v.dot(GDIR));
-    tmp.lerp(PAL.glow, 0.55 * Math.pow(gd, 7));          // langit terang di sekitar piringan
-    const j = 1 + (hash(i) - 0.5) * 0.05;                // variasi kecil per segi
-    return [tmp.r * j, tmp.g * j, tmp.b * j, 1];
-  });
-  skyTilt.add(skyMesh(dome, 0, skyMat()));
-
-  // Gargantua: grup menghadap kamera, bidang XY lokal = bidang langit
-  const garg = new THREE.Group(); skyTilt.add(garg);
-  garg.position.copy(GDIR).multiplyScalar(G.dist); garg.lookAt(0, 0, 0);
-  const r = G.dist * Math.tan(G.rad * DEG);
-  const cA = col(0xfff3dd), cB = col(0xf2c07a), cC = col(0x9a6a3c);
-  const diskCol = (rad, ang, rin, rout, i, dop) => {
-    const q = Math.min(1, Math.max(0, (rad - rin) / (rout - rin)));
-    tmp.copy(cA).lerp(cB, Math.min(1, q * 2)).lerp(cC, Math.max(0, q * 2 - 1));
-    const b = (1 + dop * Math.cos(ang)) * (1 + (hash(i + 7) - 0.5) * 0.18);
-    return [tmp.r * b, tmp.g * b, tmp.b * b, 1 - Math.pow(q, 2.2)];
-  };
-  // Piringan akresi: hampir tegak (dilihat sedikit dari atas); belahan belakang sebelum bayangan, depan sesudahnya
-  const rin = r * 1.35, rout = r * 3.3;
-  for (const [t0, order] of [[0, 1], [Math.PI, 5]]) {
-    const g = facet(new THREE.RingGeometry(rin, rout, 26, 5, t0, Math.PI), (m, i) => diskCol(Math.hypot(m.x, m.y), Math.atan2(m.y, m.x) + Math.PI, rin, rout, i, 0.45));
-    const mesh = skyMesh(g, order, skyMat()); mesh.rotation.x = -82 * DEG;
-    const wrap = new THREE.Group(); wrap.rotation.z = -9 * DEG; wrap.add(mesh); garg.add(wrap);
-  }
-  // Cincin terbelokkan (citra belakang piringan di atas dan bawah bayangan)
-  const halo = facet(new THREE.RingGeometry(r * 0.96, r * 1.62, 36, 3), (m, i) => diskCol(Math.hypot(m.x, m.y) * 1.35, Math.atan2(m.y, m.x) + Math.PI, r * 1.3, r * 2.2, i, 0.35));
-  const haloM = skyMesh(halo, 2, skyMat()); haloM.rotation.z = -9 * DEG; garg.add(haloM);
-  garg.add(skyMesh(facet(new THREE.CircleGeometry(r, 22), () => [0, 0, 0, 1]), 3, skyMat()));
-  const ring = facet(new THREE.RingGeometry(r, r * 1.05, 44, 1), (m, i) => { const b = 1.6 + 0.6 * Math.cos(Math.atan2(m.y, m.x) + Math.PI + 9 * DEG) + hash(i) * 0.2; return [1 * b, 0.93 * b, 0.8 * b, 1]; });
-  garg.add(skyMesh(ring, 4, skyMat()));
-}
-
-/* ---------------- Dasar laut: grid persegi mengikuti pemain, digeser per sel (tidak berubah bentuk saat berjalan) ---------------- */
-const BED = { size: 640, n: 256 }; BED.cell = BED.size / BED.n;
-const bedGeo = new THREE.PlaneGeometry(BED.size, BED.size, BED.n, BED.n); bedGeo.rotateX(-Math.PI / 2);
-const bedU = { ...U, uOff: { value: new THREE.Vector3() } };
-const bedMat = new THREE.ShaderMaterial({
-  uniforms: Object.assign(bedU, { uSand: U.uSand, uRock: U.uRock, uAlgae: U.uAlgae, uWater: U.uWater }),
-  vertexShader: LOG_VS + COMMON + /* glsl */`
-    varying vec3 vR; varying float vWet;
-    flat varying float vK, vK2;          // acak per segitiga (dari titik terakhir segitiga): pasir, batu, ganggang
-    void main() {
-      vec3 w = vec3(position.x + uOff.x, 0.0, position.z + uOff.z);
-      vec2 j = jit(w.xz, ${BED.cell.toFixed(2)});
-      vK = fract(j.x * 7.13 + j.y * 3.71); vK2 = fract(j.x * 2.3 - j.y * 5.9);
-      vK = max(vK, 0.9 * step(0.55, sin(w.x * 0.045 + 1.0) * sin(w.z * 0.052 - 0.7)));   // petak ganggang/batu berkelompok
-      w.xz += j;
-      float b = seabed(w.xz);
-      vWet = drawdown(w.x - frontX(w.z)) - b;          // kedalaman air di titik ini (tanpa riak)
-      w.y = b - curveDrop(w);
-      vR = w - uCam;
-      gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
-      #include <logdepthbuf_vertex>
-    }`,
-  fragmentShader: LOG_FS + COMMON + FLAT_FS + /* glsl */`
-    uniform vec3 uSand, uRock, uAlgae, uWater;
-    varying vec3 vR; varying float vWet;
-    flat varying float vK, vK2;
-    void main() {
-      #include <logdepthbuf_fragment>
-      vec3 n = flatN(vR);
-      vec3 base = vK > 0.93 ? uRock : (vK > 0.8 ? mix(uSand, uAlgae, 0.7) : uSand);
-      base *= 0.88 + 0.24 * vK2;
-      float wet = smoothstep(-0.05, 0.25, vWet);
-      base = mix(base, base * 0.55 + uWater * 0.25, wet);       // basah dan terendam: lebih gelap, kehijauan
-      float ndl = max(dot(n, uSunDir), 0.0);
-      vec3 c = base * (uAmb + uSun * ndl * 0.8);
-      c = mix(c, uFog, 1.0 - exp(-length(vR) / uFogD));
-      gl_FragColor = vec4(c, 1.0);
-      #include <colorspace_fragment>
-    }`,
+  res = acc + T * above(d);
+#else
+  // Awan 2D: satu atau dua lapisan fbm di bidang h0
+  vec2 uv = (d.xz * t0 + wind) / ${CONFIG.cloud.scale.toFixed(1)};
+  float n = fbm3(vec3(uv, 0.3));
+  float den = smoothstep(1.0 - cov - 0.12, 1.0 - cov + 0.28, n);
+#if LAYERS > 1
+  float n2 = fbm3(vec3(uv * 2.7 + 5.1, 1.7));
+  den = clamp(den * 0.8 + smoothstep(1.0 - cov, 1.0 - cov + 0.3, n2) * 0.35, 0.0, 1.0);
+  n = n * 0.7 + n2 * 0.3;
+#endif
+  float T = exp(-den * 4.0 - cov * 0.15);
+  res = cloudLight(0.2 + 1.1 * (n - 0.3) * (1.0 - den * 0.4), d, 1.0 - den) * (1.0 - T) + above(d) * T;
+#endif
+  res = mix(uHaze, res, exp(-t0 / 35000.0));                    // cakrawala berkabut
+  gl_FragColor = vec4(max(res, vec3(0.0)), 1.0);
+}`;
+const skyScene = new THREE.Scene();
+const skyMat = new THREE.ShaderMaterial({
+  uniforms: SKYU, side: THREE.BackSide, depthTest: false, depthWrite: false, defines: { STEPS: 0, LAYERS: 1, OCT: 4 },
+  vertexShader: 'varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: SKY_FS,
 });
-const bed = new THREE.Mesh(bedGeo, bedMat); bed.frustumCulled = false; bed.renderOrder = 10; scene.add(bed);
+{ const m = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), skyMat); m.frustumCulled = false; skyScene.add(m); }
+const SKYCUBE = { rt: null, cam: null, face: 0, tick: 0 };
+function makeSkyCube(size) {
+  if (SKYCUBE.rt) SKYCUBE.rt.dispose();
+  SKYCUBE.rt = new THREE.WebGLCubeRenderTarget(size, { type: THREE.HalfFloatType, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
+  SKYCUBE.cam = new THREE.CubeCamera(0.1, 100, SKYCUBE.rt);
+  SKYCUBE.cam.coordinateSystem = renderer.coordinateSystem; SKYCUBE.cam.updateCoordinateSystem(); SKYCUBE.cam.updateMatrixWorld(true);
+  U.uSky.value = SKYCUBE.rt.texture;
+  SKYCUBE.full = true;
+}
+function updateSkyCube() {      // satu sisi per frame (atau per 2 frame di preset rendah); semua sisi saat dibuat ulang
+  const P = PRESETS[PRESET.idx], cams = SKYCUBE.cam.children;
+  const faces = SKYCUBE.full ? [0, 1, 2, 3, 4, 5] : (++SKYCUBE.tick % P.faceEvery ? [] : [SKYCUBE.face++ % 6]);
+  SKYCUBE.full = false;
+  for (const f of faces) { renderer.setRenderTarget(SKYCUBE.rt, f); renderer.render(skyScene, cams[f]); }
+}
+// Latar: bola besar yang mengambil warna dari cubemap
+const bgMat = new THREE.ShaderMaterial({
+  uniforms: { uSky: U.uSky, uWob: U.uWob }, side: THREE.BackSide, depthTest: false, depthWrite: false,
+  vertexShader: 'varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * mat4(mat3(viewMatrix)) * vec4(position, 1.0); gl_Position.z = gl_Position.w * 0.999; }',
+  fragmentShader: 'uniform samplerCube uSky; uniform mat3 uWob; varying vec3 vDir; void main() { float l = length(vDir); vec3 d = l > 1e-6 ? vDir / l : vec3(0.0, 1.0, 0.0); gl_FragColor = vec4(textureCube(uSky, uWob * d).rgb, 1.0); }',
+});
+{ const m = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), bgMat); m.frustumCulled = false; m.renderOrder = -100; scene.add(m); }
 
-/* ---------------- Laut: dua bagian, permukaan sama (riak + air surut + lengkung) ----------------
-   Dekat: grid persegi 2 m ikut pemain per sel (titik tetap di dunia, tidak "berenang"), dipotong lingkaran 200 m.
-   Jauh: cincin polar dari 196 m sampai 270 km. Riak habis sebelum 190 m, jadi sambungan tidak terlihat. */
+/* ---------------- Laut: dekat = grid persegi rapat (Gerstner), jauh = cincin polar sampai 270 km ----------------
+   Permukaan per piksel dihitung dari posisi dunia yang sama, jadi sambungan dekat/jauh tidak terlihat. Tidak ada mesh
+   dasar laut: dasar dihitung di shader air (selalu terendam, samar lewat air keruh). */
 function polarGeo(r0, N, segs, a, b) {
   const pos = [], idx = [];
   for (let i = 0; i <= N; i++) {
@@ -328,176 +459,370 @@ function polarGeo(r0, N, segs, a, b) {
     for (let j = 0; j < segs; j++) { const an = (j + off) / segs * Math.PI * 2; pos.push(r * Math.cos(an), 0, r * Math.sin(an)); }
   }
   for (let i = 0; i < N; i++) {
-    const A = i * segs, B = (i + 1) * segs, oddIn = i % 2 === 1;
+    const A = i * segs, B = (i + 1) * segs, odd = i % 2 === 1;
     for (let j = 0; j < segs; j++) {
       const a0 = A + j, a1 = A + (j + 1) % segs, b0 = B + j, b1 = B + (j + 1) % segs;
-      if (!oddIn) idx.push(a0, b0, a1, a1, b0, b1); else idx.push(a0, b1, a1, a0, b0, b1);
+      if (!odd) idx.push(a0, b0, a1, a1, b0, b1); else idx.push(a0, b1, a1, a0, b0, b1);
     }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
   return g;
 }
-const SEA = { cell: 2, near: 200, nearSize: 420, r0: 196, N: 170, segs: 200, b: 0.045 }; SEA.a = 6 / SEA.b;
-function seaMat(cut, jitter) {
-  const u = { ...U, uOff: { value: new THREE.Vector3() }, uCut: { value: cut } };
+function seaMat(near) {
+  const u = { ...U, uOff: { value: new THREE.Vector3() }, uCell: { value: 1 }, uNearR: { value: 70 } };
   return new THREE.ShaderMaterial({
-    uniforms: u, transparent: true, side: THREE.DoubleSide,
+    uniforms: u, defines: { NW: 16, NM: 12, NEAR: near ? 1 : 0 },
     vertexShader: LOG_VS + COMMON + /* glsl */`
-      varying vec3 vR;
+      uniform vec3 uOff; uniform float uCell, uNearR;
+      varying vec3 vR; varying vec2 vP; varying float vDepth;
       void main() {
         vec3 w = vec3(position.x + uOff.x, 0.0, position.z + uOff.z);
-        ${jitter ? `w.xz += jit(w.xz, ${SEA.cell.toFixed(1)});` : ''}
+      #if NEAR
         float d = length(w.xz - uCam.xz);
-        w.y = ripple(w.xz, uT) * (1.0 - smoothstep(60.0, 185.0, d)) + drawdown(w.x - frontX(w.z)) - curveDrop(w);
+        w += gerstner(w.xz, uT, 1.0 - smoothstep(uNearR * 0.45, uNearR * 0.9, d), uCell);
+      #endif
+        w.y += drawdown(w.x - frontX(w.z));
+        vP = w.xz; vDepth = max(w.y - seabed(w.xz), 0.03);
+        w.y -= curveDrop(w);
         vR = w - uCam;
         gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
         #include <logdepthbuf_vertex>
       }`,
-    fragmentShader: LOG_FS + COMMON + FLAT_FS + /* glsl */`
-      uniform vec3 uWater; uniform float uCut;
-      varying vec3 vR;
+    fragmentShader: LOG_FS + COMMON + /* glsl */`
+      uniform float uNearR;
+      varying vec3 vR; varying vec2 vP; varying float vDepth;
       void main() {
         #include <logdepthbuf_fragment>
-        if (uCut > 0.0 && length(vR.xz) > uCut) discard;
-        vec3 n = flatN(vR);
-        vec3 c = shadeWater(n, vR, uWater);
-        float a = mix(0.38, 1.0, smoothstep(8.0, 180.0, length(vR)));   // bening di dekat: dasar laut terlihat
-        gl_FragColor = vec4(c, a);
-        #include <colorspace_fragment>
+      #if NEAR
+        if (length(vR.xz) > uNearR) discard;
+      #endif
+        float dist = length(vR), J;
+        vec3 n = chopNormal(vP, uT, dist * uPix, J);
+        float foam = smoothstep(0.5, 0.28, J) * 0.7 * (0.6 + 0.4 * vn2(vP * 2.3));
+        gl_FragColor = vec4(seaShade(vR, n, vDepth, foam, vP), 1.0);
       }`,
   });
 }
-const seaNearGeo = new THREE.PlaneGeometry(SEA.nearSize, SEA.nearSize, SEA.nearSize / SEA.cell, SEA.nearSize / SEA.cell); seaNearGeo.rotateX(-Math.PI / 2);
-const seaNear = new THREE.Mesh(seaNearGeo, seaMat(SEA.near, true)); seaNear.frustumCulled = false; seaNear.renderOrder = 31; scene.add(seaNear);
-const seaFar = new THREE.Mesh(polarGeo(SEA.r0, SEA.N, SEA.segs, SEA.a, SEA.b), seaMat(0, false)); seaFar.frustumCulled = false; seaFar.renderOrder = 30; scene.add(seaFar);
+const seaNear = new THREE.Mesh(new THREE.BufferGeometry(), seaMat(true)); seaNear.frustumCulled = false; seaNear.renderOrder = 10; scene.add(seaNear);
+const seaFar = new THREE.Mesh(new THREE.BufferGeometry(), seaMat(false)); seaFar.frustumCulled = false; seaFar.renderOrder = 11; scene.add(seaFar);
+const SEA = { cell: 1, near: 70 };
+function buildSea(P) {
+  SEA.cell = P.cell; SEA.near = P.near;
+  const size = 2 * P.near + 4 * P.cell, n = Math.round(size / P.cell);
+  const g = new THREE.PlaneGeometry(n * P.cell, n * P.cell, n, n); g.rotateX(-Math.PI / 2);
+  seaNear.geometry.dispose(); seaNear.geometry = g;
+  const b = 0.048, a = 1.5 / b;                       // cincin pertama 1,5 m, sampai sekitar 285 km
+  seaFar.geometry.dispose(); seaFar.geometry = polarGeo(P.near - 3, 190, 256, a, b);
+  for (const m of [seaNear.material, seaFar.material]) { m.uniforms.uCell.value = P.cell; m.uniforms.uNearR.value = P.near; }
+}
 
-/* ---------------- Gelombang: pita sepanjang muka (z), profil tetap di sumbu u (jarak dari muka) ----------------
-   Tepi pita ditekan 3 m ke bawah dasar laut agar tersembunyi di bawah laut biasa. */
-const US = [-4000, -2000, -1100, -700, -480, -330, -220, -140, -80, -35, 0, 40, 90, 160, 260, 400, 600, 900, 1300, 1900, 2800, 4000, 5600, 7800, 11000, 15000, 20000, 27000, 36000, 50000];
-const ZS = []; { const n = 110, b = 0.06, a = 25 / b; for (let i = -n; i <= n; i++) ZS.push(Math.sign(i) * a * (Math.exp(b * Math.abs(i)) - 1)); }
+/* ---------------- Gelombang raksasa: pita sepanjang muka (z), profil tetap di sumbu u ----------------
+   Normal halus dari beda hingga posisi, detail permukaan dari noise berskala besar + ombak angin, alur buih mengalir turun. */
+const US = [-4000, -2000, -1300, -900, -650, -480, -360, -270, -200, -140, -95, -60, -30, -10, 0, 15, 40, 70, 110, 160, 230, 320, 450, 650, 900, 1300, 1900, 2800, 4000, 5600, 7800, 11000, 15000, 20000, 27000, 36000, 50000];
+const ZS = []; { const n = 140, b = 0.05, a = 12 / b; for (let i = -n; i <= n; i++) ZS.push(Math.sign(i) * a * (Math.exp(b * Math.abs(i)) - 1)); }
 function waveGeo() {
-  const pos = [], foam = [], idx = [], nu = US.length;
-  for (const z of ZS) for (const u of US) {
-    pos.push(u, 0, z);
-    foam.push(u < -250 ? 0 : u < 0 ? 0.35 + 0.65 * (1 + u / 250) : Math.max(0, 1 - u / 700));
-  }
+  const pos = [], idx = [], nu = US.length;
+  for (const z of ZS) for (const u of US) pos.push(u, 0, z);
   for (let j = 0; j < ZS.length - 1; j++) for (let i = 0; i < nu - 1; i++) {
     const a = j * nu + i, b = a + 1, c = a + nu, d = c + 1;
-    if ((i + j) % 2) idx.push(a, c, b, b, c, d); else idx.push(a, c, d, a, d, b);
+    idx.push(a, c, b, b, c, d);
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('aFoam', new THREE.Float32BufferAttribute(foam, 1)); g.setIndex(idx);
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
   return g;
 }
 const WAVE_VS = /* glsl */`
+  uniform vec3 uOff;
   float waveY(float u, float z, out float hw) {
     hw = waveHz(z) * waveG(u);
     return hw + drawdown(u) - 3.0 * (1.0 - smoothstep(0.5, 3.0, hw));
   }
   float waveLean(float u, float z) { float k = (u - 60.0) / 280.0; return uLean * waveHz(z) * exp(-k * k); }
+  vec3 wavePos(float u, float z, out float hw) { return vec3(frontX(z) + u - waveLean(u, z), waveY(u, z, hw), z); }
 `;
 const waveU = { ...U, uOff: { value: new THREE.Vector3() } };
 const waveMat = new THREE.ShaderMaterial({
-  uniforms: Object.assign(waveU, { uWaterDeep: U.uWaterDeep, uCrest: U.uCrest, uFoam: U.uFoam }),
-  side: THREE.DoubleSide,
+  uniforms: waveU, side: THREE.DoubleSide, defines: { NW: 16, NM: 12 },
   vertexShader: LOG_VS + COMMON + WAVE_VS + /* glsl */`
-    attribute float aFoam;
-    varying vec3 vR; varying float vFoam, vG, vU, vZ;
+    varying vec3 vR, vN, vTu; varying float vG, vU, vZ;
     void main() {
-      float z = position.z + uOff.z, u = position.x, hw;
-      vec3 w = vec3(frontX(z) + u - waveLean(u, z), 0.0, z);
-      w.y = waveY(u, z, hw) - curveDrop(w);
-      vG = hw / uWH; vFoam = aFoam * smoothstep(20.0, 200.0, hw); vU = u; vZ = z;
-      vR = w - uCam;
-      gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
-      #include <logdepthbuf_vertex>
-    }`,
-  fragmentShader: LOG_FS + COMMON + FLAT_FS + /* glsl */`
-    uniform vec3 uWaterDeep, uCrest, uFoam;
-    varying vec3 vR; varying float vFoam, vG, vU, vZ;
-    void main() {
-      #include <logdepthbuf_fragment>
-      vec3 n = flatN(vR);
-      float crest = smoothstep(0.45, 0.95, vG);
-      vec3 base = mix(uWaterDeep, uCrest, crest);
-      vec3 c = shadeWater(n, vR, base);
-      // Tembus cahaya: puncak tipis menyala saat Gargantua di belakang gelombang
-      vec3 V = -vR / max(length(vR), 1e-3);
-      c += uCrest * uSun * pow(max(dot(-V, uSunDir), 0.0), 3.0) * crest * 0.7 * exp(-length(vR) / uFogD);
-      // Alur buih vertikal di muka gelombang (pita 70 m sepanjang muka)
-      float s = fract(sin(floor(vZ / 70.0) * 12.9898) * 43758.5453);
-      float streak = step(0.55, s) * smoothstep(-450.0, -120.0, vU) * (1.0 - step(0.0, vU)) * (0.35 + 0.4 * s);
-      float f = clamp(max(vFoam, streak * smoothstep(0.05, 0.3, vG)), 0.0, 1.0);
-      vec3 fc = mix(uFoam * (uAmb + uSun * max(dot(n, uSunDir), 0.0) * 0.6), uFog, 1.0 - exp(-length(vR) / uFogD));
-      gl_FragColor = vec4(mix(c, fc, f), 1.0);
-      #include <colorspace_fragment>
-    }`,
-});
-const wave = new THREE.Mesh(waveGeo(), waveMat); wave.frustumCulled = false; wave.renderOrder = 20; scene.add(wave);
-
-// Semburan di atas puncak: dua baris (bawah di puncak, atas 260 m lebih tinggi dan tertiup ke belakang), memudar ke atas
-function sprayGeo() {
-  const pos = [], al = [], idx = [];
-  for (const z of ZS) { pos.push(-40, 0, z, 260, 1, z); al.push(0.5, 0); }
-  for (let j = 0; j < ZS.length - 1; j++) { const a = j * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aA', new THREE.Float32BufferAttribute(al, 1)); g.setIndex(idx);
-  return g;
-}
-const sprayMat = new THREE.ShaderMaterial({
-  uniforms: Object.assign({ ...U, uOff: waveU.uOff }, { uFoam: U.uFoam }),
-  transparent: true, depthWrite: false, side: THREE.DoubleSide,
-  vertexShader: LOG_VS + COMMON + WAVE_VS + /* glsl */`
-    attribute float aA; varying float vA; varying vec3 vR;
-    void main() {
-      float z = position.z + uOff.z, hw; float top = position.y;
-      vec3 w = vec3(frontX(z) - waveLean(0.0, z) + position.x, 0.0, z);
-      w.y = waveY(0.0, z, hw) + top * (220.0 + 60.0 * sin(z * 0.0021 + uT * 0.3)) - curveDrop(w);
-      vA = aA * smoothstep(100.0, 600.0, hw);
-      vR = w - uCam;
-      gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
+      float z = position.z + uOff.z, u = position.x, hw, h1, h2;
+      float du = max(8.0, abs(u) * 0.03);
+      vec3 P = wavePos(u, z, hw), Pu = wavePos(u + du, z, h1), Pz = wavePos(u, z + 20.0, h2);
+      vec3 cr = cross(Pz - P, Pu - P); float cl = length(cr);
+      vN = cl > 1e-9 ? cr / cl : vec3(0.0, 1.0, 0.0);
+      vec3 tu = Pu - P; float tl = length(tu); vTu = tl > 1e-9 ? tu / tl : vec3(1.0, 0.0, 0.0);
+      vG = hw / uWH; vU = u; vZ = z;
+      P.y -= curveDrop(P);
+      vR = P - uCam;
+      gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
       #include <logdepthbuf_vertex>
     }`,
   fragmentShader: LOG_FS + COMMON + /* glsl */`
-    uniform vec3 uFoam; varying float vA; varying vec3 vR;
+    varying vec3 vR, vN, vTu; varying float vG, vU, vZ;
+    float fbm2(vec2 p) { return vn2(p) * 0.55 + vn2(p * 2.1 + 3.7) * 0.3 + vn2(p * 4.3 + 1.3) * 0.15; }
     void main() {
       #include <logdepthbuf_fragment>
-      vec3 c = mix(uFoam * (uAmb + uSun * 0.5), uFog, 1.0 - exp(-length(vR) / uFogD));
-      gl_FragColor = vec4(c, vA);
-      #include <colorspace_fragment>
+      float nl = length(vN); vec3 n = nl > 1e-6 ? vN / nl : vec3(0.0, 1.0, 0.0);
+      float dist = length(vR);
+      if (dot(n, -vR) < 0.0) n = -n;
+      // Tekstur permukaan dinding air: noise besar (turun mengalir) + ombak angin
+      vec2 q = vec2(vZ / 60.0, vU / 90.0 + uT * 0.08);
+      float e = 0.3, h0 = fbm2(q), hz = fbm2(q + vec2(e, 0.0)), hu = fbm2(q + vec2(0.0, e));
+      float fade = exp(-dist / 9000.0);
+      vec3 tz = vec3(0.0, 0.0, 1.0);
+      n = n - (tz * (hz - h0) + vTu * (hu - h0)) / e * 0.6 * fade;
+      float J; vec3 nc = chopNormal(vec2(vZ, vU * 0.3 + vZ * 0.1), uT, dist * uPix, J);
+      n = normalize(n + (nc - vec3(0.0, 1.0, 0.0)) * 0.6 * fade + vec3(0.0, 1e-4, 0.0));
+      // Buih: puncak, urat putih tak beraturan yang mengalir turun di muka (noise dibengkokkan), pecah di kaki gelombang
+      float crest = smoothstep(0.82, 0.98, vG) * step(vU, 180.0);
+      float face = smoothstep(-520.0, -120.0, vU) * (1.0 - smoothstep(0.0, 60.0, vU));
+      vec2 w0 = vec2(vZ / 80.0, vU / 120.0 - uT * 0.12);
+      vec2 wp = w0 + vec2(fbm2(w0 * 0.7 + 4.1), fbm2(w0 * 0.7 + 8.3)) * 1.6;
+      float streak = smoothstep(0.62, 0.8, fbm2(wp * 1.3)) * face;
+      float base = smoothstep(0.03, 0.12, vG) * (1.0 - smoothstep(0.12, 0.3, vG)) * step(vU, 0.0) * smoothstep(0.45, 0.7, fbm2(vec2(vZ / 30.0, uT * 0.2)));
+      float foam = clamp(crest * (0.6 + 0.4 * h0) + streak * 0.7 + base * 0.7, 0.0, 1.0) * smoothstep(1.0, 30.0, vG * uWH);
+      vec3 c = seaShade(vR, n, 40.0, foam, vec2(vZ, vU)) * mix(0.7, 1.0, smoothstep(0.05, 0.8, vG));   // kaki dinding lebih gelap
+      gl_FragColor = vec4(c, 1.0);
     }`,
 });
-const spray = new THREE.Mesh(sprayGeo(), sprayMat); spray.frustumCulled = false; spray.renderOrder = 40; scene.add(spray);
+const wave = new THREE.Mesh(waveGeo(), waveMat); wave.frustumCulled = false; wave.renderOrder = 5; scene.add(wave);
+
+// Kabut semburan di atas puncak dan kaki gelombang: lembar tembus pandang, memudar ke atas dan ke samping
+function sprayGeo(u0, u1, rows) {
+  const pos = [], idx = [];
+  for (const z of ZS) for (let r = 0; r <= rows; r++) { const f = r / rows; pos.push(u0 + (u1 - u0) * f, f, z); }
+  for (let j = 0; j < ZS.length - 1; j++) for (let r = 0; r < rows; r++) { const a = j * (rows + 1) + r, c = a + rows + 1; idx.push(a, c, a + 1, a + 1, c, c + 1); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+  return g;
+}
+function sprayMat(kind) {
+  return new THREE.ShaderMaterial({
+    uniforms: { ...waveU }, transparent: true, depthWrite: false, side: THREE.DoubleSide, defines: { NW: 1, NM: 1, KIND: kind },
+    vertexShader: LOG_VS + COMMON + WAVE_VS + /* glsl */`
+      varying float vA, vF; varying vec3 vR; varying vec2 vQ;
+      void main() {
+        float z = position.z + uOff.z, f = position.y, hw;
+      #if KIND == 0
+        vec3 P = wavePos(-30.0, z, hw); P.x += position.x + 30.0;
+        P.y += f * (230.0 + 70.0 * sin(z * 0.0021 + uT * 0.3));
+        vA = 0.55 * smoothstep(100.0, 600.0, hw);
+      #else
+        vec3 P = wavePos(-700.0, z, hw); P.x += position.x + 700.0;       // kabut di kaki gelombang, bergerak bersama muka
+        P.y = f * 160.0;
+        vA = 0.45 * smoothstep(300.0, 900.0, waveHz(z) * waveG(0.0));
+      #endif
+        vF = f; vQ = vec2(z / 90.0, f * 3.0 - uT * 0.25);
+        P.y -= curveDrop(P);
+        vR = P - uCam;
+        gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: LOG_FS + COMMON + /* glsl */`
+      varying float vA, vF; varying vec3 vR; varying vec2 vQ;
+      void main() {
+        #include <logdepthbuf_fragment>
+        float n = vn2(vQ) * 0.6 + vn2(vQ * 2.3 + 1.1) * 0.4;
+        float a = vA * (1.0 - vF) * (1.0 - vF) * smoothstep(0.0, 0.08, vF) * (0.4 + 0.9 * n);
+        vec3 c = uFoamC * uAmb * 1.05;
+        vec3 hd = normalize(vec3(vR.x, 0.02 * length(vR), vR.z) + vec3(0.0, 1e-3, 0.0));
+        c = mix(c, skyL(hd), 1.0 - exp(-length(vR) / uFogD));
+        gl_FragColor = vec4(c, clamp(a, 0.0, 1.0));
+      }`,
+  });
+}
+const spray = new THREE.Mesh(sprayGeo(-30, 260, 6), sprayMat(0)); spray.frustumCulled = false; spray.renderOrder = 40; scene.add(spray);
+const mist = new THREE.Mesh(sprayGeo(-380, -200, 5), sprayMat(1)); mist.frustumCulled = false; mist.renderOrder = 41; scene.add(mist);
+
+/* ---------------- Post: HDR -> bloom -> ACES + grading -> FXAA + grain + vinyet ---------------- */
+const FSV = 'varying vec2 vUv; void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+const fsGeo = new THREE.BufferGeometry(); fsGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+const fsq = new THREE.Mesh(fsGeo); fsq.frustumCulled = false;
+const postScene = new THREE.Scene(); postScene.add(fsq);
+const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const pmat = (fs, uniforms, defines = {}) => new THREE.ShaderMaterial({ uniforms, defines, vertexShader: FSV, fragmentShader: fs, depthTest: false, depthWrite: false });
+const POST = { hdr: null, ldr: null, down: [], up: [], w: 0, h: 0, levels: 6 };
+const M_PRE = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; varying vec2 vUv;
+  vec3 s(vec2 o) { vec3 c = texture2D(tSrc, vUv + o * uPx).rgb; return any(isnan(c)) ? vec3(0.0) : clamp(c, 0.0, 64.0); }
+  void main() { vec3 c = (s(vec2(-1.0)) + s(vec2(1.0, -1.0)) + s(vec2(-1.0, 1.0)) + s(vec2(1.0))) * 0.25;
+    float l = max(max(c.r, c.g), c.b); gl_FragColor = vec4(c * max(l - 1.1, 0.0) / max(l, 1e-4), 1.0); }`, { tSrc: { value: null }, uPx: { value: new THREE.Vector2() } });
+const M_DOWN = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; varying vec2 vUv;
+  void main() { gl_FragColor = vec4((texture2D(tSrc, vUv + vec2(-1.0) * uPx).rgb + texture2D(tSrc, vUv + vec2(1.0, -1.0) * uPx).rgb
+    + texture2D(tSrc, vUv + vec2(-1.0, 1.0) * uPx).rgb + texture2D(tSrc, vUv + vec2(1.0) * uPx).rgb) * 0.25, 1.0); }`, { tSrc: { value: null }, uPx: { value: new THREE.Vector2() } });
+const M_UP = pmat(`uniform sampler2D tSrc, tCur; uniform vec2 uPx; varying vec2 vUv;
+  void main() { vec3 s = vec3(0.0);
+    for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) s += texture2D(tSrc, vUv + vec2(x, y) * uPx).rgb * (x == 0 ? 2.0 : 1.0) * (y == 0 ? 2.0 : 1.0);
+    gl_FragColor = vec4(texture2D(tCur, vUv).rgb + s / 16.0, 1.0); }`, { tSrc: { value: null }, tCur: { value: null }, uPx: { value: new THREE.Vector2() } });
+const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform float uExp, uBloomK; varying vec2 vUv;
+  vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+  void main() {
+    vec3 c = texture2D(tHdr, vUv).rgb; if (any(isnan(c))) c = vec3(0.0);
+    c = clamp(c, 0.0, 64.0) + texture2D(tBloom, vUv).rgb * uBloomK;   // jepit juga Inf
+    c = aces(c * uExp);
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c = mix(vec3(l), c, 0.82) * vec3(0.97, 1.0, 1.03);              // grading: agak pudar, dingin
+    c = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));                      // ke ruang tampilan (sRGB didekati gamma 2,2)
+    gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));        // alpha = luma untuk FXAA
+  }`, { tHdr: { value: null }, tBloom: { value: null }, uExp: { value: CONFIG.exposure }, uBloomK: { value: 0.08 } });
+const M_FINAL = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; uniform float uTime, uGrain; varying vec2 vUv;
+  float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+  vec3 fxaa() {
+    vec4 M = texture2D(tSrc, vUv);
+    float NW = texture2D(tSrc, vUv + vec2(-1.0, -1.0) * uPx).a, NE = texture2D(tSrc, vUv + vec2(1.0, -1.0) * uPx).a;
+    float SW = texture2D(tSrc, vUv + vec2(-1.0, 1.0) * uPx).a, SE = texture2D(tSrc, vUv + vec2(1.0, 1.0) * uPx).a;
+    float lmin = min(M.a, min(min(NW, NE), min(SW, SE))), lmax = max(M.a, max(max(NW, NE), max(SW, SE)));
+    vec2 dir = vec2(-((NW + NE) - (SW + SE)), (NW + SW) - (NE + SE));
+    float red = max((NW + NE + SW + SE) * 0.03125, 1.0 / 128.0);
+    dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + red), -8.0, 8.0) * uPx;
+    vec3 A = 0.5 * (texture2D(tSrc, vUv - dir / 6.0).rgb + texture2D(tSrc, vUv + dir / 6.0).rgb);
+    vec3 B = A * 0.5 + 0.25 * (texture2D(tSrc, vUv - dir * 0.5).rgb + texture2D(tSrc, vUv + dir * 0.5).rgb);
+    float lb = dot(B, vec3(0.299, 0.587, 0.114));
+    return (lb < lmin || lb > lmax) ? A : B;
+  }
+  void main() {
+    vec3 c = fxaa();
+    vec2 v = vUv - 0.5; c *= 1.0 - 0.28 * dot(v, v) * 2.0;           // vinyet
+    c += (h12(gl_FragCoord.xy + fract(uTime * 7.13) * 517.0) - 0.5) * 0.028 * uGrain;
+    gl_FragColor = vec4(c, 1.0);
+  }`, { tSrc: { value: null }, uPx: { value: new THREE.Vector2() }, uTime: { value: 0 }, uGrain: { value: 1 } });
+function pass(mat, target) { fsq.material = mat; renderer.setRenderTarget(target); renderer.render(postScene, postCam); }
+function makePost(w, h, P) {
+  for (const r of [POST.hdr, POST.ldr, ...POST.down, ...POST.up]) if (r) r.dispose();
+  const opt = { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false };
+  POST.hdr = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: true, samples: P.msaa });
+  POST.ldr = new THREE.WebGLRenderTarget(w, h, { type: THREE.UnsignedByteType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
+  POST.levels = P.bloom; POST.down = []; POST.up = [];
+  for (let i = 0; i < P.bloom; i++) POST.down.push(new THREE.WebGLRenderTarget(Math.max(1, w >> (i + 1)), Math.max(1, h >> (i + 1)), opt));
+  for (let i = 0; i < P.bloom - 1; i++) POST.up.push(new THREE.WebGLRenderTarget(Math.max(1, w >> (i + 1)), Math.max(1, h >> (i + 1)), opt));
+  POST.w = w; POST.h = h;
+}
+function postRender(time) {
+  const D = POST.down, Up = POST.up, n = POST.levels;
+  M_PRE.uniforms.tSrc.value = POST.hdr.texture; M_PRE.uniforms.uPx.value.set(1 / POST.w, 1 / POST.h); pass(M_PRE, D[0]);
+  for (let i = 1; i < n; i++) { M_DOWN.uniforms.tSrc.value = D[i - 1].texture; M_DOWN.uniforms.uPx.value.set(1 / D[i - 1].width, 1 / D[i - 1].height); pass(M_DOWN, D[i]); }
+  let src = D[n - 1];
+  for (let i = n - 2; i >= 0; i--) {
+    M_UP.uniforms.tSrc.value = src.texture; M_UP.uniforms.tCur.value = D[i].texture; M_UP.uniforms.uPx.value.set(1 / src.width, 1 / src.height);
+    pass(M_UP, Up[i]); src = Up[i];
+  }
+  M_COMP.uniforms.tHdr.value = POST.hdr.texture; M_COMP.uniforms.tBloom.value = src.texture; pass(M_COMP, POST.ldr);
+  M_FINAL.uniforms.tSrc.value = POST.ldr.texture; M_FINAL.uniforms.uPx.value.set(1 / POST.w, 1 / POST.h); M_FINAL.uniforms.uTime.value = time;
+  pass(M_FINAL, null);
+}
+
+/* ---------------- Ukur GPU (pola GPUT Copper Corn Station) ---------------- */
+const GPUT = { ext: null, pool: [], pend: [], cur: null, frame: 0, acc: {}, ms: { sk: 0, sc: 0, po: 0 }, n: 0 };
+try { GPUT.ext = renderer.getContext().getExtension('EXT_disjoint_timer_query_webgl2'); } catch (e) { GPUT.ext = null; }
+function gpuBegin(key) { if (!GPUT.ext) return; const gl = renderer.getContext(), q = GPUT.pool.pop() || gl.createQuery(); gl.beginQuery(GPUT.ext.TIME_ELAPSED_EXT, q); GPUT.cur = { q, key, f: GPUT.frame }; }
+function gpuEnd() { if (!GPUT.cur) return; renderer.getContext().endQuery(GPUT.ext.TIME_ELAPSED_EXT); GPUT.pend.push(GPUT.cur); GPUT.cur = null; }
+function gpuFrameEnd() {
+  if (!GPUT.ext) return;
+  GPUT.pend.push({ end: true, f: GPUT.frame }); GPUT.frame++;
+  const gl = renderer.getContext(), bad = gl.getParameter(GPUT.ext.GPU_DISJOINT_EXT);
+  while (GPUT.pend.length) {
+    const e = GPUT.pend[0];
+    if (e.end) {
+      const A = GPUT.acc[e.f]; delete GPUT.acc[e.f];
+      if (A && !A.bad) { const k = GPUT.n ? 0.1 : 1; for (const key of ['sk', 'sc', 'po']) GPUT.ms[key] += ((A[key] || 0) - GPUT.ms[key]) * k; GPUT.n++; }
+      GPUT.pend.shift(); continue;
+    }
+    if (!gl.getQueryParameter(e.q, gl.QUERY_RESULT_AVAILABLE)) break;
+    const A = GPUT.acc[e.f] || (GPUT.acc[e.f] = {});
+    if (bad) A.bad = true; else A[e.key] = (A[e.key] || 0) + gl.getQueryParameter(e.q, gl.QUERY_RESULT) / 1e6;
+    GPUT.pool.push(e.q); GPUT.pend.shift();
+  }
+  if (GPUT.pend.length > 64) { for (const e of GPUT.pend) if (e.q) gl.deleteQuery(e.q); GPUT.pend.length = 0; GPUT.acc = {}; }
+}
+
+/* ---------------- Terapkan preset ---------------- */
+function viewSize() {
+  const P = PRESETS[PRESET.idx], pr = Math.min(window.devicePixelRatio || 1, P.dpr);
+  return [Math.max(1, Math.round(innerWidth * pr)), Math.max(1, Math.round(innerHeight * pr))];
+}
+function resize() {
+  const [w, h] = viewSize();
+  renderer.setPixelRatio(1); renderer.setSize(w, h, false);
+  camera.aspect = w / h; camera.updateProjectionMatrix();
+  makePost(w, h, PRESETS[PRESET.idx]);
+  U.uPix.value = 2 * Math.tan(camera.fov * DEG / 2) / h;     // sudut satu piksel (rad), untuk meredam ombak di bawah ukuran piksel
+}
+function applyPreset(i) {
+  PRESET.idx = i; const P = PRESETS[i];
+  applyChop(P.nw, P.nm);
+  for (const m of [seaNear.material, seaFar.material, waveMat]) { m.defines.NW = P.nw; m.defines.NM = P.nm; m.needsUpdate = true; }
+  skyMat.defines.STEPS = P.steps; skyMat.defines.LAYERS = P.layers; skyMat.defines.OCT = P.oct; skyMat.needsUpdate = true;
+  buildSea(P);
+  makeSkyCube(P.cube);
+  M_FINAL.uniforms.uGrain.value = P.grain;
+  resize();
+  try { localStorage.setItem('millar.preset', JSON.stringify({ idx: i, auto: PRESET.auto })); } catch (e) { /* abaikan */ }
+  document.querySelectorAll('#presetPick button').forEach((b, k) => b.classList.toggle('on', k === i));
+  const au = document.getElementById('presetAuto'); if (au) au.checked = PRESET.auto;
+}
+function autoPreset(dt) {
+  if (!PRESET.auto || !STATE.started) return;
+  PRESET.low = fps < 30 ? PRESET.low + dt : Math.max(0, PRESET.low - dt);
+  if (PRESET.low > 4 && PRESET.idx < PRESETS.length - 1) { applyPreset(PRESET.idx + 1); PRESET.low = -6; toast(t('FPS rendah: grafik diturunkan ke {p}.', { p: t(PRESETS[PRESET.idx].name) }), 3); }
+}
+
+/* ---------------- Suasana: warna langit dan cahaya, bergeser halus ---------------- */
+const PAL = [
+  { haze: [0.56, 0.60, 0.62], zen: [0.36, 0.42, 0.50], hi: [0.64, 0.66, 0.68], lo: [0.24, 0.26, 0.29], glow: [0.45, 0.40, 0.32], warm: [0, 0, 0], amb: [0.50, 0.53, 0.55] },
+  { haze: [0.72, 0.52, 0.38], zen: [0.22, 0.22, 0.32], hi: [0.95, 0.62, 0.40], lo: [0.20, 0.16, 0.18], glow: [0.70, 0.46, 0.26], warm: [1.6, 0.8, 0.35], amb: [0.50, 0.40, 0.34] },
+];
+function updateMood(dt, simT) {
+  const goK = MOOD.idx === 2 ? 1 : 0;
+  const goCover = MOOD.idx === 1 ? 0.97 : MOOD.idx === 2 ? 0.8 : 0.93;
+  // Otomatis: celah awan di sekitar Gargantua terbuka sekitar 70 s tiap 5 menit
+  const goBrk = MOOD.idx === 1 ? 0 : MOOD.idx === 2 ? 0.85 :THREE.MathUtils.smoothstep(Math.sin(simT * 2 * Math.PI / 300 - 1.3), 0.45, 0.8);
+  const k = 1 - Math.exp(-dt / 2.5);
+  MOOD.k += (goK - MOOD.k) * k; MOOD.cover += (goCover - MOOD.cover) * k; MOOD.brk += (goBrk - MOOD.brk) * k;
+  const L = (key) => PAL[0][key].map((v, i) => v + (PAL[1][key][i] - v) * MOOD.k);
+  SKYU.uHaze.value.setRGB(...L('haze')); SKYU.uZen.value.setRGB(...L('zen')); SKYU.uCloudHi.value.setRGB(...L('hi')); SKYU.uCloudLo.value.setRGB(...L('lo'));
+  SKYU.uGlow.value.setRGB(...L('glow')); SKYU.uWarm.value.setRGB(...L('warm')); U.uAmb.value.setRGB(...L('amb'));
+  SKYU.uMood.value = MOOD.k; SKYU.uCover.value = MOOD.cover; SKYU.uBreak.value = MOOD.brk;
+}
+function setMood(i) {
+  MOOD.idx = i;
+  document.querySelectorAll('#moodPick button').forEach((b, k) => b.classList.toggle('on', k === i));
+}
 
 /* ---------------- Kembaran JS untuk fisika pemain dan HUD ---------------- */
 const frontX = (z) => U.uWX.value + 2500 * Math.sin(z * 4e-5 + 1.3) + 900 * Math.sin(z * 1.7e-4);
 const waveHz = (z) => U.uWH.value * (0.82 + 0.18 * Math.sin(z * 9e-5 + 0.4));
 const waveG = (u) => u < 0 ? Math.exp(-((u / W.wf) ** 2)) : 0.35 * Math.exp(-((u / W.wc) ** 2)) + 0.65 * Math.exp(-u / W.wb);
 const drawdown = (u) => -W.dd * Math.exp(-(((u + W.ddL) / W.ddL) ** 2));
-const seabed = (x, z) => -0.5 + 0.16 * Math.sin(0.13 * x + 0.07 * z) + 0.11 * Math.sin(-0.05 * x + 0.21 * z + 1.7) + 0.05 * Math.sin(0.61 * x + 0.43 * z)
-  + 0.35 * Math.sin(0.011 * x + 0.4) * Math.sin(0.013 * z + 1.1) + 0.2 * Math.sin(0.0031 * x - 0.0027 * z);
-const waterAt = (x, z) => { const u = x - frontX(z); return Math.max(drawdown(u), waveHz(z) * waveG(u) + drawdown(u)); };
+const seabed = (x, z) => CONFIG.sea.bed + 0.06 * Math.sin(0.13 * x + 0.07 * z) + 0.05 * Math.sin(-0.05 * x + 0.21 * z + 1.7)
+  + 0.03 * Math.sin(0.61 * x + 0.43 * z) + 0.04 * Math.sin(0.011 * x + 0.4) * Math.sin(0.013 * z + 1.1);
+const waveTop = (x, z) => { const u = x - frontX(z); return waveHz(z) * waveG(u) + drawdown(u); };
+const waterAt = (x, z, tt) => Math.max(drawdown(x - frontX(z)) + chopAt(x, z, tt), waveTop(x, z));
 
 /* ---------------- Pemain dan kontrol ---------------- */
-const P = { x: 0, z: 0, y: 0, vy: 0, ground: true, yaw: -90 * DEG + 0 * DEG, pitch: 4 * DEG, view: 0, speed: 0 };
-// yaw: kamera three.js menghadap -Z saat yaw 0; -90 derajat = menghadap +X (arah datang gelombang)
-P.yaw = -Math.PI / 2 + 18 * DEG;   // sedikit menoleh ke Gargantua
+const STATE = { started: false, simT: 0, visT: 0 };
+const P = { x: 0, z: 0, y: 0, vy: 0, ground: true, yaw: -Math.PI / 2 + 18 * DEG, pitch: 4 * DEG, view: 0, speed: 0 };
 const keys = {};
-const CLK = { planet: 0, lost: 0, swept: 0, white: 0, msgT: 0 };
+const CLK = { planet: 0, swept: 0, white: 0, msgT: 0 };
 const msgEl = document.getElementById('msg'), whiteEl = document.getElementById('white');
 function toast(html, s = 4) { msgEl.innerHTML = html; msgEl.classList.add('on'); CLK.msgT = s; }
 function resetPlayer() { P.x = 0; P.z = 0; P.vy = 0; P.y = seabed(0, 0) + CONFIG.eye; P.ground = true; }
 resetPlayer();
+function start() {
+  if (STATE.started) return;
+  STATE.started = true; document.getElementById('start').hidden = true; document.body.classList.remove('pre');
+  try { canvas.requestPointerLock(); } catch (e) { /* abaikan */ }
+}
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
+  if (!STATE.started) { if (e.code === 'Enter') start(); return; }
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
   if (e.repeat) return;
   if (e.code === 'KeyV') { P.view = (P.view + 1) % CONFIG.views.length; if (P.view === 0) P.y = seabed(P.x, P.z) + CONFIG.eye; }
-  if (e.code === 'KeyG') { U.uWX.value = P.x + W.summon - (frontX(P.z) - U.uWX.value); toast(t('Gelombang dipanggil: {d} km', { d: fmtN(W.summon / 1000) }), 2.5); }
+  if (e.code === 'KeyG') { U.uWX.value += P.x + W.summon - frontX(P.z); toast(t('Gelombang dipanggil: {d} km', { d: fmtN(W.summon / 1000) }), 2.5); }
   if (e.code === 'KeyZ') P.speed = (P.speed + 1) % CONFIG.speeds.length;
+  if (e.code === 'KeyP') { PRESET.auto = false; applyPreset((PRESET.idx + 1) % PRESETS.length); toast(t('Grafik: {p}', { p: t(PRESETS[PRESET.idx].name) }), 2); }
+  if (e.code === 'KeyN') { setMood((MOOD.idx + 1) % MOODS.length); toast(t('Suasana: {m}', { m: t(MOODS[MOOD.idx].key) }), 2); }
   if (e.code === 'KeyR') resetPlayer();
   if (e.code === 'KeyH') document.body.classList.toggle('hide');
   if (e.code === 'Space' && P.view === 0 && P.ground) { P.vy = CONFIG.jumpV; P.ground = false; }
@@ -506,27 +831,29 @@ addEventListener('keyup', (e) => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 let drag = null;
 canvas.addEventListener('pointerdown', (e) => {
+  if (!STATE.started) return;
   if (e.pointerType === 'mouse' && !document.pointerLockElement) { try { canvas.requestPointerLock(); } catch (er) { /* abaikan */ } }
   drag = { x: e.clientX, y: e.clientY };
 });
 addEventListener('pointerup', () => { drag = null; });
 addEventListener('pointermove', (e) => {
+  if (!STATE.started) return;
   let dx = 0, dy = 0;
   if (document.pointerLockElement === canvas) { dx = e.movementX; dy = e.movementY; }
   else if (drag) { dx = e.clientX - drag.x; dy = e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY }; }
   P.yaw -= dx * 0.0022; P.pitch = Math.max(-1.45, Math.min(1.45, P.pitch - dy * 0.0022));
 });
 
-function stepPlayer(dt, simDt) {
+function stepPlayer(dt) {
   const v = CONFIG.views[P.view];
-  const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);     // maju di bidang datar
+  const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw);
   let mx = 0, mz = 0;
   if (keys.KeyW) mx += fx, mz += fz;
   if (keys.KeyS) mx -= fx, mz -= fz;
   if (keys.KeyA) mx += fz, mz -= fx;
   if (keys.KeyD) mx -= fz, mz += fx;
   const len = Math.hypot(mx, mz);
-  const bed = seabed(P.x, P.z), water = waterAt(P.x, P.z), depth = Math.max(0, water - bed);
+  const bed = seabed(P.x, P.z), water = waterAt(P.x, P.z, STATE.visT), depth = Math.max(0, water - bed);
   if (len > 0) {
     let sp = (keys.ShiftLeft || keys.ShiftRight ? 4.2 : 1.5) * v.sp;
     if (P.view === 0) sp *= Math.max(0.35, 1 - 0.9 * depth);   // air setinggi lutut memperlambat langkah
@@ -534,25 +861,29 @@ function stepPlayer(dt, simDt) {
   }
   if (P.view === 0) {
     const floor = seabed(P.x, P.z) + CONFIG.eye;
-    P.y += P.vy * dt - 0.5 * CONFIG.g * dt * dt; P.vy -= CONFIG.g * dt;   // tepat untuk g tetap (tidak tergantung FPS)
+    P.y += P.vy * dt - 0.5 * CONFIG.g * dt * dt; P.vy -= CONFIG.g * dt;   // tepat untuk g tetap
     if (P.y <= floor) { P.y = floor; P.vy = 0; P.ground = true; }
   } else {
     P.y += (Math.max(0, water) + v.h - P.y) * Math.min(1, dt * 2);
   }
-  // Tersapu: permukaan air di atas mata
-  const top = waterAt(P.x, P.z);
+  return depth;
+}
+// Waktu simulasi: gelombang maju, jam berjalan, tersapu (dipisah agar bisa diuji dengan langkah tetap)
+function simStep(sdt, dt) {
+  STATE.simT += sdt; CLK.planet += sdt;
+  U.uWX.value -= W.v * sdt;
+  if (frontX(P.z) - P.x < -60000) U.uWX.value += (P.x + W.spawn) - frontX(P.z);
+  const top = waveTop(P.x, P.z);
   if (top > P.y + 0.2) CLK.white = Math.min(1, CLK.white + dt * 1.5);
   else CLK.white = Math.max(0, CLK.white - dt * 0.8);
   if (CLK.white >= 1 && CLK.swept <= 0) {
-    // Kembali ke titik awal; gelombang sudah lewat 50 km (waktu yang lewat di planet = 50 km / v)
-    const lostPlanet = 50000 / W.v;
+    const lostPlanet = 50000 / W.v;                       // gelombang dianggap sudah lewat 50 km
     resetPlayer(); P.view = 0;
-    U.uWX.value = P.x - 50000 - (frontX(P.z) - U.uWX.value);
-    CLK.planet += lostPlanet; CLK.lost += lostPlanet * CONFIG.dil; CLK.swept = 2.5;
+    U.uWX.value += P.x - 50000 - frontX(P.z);
+    CLK.planet += lostPlanet; CLK.swept = 2.5;
     toast(t('Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}', { y: fmtOutside(lostPlanet * CONFIG.dil) }), 6);
   }
   if (CLK.swept > 0) CLK.swept -= dt;
-  return depth;
 }
 
 /* ---------------- HUD ---------------- */
@@ -566,58 +897,86 @@ function fmtOutside(s) {
 function fmtDur(s) { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m > 0 ? `${m} ${t('mnt')} ${s % 60} ${t('dtk')}` : `${s} ${t('dtk')}`; }
 let hudT = 0, fps = 60;
 function updateHud(depth, dist, wob) {
-  const eta = dist / W.v;
+  const eta = dist / W.v, warn = dist > 0 && dist < 15000 ? 'warn' : '';
   const rows = [
     [t('Waktu planet'), fmtClock(CLK.planet), 'big'],
     [t('Waktu di luar'), fmtOutside(CLK.planet * CONFIG.dil), 'big'],
     [t('Gravitasi'), `${fmtN(CONFIG.g / 9.80665, 1)} g (${fmtN(CONFIG.g, 2)} m/s²)`],
-    [t('Kedalaman air'), depth > 0.005 ? `${fmtN(depth, 2)} m` : t('darat')],
-    [t('Gelombang'), dist > 0 ? `${fmtN(dist / 1000, 1)} km, ${fmtN(waveHz(P.z))} m` : t('sudah lewat'), dist > 0 && dist < 15000 ? 'warn' : ''],
-    [t('Tiba dalam'), dist > 0 ? `${fmtDur(eta)} (${fmtN(eta * CONFIG.dil / (365.25 * 86400), 1)} ${t('tahun')} ${t('di luar')})` : '-', dist > 0 && dist < 15000 ? 'warn' : ''],
+    [t('Kedalaman air'), `${fmtN(depth, 2)} m`],
+    [t('Gelombang'), dist > 0 ? `${fmtN(dist / 1000, 1)} km, ${fmtN(waveHz(P.z))} m` : t('sudah lewat'), warn],
+    [t('Tiba dalam'), dist > 0 ? `${fmtDur(eta)} (${fmtN(eta * CONFIG.dil / (365.25 * 86400), 1)} ${t('tahun')} ${t('di luar')})` : '-', warn],
     [t('Goyangan planet'), `${fmtN(wob, 2)}°`],
     [t('Tampilan'), t(CONFIG.views[P.view].key)],
     [t('Kecepatan waktu'), `${CONFIG.speeds[P.speed]}x`],
+    [t('Grafik'), t(PRESETS[PRESET.idx].name) + (PRESET.auto ? t(' (otomatis)') : '')],
+    [t('Suasana'), t(MOODS[MOOD.idx].key)],
     ['FPS', fmtN(fps)],
   ];
+  if (GPUT.ext && GPUT.n) rows.push([t('GPU (langit / scene / post)'), `${fmtN(GPUT.ms.sk, 1)} / ${fmtN(GPUT.ms.sc, 1)} / ${fmtN(GPUT.ms.po, 1)} ms`]);
   rowsEl.innerHTML = rows.map(([a, b, c]) => `<div>${a}</div><div class="${c || ''}">${b}</div>`).join('');
 }
 
+/* ---------------- Layar awal: pilihan grafik dan suasana ---------------- */
+{
+  const pick = document.getElementById('presetPick'), mp = document.getElementById('moodPick');
+  PRESETS.forEach((Pr, i) => { const b = document.createElement('button'); b.type = 'button'; b.addEventListener('click', () => { applyPreset(i); }); pick.appendChild(b); });
+  MOODS.forEach((m, i) => { const b = document.createElement('button'); b.type = 'button'; b.addEventListener('click', () => setMood(i)); mp.appendChild(b); });
+  document.getElementById('presetAuto').addEventListener('change', (e) => { PRESET.auto = e.target.checked; applyPreset(PRESET.idx); });
+  document.getElementById('go').addEventListener('click', start);
+}
+// Preset awal dari ?preset=ultra|tinggi|sedang|rendah|hemat, atau pilihan terakhir yang tersimpan
+{
+  let idx = 1;
+  try {
+    const q = new URLSearchParams(location.search).get('preset'), qi = q ? PRESETS.findIndex((Pr) => Pr.name.toLowerCase() === q.toLowerCase()) : -1;
+    if (qi >= 0) { idx = qi; PRESET.auto = false; }
+    else { const sv = JSON.parse(localStorage.getItem('millar.preset') || 'null'); if (sv && PRESETS[sv.idx]) { idx = sv.idx; PRESET.auto = sv.auto !== false; } }
+  } catch (e) { idx = 1; }
+  applyPreset(idx);
+}
+setMood(0); translateDom();
+addEventListener('resize', resize);
+
 /* ---------------- Loop ---------------- */
-const tmpQ = new THREE.Quaternion(), WOB_AXIS = new THREE.Vector3(1, 0, 0.35).normalize();
-let last = performance.now(), simT = 0;
+const WOB_AXIS = new THREE.Vector3(1, 0, 0.35).normalize(), wobQ = new THREE.Quaternion(), wobM4 = new THREE.Matrix4();
+let last = performance.now(), depthNow = 0;
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
-  const simDt = dt * CONFIG.speeds[P.speed];
-  simT += simDt; CLK.planet += simDt;
-  // Gelombang maju (-X); setelah lewat 60 km di belakang pemain, gelombang berikutnya muncul dari balik cakrawala
-  U.uWX.value -= W.v * simDt;
-  if (frontX(P.z) - P.x < -60000) U.uWX.value += (P.x + W.spawn) - frontX(P.z);
-  const depth = stepPlayer(dt, simDt);
+  autoPreset(dt);
+  const sdt = dt * CONFIG.speeds[P.speed];
+  STATE.visT += sdt;
+  if (STATE.started) { depthNow = stepPlayer(dt); simStep(sdt, dt); }
   const dist = frontX(P.z) - P.x;
   // Goyangan planet: langit bergoyang pelan, makin kuat saat gelombang mendekat
   const close = 1 - Math.min(1, Math.max(0, (dist - 10000) / 140000));
-  const wob = (CONFIG.wobble.amp0 + CONFIG.wobble.amp1 * close * close) * Math.sin(simT * 2 * Math.PI / CONFIG.wobble.period);
-  skyTilt.quaternion.setFromAxisAngle(WOB_AXIS, wob * DEG);
-  U.uSunDir.value.copy(GDIR).applyQuaternion(skyTilt.quaternion);
+  const wob = (CONFIG.wobble.amp0 + CONFIG.wobble.amp1 * close * close) * Math.sin(STATE.visT * 2 * Math.PI / CONFIG.wobble.period);
+  wobQ.setFromAxisAngle(WOB_AXIS, -wob * DEG);          // arah di tanah -> arah di langit (kebalikan putaran langit)
+  U.uWob.value.setFromMatrix4(wobM4.makeRotationFromQuaternion(wobQ));
+  updateMood(dt, STATE.visT);
+  SKYU.uTime.value = STATE.visT;
 
   camera.position.set(P.x, P.y, P.z);
   camera.rotation.set(P.pitch, P.yaw, 0);
-  sky.position.copy(camera.position);
-  U.uT.value = simT; U.uCam.value.copy(camera.position);
+  camera.updateMatrixWorld();
+  U.uT.value = STATE.visT; U.uCam.value.copy(camera.position);
   seaNear.material.uniforms.uOff.value.set(Math.round(P.x / SEA.cell) * SEA.cell, 0, Math.round(P.z / SEA.cell) * SEA.cell);
   seaFar.material.uniforms.uOff.value.set(P.x, 0, P.z);
-  bedU.uOff.value.set(Math.round(P.x / BED.cell) * BED.cell, 0, Math.round(P.z / BED.cell) * BED.cell);
-  waveU.uOff.value.set(0, 0, Math.round(P.z / 25) * 25);
-  bed.visible = P.view < 2;
+  waveU.uOff.value.set(0, 0, Math.round(P.z / 12) * 12);
   if (CLK.msgT > 0 && (CLK.msgT -= dt) <= 0) msgEl.classList.remove('on');
   whiteEl.style.opacity = CLK.white.toFixed(3);
-  if ((hudT -= dt) <= 0) { hudT = 0.2; updateHud(depth, dist, wob); }
-  renderer.clear(); renderer.render(skyScene, camera); renderer.render(scene, camera);
+  if ((hudT -= dt) <= 0) { hudT = 0.2; updateHud(depthNow, dist, wob); }
+
+  gpuBegin('sk'); updateSkyCube(); gpuEnd();
+  gpuBegin('sc'); renderer.setRenderTarget(POST.hdr); renderer.clear(); renderer.render(scene, camera); gpuEnd();
+  gpuBegin('po'); postRender(now / 1000); gpuEnd();
+  gpuFrameEnd();
   requestAnimationFrame(frame);
 }
+try { renderer.compile(scene, camera); renderer.compile(skyScene, camera); } catch (e) { /* lanjut tanpa pra-kompilasi */ }
 requestAnimationFrame(frame);
-window.__millar = { THREE, scene, camera, renderer, CONFIG, U, P, CLK, frontX, waterAt, seabed, bed, seaNear, seaFar, wave, spray, sky };
+window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
+  frontX, waveTop, waterAt, seabed, chopAt, CHOP, stepPlayer, simStep, start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE };
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>
 </body>
