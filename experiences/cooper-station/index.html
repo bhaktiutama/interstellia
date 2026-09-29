@@ -6174,6 +6174,7 @@ function shadowPass() {
   U.uL_ShadowMat.value.multiplyMatrices(shadowCam.projectionMatrix, shadowCam.matrixWorldInverse);
   U.uL_ShadowCap.value = cap; U.uL_ShadowOn.value = 1;
   U.uL_ShadowTh.value = player.theta; SHU.uShU.value.set(player.theta, 1, R, 0); SHU.uShViewInv.value.copy(shadowCam.matrixWorld);   // 18b-3
+  shpBegin(0, shadowCam, player.theta, player.za, cap * 10 + Math.atan2(R - CAP_RING_R, cap ? CONFIG.L - player.za : player.za));   // 20d
   scene.overrideMaterial = depthMat;
   renderer.setRenderTarget(shadowRT); renderer.clear(); renderer.render(scene, shadowCam);
   scene.overrideMaterial = null;
@@ -6182,6 +6183,7 @@ function shadowPass() {
     shadowCam.layers.set(2); renderer.render(scene, shadowCam); shadowCam.layers.set(1);
     for (const m of ALPHA_CASTERS) m.material = m.userData.mainMat;
   }
+  shpEnd();
   renderer.setRenderTarget(null);
 }
 
@@ -6208,6 +6210,7 @@ function sunShadowPass() {
   U.uL_SunShMat.value.multiplyMatrices(sunShCam.projectionMatrix, sunShCam.matrixWorldInverse);
   U.uL_SunShOn.value = 1;
   U.uL_SunShTh.value = th; SHU.uShU.value.set(th, 1, R, 0); SHU.uShViewInv.value.copy(sunShCam.matrixWorld);   // 18b-3
+  shpBegin(1, sunShCam, th, zS, 0);                                // 20d
   scene.overrideMaterial = depthMat;
   renderer.setRenderTarget(sunShRT); renderer.clear(); renderer.render(scene, sunShCam);
   scene.overrideMaterial = null;
@@ -6216,6 +6219,7 @@ function sunShadowPass() {
     sunShCam.layers.set(2); renderer.render(scene, sunShCam); sunShCam.layers.set(1);
     for (const m of ALPHA_CASTERS) m.material = m.userData.mainMat;
   }
+  shpEnd();
   renderer.setRenderTarget(null);
 }
 
@@ -11105,6 +11109,104 @@ scene.traverse((o) => {
   if (!o.userData.noShadow) o.layers.enable(1);
 });
 
+// 20d (O3): pass bayangan hanya menggambar instance yang jatuh di kotak kamera bayangan. Dulu gedung kota, peralatan atap,
+// dan semua mobil (sekitar 730 ribu segitiga) digambar penuh di kedua pass tiap frame, padahal peta hanya 640 m (cap) dan
+// 300 m (sunline). Uji dilakukan di koordinat silinder terbuka yang sama dengan shUnroll (sudut th0 pass itu), jadi instance
+// yang tidak terpilih memang tidak menyentuh peta: hasil bayangan sama persis.
+// Statis (gedung, peralatan): pilihan dihitung dengan cadangan SHP.margin m, diulang bila kamera bergeser lebih dari SHP.redo m
+// (geser pemain + putaran arah cahaya cap x 1.500 m, jarak terjauh titik kotak dari pemain). Matriks terpilih disalin ke
+// atribut pengganti per pass; selama pass, mesh memakai atribut itu (instanceMatrix dan count ditukar, lalu dikembalikan).
+// Mobil: dipilih tiap frame dari posisi simulasi (aSim, sama dengan yang dibaca CAR_VS), geometri pengganti per pass.
+const SHP = { on: true, margin: 16, redo: 12, stat: [], cars: null, ref: [[0, 1e9, 0], [0, 1e9, 0]] };   // ref = [th0, za, phi] saat pilihan terakhir dihitung
+{
+  const _m = new THREE.Matrix4(), _v = new THREE.Vector3();
+  for (const mesh of Object.values(cityMeshes)) {
+    const g = mesh.geometry, n = mesh.count;
+    if (!n) continue;
+    if (!g.boundingSphere) g.computeBoundingSphere();
+    const bs = g.boundingSphere, C = new Float32Array(n * 4);      // pusat bola batas tiap instance (dunia) + jari-jari
+    mesh.updateMatrixWorld();
+    for (let i = 0; i < n; i++) {
+      mesh.getMatrixAt(i, _m); _m.premultiply(mesh.matrixWorld);
+      _v.copy(bs.center).applyMatrix4(_m);
+      C[i * 4] = _v.x; C[i * 4 + 1] = _v.y; C[i * 4 + 2] = _v.z; C[i * 4 + 3] = bs.radius * _m.getMaxScaleOnAxis();
+    }
+    const mk = () => new THREE.InstancedBufferAttribute(new Float32Array(mesh.instanceMatrix.array.length), 16);
+    SHP.stat.push({ mesh, C, n, src: mesh.instanceMatrix, cnt: mesh.count, attr: [mk(), mk()], k: [0, 0], vis: true });
+  }
+  const ig = TRAFFIC.cars.geometry, dyn = ['aLane', 'aMove', 'aPaint', 'aSim'];
+  const mkG = () => {
+    const g = new THREE.InstancedBufferGeometry(); g.index = ig.index;
+    for (const k of Object.keys(ig.attributes)) if (!dyn.includes(k)) g.setAttribute(k, ig.attributes[k]);
+    for (const k of dyn) { const a = ig.attributes[k], b = new THREE.InstancedBufferAttribute(new Float32Array(a.array.length), a.itemSize); b.setUsage(THREE.DynamicDrawUsage); g.setAttribute(k, b); }
+    g.instanceCount = 0; return g;
+  };
+  SHP.cars = { ig, geo: [mkG(), mkG()], dyn };
+}
+// titik dunia (bola x, y, z, jari-jari rho) di dalam kotak kamera ortografis cam setelah shUnroll dengan sudut th0? pad = cadangan m
+function shpIn(e, cam, c0, s0, th0, x, y, z, rho, pad) {
+  const r = Math.hypot(x, y);
+  let d = Math.atan2(y, x) - th0; d -= TAU * Math.floor((d + Math.PI) / TAU);
+  if (Math.abs(d) > 0.75) return false;                           // shUnroll membuang |d| > 0,8; 750 m ke samping jauh di luar kotak
+  const a = d * R, ux = c0 * r - s0 * a, uy = s0 * r + c0 * a;
+  return shpBox(e, cam, ux, uy, z, 1.1 * rho * R / Math.max(r - rho, 100) + pad);   // busur di silinder terbuka meregang R / r
+}
+function shpBox(e, cam, ux, uy, z, p) {
+  const vx = e[0] * ux + e[4] * uy + e[8] * z + e[12], vy = e[1] * ux + e[5] * uy + e[9] * z + e[13], vz = -(e[2] * ux + e[6] * uy + e[10] * z + e[14]);
+  return vx >= cam.left - p && vx <= cam.right + p && vy >= cam.bottom - p && vy <= cam.top + p && vz >= cam.near - p && vz <= cam.far + p;
+}
+function shpStatic(pass, cam, th0, za, phi) {
+  const ref = SHP.ref[pass];
+  if (Math.hypot(wrapS((th0 - ref[0]) * R), za - ref[1]) + Math.abs(phi - ref[2]) * 1500 < SHP.redo) return;
+  ref[0] = th0; ref[1] = za; ref[2] = phi;
+  const e = cam.matrixWorldInverse.elements, c0 = Math.cos(th0), s0 = Math.sin(th0);
+  for (const o of SHP.stat) {
+    const C = o.C, src = o.src.array, A = o.attr[pass], dst = A.array; let k = 0;
+    for (let i = 0; i < o.n; i++) {
+      if (!shpIn(e, cam, c0, s0, th0, C[i * 4], C[i * 4 + 1], C[i * 4 + 2], C[i * 4 + 3], SHP.margin)) continue;
+      dst.set(src.subarray(i * 16, i * 16 + 16), k * 16); k++;
+    }
+    o.k[pass] = k; A.clearUpdateRanges(); A.addUpdateRange(0, k * 16); A.needsUpdate = true;
+  }
+}
+function shpCars(pass, cam, th0) {
+  const S = SHP.cars, g = S.geo[pass], src = S.ig.attributes, n = S.ig.instanceCount;
+  const Ln = src.aLane.array, Sm = src.aSim.array, eye = VU.uEyeSZ.value;
+  const e = cam.matrixWorldInverse.elements, c0 = Math.cos(th0), s0 = Math.sin(th0), s0R = th0 * R;
+  let k = 0;
+  for (let i = 0; i < n; i++) {
+    if (Sm[i * 3 + 2] < 0.5) continue;                            // sama dengan CAR_VS: aSim.z < 0.5 tidak digambar
+    const dir = Ln[i * 4 + 3], lat = Ln[i * 4 + 2] * dir, mv = src.aMove.array, p = Sm[i * 3];
+    const along = mv[i * 4 + 2] + (dir > 0 ? p : mv[i * 4 + 3] - p);
+    const ps = Ln[i * 4] < 0.5 ? Ln[i * 4 + 1] + lat : along, pz = Ln[i * 4] < 0.5 ? along : Ln[i * 4 + 1] - lat;
+    if (Math.hypot(ps - eye.x, pz - eye.y) > 905) continue;        // CAR_VS membuang mobil lebih dari 900 m
+    const a = wrapS(ps - s0R);
+    if (Math.abs(a) > 750) continue;
+    const r = R - groundH(ps, pz) - 0.8;                           // pusat mobil 0,8 m di atas tanah, bola 3,2 m (termasuk selisih tinggi tanah GPU)
+    if (!shpBox(e, cam, c0 * r - s0 * a, s0 * r + c0 * a, pz - HALF_L, 4.5)) continue;
+    for (const key of S.dyn) {
+      const f = src[key].itemSize, sa = src[key].array, da = g.attributes[key].array;
+      for (let q = 0; q < f; q++) da[k * f + q] = sa[i * f + q];
+    }
+    k++;
+  }
+  for (const key of S.dyn) { const A = g.attributes[key]; A.clearUpdateRanges(); A.addUpdateRange(0, k * A.itemSize); A.needsUpdate = true; }
+  g.instanceCount = k;
+}
+// dipanggil di shadowPass / sunShadowPass setelah kamera dan SHU diisi; shpEnd() mengembalikan mesh asli
+function shpBegin(pass, cam, th0, za, phi) {
+  if (!SHP.on) return;
+  shpStatic(pass, cam, th0, za, phi);
+  for (const o of SHP.stat) { o.vis = o.mesh.visible; o.mesh.instanceMatrix = o.attr[pass]; o.mesh.count = o.k[pass]; o.mesh.visible = o.vis && o.k[pass] > 0; }
+  shpCars(pass, cam, th0); TRAFFIC.cars.geometry = SHP.cars.geo[pass];
+  SHP.act = true;
+}
+function shpEnd() {
+  if (!SHP.act) return;
+  for (const o of SHP.stat) { o.mesh.instanceMatrix = o.src; o.mesh.count = o.cnt; o.mesh.visible = o.vis; }
+  TRAFFIC.cars.geometry = SHP.cars.ig; SHP.act = false;
+}
+
 /* =====================================================================
    LOOP: fixed timestep untuk fisika, render tiap frame
    ===================================================================== */
@@ -11407,7 +11509,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
 </body>

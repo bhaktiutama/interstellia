@@ -218,6 +218,32 @@ Dikerjakan: O8, O9. O10 dicoba lalu dibatalkan.
 
 O10 (`willReadFrequently` pada kanvas lahan) sempat memangkas bagian kota ke 626 ms, tetapi raster CPU membuat 9,4% piksel kanvas berbeda (51% di antaranya selisih 1/255, 4.479 piksel lebih dari 10/255, maksimum 46) di tepi anti-alias. Kanvas ini menentukan jalan, trotoar, dan rumput di shader, jadi dibatalkan. Alternatif yang masih identik: hitung `FAR.land` dari salinan kanvas yang diperkecil di GPU, atau tunda pembacaan data lahan ke saat pertama dibutuhkan.
 
+## 7e. Hasil tahap 20d (29 September 2026)
+
+Dikerjakan: O3, dengan cara lain dari usulan awal. Bukan memecah InstancedMesh per sektor, tetapi memilih instance per pass bayangan: hanya gedung, peralatan atap, dan mobil yang jatuh di kotak kamera bayangan yang digambar. Uji dilakukan di koordinat silinder terbuka yang sama dengan shader (`shUnroll`), jadi yang dibuang memang tidak menyentuh peta bayangan.
+
+Segitiga pass bayangan per frame (Ultra, 11.00; cap + sunline):
+
+| Lokasi | 20c | 20d | Perubahan |
+| --- | --- | --- | --- |
+| Spawn kota | 980.742 + 947.638 = 1.928.380 | 274.628 + 223.974 = 498.602 | -74% |
+| Lapangan baseball | 1.070.980 + 965.140 = 2.036.120 | 389.912 + 240.482 = 630.394 | -69% |
+| Bukit | 1.503.157 + 1.430.389 = 2.933.546 | 776.115 + 703.087 = 1.479.202 | -50% |
+| Hutan | 1.891.601 + 1.697.169 = 3.588.770 | 1.164.299 + 969.867 = 2.134.166 | -41% |
+| Ladang jagung | 1.438.845 + 1.355.153 = 2.793.998 | 724.127 + 628.113 = 1.352.240 | -52% |
+
+Draw call pass bayangan turun 2-8 per frame. Pass utama tidak berubah.
+
+| Butir | Isi |
+| --- | --- |
+| Gedung dan peralatan atap (7 InstancedMesh, 35.600 instance) | Bola batas tiap instance dihitung sekali saat muat. Pilihan per pass dibuat dengan cadangan 16 m dan hanya dihitung ulang bila kamera bayangan bergeser lebih dari 12 m (geser pemain + putaran arah cahaya cap x 1.500 m). Matriks terpilih disalin ke atribut pengganti; selama pass, `instanceMatrix` dan `count` mesh ditukar lalu dikembalikan |
+| Mobil (3.455) | Dipilih tiap frame dari posisi simulasi (`aSim`, data yang sama dengan yang dibaca `CAR_VS`), dengan geometri pengganti per pass. Spawn kota: 70 mobil di pass cap, 15 di pass sunline (dulu 3.455 di keduanya) |
+| Identik | Render beku dengan pemilihan nyala vs mati di halaman yang sama: 0 dari 518.400 nilai (RGBA 480 x 270) berbeda per lokasi di 6 lokasi siang (spawn, lapangan baseball, pusat New York, pasar, Skyway, dek menara), dan 0 selama 16 langkah jalan 4 m di 3 titik (termasuk dekat end cap A, tempat arah cahaya cap berubah paling cepat). Kontrol: dengan cadangan sengaja dibuat -60 m, 5 dari 6 lokasi langsung berbeda (306-1.248 nilai), jadi uji ini memang peka |
+| Uji | `qc_load` tanpa error |
+| Sisa terbesar | Jagung 3D dekat (`CORN.near`, 2.667 instance x 145 = 386.715 segitiga per pass) di hutan, bukit, dan ladang. Posisinya dihitung di shader dari posisi mata, jadi perlu cara lain (mis. uji jarak ke petak jagung per pass, seperti `cornGate()`) |
+
+Kode: `SHP` + `shpBegin()` / `shpEnd()` dipanggil di `shadowPass()` dan `sunShadowPass()`; `SHP.on = false` mematikan pemilihan (untuk perbandingan).
+
 ## 8. Cara ukur
 
 | Item | Nilai |
