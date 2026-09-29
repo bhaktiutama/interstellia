@@ -1,6 +1,6 @@
 # Rencana Millar's World Versi Realistis
 
-Per 29 September 2026 · Status: R1, R1b, dan R2 selesai (lihat bagian "Status"), berikutnya R3
+Per 29 September 2026 · Status: R1, R1b, R2, dan R3 selesai (lihat bagian "Status"), berikutnya R4
 
 ## Ringkasan
 
@@ -168,4 +168,25 @@ Catatan: kedalaman air di HUD dan kecepatan jalan masih memakai ombak Gerstner d
 
 Belum diukur: waktu GPU FFT di GTX 1060 dan M1 (baris HUD "GPU (langit / FFT / scene / post)"). Ultra menjalankan sekitar 3 x 18 lintasan 256 x 256 per frame.
 
-Berikutnya R3: pemain di air (riak di sekitar kaki, cipratan, jejak air, langkah berat 1,3 g, gerak kepala).
+## Status R3 (+ keadaan laut)
+
+Selesai 29 September 2026.
+
+| Bagian | Isi |
+| --- | --- |
+| Keadaan laut | Permintaan pemilik: ombak angin kecil saat gelombang raksasa masih jauh, makin besar saat mendekat. Pengali tinggi 0,6 (>= 120 km) naik ke 1,5 (<= 4 km), kurva pangkat 1,5, berubah halus (4 s). Tinggi signifikan 0,21 m -> 0,53 m. Setelah gelombang lewat, laut tenang dua kali lebih cepat. Berlaku untuk FFT (buih ikut bertambah), Gerstner, dan kembaran JS. Baris HUD "Ombak angin" |
+| Tanpa daratan | Dasar laut diturunkan (rata-rata -0,66 m, kisaran -0,48 sampai -0,84 m) agar lembah ombak terbesar tetap di atas dasar |
+| Riak di kaki | Simulasi persamaan gelombang di grid yang ikut pemain (digeser per sel, tepi menyerap): Ultra/Tinggi 256 sel / 32 m, Sedang 128 / 24 m, Rendah dan Hemat 64 / 16 m. Kecepatan riak 1,2 m/s. Sumber: hentakan tiap langkah + dorongan kaki terus-menerus saat berjalan (jejak berbentuk V) |
+| Jejak buih | Kanal buih di simulasi yang sama, memudar sekitar 4 s, ikut tergeser dengan dunia |
+| Cipratan | Partikel air tiap langkah dan saat mendarat (lebih banyak), gravitasi 12,75, jatuh kembali ke air. Batas 4.000 / 2.500 / 1.500 / 600 / 300 butir |
+| Langkah berat | Air menahan: kecepatan menuju sasaran dengan waktu tanggap 0,35 s, tidak bisa berbelok saat melompat. Makin dalam air, makin lambat (sudah ada) |
+| Gerak kepala | Pola BOB Copper Corn Station: satu langkah tiap 0,72 m (lari 1,25 m), turun tajam tiap langkah, ayun kiri-kanan, sedikit miring, pegas hentakan saat mendarat. Tombol B: Mati / Halus / Normal |
+| Kedalaman di HUD | Kini dari tinggi ombak FFT tepat di kaki (dibaca balik dari GPU tanpa menunggu, tiap 3 frame). Hemat tetap perkiraan Gerstner |
+
+Beda dari rencana: Hemat memakai simulasi riak 64 x 64 (murah) alih-alih cincin riak sederhana, jadi tampilannya sama dengan Rendah.
+
+Uji: `tools/uji_millar.py` kini 32 pemeriksaan, semua lulus, termasuk: pengali keadaan laut 0,60 / 0,93 / 1,32 / 1,50 untuk 150 / 60 / 20 / 4 km; tinggi signifikan FFT 0,208 m (jauh) -> 0,530 m (dekat), harapan 0,210 -> 0,525; cincin riak di 0,75 m setelah 1 s (grid kasar sedikit memperlambat riak dari 1,2 m/s); cipratan 96 butir lalu habis setelah 2 s; 3 langkah untuk 2,63 m (harapan 3,7); air menahan (0,18 m/s setelah 0,1 s, 0,75 m/s setelah 4 s); gerak kepala Mati = 0; kedalaman dari FFT terbaca.
+
+Belum diukur: biaya simulasi riak dan cipratan di GTX 1060 dan M1 (masuk baris HUD "laut"). Tampilan riak dan cipratan perlu dinilai langsung (sandbox hanya beberapa FPS).
+
+Berikutnya R4: gelombang raksasa realistis (muka gelombang rapat di dekat pemain, buih mengalir, kabut kaki gelombang, arus air surut, urutan tersapu).

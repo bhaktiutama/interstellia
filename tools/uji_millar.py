@@ -1,4 +1,4 @@
-"""Uji Millar's World R1 + R1b: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
+"""Uji Millar's World R1 + R1b + R2 + R3: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
 tidak ada daratan (dasar laut selalu di bawah air terendah), fisika (1,3 g, lompat 77%), gelombang 125 m/s, jam dilatasi,
 tersapu = kembali dengan penalti waktu, lensa Gargantua (radius bayangan, busur terbelokkan), tidak ada nilai tidak valid (NaN/Inf) di render HDR tiap preset.
 Pakai: python tools/uji_millar.py   (butuh: pip install playwright && playwright install chromium)
@@ -25,8 +25,8 @@ UJI = r"""
   let bedMax = -9;
   for (let i = 0; i < 40000; i++) { const x = (Math.random() - 0.5) * 20000, z = (Math.random() - 0.5) * 20000; bedMax = Math.max(bedMax, M.seabed(x, z)); }
   const trough = M.CHOP.base.slice(0, 16).reduce((s, b) => s + (b.a || 0), 0);
-  const low = -M.CONFIG.wave.dd - M.CONFIG.chop.Hs / 2;
-  out[`dasar laut tertinggi ${bedMax.toFixed(3)} m < air terendah ${low.toFixed(3)} m (surut + setengah Hs)`] = bedMax < low;
+  const low = -M.CONFIG.wave.dd - M.CONFIG.chop.Hs * M.CONFIG.seaState.near / 2;
+  out[`dasar laut tertinggi ${bedMax.toFixed(3)} m < air terendah ${low.toFixed(3)} m (surut + setengah Hs laut terbesar)`] = bedMax < low;
   out[`jumlah amplitudo ombak ${trough.toFixed(3)} m (batas atas lembah, info)`] = true;
 
   // 3. mulai, fisika lompat dengan langkah tetap
@@ -84,8 +84,8 @@ UJI = r"""
       let v = 0, foam = 0, n = 0; const bufs = O.casc.map(readC);
       bufs.forEach((b) => { let s = 0, s2 = 0; for (let k = 0; k < b.length; k += 4) { const h = from(b[k + 1]); s += h; s2 += h * h; } const m = s / (b.length / 4); v += s2 / (b.length / 4) - m * m; });
       for (let k = 0; k < bufs[0].length; k += 4) { if (from(bufs[0][k + 3]) < M.CONFIG.fft.foamJ - 0.15) foam++; n++; }
-      const hs = 4 * Math.sqrt(v);
-      out[`FFT ${name}: tinggi signifikan ${hs.toFixed(3)} m (CONFIG ${M.CONFIG.chop.Hs})`] = Math.abs(hs / M.CONFIG.chop.Hs - 1) < 0.08;
+      const hs = 4 * Math.sqrt(v) / O.amp;                    // dibagi pengali keadaan laut saat itu
+      out[`FFT ${name}: tinggi signifikan ${hs.toFixed(3)} m pada keadaan laut 1 (CONFIG ${M.CONFIG.chop.Hs})`] = Math.abs(hs / M.CONFIG.chop.Hs - 1) < 0.08;
       out[`FFT ${name}: buih baru ${(100 * foam / n).toFixed(1)}% permukaan kaskade 1 (info)`] = true;
       if (pi === 3) {                                           // bandingkan dengan DFT langsung di 6 titik (N 64)
         const c = O.casc[0], N = O.N, L = c.L, t = O.t, b = bufs[0], g = M.CONFIG.g, dd = M.CONFIG.chop.depth; let err = 0;
@@ -98,13 +98,63 @@ UJI = r"""
             const hi = c.raw[o] * sn + c.raw[o + 1] * cs - c.raw[o + 2] * sn + c.raw[o + 3] * cs;
             const a = kx * x + kz * z; re += hr * Math.cos(a) - hi * Math.sin(a);
           }
-          err = Math.max(err, Math.abs(re - from(b[(mz * N + mx) * 4 + 1])));
+          err = Math.max(err, Math.abs(re * O.amp - from(b[(mz * N + mx) * 4 + 1])));
         }
         out[`FFT GPU = DFT CPU di 6 titik: selisih maks ${(err * 1000).toFixed(2)} mm`] = err < 0.003;
       }
     }
     M.applyPreset(4); await wait(800);
     out[`Hemat tetap Gerstner (FFT ${M.OCEAN.on})`] = !M.OCEAN.on && M.seaNear.material.defines.FFT === 0;
+  }
+
+  // 5d. keadaan laut: ombak angin kecil saat gelombang raksasa jauh, besar saat dekat (FFT ikut)
+  {
+    const ks = [150000, 60000, 20000, 4000].map((d) => M.seaStateTarget(d));
+    out[`keadaan laut: ${ks.map((k) => k.toFixed(2)).join(' / ')} untuk 150 / 60 / 20 / 4 km (naik saat mendekat)`] = ks[0] < ks[1] && ks[1] < ks[2] && ks[2] < ks[3] && Math.abs(ks[0] - M.CONFIG.seaState.far) < 0.01 && Math.abs(ks[3] - M.CONFIG.seaState.near) < 0.01;
+    const from = M.THREE.DataUtils.fromHalfFloat, O = M.OCEAN, tau = M.CONFIG.seaState.tau;
+    M.applyPreset(1); M.CONFIG.seaState.tau = 1e-4;
+    const hsNow = async (d) => {
+      M.U.uWX.value += d - M.frontX(M.P.z) + M.P.x; await wait(1500);
+      let v = 0; for (const c of O.casc) { const N = O.N, b = new Uint16Array(N * N * 4); M.renderer.readRenderTargetPixels(c.out, 0, 0, N, N, b); let s1 = 0, s2 = 0; for (let k = 0; k < b.length; k += 4) { const h = from(b[k + 1]); s1 += h; s2 += h * h; } const n = b.length / 4; v += s2 / n - (s1 / n) ** 2; }
+      return 4 * Math.sqrt(v);
+    };
+    const hFar = await hsNow(150000), hNear = await hsNow(3000);
+    out[`FFT ikut keadaan laut: Hs ${hFar.toFixed(3)} m (jauh) -> ${hNear.toFixed(3)} m (dekat), harapan ${(0.35 * M.CONFIG.seaState.far).toFixed(3)} -> ${(0.35 * M.CONFIG.seaState.near).toFixed(3)}`] =
+      Math.abs(hFar / (0.35 * M.CONFIG.seaState.far) - 1) < 0.08 && Math.abs(hNear / (0.35 * M.CONFIG.seaState.near) - 1) < 0.08;
+    M.CONFIG.seaState.tau = tau; M.U.uWX.value += 40000 - M.frontX(M.P.z) + M.P.x;
+  }
+
+  // 5e. R3: riak menyebar dari kaki, cipratan jatuh lagi, langkah sesuai panjang langkah, air menahan gerak, kedalaman dari FFT
+  {
+    const from = M.THREE.DataUtils.fromHalfFloat, R = M.RIP, P = M.P;
+    P.view = 0; P.x = 0; P.z = 0; P.vx = 0; P.vz = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.ground = true;
+    M.updateRipple(1 / 60);
+    for (let i = 0; i < 90; i++) M.updateRipple(1 / 60);          // tenangkan dulu
+    const sx = R.ox + 2.0, sz = R.oz;
+    M.ripSource(sx, sz, 0.22, -0.03, 0.8);
+    for (let i = 0; i < 60; i++) M.updateRipple(1 / 60);          // 1 s
+    const N = R.N, b = new Uint16Array(N * N * 4); M.renderer.readRenderTargetPixels(R.rt[R.i], 0, 0, N, N, b);
+    const ci = Math.round((sx - R.ox) / R.dx + N / 2 - 0.5), cj = Math.round((sz - R.oz) / R.dx + N / 2 - 0.5);
+    let best = 0, rBest = 0, bad = 0;
+    for (let k = 0; k < b.length; k++) if (!Number.isFinite(from(b[k]))) bad++;
+    for (let d = 2; d < N / 2 - 4; d++) { const i = ci + d; if (i >= N) break; const h = Math.abs(from(b[(cj * N + i) * 4])); if (h > best) { best = h; rBest = d * R.dx; } }
+    const foam = from(b[(cj * N + ci) * 4 + 2]);
+    out[`riak: cincin di ${rBest.toFixed(2)} m setelah 1 s (kecepatan ${R.c} m/s), buih jejak ${foam.toFixed(2)}, tidak valid ${bad}`] = rBest > 0.7 && rBest < 1.8 && foam > 0.1 && bad === 0;
+    P.depth = 0.5; M.footstep(1, true);
+    const a0 = M.SPL.alive || M.SPL.life.filter((l) => l > 0).length;
+    for (let i = 0; i < 60; i++) M.stepSplash(1 / 30);
+    out[`cipratan: ${a0} butir saat melangkah, sisa ${M.SPL.alive} setelah 2 s`] = a0 > 10 && M.SPL.alive === 0;
+    // berjalan 4 s ke depan dengan langkah tetap
+    const s0 = M.BOB.steps; M.keys.KeyW = true; let v01 = 0, vEnd = 0, dist = 0;
+    for (let i = 0; i < 240; i++) { const x0 = P.x, z0 = P.z; M.stepPlayer(1 / 60); dist += Math.hypot(P.x - x0, P.z - z0); if (i === 5) v01 = Math.hypot(P.vx, P.vz); }
+    vEnd = Math.hypot(P.vx, P.vz); M.keys.KeyW = false;
+    const steps = M.BOB.steps - s0, exp = dist / M.CONFIG.walk.stride;
+    out[`langkah: ${steps} langkah untuk ${dist.toFixed(2)} m (harapan ${exp.toFixed(1)})`] = Math.abs(steps - exp) <= 1.5;
+    out[`air menahan: kecepatan ${v01.toFixed(2)} m/s setelah 0,1 s, ${vEnd.toFixed(2)} m/s setelah 4 s`] = v01 < 0.5 * vEnd && vEnd > 0.5;
+    const lv = M.BOB.level; M.BOB.level = 0; M.headBob(1 / 60, 1.2, false, 0.5, 0); const off = Math.abs(M.BOB.dy) + Math.abs(M.BOB.dx); M.BOB.level = lv;
+    out[`gerak kepala Mati: simpangan ${off.toFixed(4)} m`] = off === 0;
+    await wait(2500);
+    out[`kedalaman dari FFT (baca balik GPU): ok ${M.OCEAN.probe.ok}, h ${M.OCEAN.probe.h.toFixed(3)} m`] = !M.OCEAN.on || (M.OCEAN.probe.ok && Math.abs(M.OCEAN.probe.h) < 1);
   }
 
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua
