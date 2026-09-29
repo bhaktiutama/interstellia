@@ -8,7 +8,7 @@ Per 29 September 2026 · Bhakti
 - **21b kaca rumah Cooper:** dari dalam rumah kaca tidak lagi memantulkan seluruh silinder. Yang terpantul hanya ruangan yang redup (lemah), jadi luar terlihat jelas. Dari luar pantulan daratan seberang tetap ada.
 - **21c gedung kaca malam:** gedung jauh tidak lagi putih rata. Lampu menyala per lantai dan per blok kantor (tetap bervariasi dari jauh), warna putih dingin kantor vs kuning hangat hunian, banyak kaca gelap, jumlah lampu ikut jam, lampu mahkota di sebagian menara, lampu merah penanda di atap.
 
-Urutan kerja: 1) 21a-1 (selesai), 2) 21b (selesai), 3) 21c, 4) 21a-2 + 21a-3 (paling besar).
+Urutan kerja: 1) 21a-1 (selesai), 2) 21b (selesai), 3) 21c (selesai), 4) 21a-2 + 21a-3 (paling besar).
 
 ## Penyebab di kode
 
@@ -128,7 +128,7 @@ Penyebab utama ternyata lebih parah dari dugaan: kaca lama hampir pejal dari KED
 Alpha diukur dengan kaca saja (tekstur kisi putih diganti sementara saat uji). Kisi putih tetap pejal. `tools/uji_menara.py`: hitungan panel disesuaikan (6 verteks per bidang, dulu 36 per kotak). Uji lama `qc_load`, `uji_pantulan`, `uji_bahasa` lolos; `uji_menara` lolos kecuali 2 cek jatuhkan bola dari dek yang juga gagal di commit sebelum Tahap 21 (bola belum mendarat dalam batas tunggu 30 s di sandbox SwiftShader yang lambat), jadi bukan dari perubahan ini.
 
 
-## 21c: gedung kaca malam
+## 21c: gedung kaca malam (selesai)
 
 | Bagian | Isi |
 | --- | --- |
@@ -146,6 +146,33 @@ Alpha diukur dengan kaca saja (tekstur kisi putih diganti sementara saat uji). K
 | Biaya | Beberapa hash tambahan per piksel, hanya di cabang `uNight > 0.01`. Preset Hemat: dua tingkat saja |
 
 Menara ikon `LANDMARK` (221 m, beacon) dan interior jendela dekat (14c) tetap.
+
+### Hasil 21c
+
+| Bagian | Yang dikerjakan |
+| --- | --- |
+| Nyala bertingkat | Lantai, blok 4 bay, jendela; peluang qF = litB^0,4, qB = litB^0,35, qW = litB^0,25 (hasil kali = litB). Rata-rata per tingkat saat sel lebih kecil dari sekitar 2 piksel |
+| Per gedung | litB = litP x faktor jam x (0,3-1,7 dari `vSeed`) |
+| Faktor jam (`BUILD_U.uLitT`) | Kantor 1,0 sampai 21.00, turun ke 0,25 pukul 23.30; hunian 1,0 pukul 19-23, turun ke 0,25 pukul 01.30, naik sedikit pagi 05-09. Angka awal, bisa disetel |
+| Warna | Kantor (gaya 0, 1, 8): putih netral atau putih dingin per blok. Hunian: kuning hangat, 15% putih kebiruan. Terang per blok 0,75-1,25 |
+| Menara kaca | Lantai mesin gelap tiap 14-22 lantai (menara > 60 m), lobi selalu terang |
+| Lampu mahkota | 30% menara kaca > 120 m: 12 m teratas disorot dari lis bawah; 1 dari 5 biru atau ungu, sisanya putih hangat |
+| Lampu penanda atap | Merah di sudut atap gedung > 90 m, 30 kedip per menit, ukuran minimal sekitar 2 piksel |
+| Siang | Tidak berubah (semua suku baru dikali `uNight`) |
+| Interior 14c | Lampu ruangan dekat mengikuti pola nyala bertingkat yang sama |
+
+Hasil `tools/uji_gedung_malam.py` (baru): menara kaca tertinggi (142 m) dirender sendirian dari 800 m pukul 23.00.
+
+| Ukuran | Sebelum (main) | Sesudah |
+| --- | --- | --- |
+| Sebaran terang sepanjang baris (blok menyala / gelap) | 0,05 (rata) | 0,39 |
+| Sebaran terang antarbaris (lantai) | 0,31 | 1,73 |
+| Terang rata-rata muka gedung | 0,318 | 0,134 (ikut jam: kantor pukul 23.00 sekitar 1/3) |
+| Nilai tidak valid | | 0 |
+| Siang dengan faktor jam berbeda | | 0 nilai beda |
+
+Sebaran = simpangan baku dibagi rata-rata. Uji lama `qc_load` dan `uji_interior` dijalankan ulang.
+
 
 ## Uji
 

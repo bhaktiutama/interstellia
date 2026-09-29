@@ -3479,7 +3479,8 @@ building('gambrel', COOPER.s - 32, COOPER.za + 24, 16, 12, 9, '#8e3b2f', 0, true
 // Detail digambar di shader dari koordinat dinding (meter): lantai, jendela, kusen, pintu, etalase, balkon,
 // papan kayu / seng / bata, genteng / seng atap, kerikil atap datar. Detail memudar otomatis ke warna rata-rata
 // saat pola lebih kecil dari beberapa piksel (LOD di shader, tanpa geometri tambahan). Malam: sebagian jendela menyala.
-const BUILD_U = { uNight: { value: 0 }, uInterior: { value: 1 } };   // 14c: 1 = ruangan maya di balik jendela
+const BUILD_U = { uNight: { value: 0 }, uInterior: { value: 1 },   // 14c: 1 = ruangan maya di balik jendela
+  uLitT: { value: new THREE.Vector2(1, 1) }, uTime: groundMat.uniforms.uTime };   // 21c: faktor nyala jendela per jam (x kantor, y hunian), kedip lampu atap
 const BUILD_VS = /* glsl */`
   #include <fog_pars_vertex>
   attribute float aPart;
@@ -3510,7 +3511,8 @@ const BUILD_VS = /* glsl */`
   }`;
 const BUILD_FS = /* glsl */`
   #include <fog_pars_fragment>
-  uniform float uNight, uInterior;
+  uniform float uNight, uInterior, uTime;
+  uniform vec2 uLitT;
   varying vec3 vO, vNo, vW, vNw;
   varying vec3 vDirO;
   flat varying vec3 vCol, vScale;
@@ -3547,6 +3549,11 @@ const BUILD_FS = /* glsl */`
         rc = vec3(0.44, 0.44, 0.43) * g;
         rc = mix(rc, vec3(0.62, 0.61, 0.58), band(e, -1.0, 0.45, fwidth(e)));
         if (code == 1.0) rc *= 0.8;
+        if (vScale.y > 90.0) {                                    // 21c: lampu penanda merah berkedip di sudut atap gedung > 90 m (30 kedip per menit)
+          float e2 = length(vec2(vScale.x * 0.5 - abs(vO.x), vScale.z * 0.5 - abs(vO.z)));
+          float rB = max(0.6, 2.5 * length(fwidth(vO.xz)));       // minimal sekitar 2 piksel agar tetap terlihat dari jauh
+          emit = vec3(1.0, 0.06, 0.03) * 8.0 * uNight * step(0.55, fract(uTime * 0.5 + vSeed * 7.0)) * (1.0 - smoothstep(rB * 0.6, rB, e2));
+        }
       } else {
         float sel = floor(vSeed * 5.0);
         rc = sel < 1.0 ? vec3(0.42, 0.14, 0.08) : sel < 2.0 ? vec3(0.13, 0.14, 0.16) : sel < 3.0 ? vec3(0.28, 0.18, 0.12) : sel < 4.0 ? vec3(0.36, 0.08, 0.05) : vec3(0.25, 0.27, 0.28);
@@ -3567,7 +3574,7 @@ const BUILD_FS = /* glsl */`
         }
         rc *= 0.85 + 0.3 * vn(vO.xz * 0.7 + vO.y);             // lumut / pudar
       }
-      col = rc * light;
+      col = rc * light + emit;
     } else {
       // ---- dinding ----
       bool fz = abs(n.z) > abs(n.x);
@@ -3668,9 +3675,24 @@ const BUILD_FS = /* glsl */`
       vec3 inner = vec3(0.06, 0.06, 0.065) * (0.6 + 0.9 * mix(wid, 0.5, max(ax, ay)));
       if (code == 1.0) inner = mix(inner, base * 0.25, 0.5);
       vec3 glass = inner * light + sky * (0.18 + 0.7 * F) * (code == 1.0 ? 1.2 : 0.8);
-      float on = mix(step(wid, litP), litP, max(ax, ay)) * uNight;     // jauh: rata-rata jendela menyala
+      // 21c: nyala bertingkat: lantai > blok 4 bay (satu kantor / unit) > jendela, peluang qF x qB x qW = litB. Dari jauh dirata-ratakan
+      // per tingkat (jendela dulu, lalu blok, lalu lantai), jadi pola lantai terang dan gelap tetap terlihat (dulu: semua jendela
+      // menyala tepat litP, muka gedung terang rata dan tampak putih setelah bloom dan adaptasi mata)
+      bool office = code == 0.0 || code == 1.0 || code == 8.0;
+      float litB = clamp(litP * (office ? uLitT.x : uLitT.y) * (0.3 + 1.4 * hash1(vec2(vSeed * 41.0, 3.7))), 0.0, 0.95);   // per gedung 0,3-1,7 x
+      float lq = log2(max(litB, 1e-4)), qF = exp2(0.4 * lq), qB = exp2(0.35 * lq), qW = exp2(0.25 * lq);
+      float sdF = vSeed * 97.0 + (fz ? 13.0 : 71.0), blk = floor(bi / 4.0);
+      float onF = step(hash1(vec2(fi + 0.37, sdF + 5.1)), qF), onBk = step(hash1(vec2(blk + sdF, fi + 17.3)), qB), on0 = onF * onBk * step(wid, qW);
+      float ax4 = smoothstep(0.5, 0.9, fwx * 0.25), ayF = smoothstep(0.5, 0.9, fwy);   // blok / lantai lebih kecil dari sekitar 2 piksel: rata-rata
+      float onL = mix(mix(mix(on0, onF * onBk * qW, ax), onF * qB * qW, ax4), litB, ayF);
+      float mech = code == 1.0 && H > 60.0 && mod(fi + 1.0, 14.0 + floor(vSeed * 9.0)) < 0.5 ? 1.0 : 0.0;   // lantai mesin: gelap
+      float lobby = code == 1.0 && fi < 0.5 ? 1.0 : 0.0;          // lobi menara kaca selalu terang
+      float on = mix(onL * (1.0 - mech), 1.0, lobby) * uNight;
       float far = max(ax, ay);
-      vec3 warm = mix(vec3(1.0, 0.72, 0.42), vec3(0.85, 0.9, 1.0), mix(step(0.8, hash1(vec2(wid, 5.0))), 0.2, far)) * (0.8 + 0.6 * mix(hash1(vec2(fi, bi)), 0.5, far));
+      float hb = hash1(vec2(blk + sdF, fi + 29.1));                  // warna per blok (tetap terlihat dari jauh)
+      vec3 warm = office ? mix(vec3(1.0, 0.93, 0.8), vec3(0.8, 0.9, 1.0), step(0.45, hb))   // kantor: putih netral / putih dingin
+                         : mix(vec3(1.0, 0.72, 0.42), vec3(0.85, 0.9, 1.0), step(0.85, hb));  // hunian: kuning hangat, sebagian layar
+      warm *= (0.75 + 0.5 * hash1(vec2(hb, 7.0))) * mix(0.85 + 0.3 * hash1(vec2(fi, bi)), 1.0, far);
 
       // 14c: ruangan maya di balik jendela (interior mapping). Satu ruangan = satu bay x satu lantai, dalam D. Sinar dari titik
       // kaca searah pandang dipotong dengan dinding samping, lantai/plafon, dan dinding belakang. Tanpa normalize, pembagi dijaga.
@@ -3706,7 +3728,7 @@ const BUILD_FS = /* glsl */`
               c = mix(vec3(0.36, 0.36, 0.4), vec3(0.46, 0.31, 0.19) * (0.85 + 0.15 * step(0.5, fract(h.x * 5.0))), wood);
             } else c = vec3(0.86, 0.86, 0.84);                           // plafon
           } else c = wallC * 0.82;                                       // dinding samping
-          float onR = step(wid, litP) * uNight;
+          float onR = mix(on0 * (1.0 - mech), 1.0, lobby) * uNight;   // 21c: sama dengan pola nyala bertingkat
           float amb = dot(light, vec3(0.333)) * 0.45 * mix(1.0, 0.45, fz2);   // siang: terang dekat jendela, redup ke belakang
           vec3 lamp = warm * onR * (0.55 + 0.6 * max(0.0, 1.0 - length(vec2(fx2 - 0.5, fz2 - 0.5)) * 1.4));
           vec3 room = c * (amb + lamp);
@@ -3739,6 +3761,11 @@ const BUILD_FS = /* glsl */`
       col = mix(mix(wallLit, frameC * light, frameM), glass, max(winM, shopM));
       emit = (warm * on * max(winM * (1.0 - kI), shopM * 0.8) * 1.6 +   // 14c: jendela dekat menyala lewat ruangannya
          vec3(1.0, 0.8, 0.55) * shopM * uNight * 0.5) * mix(1.0, 0.55, ax * ay);
+      if (code == 1.0 && H > 120.0 && hash1(vec2(vSeed, 11.0)) < 0.3 && y > H - 12.0 && y < H) {   // 21c: lampu mahkota 30% menara > 120 m
+        float hc = hash1(vec2(vSeed, 12.0)), kc = (y - (H - 12.0)) / 12.0;                           // disorot dari lis bawah, pudar ke atas
+        vec3 cc = hc < 0.8 ? vec3(1.0, 0.95, 0.88) : hc < 0.9 ? vec3(0.35, 0.55, 1.0) : vec3(0.7, 0.45, 1.0);   // 1 dari 5 berwarna
+        emit += cc * 1.1 * uNight * (1.0 - kc) * (1.0 - kc);
+      }
       col *= mix(0.65, 1.0, smoothstep(0.0, 1.2, y));             // AO dekat tanah
       col += emit;
     }
@@ -6285,6 +6312,9 @@ function updateLighting() {
   capRingMat.color.setRGB(0.3 + 1.6 * U.uL_CapI.value, 0.2 + 1.0 * U.uL_CapI.value, 0.08 + 0.45 * U.uL_CapI.value);
   capGlowMat.uniforms.uI.value = 0.15 + 0.85 * U.uL_CapI.value;
   BUILD_U.uNight.value = 1 - sstep(5.8, 7.2, h) * (1 - sstep(17.8, 19.4, h));   // lampu jendela menyala saat senja sampai subuh
+  { const hl = h < 12 ? h + 24 : h;                                    // 21c: kantor ramai sampai 21, sepi setelah 23.30; hunian puncak 19-23, sepi setelah 01.30
+    BUILD_U.uLitT.value.set(0.25 + 0.75 * sstep(5, 7.5, h) * (1 - sstep(21, 23.5, h)),
+      0.25 + 0.75 * sstep(16, 19, hl) * (1 - sstep(23, 25.5, hl)) + 0.3 * sstep(5, 6.5, h) * (1 - sstep(7.5, 9, h))); }
   const cc = U.uL_SunlineCol.value;
   { const kc = 1 - 0.5 * ov, gl = golden * (1 - 0.6 * ov);
     const r = cc.x * (0.25 + 0.9 * I) + amb[0] + 0.25 * gl, g = cc.y * (0.25 + 0.9 * I) + amb[1] + 0.12 * gl, b = cc.z * (0.25 + 0.9 * I) + amb[2];
