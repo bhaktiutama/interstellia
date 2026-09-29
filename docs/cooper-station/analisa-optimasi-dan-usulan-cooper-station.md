@@ -15,7 +15,7 @@ Semua butir di tabel ini menghasilkan gambar yang sama; yang berubah hanya jumla
 | No | Temuan (data) | Usulan | Hasil (perkiraan) | Beban |
 | --- | --- | --- | --- | --- |
 | O1 | 6 grup kecil menyumbang 784 dari 1.114 draw call per frame di spawn: lapangan baseball 445 (173 mesh, `frustumCulled = false`, ikut 2 pass bayangan walau 900 m lebih dari pemain), trem 158, kabin lift 56, menara lift 51, rumah Cooper 42, hub nol-g 32 | Gabung bagian statis per material (cara yang sudah dipakai rumah Cooper dan trem), hitung bounding sphere lalu nyalakan frustum culling. Kamera bayangan otomatis membuang grup di luar kotak bayangannya | 600-750 draw call lebih sedikit per frame di spawn. Hemat CPU (three.js + driver) paling terasa di M1 | rendah |
-| O2 | `CORN.near` (386.715 segitiga) dan `CORN.mid` (69.908) digambar di 3 pass di semua lokasi uji, termasuk kota dan hutan. Jumlah instance tetap; tanaman yang bukan di ladang jagung baru dibuang di vertex shader (`isCorn`) | Seperti `MEADOW.active`: `instanceCount = 0` bila tidak ada petak `f.corn` dalam radius `cornMid + 20 m` (cek CPU tiap 1 s atau tiap pindah 20 m) | -1,37 juta segitiga per frame (21%) di kota dan hutan | rendah |
+| O2 | `CORN.near` (386.715 segitiga) dan `CORN.mid` (69.908) digambar di 3 pass di semua lokasi uji, termasuk kota. Jumlah instance tetap; tanaman yang bukan di ladang jagung baru dibuang di vertex shader (`isCorn`) | Seperti `MEADOW.active`: `instanceCount = 0` bila tidak ada petak `f.corn` dalam radius `cornMid + 20 m` (cek CPU tiap 1 s atau tiap pindah 20 m) | -1,37 juta segitiga per frame (21%) di kota (di titik hutan uji ada petak jagung dalam 110 m, jadi tetap aktif) | rendah |
 | O3 | Pass bayangan hanya meliput 640 x 640 m (cincin cap) dan 300 x 300 m (sunline), tetapi menggambar semua instance stasiun: mobil 248.760, peralatan atap 175.260, gedung sekitar 300 ribu segitiga per pass. Total kedua pass 2,86 juta segitiga dan 563 draw call | (a) Pecah InstancedMesh besar (gedung, peralatan atap, tiang lampu, perabot, props) per sektor (mis. 26 kolom arteri x 4 pita za) supaya frustum culling jalan; beri margin karena shader bayangan membuka silinder (`shUnroll`). (b) Mobil: kirim hanya mobil dalam radius 900 m ke buffer instance (cara `updatePeds`) | Pass bayangan turun dari 2,86 juta ke kurang dari 1 juta segitiga. Pass utama juga turun (sektor di belakang kamera dibuang) | sedang |
 | O4 | Rumput: bulir (`aHead`) rumput biasa dan kedelai dikempiskan ke satu titik, tetapi tetap menjalankan seluruh `GRASS_VS` (tinggi tanah 4 texelFetch, `vegLight` dengan 7 sampel bayangan). Bulir = 53% vertex rumput dekat (56 dari 105) dan 62% rumput jauh (32 dari 52) | `if (aHead > 0.5 && !headOn) { CLIP_AWAY }` sebelum `groundFrame` | Kerja vertex rumput biasa turun 53% (dekat) dan 62% (jauh). Di kota: `grass.near` 281.547 + `grass.far` 432.012 segitiga | sangat rendah |
 | O5 | Shader gedung (`BUILD_FS`) menghitung `farEnv` (pantulan, 2-3 baca tekstur, atan, exp) di setiap piksel dinding dan atap, padahal hanya dipakai kaca dan ruangan maya. Muka bawah (`n.y < -0.9`) keluar setelah semua cahaya dihitung | Hitung `sky` hanya bila `max(winM, shopM) > 0`; pindah early-out muka bawah ke awal | GPU: pantulan hanya di piksel kaca (tidak bisa diukur di sandbox) | rendah |
@@ -174,6 +174,20 @@ Simulasi total sekitar 1,5 ms per frame: CPU simulasi bukan hambatan. Yang berat
 | 20c | O8, O9, O10 (muat) | waktu muat, `TER.h` dan `heightTex` sama persis (checksum) |
 | 20d | O3 (sektor instance) | pass bayangan, `tools/uji_cahaya_lanjut.py` |
 | 20e | Efek layar Ringan, simpan sesi, lalu `shared/` | uji semua experience dari file:// |
+
+## 7b. Hasil tahap 20a (29 September 2026)
+
+Dikerjakan: O2, O4, O11, O12, alat ukur GPU, ditambah satu bug yang ditemukan saat mengerjakan O11.
+
+| Butir | Hasil |
+| --- | --- |
+| O2 jagung | Spawn kota siang: 6.363.488 menjadi 4.993.749 segitiga per frame (-21,5%); draw call 1.114 menjadi 1.108. Bukit, hutan, ladang jagung: tidak berubah (ada petak jagung dalam jangkauan) |
+| O4 bulir rumput | Jumlah segitiga yang dikirim sama (dihitung dari indeks), kerja vertex shader bulir yang tidak dipakai hilang (53% vertex rumput dekat, 62% rumput jauh) |
+| O11 | `lampPool` / `tramPool` di shader tanah dihapus, memakai `lampPoolL` / `tramPoolL` |
+| Bug 17e | `THREE.UniformsUtils.merge` menyalin `uTram`, jadi `uL_Tram` tidak pernah diperbarui dan trem malam tidak pernah menerangi objek (hanya tanah). Kini satu objek uniform bersama: dinding, pohon, orang di dekat trem ikut terang di malam hari seperti rencana 17e. Material trem sendiri dikecualikan (`userData.noTramLight`, define `NO_TRAM_LIGHT`), jadi tampilan trem sama seperti sebelumnya |
+| O12 | Kamera luar dan kendaraan perawatan memakai dt nyata: yaw orbit otomatis 2 s = 0,07 rad di 30, 60, dan 144 FPS (dulu bergantung FPS) |
+| Uji | `qc_load` tanpa error; `uji_bahasa`, `uji_rumput_bukit`, `uji_trem_malam`, `uji_hujan`, `uji_hutan`, `uji_ladang_foto_tur`, `uji_spaceport`, `uji_cahaya_lanjut` semua OK |
+| Alat ukur GPU | Baris HUD lengkap: GPU total, bayangan, scene, post (ms, dihaluskan). Aktif hanya saat HUD lengkap. Didukung juga di SwiftShader (angkanya waktu render perangkat lunak, tidak bermakna); di GTX 1060 dan M1 menunjukkan ms nyata |
 
 ## 8. Cara ukur
 

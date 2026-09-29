@@ -771,6 +771,11 @@ Object.assign(I18N.en, {
   "FPS": "FPS",
   "Frame": "Frame",
   "Draw call": "Draw call",
+  "GPU": "GPU",
+  "Bayangan GPU": "GPU shadows",
+  "Scene GPU": "GPU scene",
+  "Post GPU": "GPU post",
+  "tidak didukung": "not supported",
   "Status": "Status",
   "HUD": "HUD",
   "Mouse": "Mouse",
@@ -1085,7 +1090,9 @@ const LIGHT_GLSL = /* glsl */`
     float face = 0.45 + 0.55 * max(dot(n, up), 0.0);
     vec3 c = vec3(0.0);
     if (uL_Night > 0.01) c += vec3(1.0, 0.72, 0.42) * 1.5 * uL_Night * lampPoolL(s, za) * face * (1.0 - smoothstep(6.0, 18.0, h));
+    #ifndef NO_TRAM_LIGHT
     if (uL_Tram.w > 0.01) c += vec3(1.0, 0.9, 0.75) * uL_Tram.w * tramPoolL(s, za) * face * (1.0 - smoothstep(2.0, 6.0, h));
+    #endif
     if (uL_Head.w > 0.01) c += headSpotL(p, n);                         // 19b
     return c;
   }
@@ -1195,7 +1202,7 @@ function specMat(m, r, f0 = 0.04, metal = 0, glass = false) { m.userData.spec = 
 function patchLit(mat) {
   if (mat.userData.lit) return;
   mat.userData.lit = true;
-  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = !!(sp && sp.glass);
+  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = !!(sp && sp.glass), noTram = !!mat.userData.noTramLight;   // 20a: trem tidak disinari cahayanya sendiri
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, LIGHT.uniforms);
     if (cabin) Object.assign(sh.uniforms, CABIN_LIGHT);
@@ -1209,12 +1216,12 @@ function patchLit(mat) {
         vLitWorld = (modelMatrix * lw).xyz;
         vec3 wn = mat3(modelMatrix) * ln; vLitNormal = wn * inversesqrt(max(dot(wn, wn), 1e-12));   // normal nol tetap nol (tanpa NaN)
       }`);
-    sh.fragmentShader = 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + LIGHT_GLSL +
+    sh.fragmentShader = (noTram ? '#define NO_TRAM_LIGHT\n' : '') + 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + LIGHT_GLSL +
       sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\noutgoingLight *= stationLight(vLitWorld, litN) + nightLight(vLitWorld, litN);\n' + (cabin ? 'outgoingLight += diffuseColor.rgb * uCabin;\n' : '') + (sp ? SPEC_GLSL(glass) : '') + '#include <opaque_fragment>');
     if (cabin) sh.fragmentShader = 'uniform vec3 uCabin;\n' + sh.fragmentShader;
     if (sp) sh.fragmentShader = 'uniform vec3 uSpec;\n' + sh.fragmentShader;
   };
-  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass ? 'Glass' : 'Spec') : '');
+  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass ? 'Glass' : 'Spec') : '') + (noTram ? 'NoTram' : '');
   mat.needsUpdate = true;
 }
 
@@ -1595,19 +1602,23 @@ function extKey(code) {
   if (i >= 0) { ext.targetT.copy(EXT_FOCUS[i][0]); ext.distT = EXT_FOCUS[i][1]; return true; }
   return false;
 }
-function updateExteriorCamera() {
-  updateCrawlers(1 / 60);
+// 20a: dt frame nyata dari updateCamera (dulu tetap 1/60: di 30 FPS orbit 2x lebih lambat, di 144 Hz 2,4x lebih cepat).
+// Peredaman per frame diubah ke bentuk 1 - (1 - k)^(60 dt), jadi di 60 FPS sama persis dengan dulu.
+const perFrame = (k, dt) => 1 - Math.pow(1 - k, dt * 60);
+function updateExteriorCamera(dt) {
+  updateCrawlers(dt);
   scene.rotation.z = OMEGA * clock.sim;                                     // stasiun berputar di ruang inersia
-  const dt = 1 / 60, kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+  const kx = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
   const ky = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
   if (kx || ky) ext.auto = false;
-  ext.vyaw += (kx * 0.9 - ext.vyaw) * 0.08; ext.vpitch += (ky * 0.6 - ext.vpitch) * 0.08;
+  const k8 = perFrame(0.08, dt);
+  ext.vyaw += (kx * 0.9 - ext.vyaw) * k8; ext.vpitch += (ky * 0.6 - ext.vpitch) * k8;
   ext.yaw += (ext.vyaw + (ext.auto ? 0.035 : 0)) * dt;
   ext.pitch = Math.max(-1.45, Math.min(1.45, ext.pitch + ext.vpitch * dt));
-  if (keys.has('Equal') || keys.has('NumpadAdd')) ext.distT = Math.max(1500, ext.distT * 0.985);
-  if (keys.has('Minus') || keys.has('NumpadSubtract')) ext.distT = Math.min(60000, ext.distT * 1.015);
-  ext.dist += (ext.distT - ext.dist) * 0.06;
-  ext.target.lerp(ext.targetT, 0.04);
+  if (keys.has('Equal') || keys.has('NumpadAdd')) ext.distT = Math.max(1500, ext.distT * Math.pow(0.985, dt * 60));
+  if (keys.has('Minus') || keys.has('NumpadSubtract')) ext.distT = Math.min(60000, ext.distT * Math.pow(1.015, dt * 60));
+  ext.dist += (ext.distT - ext.dist) * perFrame(0.06, dt);
+  ext.target.lerp(ext.targetT, perFrame(0.04, dt));
   const cp = Math.cos(ext.pitch);
   camera.position.set(ext.dist * cp * Math.sin(ext.yaw), ext.dist * Math.sin(ext.pitch), ext.dist * cp * Math.cos(ext.yaw)).add(ext.target);
   camera.up.set(0, 1, 0);
@@ -1699,54 +1710,10 @@ const groundMat = new THREE.ShaderMaterial({
     #include <fog_pars_fragment>
     uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex, uLitterTex;
     uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf, uNight, uWet, uRainNow, uCropT;
-    uniform vec4 uTram;
-    // 15a: sorot lampu depan trem (melebar ke depan sampai 26 m) + pendaran jendela di samping badan trem
-    float tramPool(float s, float za) {
-      const float CIRC = 6283.185307;
-      float ds = mod(s - uTram.x + CIRC * 1.5, CIRC) - CIRC * 0.5, dz = za - uTram.y;
-      if (abs(ds) > 8.0 || abs(dz) > 40.0) return 0.0;
-      float along = dz * uTram.z - 9.0, w = 0.9 + 0.12 * max(along, 0.0);
-      float beam = exp(-ds * ds / (w * w)) * smoothstep(-0.5, 2.0, along) * (1.0 - smoothstep(10.0, 26.0, along));
-      float side = abs(ds) - 1.9;
-      float glow = exp(-side * side / 1.6) * (1.0 - smoothstep(8.0, 10.0, abs(dz)));
-      return 1.3 * beam + 0.55 * glow;
-    }
+    // 20a: kolam cahaya lampu jalan dan trem memakai lampPoolL / tramPoolL dari LIGHT_GLSL (dulu salinan di sini)
     vec3 wheatStage(float g) { float ph = fract(uCropT + g);          // sama dengan VEG_COMMON (12d)
       float grow = ph < 0.82 ? mix(0.3, 1.0, clamp(ph / 0.45, 0.0, 1.0)) : 0.14;
       return vec3(grow, smoothstep(0.45, 0.72, ph), ph >= 0.82 ? 1.0 : 0.0); }
-    // tahap 10: kolam cahaya lampu jalan (posisi sama dengan tiang lampu di JS)
-    float lampPool(float s, float za) {
-      const float SP = 45.0, OFF = 13.5, RR = 81.0, CIRC = 6283.185307;
-      float pool = 0.0;
-      float sp = s < 0.0 ? s + CIRC : s;
-      float skyS = CIRC * 0.5;
-      if (za > 140.0 && za < 2610.0) {
-        float kS = floor(sp / uArt + 0.5), dS = sp - kS * uArt, km = mod(kS, 26.0);
-        bool bl = km < 0.5 || km > 25.5;                             // 15b: boulevard, tiang di 21,5 m
-        float offK = bl ? 21.5 : OFF;
-        if (abs(km - 13.0) > 0.5 && abs(abs(dS) - offK) < 12.0) {
-          float side = sign(dS), ph = side > 0.0 ? 0.0 : SP * 0.5;
-          float zl = 150.0 + ph + floor((za - 150.0 - ph) / SP + 0.5) * SP;
-          float dz = abs(zl - floor(zl / 250.0 + 0.5) * 250.0);
-          if (dz >= 16.0 && zl >= 150.0 && zl < 2600.0) pool += exp(-((abs(dS) - offK) * (abs(dS) - offK) + (za - zl) * (za - zl)) / RR);
-        }
-        float kZ = floor(za / 250.0 + 0.5), dZ = za - kZ * 250.0;
-        if (kZ >= 1.0 && kZ <= 10.0 && abs(kZ - 4.0) > 0.5 && abs(kZ - 8.0) > 0.5 && abs(abs(dZ) - OFF) < 12.0) {
-          float side = sign(dZ), ph = side > 0.0 ? 0.0 : SP * 0.5;
-          float sl = ph + floor((sp - ph) / SP + 0.5) * SP;
-          float dsA = abs(sl - floor(sl / uArt + 0.5) * uArt), dsk = abs(mod(sl - skyS + CIRC * 1.5, CIRC) - CIRC * 0.5);
-          if (dsA >= 16.0 && dsk >= 40.0) pool += exp(-((abs(dZ) - OFF) * (abs(dZ) - OFF) + (sp - sl) * (sp - sl)) / RR);
-        }
-      }
-      float kR = floor(za / 1000.0 + 0.5);
-      if (kR >= 1.0 && kR <= 7.0) {                                   // tiang lampu cincin struktur tiap 40 m
-        float zl = kR * 1000.0 + 9.0, sl = floor(sp / 40.0 + 0.5) * 40.0;
-        if (sl < 0.5) sl = -9.0;                                        // 13a: tiang di as rel trem dipindah 9 m
-        float dsk = abs(mod(sl - skyS + CIRC * 1.5, CIRC) - CIRC * 0.5);
-        if (dsk >= 20.0 && sl < CIRC - 20.0) pool += 0.8 * exp(-((za - zl) * (za - zl) + (sp - sl) * (sp - sl)) / RR);
-      }
-      return pool;
-    }
     uniform vec2 uFieldZ, uCityZ;
     uniform vec4 uReal;
     uniform vec3 uWind;
@@ -1974,8 +1941,8 @@ const groundMat = new THREE.ShaderMaterial({
       vec3 nrm = up;
       #endif
       vec3 light = stationLight(vWorld, nrm);
-      if (uNight > 0.01) light += vec3(1.0, 0.72, 0.42) * 1.5 * uNight * lampPool(s, za);   // lampu jalan malam
-      if (uTram.w > 0.01) light += vec3(1.0, 0.9, 0.75) * uTram.w * tramPool(s, za);         // 15a: trem malam
+      if (uNight > 0.01) light += vec3(1.0, 0.72, 0.42) * 1.5 * uNight * lampPoolL(s, za);   // lampu jalan malam
+      if (uL_Tram.w > 0.01) light += vec3(1.0, 0.9, 0.75) * uL_Tram.w * tramPoolL(s, za);   // 15a: trem malam
       if (uL_Head.w > 0.01) light += vec3(1.0, 0.94, 0.84) * uL_Head.w * headPoolL(s, za);   // 19b: sorot lampu depan motor
       {                                                           // bayangan tajuk pohon dari sunline (tepat di atas)
         float tsh = textureGrad(uShadeTex, uv, gx, gy).r * (1.0 - sunShCover(vWorld));   // 17f: dekat pemain bayangan real-time
@@ -1987,7 +1954,7 @@ const groundMat = new THREE.ShaderMaterial({
       if (uWet > 0.01 && waterM < 0.5) {                          // 12c revisi: pantulan Fresnel (kuat saat dilihat miring), lampu jalan, riak hujan
         vec3 V = cameraPosition - vWorld; float vl = length(V); V = vl > 1e-4 ? V / vl : up;
         float cosT = clamp(dot(V, up), 0.0, 1.0), F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
-        vec3 refl = farEnv(vWorld, reflect(-V, up), 0.15, 0.7) + vec3(1.0, 0.72, 0.42) * 2.2 * uNight * lampPool(s, za);   // 17d
+        vec3 refl = farEnv(vWorld, reflect(-V, up), 0.15, 0.7) + vec3(1.0, 0.72, 0.42) * 2.2 * uNight * lampPoolL(s, za);   // 17d
         if (uL_Head.w > 0.01) refl += vec3(1.0, 0.94, 0.84) * 1.2 * uL_Head.w * headPoolL(s, za);   // 19b: aspal basah berkilau di sorot motor
         float ring = 0.0;
         if (puddle > 0.01 && uRainNow > 0.05) {                   // riak tetes hujan: cincin melebar di sel 0,5 m
@@ -2034,6 +2001,7 @@ const groundMat = new THREE.ShaderMaterial({
 });
 
 Object.assign(groundMat.uniforms, LIGHT.uniforms);   // pakai objek uniform yang sama (bukan salinan)
+groundMat.uniforms.uTram = LIGHT.uniforms.uL_Tram;   // 20a: merge() di atas menyalin uTram, jadi uL_Tram (17e: trem menerangi objek) tidak pernah diperbarui
 
 // Permukaan dalam silinder: open-ended, 512 segmen keliling (sagitta 1,9 cm), 32 segmen panjang.
 // Sumbu silinder = Z dunia. Ada celah untuk strip jendela Skyway (lebar 30 m) di theta = WIN.theta.
@@ -4310,6 +4278,7 @@ const TRAM_PARTS = {};
     lamp: new THREE.MeshBasicMaterial({ color: 0xfff4e0 }),
   };
   for (const k of ['inner', 'floor', 'seat', 'seatFrame', 'pole']) M[k].userData.cabin = true;   // 15a: diterangi lampu kabin saat malam
+  for (const m of Object.values(M)) m.userData.noTramLight = true;   // 20a: kolam cahaya trem (17e) untuk objek sekitar, bukan untuk trem sendiri
   const staticG = new THREE.Group();
   const box = (sx, sy, sz, mat, x, y, z, parent = staticG, tile = 1) => {
     const g = new THREE.BoxGeometry(sx, sy, sz);
@@ -5372,7 +5341,7 @@ function updateFov(dt) {                                            // 19a: FOV 
 function updateCamera() {
   const now = performance.now(), dt = Math.min(0.1, BOB.last ? (now - BOB.last) / 1000 : 0); BOB.last = now;   // 19a
   headBob(dt);
-  if (ext.active) { if (ext.flight) updateFlightCamera(); else updateExteriorCamera(); }
+  if (ext.active) { if (ext.flight) updateFlightCamera(dt); else updateExteriorCamera(dt); }
   else if (player.state === 'pod') {
     const F = player.float;
     lookBasis(F.up, F.tan);
@@ -5693,6 +5662,10 @@ hud.innerHTML = `
   <div class="title" id="hudTitle">Copper Corn Station</div>
   <span class="k">FPS</span><span class="v" id="hFps">-</span>
   <span class="x k wide">Frame</span><span class="x v wide" id="hMs">-</span>
+  <span class="x k wide">GPU</span><span class="x v wide" id="hGpu">-</span>
+  <span class="x k wide">Bayangan GPU</span><span class="x v wide" id="hGpuSh">-</span>
+  <span class="x k wide">Scene GPU</span><span class="x v wide" id="hGpuSc">-</span>
+  <span class="x k wide">Post GPU</span><span class="x v wide" id="hGpuPo">-</span>
   <span class="x k">Draw call</span><span class="x v" id="hCalls">-</span>
   <span class="x k wide">Segitiga</span><span class="x v wide" id="hTris">-</span>
   <span class="x k wide">Resolusi</span><span class="x v wide" id="hRes">-</span>
@@ -5723,7 +5696,7 @@ function setHudMode(compact) {
 }
 { let m = 'ringkas'; try { m = localStorage.getItem('cooperStation.hud') || m; } catch (e) { /* abaikan */ } setHudMode(m === 'ringkas'); }
 H('hudTitle').addEventListener('click', () => setHudMode(!hud.classList.contains('compact')));
-const hEl = { hour: H('hHour'), tram: H('hTram'), sat: H('hSat'), orb: H('hOrb'), orbX: H('hOrbX'), fps: H('hFps'), ms: H('hMs'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
+const hEl = { hour: H('hHour'), tram: H('hTram'), sat: H('hSat'), orb: H('hOrb'), orbX: H('hOrbX'), fps: H('hFps'), ms: H('hMs'), gpu: H('hGpu'), gpuSh: H('hGpuSh'), gpuSc: H('hGpuSc'), gpuPo: H('hGpuPo'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
   theta: H('hTheta'), z: H('hZ'), h: H('hH'), head: H('hHead'), dist: H('hDist'), mode: H('hMode'), g: H('hG') };
 const _tmpV2 = new THREE.Vector2(), _satDir = new THREE.Vector3();
 const ORBIT_SPEEDS = [1, 100, 1000, 10000];
@@ -5777,6 +5750,11 @@ function updateStats(dt) {
   const hNow = player.state === 'float' ? R - Math.hypot(player.float.pos.x, player.float.pos.y) : player.h;
   hEl.fps.textContent = stats.fps.toFixed(0);
   hEl.ms.textContent = stats.ms.toFixed(1) + ' ms';
+  if (!GPUT.ext) { hEl.gpu.textContent = t('tidak didukung'); hEl.gpuSh.textContent = hEl.gpuSc.textContent = hEl.gpuPo.textContent = '-'; }   // 20a
+  else if (GPUT.n) {
+    const M = GPUT.ms, f = (x) => `${fmtN(x, 1)} ms`;
+    hEl.gpu.textContent = f(M.sh + M.sc + M.po); hEl.gpuSh.textContent = f(M.sh); hEl.gpuSc.textContent = f(M.sc); hEl.gpuPo.textContent = f(M.po);
+  }
   hEl.calls.textContent = info.calls;
   hEl.tris.textContent = (info.triangles / 1000).toFixed(1) + t(' rb');
   hEl.res.textContent = `${size.x}x${size.y}`;
@@ -6673,7 +6651,7 @@ const GRASS_VS = /* glsl */`
     float wmul = kind == 2 ? 2.4 : kind == 1 ? 0.8 : kind == 3 ? 1.3 : 1.0;
     bool headOn = kind == 3 || (kind == 1 && wst.z < 0.5 && wst.y > 0.15);
     vec3 lp = position;
-    if (aHead > 0.5 && !headOn) lp = vec3(0.0);                      // bulir dikempiskan
+    if (aHead > 0.5 && !headOn) { ${CLIP_AWAY} }                     // 20a: bulir tidak dipakai: dibuang sebelum tinggi tanah dan cahaya (dulu dikempiskan ke satu titik)
     vec3 up, tS;
     vec3 base = groundFrame(P, 0.0, up, tS);
     float ang = h3 * 6.2832, ca = cos(ang), sa = sin(ang);
@@ -7533,6 +7511,17 @@ const VEG_Q = [
   { name: 'Rendah', grassNear: 0, grassFar: 16, cornNear: 0, cornMid: 40, treeLod: 50 },
 ];
 let vegQ = 0;
+// 20a: jagung 3D hanya digambar bila ada petak jagung dalam jangkauan (dulu semua instance selalu dikirim ke 3 pass, lalu
+// dibuang satu per satu di vertex shader: 1,37 juta segitiga per frame di kota dan hutan). Sama dengan isCorn() di shader:
+// petak f.corn (kode biru 0,784 di tekstur ladang). Dicek ulang tiap pindah 10 m.
+function cornGate(eyeS, eyeZ) {
+  if (Math.abs(wrapS(eyeS - CORN.gateS)) < 10 && Math.abs(eyeZ - CORN.gateZ) < 10) return;
+  CORN.gateS = eyeS; CORN.gateZ = eyeZ;
+  const reach = VEG_Q[vegQ].cornMid + 20;
+  CORN.active = fieldList.some((f) => f.corn && Math.abs(wrapS(eyeS - (f.s0 + f.s1) / 2)) - (f.s1 - f.s0) / 2 < reach && Math.abs(eyeZ - (f.z0 + f.z1) / 2) - (f.z1 - f.z0) / 2 < reach);
+  CORN.near.geometry.instanceCount = CORN.active ? CORN.nearN : 0;
+  CORN.mid.geometry.instanceCount = CORN.active ? CORN.midN : 0;
+}
 function applyVegQuality() {
   const Q = VEG_Q[vegQ];
   const gN = GRASS.near.material.uniforms, gF = GRASS.far.material.uniforms;
@@ -7542,9 +7531,10 @@ function applyVegQuality() {
   GRASS.near.geometry.instanceCount = Q.grassNear ? GRASS.near.userData.cells.countFor(Q.grassNear) : 0;
   GRASS.far.geometry.instanceCount = GRASS.far.userData.cells.countFor(Q.grassFar);
   CORN.near.material.uniforms.uNearR.value = Q.cornNear;
-  CORN.near.geometry.instanceCount = Q.cornNear ? CORN.near.userData.cells.countFor(Q.cornNear) : 0;
+  CORN.nearN = Q.cornNear ? CORN.near.userData.cells.countFor(Q.cornNear) : 0;   // 20a: jumlah instance disimpan, dipasang di cornGate()
   CORN.mid.material.uniforms.uMidR.value = Q.cornMid;
-  CORN.mid.geometry.instanceCount = CORN.mid.userData.cells.countFor(Q.cornMid);
+  CORN.midN = CORN.mid.userData.cells.countFor(Q.cornMid);
+  CORN.gateS = 1e9; cornGate(CORN.lastEyeS ?? 1e9, CORN.lastEyeZ ?? 1e9);
   TREES.lodD = Q.treeLod; TREES.lastS = 1e9;
   groundMat.uniforms.uGrassR.value = Q.grassFar;
   groundMat.uniforms.uCornR.value = Q.cornMid;
@@ -7565,6 +7555,7 @@ function updateReal() {
     GRASS.far.material.uniforms.uCenter.value.set(Math.floor(eyeS / 0.55), Math.floor(eyeZ / 0.55));
     CORN.near.material.uniforms.uCenter.value.set(Math.floor(eyeS / 0.76), Math.floor(eyeZ / 0.25));
     CORN.mid.material.uniforms.uCenter.value.set(Math.floor(eyeS / 0.76), Math.floor(eyeZ / 2.0));
+    CORN.lastEyeS = eyeS; CORN.lastEyeZ = eyeZ; cornGate(eyeS, eyeZ);   // 20a
   }
   // 14b: rumput tinggi hanya bila ada bukit dalam jangkauan (tanpa itu semua instance terbuang di vertex shader)
   const reach = MEADOW.midR + 20;
@@ -9399,9 +9390,9 @@ function stepPort(dt) {
   PORT.thr = Math.min(1, thr); PORT.rcs = rcs;
 }
 const _camQ = new THREE.Quaternion(), _eul = new THREE.Euler(0, 0, 0, 'YXZ');
-function updateFlightCamera() {
+function updateFlightCamera(dt) {
   scene.rotation.z = OMEGA * clock.sim;
-  updateCrawlers(1 / 60);
+  updateCrawlers(dt);                                               // 20a: dt nyata
   if (PORT.view === 'cockpit') {
     _eul.set(PORT.mode === 'fly' ? 0 : PORT.look.pitch, PORT.mode === 'fly' ? 0 : PORT.look.yaw, 0);
     camera.position.copy(PORT.eye).applyQuaternion(PORT.q).add(PORT.p);
@@ -11031,6 +11022,41 @@ scene.traverse((o) => {
 /* =====================================================================
    LOOP: fixed timestep untuk fisika, render tiap frame
    ===================================================================== */
+/* =====================================================================
+   TAHAP 20a: PENGUKUR WAKTU GPU (EXT_disjoint_timer_query_webgl2)
+   Waktu GPU nyata per kelompok pass: sh = dua peta bayangan, sc = scene jauh + scene utama, po = efek layar. Hasil query
+   tersedia 1-3 frame kemudian (tanpa menunggu GPU); satu frame dihitung setelah semua query-nya selesai, lalu dihaluskan.
+   Hanya aktif saat HUD lengkap (baris GPU terlihat). Frame dengan GPU_DISJOINT (jam GPU terganggu) dibuang.
+   ===================================================================== */
+const GPUT = { ext: null, on: false, pool: [], pend: [], cur: null, frame: 0, acc: {}, ms: { sh: 0, sc: 0, po: 0 }, n: 0 };
+try { GPUT.ext = renderer.getContext().getExtension('EXT_disjoint_timer_query_webgl2'); } catch (e) { GPUT.ext = null; }
+function gpuBegin(key) {
+  if (!GPUT.on) return;
+  const gl = renderer.getContext(), q = GPUT.pool.pop() || gl.createQuery();
+  gl.beginQuery(GPUT.ext.TIME_ELAPSED_EXT, q); GPUT.cur = { q, key, f: GPUT.frame };
+}
+function gpuEnd() {
+  if (!GPUT.cur) return;
+  renderer.getContext().endQuery(GPUT.ext.TIME_ELAPSED_EXT); GPUT.pend.push(GPUT.cur); GPUT.cur = null;
+}
+function gpuFrameEnd() {                                             // penanda akhir frame, lalu baca hasil yang sudah siap
+  if (GPUT.on) { GPUT.pend.push({ end: true, f: GPUT.frame }); GPUT.frame++; }
+  if (!GPUT.pend.length) return;
+  const gl = renderer.getContext(), bad = gl.getParameter(GPUT.ext.GPU_DISJOINT_EXT);
+  while (GPUT.pend.length) {
+    const e = GPUT.pend[0];
+    if (e.end) {
+      const A = GPUT.acc[e.f]; delete GPUT.acc[e.f];
+      if (A && !A.bad) { const k = GPUT.n ? 0.1 : 1; for (const key of ['sh', 'sc', 'po']) GPUT.ms[key] += ((A[key] || 0) - GPUT.ms[key]) * k; GPUT.n++; }
+      GPUT.pend.shift(); continue;
+    }
+    if (!gl.getQueryParameter(e.q, gl.QUERY_RESULT_AVAILABLE)) break;
+    const A = GPUT.acc[e.f] || (GPUT.acc[e.f] = {});
+    if (bad) A.bad = true; else A[e.key] = (A[e.key] || 0) + gl.getQueryParameter(e.q, gl.QUERY_RESULT) / 1e6;   // ns -> ms
+    GPUT.pool.push(e.q); GPUT.pend.shift();
+  }
+  if (GPUT.pend.length > 64) { for (const e of GPUT.pend) if (e.q) gl.deleteQuery(e.q); GPUT.pend.length = 0; GPUT.acc = {}; }   // tab tersembunyi lama: mulai ulang
+}
 const STEP = 1 / CONFIG.physicsHz;
 let acc = 0, last = performance.now();
 /* =====================================================================
@@ -11244,14 +11270,19 @@ function frame(now) {
   updateForest(Math.min(0.1, dt));                 // 14a: kabut hutan, semak dan pakis
   groundMat.uniforms.uTime.value = clock.sim % 3600;
   renderer.info.reset();
+  GPUT.on = !!GPUT.ext && !hud.classList.contains('compact');       // 20a: ukur GPU hanya saat HUD lengkap
+  gpuBegin('sh');
   shadowPass();
   sunShadowPass();                                 // 17f
+  gpuEnd(); gpuBegin('sc');
   const post = postBegin();                        // tahap 9: render ke target HDR bila efek layar aktif
   renderer.clear();
   renderer.render(farScene, farCam);
   renderer.clearDepth();
   renderer.render(scene, camera);
+  gpuEnd(); gpuBegin('po');
   if (post) postEnd();
+  gpuEnd(); gpuFrameEnd();
   updateAudio(dt);
   updateTraffic();
   updateFurniture();
@@ -11289,7 +11320,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 }
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
-window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
+window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
   jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
 requestAnimationFrame(frame);
 </script>
