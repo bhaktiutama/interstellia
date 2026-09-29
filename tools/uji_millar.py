@@ -1,4 +1,4 @@
-"""Uji Millar's World R1 + R1b + R2 + R3: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
+"""Uji Millar's World R1 + R1b + R2 + R3 + R4: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
 tidak ada daratan (dasar laut selalu di bawah air terendah), fisika (1,3 g, lompat 77%), gelombang 125 m/s, jam dilatasi,
 tersapu = kembali dengan penalti waktu, lensa Gargantua (radius bayangan, busur terbelokkan), tidak ada nilai tidak valid (NaN/Inf) di render HDR tiap preset.
 Pakai: python tools/uji_millar.py   (butuh: pip install playwright && playwright install chromium)
@@ -46,8 +46,9 @@ UJI = r"""
   out[`1 s planet = ${(dp / 10 * M.CONFIG.dil / 3600).toFixed(2)} jam di luar (17,04)`] = Math.abs(dp / 10 * M.CONFIG.dil / 3600 - 17.045) < 0.01;
 
   // 5. tersapu: gelombang 150 m di depan
-  M.U.uWX.value += 150 - M.frontX(0); const cBefore = M.CLK.planet;
-  for (let i = 0; i < 300 && M.CLK.swept <= 0; i++) M.simStep(0.05, 0.05);
+  M.U.uWX.value += 150 - M.frontX(0); const cBefore = M.CLK.planet; let under = 0, rot = 0, tSw = 0;
+  for (let i = 0; i < 300 && M.CLK.swept <= 0; i++) { M.simStep(0.05, 0.05); under = Math.max(under, M.SWEEP.under); rot = Math.max(rot, Math.abs(M.SWEEP.rx) + Math.abs(M.SWEEP.rz)); if (M.SWEEP.on) tSw = M.SWEEP.t; }
+  out[`tersapu R4: di bawah air ${under.toFixed(2)}, kamera terguling ${rot.toFixed(1)} rad, urutan ${tSw.toFixed(2)} s`] = under > 0.99 && rot > 3 && tSw > 4;
   const lost = (M.CLK.planet - cBefore) * M.CONFIG.dil / (365.25 * 86400);
   out[`tersapu: kembali ke awal (x ${P.x}), waktu di luar bertambah ${lost.toFixed(2)} tahun`] = M.CLK.swept > 0 && P.x === 0 && lost > 0.77;
   M.CLK.white = 0; M.U.uWX.value += 12000 - M.frontX(0);
@@ -155,6 +156,27 @@ UJI = r"""
     out[`gerak kepala Mati: simpangan ${off.toFixed(4)} m`] = off === 0;
     await wait(2500);
     out[`kedalaman dari FFT (baca balik GPU): ok ${M.OCEAN.probe.ok}, h ${M.OCEAN.probe.h.toFixed(3)} m`] = !M.OCEAN.on || (M.OCEAN.probe.ok && Math.abs(M.OCEAN.probe.h) < 1);
+  }
+
+  // 5f. R4: gelombang raksasa rapat, arus air surut, gelombang dekat tanpa nilai tidak valid
+  {
+    const face = M.US.filter((u) => u >= -800 && u <= 300), gaps = face.slice(1).map((u, i) => u - face[i]);
+    const zs = M.ZS.map(Math.abs).sort((a, b) => a - b), dz = zs[1] - zs[0];
+    out[`muka gelombang: ${M.US.length} sampel profil, ${face.length} di muka (jarak ${Math.min(...gaps)}-${Math.max(...gaps)} m), baris ${dz.toFixed(1)} m dekat pemain`] = face.length >= 50 && Math.max(...gaps) <= 26 && dz <= 6.5;
+    const P = M.P; P.x = 0; P.z = 0; P.vx = 0; P.vz = 0; P.view = 0;
+    M.U.uWX.value += 30000 - M.frontX(0); const cFar = M.currentAt(0, 0);
+    M.U.uWX.value += M.CONFIG.current.at - M.frontX(0); const cNear = M.currentAt(0, 0);
+    const x0 = P.x; for (let i = 0; i < 120; i++) M.stepPlayer(1 / 60); const drift = P.x - x0;
+    out[`arus: ${cFar.toFixed(2)} m/s (gelombang 30 km), ${cNear.toFixed(2)} m/s (2,5 km); pemain terseret ${drift.toFixed(2)} m dalam 2 s ke arah gelombang`] = cFar < 0.01 && Math.abs(cNear - M.CONFIG.current.max) < 0.05 && drift > 0.8 && drift < 1.5;
+    P.x = 0; P.pitch = 0.3; P.yaw = -Math.PI / 2;
+    const from = M.THREE.DataUtils.fromHalfFloat;
+    for (const d of [1500, 350]) {
+      M.U.uWX.value += d - M.frontX(0); await wait(1500);
+      const T = M.POST.hdr, w = T.width, h = T.height, b = new Uint16Array(w * h * 4); M.renderer.readRenderTargetPixels(T, 0, 0, w, h, b);
+      let bad = 0, hot = 0; for (let k = 0; k < b.length; k += 4) for (let c = 0; c < 3; c++) { const x = from(b[k + c]); if (!Number.isFinite(x)) bad++; else if (x > 50) hot++; }
+      out[`gelombang ${d} m di depan: tidak valid ${bad}, titik > 50: ${hot}`] = bad === 0 && hot === 0;
+    }
+    M.U.uWX.value += 40000 - M.frontX(0); P.pitch = 0.02;
   }
 
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua

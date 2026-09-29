@@ -111,7 +111,9 @@ const CONFIG = {
   },
   fft: { lam: 0.9, foamJ: 0.7, foamTau: 2.5 },
   seaState: { far: 0.6, near: 1.5, dFar: 120000, dNear: 4000, tau: 4 },   // pengali tinggi ombak angin: kecil saat gelombang raksasa jauh, besar saat dekat
-  walk: { stride: 0.72, strideRun: 1.25, drag: 0.35, legs: 0.13 },        // R3: panjang langkah (m), waktu tanggap di air (s), jarak kaki dari tengah (m)   // R2: kecuraman horizontal (choppy), ambang Jacobian buih, waktu pudar buih (s)
+  walk: { stride: 0.72, strideRun: 1.25, drag: 0.35, legs: 0.13 },        // R3: panjang langkah (m), waktu tanggap di air (s), jarak kaki dari tengah (m)
+  current: { max: 1.6, at: 2500, w: 3500, push: 0.35 },                  // R4: arus air surut ke arah gelombang (m/s, puncak di depan muka, lebar, tarikan ke pemain)
+  sweep: { burst: 0.5, under: 3.4, out: 4.3 },                            // R4: urutan tersapu (s): buih putih, di bawah air, memutih   // R2: kecuraman horizontal (choppy), ambang Jacobian buih, waktu pudar buih (s)
   wave: {               // gelombang raksasa (konsep: sekitar 1.200 m)
     H: 1200,            // tinggi (m)
     v: 125,             // kecepatan muka (m/s), parameter desain
@@ -189,7 +191,7 @@ const I18N = { en: {
   'Waktu planet': 'Planet time', 'Waktu di luar': 'Time outside', 'Gravitasi': 'Gravity', 'Kedalaman air': 'Water depth',
   'Gelombang': 'Wave', 'Tiba dalam': 'Arrives in', 'sudah lewat': 'passed', 'di luar': 'outside', 'Goyangan planet': 'Planet wobble',
   'Tampilan': 'View', 'Kecepatan waktu': 'Time speed', 'Jalan kaki': 'On foot', 'Drone 60 m': 'Drone 60 m', 'Tinggi 1,5 km': 'High 1.5 km',
-  'Grafik': 'Graphics', 'GPU (langit / laut / scene / post)': 'GPU (sky / sea / scene / post)', 'Ombak angin': 'Wind waves',
+  'Grafik': 'Graphics', 'GPU (langit / laut / scene / post)': 'GPU (sky / sea / scene / post)', 'Ombak angin': 'Wind waves', 'Arus': 'Current', 'ke arah gelombang': 'toward the wave',
   'Gerak kepala: {m}': 'Head bob: {m}', 'Mati': 'Off', 'Halus': 'Subtle', 'Normal': 'Normal',
   'tahun': 'y', 'hari': 'd', 'jam': 'h', 'mnt': 'min', 'dtk': 's',
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
@@ -285,6 +287,8 @@ float waveG(float u) {
   float k = u / ${W.wc.toFixed(1)}; return 0.35 * exp(-k * k) + 0.65 * exp(-u / ${W.wb.toFixed(1)});
 }
 float drawdown(float u) { float k = (u + ${W.ddL.toFixed(1)}) / ${W.ddL.toFixed(1)}; return -${W.dd.toFixed(2)} * exp(-k * k); }
+// Arus air surut (m/s) ke arah gelombang (+x): paling kuat sekitar 2,5 km di depan muka
+float currentAt(vec2 p) { float u = p.x - frontX(p.y); if (u >= 0.0) return 0.0; float k = (u + ${CONFIG.current.at.toFixed(1)}) / ${CONFIG.current.w.toFixed(1)}; return ${CONFIG.current.max.toFixed(2)} * exp(-k * k) * smoothstep(0.0, 150.0, -u); }
 float seabed(vec2 p) {
   return ${CONFIG.sea.bed.toFixed(2)} + 0.06 * sin(0.13 * p.x + 0.07 * p.y) + 0.05 * sin(-0.05 * p.x + 0.21 * p.y + 1.7)
     + 0.03 * sin(0.61 * p.x + 0.43 * p.y) + 0.04 * sin(0.011 * p.x + 0.4) * sin(0.013 * p.y + 1.1);
@@ -904,6 +908,14 @@ vec2 fftSlope(vec2 p, out float J) {                  // kemiringan total dan Ja
   J = 1.0 - jd;
   return s;
 }
+// Kemiringan permukaan (FFT atau Gerstner) di p; dist = jarak ke kamera (untuk meredam ombak di bawah ukuran piksel)
+vec2 surfS(vec2 p, float dist, out float J) {
+#if FFT
+  return fftSlope(p, J);
+#else
+  vec3 n = chopNormal(p, uT, dist * uPix, J); return -n.xz / max(n.y, 0.05);
+#endif
+}
 float lapS(sampler2D t, vec2 p, float L, float e) {   // laplasian tinggi = divergensi kemiringan (beda pusat)
   vec2 u = p / L, d = vec2(e / L, 0.0);
   return (texture(t, u + d.xy).x - texture(t, u - d.xy).x + texture(t, u + d.yx).y - texture(t, u - d.yx).y) / (2.0 * e);
@@ -957,11 +969,21 @@ function seaMat(near) {
           rf = texture(tRip, ru).z;
         }
       #endif
+        // Arus air surut: pola ombak terbawa ke arah gelombang (peta aliran dua fase agar tidak meregang)
+        float cur = currentAt(vP), J1, J2;
+        vec2 sO;
+        if (cur > 0.03) {
+          float c1 = fract(uT / 8.0), c2 = fract(uT / 8.0 + 0.5), w1 = 1.0 - abs(2.0 * c1 - 1.0);
+          vec2 s1 = surfS(vP - vec2(cur * c1 * 8.0, 0.0), dist, J1), s2 = surfS(vP - vec2(cur * c2 * 8.0, 0.0), dist, J2);
+          sO = mix(s2, s1, w1); J = mix(J2, J1, w1);
+        } else sO = surfS(vP, dist, J);
+        // garis buih memanjang searah arus
+        float curF = cur > 0.03 ? smoothstep(0.62, 0.82, vn2(vec2((vP.x - uT * cur) * 0.07, vP.y * 0.8))) * smoothstep(0.1, ${CONFIG.current.max.toFixed(2)}, cur) * 0.5 : 0.0;
       #if FFT
-        vec2 s = fftSlope(vP, J) + rs;
+        vec2 s = sO + rs;
         vec3 n = normalize(vec3(-s.x, 1.0, -s.y));
         float inst = smoothstep(uFoamJ, uFoamJ - 0.3, J), stay = texture(tFoam, vP / uLc.x).r;   // buih baru + buih sisa yang memudar
-        float foam = clamp(max(max(inst, stay * 0.85), rf), 0.0, 1.0) * (0.55 + 0.45 * vn2(vP * 3.1)) * 0.85;
+        float foam = clamp(max(max(max(inst, stay * 0.85), rf), curF), 0.0, 1.0) * (0.55 + 0.45 * vn2(vP * 3.1)) * 0.85;
       #if CAUST
         // Kaustik: permukaan cembung memfokuskan cahaya ke dasar (1 / (1 + d x laplasian)); kuat saat langit cerah
         float lap = lapS(tS0, vP, uLc.x, uTexel.x * 1.5);
@@ -972,8 +994,8 @@ function seaMat(near) {
         caust = mix(1.0, exp(1.1 * tanh(-0.35 * clamp(vDepth, 0.03, 2.0) * lap)), uCaustK * (1.0 - smoothstep(20.0, 120.0, dist)));
       #endif
       #else
-        vec3 n = normalize(chopNormal(vP, uT, dist * uPix, J) + vec3(-rs.x, 0.0, -rs.y));
-        float foam = max(smoothstep(0.5, 0.28, J) * 0.7, rf) * (0.6 + 0.4 * vn2(vP * 2.3));
+        vec3 n = normalize(vec3(-sO.x - rs.x, 1.0, -sO.y - rs.y));
+        float foam = max(max(smoothstep(0.5, 0.28, J) * 0.7, rf), curF) * (0.6 + 0.4 * vn2(vP * 2.3));
       #endif
         gl_FragColor = vec4(seaShade(vR, n, vDepth, foam, vP, caust), 1.0);
       }`,
@@ -992,19 +1014,35 @@ function buildSea(P) {
   for (const m of [seaNear.material, seaFar.material]) { m.uniforms.uCell.value = P.cell; m.uniforms.uNearR.value = P.near; }
 }
 
-/* ---------------- Gelombang raksasa: pita sepanjang muka (z), profil tetap di sumbu u ----------------
-   Normal halus dari beda hingga posisi, detail permukaan dari noise berskala besar + ombak angin, alur buih mengalir turun. */
-const US = [-4000, -2000, -1300, -900, -650, -480, -360, -270, -200, -140, -95, -60, -30, -10, 0, 15, 40, 70, 110, 160, 230, 320, 450, 650, 900, 1300, 1900, 2800, 4000, 5600, 7800, 11000, 15000, 20000, 27000, 36000, 50000];
-const ZS = []; { const n = 140, b = 0.05, a = 12 / b; for (let i = -n; i <= n; i++) ZS.push(Math.sign(i) * a * (Math.exp(b * Math.abs(i)) - 1)); }
+/* ---------------- Gelombang raksasa (R4): pita sepanjang muka (z), profil tetap di sumbu u ----------------
+   Muka rapat dekat pemain (profil tiap 12-25 m, baris tiap 6 m), tonjolan air yang meluncur turun di muka (perpindahan
+   vertex, normal ikut dihitung dari posisi tergeser), tekstur dua skala dan urat buih yang mengalir dengan kecepatan sama,
+   puncak lebih terang (air tipis), semburan berlapis di puncak dan kabut di kaki. */
+const US = (() => {
+  const a = [-4000, -3000, -2200, -1600, -1200, -950];
+  for (let u = -800; u <= 300;) { a.push(Math.round(u)); u += 12 + 13 * Math.min(1, Math.abs(u + 250) / 550); }
+  a.push(420, 580, 800, 1100, 1500, 2000, 2700, 3600, 4800, 6400, 8500, 11500, 15500, 21000, 28000, 37000, 50000);
+  return a;
+})();
+const ZS = []; { const n = 190, b = 0.037, a = 6 / b; for (let i = -n; i <= n; i++) ZS.push(Math.sign(i) * a * (Math.exp(b * Math.abs(i)) - 1)); }
+// Panjang busur sepanjang profil (m di permukaan, dari depan ke belakang): koordinat pola yang tidak meregang di kaki yang landai
+const ARC = (() => {
+  const H = W.H * 0.91, g = (u) => (u < 0 ? Math.exp(-((u / W.wf) ** 2)) : 0.35 * Math.exp(-((u / W.wc) ** 2)) + 0.65 * Math.exp(-u / W.wb)) * H;
+  const a = [0]; for (let i = 1; i < US.length; i++) {
+    let s = 0; const n = 32; for (let k = 0; k < n; k++) { const u0 = US[i - 1] + (US[i] - US[i - 1]) * k / n, u1 = US[i - 1] + (US[i] - US[i - 1]) * (k + 1) / n; s += Math.hypot(u1 - u0, g(u1) - g(u0)); }
+    a.push(a[i - 1] + s);
+  }
+  const a0 = a[US.indexOf(0)] || 0; return a.map((v) => v - a0);         // 0 di muka (u = 0)
+})();
 function waveGeo() {
-  const pos = [], idx = [], nu = US.length;
-  for (const z of ZS) for (const u of US) pos.push(u, 0, z);
+  const pos = [], arc = [], idx = [], nu = US.length;
+  for (const z of ZS) US.forEach((u, i) => { pos.push(u, 0, z); arc.push(ARC[i]); });
   for (let j = 0; j < ZS.length - 1; j++) for (let i = 0; i < nu - 1; i++) {
     const a = j * nu + i, b = a + 1, c = a + nu, d = c + 1;
     idx.push(a, c, b, b, c, d);
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aArc', new THREE.Float32BufferAttribute(arc, 1)); g.setIndex(idx);
   return g;
 }
 const WAVE_VS = /* glsl */`
@@ -1015,56 +1053,72 @@ const WAVE_VS = /* glsl */`
   }
   float waveLean(float u, float z) { float k = (u - 60.0) / 280.0; return uLean * waveHz(z) * exp(-k * k); }
   vec3 wavePos(float u, float z, out float hw) { return vec3(frontX(z) + u - waveLean(u, z), waveY(u, z, hw), z); }
+  float fbmW(vec2 p) { return vn2(p) * 0.5 + vn2(p * 2.07 + 5.3) * 0.3 + vn2(p * 4.3 + 1.7) * 0.2; }
+  // Tonjolan air di muka: menonjol ke depan sampai sekitar 16 m, meluncur turun 33 m/s. Koordinat pola = panjang busur
+  // profil (meter di permukaan: tidak meregang di kaki yang landai, tidak seperti u atau tinggi)
+  vec3 wavePosD(float u, float z, float arc, out float hw) {
+    vec3 P = wavePos(u, z, hw);
+    float m = smoothstep(-760.0, -420.0, u) * (1.0 - smoothstep(60.0, 220.0, u)) * smoothstep(0.05, 0.4, hw / uWH);
+    float d = (fbmW(vec2(z / 70.0, arc / 70.0 + uT * 0.47)) - 0.5) * 32.0 * m;
+    P.x -= d; P.y += d * 0.25;
+    return P;
+  }
 `;
 const waveU = { ...U, uOff: { value: new THREE.Vector3() } };
 const waveMat = new THREE.ShaderMaterial({
   uniforms: waveU, side: THREE.DoubleSide, defines: { NW: 16, NM: 12 },
   vertexShader: LOG_VS + COMMON + WAVE_VS + /* glsl */`
-    varying vec3 vR, vN, vTu; varying float vG, vU, vZ;
+    attribute float aArc;
+    varying vec3 vR, vN, vTu; varying float vG, vU, vZ, vArc;
     void main() {
       float z = position.z + uOff.z, u = position.x, hw, h1, h2;
-      float du = max(8.0, abs(u) * 0.03);
-      vec3 P = wavePos(u, z, hw), Pu = wavePos(u + du, z, h1), Pz = wavePos(u, z + 20.0, h2);
+      float du = max(6.0, abs(u) * 0.02);
+      float ds = du * sqrt(1.0 + pow(abs(waveHz(z) * (waveG(u + du) - waveG(u))) / du, 2.0));   // busur untuk langkah du
+      vec3 P = wavePosD(u, z, aArc, hw), Pu = wavePosD(u + du, z, aArc + ds, h1), Pz = wavePosD(u, z + 6.0, aArc, h2);
       vec3 cr = cross(Pz - P, Pu - P); float cl = length(cr);
       vN = cl > 1e-9 ? cr / cl : vec3(0.0, 1.0, 0.0);
       vec3 tu = Pu - P; float tl = length(tu); vTu = tl > 1e-9 ? tu / tl : vec3(1.0, 0.0, 0.0);
-      vG = hw / uWH; vU = u; vZ = z;
+      vG = hw / uWH; vU = u; vZ = z; vArc = aArc;
       P.y -= curveDrop(P);
       vR = P - uCam;
       gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
       #include <logdepthbuf_vertex>
     }`,
   fragmentShader: LOG_FS + COMMON + /* glsl */`
-    varying vec3 vR, vN, vTu; varying float vG, vU, vZ;
+    varying vec3 vR, vN, vTu; varying float vG, vU, vZ, vArc;
     float fbm2(vec2 p) { return vn2(p) * 0.55 + vn2(p * 2.1 + 3.7) * 0.3 + vn2(p * 4.3 + 1.3) * 0.15; }
+    vec2 grad2(vec2 q, float e) { float h0 = fbm2(q); return vec2(fbm2(q + vec2(e, 0.0)) - h0, fbm2(q + vec2(0.0, e)) - h0) / e; }
     void main() {
       #include <logdepthbuf_fragment>
       float nl = length(vN); vec3 n = nl > 1e-6 ? vN / nl : vec3(0.0, 1.0, 0.0);
       float dist = length(vR);
       if (dot(n, -vR) < 0.0) n = -n;
-      // Tekstur permukaan dinding air: noise besar (turun mengalir) + ombak angin
-      vec2 q = vec2(vZ / 60.0, vU / 90.0 + uT * 0.08);
-      float e = 0.3, h0 = fbm2(q), hz = fbm2(q + vec2(e, 0.0)), hu = fbm2(q + vec2(0.0, e));
-      float fade = exp(-dist / 9000.0);
+      // Tekstur dinding air dua skala, meluncur turun 33 m/s (sama dengan tonjolan dan urat buih)
+      float fade = exp(-dist / 9000.0), fade2 = exp(-dist / 2500.0);
+      float Hh = vArc;                                                         // panjang busur (m di permukaan): koordinat pola di muka
+      vec2 g1 = grad2(vec2(vZ / 60.0, Hh / 60.0 + uT * 0.55), 0.3), g2 = grad2(vec2(vZ / 16.0, Hh / 16.0 + uT * 2.06), 0.3);
       vec3 tz = vec3(0.0, 0.0, 1.0);
-      n = n - (tz * (hz - h0) + vTu * (hu - h0)) / e * 0.6 * fade;
-      float J; vec3 nc = chopNormal(vec2(vZ, vU * 0.3 + vZ * 0.1), uT, dist * uPix, J);
+      n = n - (tz * g1.x + vTu * g1.y) * 0.55 * fade - (tz * g2.x + vTu * g2.y) * 0.35 * fade2;
+      float J; vec3 nc = chopNormal(vec2(vZ, Hh), uT, dist * uPix, J);
       n = normalize(n + (nc - vec3(0.0, 1.0, 0.0)) * 0.6 * fade + vec3(0.0, 1e-4, 0.0));
-      // Buih: puncak, urat putih tak beraturan yang mengalir turun di muka (noise dibengkokkan), pecah di kaki gelombang
-      float crest = smoothstep(0.82, 0.98, vG) * step(vU, 180.0);
-      float face = smoothstep(-520.0, -120.0, vU) * (1.0 - smoothstep(0.0, 60.0, vU));
-      vec2 w0 = vec2(vZ / 80.0, vU / 120.0 - uT * 0.12);
+      // Buih: puncak dan bibir, urat putih tak beraturan yang meluncur turun, air pecah di kaki
+      float crest = smoothstep(0.85, 0.98, vG) * (1.0 - smoothstep(120.0, 260.0, vU)) * step(-120.0, vU);
+      float face = smoothstep(-620.0, -160.0, vU) * (1.0 - smoothstep(0.0, 60.0, vU));
+      vec2 w0 = vec2(vZ / 80.0, Hh / 80.0 + uT * 0.41);
       vec2 wp = w0 + vec2(fbm2(w0 * 0.7 + 4.1), fbm2(w0 * 0.7 + 8.3)) * 1.6;
-      float streak = smoothstep(0.62, 0.8, fbm2(wp * 1.3)) * face;
-      float base = smoothstep(0.03, 0.12, vG) * (1.0 - smoothstep(0.12, 0.3, vG)) * step(vU, 0.0) * smoothstep(0.45, 0.7, fbm2(vec2(vZ / 30.0, uT * 0.2)));
-      float foam = clamp(crest * (0.6 + 0.4 * h0) + streak * 0.7 + base * 0.7, 0.0, 1.0) * smoothstep(1.0, 30.0, vG * uWH);
-      vec3 c = seaShade(vR, n, 40.0, foam, vec2(vZ, vU), 1.0) *mix(0.7, 1.0, smoothstep(0.05, 0.8, vG));   // kaki dinding lebih gelap
+      float streak = smoothstep(0.6, 0.8, fbm2(wp * 1.3)) * face;
+      float fine = smoothstep(0.62, 0.78, fbm2(vec2(vZ / 14.0, Hh / 14.0 + uT * 2.36))) * face * fade2;
+      float base = smoothstep(0.02, 0.1, vG) * (1.0 - smoothstep(0.12, 0.3, vG)) * step(vU, 0.0) * smoothstep(0.42, 0.7, fbm2(vec2(vZ / 30.0, Hh / 30.0 + uT * 1.1)));   // air pecah di kaki: petak bergolak, bukan kolom
+      float foam = clamp(crest * (0.65 + 0.35 * fbm2(vec2(vZ / 25.0, uT * 0.5))) + streak * 0.7 + fine * 0.35 + base * 0.8, 0.0, 1.0) * smoothstep(1.0, 30.0, vG * uWH);
+      vec3 c = seaShade(vR, n, 40.0, foam, vec2(vZ, vU), 1.0);
+      c += uScat * uAmb * 0.7 * smoothstep(0.7, 0.97, vG) * (1.0 - foam);      // puncak lebih terang: air menipis
+      c *= mix(0.68, 1.0, smoothstep(0.05, 0.8, vG));                          // kaki dinding lebih gelap
       gl_FragColor = vec4(c, 1.0);
     }`,
 });
 const wave = new THREE.Mesh(waveGeo(), waveMat); wave.frustumCulled = false; wave.renderOrder = 5; scene.add(wave);
 
-// Kabut semburan di atas puncak dan kaki gelombang: lembar tembus pandang, memudar ke atas dan ke samping
+// Semburan di puncak (3 lapis, tertiup ke belakang) dan kabut di kaki (2 lapis): lembar tembus pandang, memudar ke atas
 function sprayGeo(u0, u1, rows) {
   const pos = [], idx = [];
   for (const z of ZS) for (let r = 0; r <= rows; r++) { const f = r / rows; pos.push(u0 + (u1 - u0) * f, f, z); }
@@ -1072,7 +1126,7 @@ function sprayGeo(u0, u1, rows) {
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx);
   return g;
 }
-function sprayMat(kind) {
+function sprayMat(kind, seed, hMul) {
   return new THREE.ShaderMaterial({
     uniforms: { ...waveU }, transparent: true, depthWrite: false, side: THREE.DoubleSide, defines: { NW: 1, NM: 1, KIND: kind },
     vertexShader: LOG_VS + COMMON + WAVE_VS + /* glsl */`
@@ -1081,14 +1135,14 @@ function sprayMat(kind) {
         float z = position.z + uOff.z, f = position.y, hw;
       #if KIND == 0
         vec3 P = wavePos(-30.0, z, hw); P.x += position.x + 30.0;
-        P.y += f * (230.0 + 70.0 * sin(z * 0.0021 + uT * 0.3));
-        vA = 0.55 * smoothstep(100.0, 600.0, hw);
+        P.y += f * ${(230 * hMul).toFixed(1)} * (1.0 + 0.3 * sin(z * 0.0021 + uT * 0.3 + ${seed.toFixed(1)}));
+        vA = 0.5 * smoothstep(100.0, 600.0, hw);
       #else
         vec3 P = wavePos(-700.0, z, hw); P.x += position.x + 700.0;       // kabut di kaki gelombang, bergerak bersama muka
-        P.y = f * 160.0;
-        vA = 0.45 * smoothstep(300.0, 900.0, waveHz(z) * waveG(0.0));
+        P.y = f * ${(220 * hMul).toFixed(1)};
+        vA = 0.26 * smoothstep(300.0, 900.0, waveHz(z) * waveG(0.0));
       #endif
-        vF = f; vQ = vec2(z / 90.0, f * 3.0 - uT * 0.25);
+        vF = f; vQ = vec2(z / 90.0 + ${seed.toFixed(1)}, f * 3.0 - uT * 0.25);
         P.y -= curveDrop(P);
         vR = P - uCam;
         gl_Position = projectionMatrix * viewMatrix * vec4(P, 1.0);
@@ -1098,8 +1152,8 @@ function sprayMat(kind) {
       varying float vA, vF; varying vec3 vR; varying vec2 vQ;
       void main() {
         #include <logdepthbuf_fragment>
-        float n = vn2(vQ) * 0.6 + vn2(vQ * 2.3 + 1.1) * 0.4;
-        float a = vA * (1.0 - vF) * (1.0 - vF) * smoothstep(0.0, 0.08, vF) * (0.4 + 0.9 * n);
+        float n = vn2(vQ) * 0.5 + vn2(vQ * 2.3 + 1.1) * 0.3 + vn2(vQ * 5.1 + 2.7) * 0.2;
+        float a = vA * (1.0 - vF) * (1.0 - vF) * smoothstep(0.0, 0.08, vF) * smoothstep(0.35, 0.8, n) * 1.6;   // gumpalan terpisah, bukan pita rata
         vec3 c = uFoamC * uAmb * 1.05;
         vec3 hd = normalize(vec3(vR.x, 0.02 * length(vR), vR.z) + vec3(0.0, 1e-3, 0.0));
         c = mix(c, skyL(hd), 1.0 - exp(-length(vR) / uFogD));
@@ -1107,8 +1161,11 @@ function sprayMat(kind) {
       }`,
   });
 }
-const spray = new THREE.Mesh(sprayGeo(-30, 260, 6), sprayMat(0)); spray.frustumCulled = false; spray.renderOrder = 40; scene.add(spray);
-const mist = new THREE.Mesh(sprayGeo(-380, -200, 5), sprayMat(1)); mist.frustumCulled = false; mist.renderOrder = 41; scene.add(mist);
+const SPRAY = [];
+for (const [kind, u0, u1, seed, hm] of [[0, -30, 260, 0, 1.0], [0, 40, 380, 3.1, 1.35], [0, 130, 520, 7.7, 0.8], [1, -420, -250, 1.9, 1.0], [1, -300, -150, 5.3, 0.7]]) {
+  const m = new THREE.Mesh(sprayGeo(u0, u1, kind ? 5 : 6), sprayMat(kind, seed, hm)); m.frustumCulled = false; m.renderOrder = 40 + SPRAY.length; scene.add(m); SPRAY.push(m);
+}
+const spray = SPRAY[0], mist = SPRAY[3];
 
 /* ---------------- Post: HDR -> bloom -> ACES + grading -> FXAA + grain + vinyet ---------------- */
 const FSV = 'varying vec2 vUv; void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 0.0, 1.0); }';
@@ -1129,17 +1186,33 @@ const M_UP = pmat(`uniform sampler2D tSrc, tCur; uniform vec2 uPx; varying vec2 
   void main() { vec3 s = vec3(0.0);
     for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) s += texture2D(tSrc, vUv + vec2(x, y) * uPx).rgb * (x == 0 ? 2.0 : 1.0) * (y == 0 ? 2.0 : 1.0);
     gl_FragColor = vec4(texture2D(tCur, vUv).rgb + s / 16.0, 1.0); }`, { tSrc: { value: null }, tCur: { value: null }, uPx: { value: new THREE.Vector2() } });
-const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform float uExp, uBloomK; varying vec2 vUv;
+const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform float uExp, uBloomK, uUnder, uTime; varying vec2 vUv;
   vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+  float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
   void main() {
     vec3 c = texture2D(tHdr, vUv).rgb; if (any(isnan(c))) c = vec3(0.0);
     c = clamp(c, 0.0, 64.0) + texture2D(tBloom, vUv).rgb * uBloomK;   // jepit juga Inf
+    if (uUnder > 0.0) {                                               // R4: di dalam gelombang: hijau-abu gelap, terang ke atas, gelembung naik
+      float l = dot(c, vec3(0.3, 0.5, 0.2));
+      vec3 uw = vec3(0.025, 0.07, 0.075) * (0.5 + 0.8 * l) + vec3(0.06, 0.13, 0.13) * smoothstep(0.2, 1.0, vUv.y);
+      float b = 0.0;
+      for (int k = 0; k < 2; k++) {                                   // dua lapis gelembung: posisi dan ukuran acak per sel, naik bergoyang
+        float sc = k == 0 ? 1.0 : 1.9;
+        vec2 g = vUv * vec2(40.0, 22.5) * sc + vec2(sin(vUv.y * 18.0 + uTime * (1.3 + float(k))) * 0.35, -uTime * (2.2 + 1.4 * float(k)));
+        vec2 cl = floor(g); float r = h12(cl + float(k) * 17.0);
+        if (r > 0.955) {
+          vec2 ctr = 0.5 + (vec2(h12(cl + 7.1), h12(cl + 3.9)) - 0.5) * 0.6; float rad = 0.07 + 0.22 * h12(cl + 11.3);
+          b += smoothstep(rad, rad * 0.35, length(fract(g) - ctr)) * (0.45 + 0.55 * h12(cl + 5.7)) / sc;
+        }
+      }
+      c = mix(c, uw + vec3(0.35, 0.45, 0.45) * b, uUnder);
+    }
     c = aces(c * uExp);
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = mix(vec3(l), c, 0.82) * vec3(0.97, 1.0, 1.03);              // grading: agak pudar, dingin
     c = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));                      // ke ruang tampilan (sRGB didekati gamma 2,2)
     gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));        // alpha = luma untuk FXAA
-  }`, { tHdr: { value: null }, tBloom: { value: null }, uExp: { value: CONFIG.exposure }, uBloomK: { value: 0.08 } });
+  }`, { tHdr: { value: null }, tBloom: { value: null }, uExp: { value: CONFIG.exposure }, uBloomK: { value: 0.08 }, uUnder: { value: 0 }, uTime: { value: 0 } });
 const M_FINAL = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; uniform float uTime, uGrain; varying vec2 vUv;
   float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
   vec3 fxaa() {
@@ -1276,6 +1349,7 @@ const waveG = (u) => u < 0 ? Math.exp(-((u / W.wf) ** 2)) : 0.35 * Math.exp(-((u
 const drawdown = (u) => -W.dd * Math.exp(-(((u + W.ddL) / W.ddL) ** 2));
 const seabed = (x, z) => CONFIG.sea.bed + 0.06 * Math.sin(0.13 * x + 0.07 * z) + 0.05 * Math.sin(-0.05 * x + 0.21 * z + 1.7)
   + 0.03 * Math.sin(0.61 * x + 0.43 * z) + 0.04 * Math.sin(0.011 * x + 0.4) * Math.sin(0.013 * z + 1.1);
+const currentAt = (x, z) => { const u = x - frontX(z), C = CONFIG.current; if (u >= 0) return 0; const k = (u + C.at) / C.w, sm = Math.min(1, Math.max(0, -u / 150)); return C.max * Math.exp(-k * k) * sm * sm * (3 - 2 * sm); };
 const waveTop = (x, z) => { const u = x - frontX(z); return waveHz(z) * waveG(u) + drawdown(u); };
 const waterAt = (x, z, tt) => Math.max(drawdown(x - frontX(z)) + chopAt(x, z, tt), waveTop(x, z));
 // Muka air di kaki pemain: tinggi FFT dari GPU (dibaca balik) bila ada, selain itu Gerstner di CPU
@@ -1294,6 +1368,7 @@ const BOB_LEVELS = [['Mati', 0], ['Halus', 0.5], ['Normal', 1]];
 const BOB = { level: 2, phase: 0, side: 0, amp: 0, y: 0, vy: 0, steps: 0, dy: 0, dx: 0, roll: 0 };
 const keys = {};
 const CLK = { planet: 0, swept: 0, white: 0, msgT: 0 };
+const SWEEP = { on: false, t: 0, rx: 0, ry: 0, rz: 0, wx: 0, wy: 0, wz: 0, under: 0 };
 const msgEl = document.getElementById('msg'), whiteEl = document.getElementById('white');
 function toast(html, s = 4) { msgEl.innerHTML = html; msgEl.classList.add('on'); CLK.msgT = s; }
 function resetPlayer() { P.x = 0; P.z = 0; P.vy = 0; P.vx = 0; P.vz = 0; P.y = seabed(0, 0) + CONFIG.eye; P.ground = true; RIP.fresh = true; }
@@ -1354,6 +1429,7 @@ function stepPlayer(dt) {
     P.vx += ((len > 0 ? mx / len * sp : 0) - P.vx) * k; P.vz += ((len > 0 ? mz / len * sp : 0) - P.vz) * k;
   } else { P.vx = len > 0 ? mx / len * sp : 0; P.vz = len > 0 ? mz / len * sp : 0; }
   P.x += P.vx * dt; P.z += P.vz * dt;
+  if (P.view === 0) P.x += currentAt(P.x, P.z) * CONFIG.current.push * dt;   // arus menarik ke arah gelombang
   if (P.view === 0) {
     const floor = seabed(P.x, P.z) + CONFIG.eye, vyIn = P.vy, wasAir = !P.ground;
     P.y += P.vy * dt - 0.5 * CONFIG.g * dt * dt; P.vy -= CONFIG.g * dt;   // tepat untuk g tetap
@@ -1401,16 +1477,28 @@ function simStep(sdt, dt) {
   STATE.simT += sdt; CLK.planet += sdt;
   U.uWX.value -= W.v * sdt;
   if (frontX(P.z) - P.x < -60000) U.uWX.value += (P.x + W.spawn) - frontX(P.z);
-  const top = waveTop(P.x, P.z);
-  if (top > P.y + 0.2) CLK.white = Math.min(1, CLK.white + dt * 1.5);
-  else CLK.white = Math.max(0, CLK.white - dt * 0.8);
-  if (CLK.white >= 1 && CLK.swept <= 0) {
-    const lostPlanet = 50000 / W.v;                       // gelombang dianggap sudah lewat 50 km
-    resetPlayer(); P.view = 0;
-    U.uWX.value += P.x - 50000 - frontX(P.z);
-    CLK.planet += lostPlanet; CLK.swept = 2.5;
-    toast(t('Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}', { y: fmtOutside(lostPlanet * CONFIG.dil) }), 6);
+  const top = waveTop(P.x, P.z), S = CONFIG.sweep;
+  // Tersapu (R4): hantaman buih putih -> terguling di bawah air -> memutih -> kembali ke titik awal
+  if (!SWEEP.on && CLK.swept <= 0 && top > P.y + 0.2) {
+    Object.assign(SWEEP, { on: true, t: 0, rx: 0, ry: 0, rz: 0, wx: 2.5 + 2 * srnd(), wy: (srnd() - 0.5) * 3, wz: (srnd() < 0.5 ? -1 : 1) * (1.5 + 2 * srnd()) });
   }
+  if (SWEEP.on) {
+    const u = SWEEP.t += dt;
+    SWEEP.rx += SWEEP.wx * dt; SWEEP.ry += SWEEP.wy * dt; SWEEP.rz += SWEEP.wz * dt;          // kamera terguling
+    SWEEP.wx *= Math.exp(-dt * 0.4); SWEEP.wz *= Math.exp(-dt * 0.4);
+    CLK.white = u < S.burst ? 0.95 * u / S.burst
+      : u < S.under ? 0.12 + 0.2 * Math.max(0, Math.sin(u * 9.0) * Math.sin(u * 3.7))               // kilatan buih di bawah air
+      : Math.min(1, 0.12 + 0.88 * (u - S.under) / (S.out - S.under));
+    SWEEP.under = u < S.burst * 0.6 ? 0 : u < S.under ? 1 : Math.max(0, 1 - (u - S.under) / 0.3);
+    if (u >= S.out) {
+      const lostPlanet = 50000 / W.v;                     // gelombang dianggap sudah lewat 50 km
+      SWEEP.on = false; SWEEP.under = 0; CLK.white = 1;
+      resetPlayer(); P.view = 0;
+      U.uWX.value += P.x - 50000 - frontX(P.z);
+      CLK.planet += lostPlanet; CLK.swept = 2.5;
+      toast(t('Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}', { y: fmtOutside(lostPlanet * CONFIG.dil) }), 6);
+    }
+  } else CLK.white = Math.max(0, CLK.white - dt * 0.8);
   if (CLK.swept > 0) CLK.swept -= dt;
 }
 
@@ -1432,6 +1520,7 @@ function updateHud(depth, dist, wob) {
     [t('Gravitasi'), `${fmtN(CONFIG.g / 9.80665, 1)} g (${fmtN(CONFIG.g, 2)} m/s²)`],
     [t('Kedalaman air'), `${fmtN(depth, 2)} m`],
     [t('Ombak angin'), `${fmtN(CONFIG.chop.Hs * U.uChopK.value, 2)} m`],
+    [t('Arus'), (() => { const c = currentAt(P.x, P.z); return c > 0.05 ? `${fmtN(c, 1)} m/s ${t('ke arah gelombang')}` : '-'; })(), currentAt(P.x, P.z) > 0.5 ? 'warn' : ''],
     [t('Gelombang'), dist > 0 ? `${fmtN(dist / 1000, 1)} km, ${fmtN(waveHz(P.z))} m` : t('sudah lewat'), warn],
     [t('Tiba dalam'), dist > 0 ? `${fmtDur(eta)} (${fmtN(eta * CONFIG.dil / (365.25 * 86400), 1)} ${t('tahun')} ${t('di luar')})` : '-', warn],
     [t('Goyangan planet'), `${fmtN(wob, 2)}°`],
@@ -1475,7 +1564,7 @@ function frame(now) {
   autoPreset(dt);
   const sdt = dt * CONFIG.speeds[P.speed];
   STATE.visT += sdt;
-  if (STATE.started) { depthNow = stepPlayer(dt); simStep(sdt, dt); }
+  if (STATE.started) { if (!SWEEP.on) depthNow = stepPlayer(dt); simStep(sdt, dt); }
   const dist = frontX(P.z) - P.x;
   // Goyangan planet: langit bergoyang pelan, makin kuat saat gelombang mendekat
   const close = 1 - Math.min(1, Math.max(0, (dist - 10000) / 140000));
@@ -1488,8 +1577,10 @@ function frame(now) {
   SKYU.uTime.value = STATE.visT; GU_.uTime.value = STATE.visT * 1.5;   // waktu piringan (satuan rs/c), sekitar 30 s per putaran di tepi dalam
 
   const onFoot = P.view === 0;
-  camera.position.set(P.x + (onFoot ? Math.cos(P.yaw) * BOB.dx : 0), P.y + (onFoot ? BOB.dy : 0), P.z - (onFoot ? Math.sin(P.yaw) * BOB.dx : 0));
-  camera.rotation.set(P.pitch, P.yaw, onFoot ? BOB.roll : 0);
+  camera.position.set(P.x + (onFoot ? Math.cos(P.yaw) * BOB.dx : 0), P.y + (onFoot ? BOB.dy : 0) + (SWEEP.on ? SWEEP.t * 6 : 0), P.z - (onFoot ? Math.sin(P.yaw) * BOB.dx : 0));
+  if (SWEEP.on) camera.rotation.set(P.pitch + SWEEP.rx, P.yaw + SWEEP.ry, SWEEP.rz);
+  else camera.rotation.set(P.pitch, P.yaw, onFoot ? BOB.roll : 0);
+  M_COMP.uniforms.uUnder.value = SWEEP.under; M_COMP.uniforms.uTime.value = STATE.visT;
   camera.updateMatrixWorld();
   U.uT.value = STATE.visT; U.uCam.value.copy(camera.position);
   seaNear.material.uniforms.uOff.value.set(Math.round(P.x / SEA.cell) * SEA.cell, 0, Math.round(P.z / SEA.cell) * SEA.cell);
@@ -1511,7 +1602,8 @@ try { renderer.compile(scene, camera); renderer.compile(skyScene, camera); rende
 requestAnimationFrame(frame);
 window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
   frontX, waveTop, waterAt, seabed, chopAt, CHOP, stepPlayer, simStep, start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_, OCEAN, makeOcean, updateOcean,
-  RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean };
+  RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
+  SWEEP, currentAt, SPRAY, US, ZS, M_COMP };
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>
 </body>

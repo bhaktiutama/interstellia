@@ -1,6 +1,6 @@
 # Rencana Millar's World Versi Realistis
 
-Per 29 September 2026 · Status: R1, R1b, R2, dan R3 selesai (lihat bagian "Status"), berikutnya R4
+Per 29 September 2026 · Status: R1, R1b, R2, R3, dan R4 selesai (lihat bagian "Status"), berikutnya R5
 
 ## Ringkasan
 
@@ -189,4 +189,23 @@ Uji: `tools/uji_millar.py` kini 32 pemeriksaan, semua lulus, termasuk: pengali k
 
 Belum diukur: biaya simulasi riak dan cipratan di GTX 1060 dan M1 (masuk baris HUD "laut"). Tampilan riak dan cipratan perlu dinilai langsung (sandbox hanya beberapa FPS).
 
-Berikutnya R4: gelombang raksasa realistis (muka gelombang rapat di dekat pemain, buih mengalir, kabut kaki gelombang, arus air surut, urutan tersapu).
+## Status R4
+
+Selesai 29 September 2026.
+
+| Bagian | Isi |
+| --- | --- |
+| Muka gelombang | Profil 86 titik (63 di muka, tiap 12-25 m), baris tiap 6 m di dekat pemain (dulu 37 titik dan 12 m) |
+| Air meluncur | Tonjolan air sampai sekitar 16 m di muka yang meluncur turun 33 m/s (perpindahan vertex, normal ikut dihitung dari posisi tergeser) |
+| Tekstur dinding | Dua skala (60 m dan 16 m) + ombak angin, dengan koordinat panjang busur profil (meter di permukaan) agar tidak meregang di kaki yang landai. Urat buih putih tak beraturan meluncur dengan kecepatan yang sama, air pecah bergolak di kaki, puncak lebih terang (air menipis), kaki lebih gelap |
+| Semburan dan kabut | 3 lapis semburan di puncak (tertiup ke belakang, sampai sekitar 310 m) dan 2 lapis kabut di kaki, berupa gumpalan terpisah |
+| Arus air surut | Air mengalir ke arah gelombang, paling kuat 1,6 m/s sekitar 2,5 km di depan muka, nol bila gelombang jauh. Terlihat: pola ombak terbawa arus (peta aliran dua fase) dan garis buih memanjang searah arus. Terasa: pemain terseret ke arah gelombang (35% kecepatan arus). Baris HUD "Arus" |
+| Tersapu | Urutan 4,3 s: hantaman buih putih (0,5 s), kamera terguling di dalam air hijau-abu gelap dengan gelembung naik dan kilatan buih, lalu memutih, kembali ke titik awal dengan catatan waktu yang hilang (seperti sebelumnya) |
+
+Perbaikan saat pengecekan visual: pola dinding memakai koordinat u lalu tinggi, keduanya meregang jadi garis tegak di kaki dan sinar memusat bila dilihat dari dekat; diganti panjang busur profil. Buih kaki hanya bergantung pada z sehingga membentuk kolom tegak; kini ikut panjang busur. Gelembung bawah air semula titik seragam dalam grid; kini ukuran dan posisi acak, dua lapis.
+
+Uji: `tools/uji_millar.py` kini 39 pemeriksaan, semua lulus, termasuk: urutan tersapu (di bawah air penuh, kamera terguling 13,6 rad, 4,30 s), kerapatan muka, arus 0,00 m/s (gelombang 30 km) dan 1,60 m/s (2,5 km) dengan pemain terseret 1,12 m dalam 2 s, gelombang 1.500 m dan 350 m di depan tanpa nilai tidak valid atau titik menyala.
+
+Belum diukur: biaya gelombang (mesh 31.600 titik dengan noise per vertex) dan peta aliran arus (dua kali ambil tekstur ombak di zona arus) di GTX 1060 dan M1.
+
+Berikutnya R5: audio (angin, gemericik ombak, langkah di air, gemuruh gelombang frekuensi rendah yang makin keras, getaran).
