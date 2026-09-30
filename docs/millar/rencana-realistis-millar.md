@@ -1,6 +1,6 @@
 # Rencana Millar's World Versi Realistis
 
-Per 30 September 2026 · Status: R1, R1b, R2, R3, R4, dan R5 selesai (lihat bagian "Status")
+Per 30 September 2026 · Status: R1, R1b, R2, R3, R4, dan R5 selesai (lihat bagian "Status"). Berikutnya M3 (shuttle dan misi suar): `rencana-m3-millar.md`
 
 ## Ringkasan
 

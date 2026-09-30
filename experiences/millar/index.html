@@ -105,6 +105,7 @@
 </div>
 <pre id="err" hidden></pre>
 
+<script src="../../shared/kestrel.js"></script>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
 </script>
@@ -236,7 +237,7 @@ const I18N = { en: {
   'tahun': 'y', 'hari': 'd', 'jam': 'h', 'mnt': 'min', 'dtk': 's',
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
   'Gelombang dipanggil: {d} km': 'Wave summoned: {d} km',
-  'Grafik: {p}': 'Graphics: {p}', 'Suasana: {m}': 'Mood: {m}', 'FPS rendah: grafik diturunkan ke {p}.': 'Low FPS: graphics lowered to {p}.',
+  'Grafik: {p}': 'Graphics: {p}', 'Shuttle KS-07': 'Shuttle KS-07', 'Suasana: {m}': 'Mood: {m}', 'FPS rendah: grafik diturunkan ke {p}.': 'Low FPS: graphics lowered to {p}.',
   [KEYS_ID]: '<b>Click</b> lock mouse &middot; <b>WASD</b> walk &middot; <b>Shift</b> run &middot; <b>Space</b> jump<br><b>V</b> view &middot; <b>G</b> summon wave &middot; <b>Z</b> time speed &middot; <b>N</b> mood<br><b>Q</b> graphics &middot; <b>P</b> screen effects &middot; <b>U</b> sound &middot; <b>F</b> photo &middot; <b>R</b> reset &middot; <b>H</b> hide<br><b>`</b> panel &middot; <b>?</b> help',
 } };
 function t(src, vars) {
@@ -917,7 +918,7 @@ function polarGeo(r0, N, segs, a, b) {
     const A = i * segs, B = (i + 1) * segs, odd = i % 2 === 1;
     for (let j = 0; j < segs; j++) {
       const a0 = A + j, a1 = A + (j + 1) % segs, b0 = B + j, b1 = B + (j + 1) % segs;
-      if (!odd) idx.push(a0, b0, a1, a1, b0, b1); else idx.push(a0, b1, a1, a0, b0, b1);
+      if (!odd) idx.push(a0, a1, b0, a1, b1, b0); else idx.push(a0, a1, b1, a0, b1, b0);   // normal ke atas (dulu terbalik: laut jauh dibuang culling)
     }
   }
   const g = new THREE.BufferGeometry();
@@ -1406,6 +1407,82 @@ function seaStateTarget(dist) {
   return S.far + (S.near - S.far) * Math.pow(x, 1.5);
 }
 
+/* ---------------- Shuttle KS-07 mendarat di air (M3a, rencana: docs/millar/rencana-m3-millar.md) ----------------
+   Geometri dari modul bersama shared/kestrel.js (sama dengan Copper Corn Station) + kaki pendarat tiga titik bertapak lebar.
+   Diletakkan di samping titik awal; perut sekitar 1,5 m di atas muka air, pemain bisa berjalan di bawahnya. Tabrakan: hanya kaki.
+   Shading sendiri seperti laut: albedo warna vertex, cahaya langit mendung (uAmb) + pantulan cubemap langit (Fresnel),
+   bagian yang terkena air lebih gelap dan berkilap, kabut ke cakrawala, turun mengikuti lengkung planet. */
+const SHIP = { x: 22.3, z: 20.1, yaw: 2.675, padDrop: 3.8, y: 0, pads: [], navT: 0, ripT: 0, mesh: null };
+const KS = window.KESTREL.build(THREE), KG = window.KESTREL.gear(THREE, SHIP.padDrop);
+{
+  const c = Math.cos(SHIP.yaw), sn = Math.sin(SHIP.yaw);
+  SHIP.pads = KG.pads.map((p) => ({ x: SHIP.x + p.x * c + p.z * sn, z: SHIP.z - p.x * sn + p.z * c, r: p.r }));   // model -> dunia (rotasi y)
+  SHIP.y = Math.max(...SHIP.pads.map((p) => seabed(p.x, p.z))) + SHIP.padDrop;   // tapak tertinggi menyentuh dasar laut
+}
+const shipU = { ...U, uWater: { value: 0 } };
+const shipMat = new THREE.ShaderMaterial({
+  uniforms: shipU, defines: { NW: 1, NM: 1 }, side: THREE.DoubleSide,
+  vertexShader: LOG_VS + COMMON + /* glsl */`
+    attribute vec3 color; varying vec3 vC, vN, vR, vW;
+    void main() {
+      vec4 w = modelMatrix * vec4(position, 1.0);
+      vN = mat3(modelMatrix) * normal; vC = color; vW = w.xyz;
+      w.y -= curveDrop(w.xyz);
+      vR = w.xyz - uCam;
+      gl_Position = projectionMatrix * viewMatrix * w;
+      #include <logdepthbuf_vertex>
+    }`,
+  fragmentShader: LOG_FS + COMMON + /* glsl */`
+    uniform float uWater; varying vec3 vC, vN, vR, vW;
+    void main() {
+      #include <logdepthbuf_fragment>
+      float nl = length(vN); vec3 n = nl > 1e-6 ? vN / nl : vec3(0.0, 1.0, 0.0);
+      float dist = max(length(vR), 1e-3); vec3 V = -vR / dist;
+      if (dot(n, V) < 0.0) n = -n;                                     // sisi dalam sirip dan sayap (DoubleSide)
+      vec3 alb = pow(max(vC, vec3(0.0)), vec3(2.2));                   // warna vertex sRGB -> linear
+      float win = step(max(vC.r, max(vC.g, vC.b)), 0.1);               // jendela kokpit: gelap, mengilap
+      float wet = 1.0 - smoothstep(0.0, 0.6, vW.y - uWater);           // dekat dan di bawah muka air: basah
+      alb *= 1.0 - 0.35 * wet;
+      float nv = clamp(dot(n, V), 0.0, 1.0);
+      vec3 R = reflect(-V, n); R.y = abs(R.y) * 0.9 + 0.1 * R.y; R = normalize(R + vec3(0.0, 1e-3, 0.0));
+      vec3 env = skyL(R);
+      float gloss = mix(0.35, 1.0, max(win, wet * 0.8));
+      float F = mix(0.04, 0.08, win) + (1.0 - mix(0.04, 0.08, win)) * pow(1.0 - nv, 5.0);
+      vec3 sky = uAmb * (0.62 + 0.38 * n.y) + uAmb * vec3(0.30, 0.34, 0.36) * max(-n.y, 0.0);   // langit dari atas, pantulan laut dari bawah
+      vec3 c = alb * sky * 1.25 + mix(uAmb, env, gloss) * F * mix(0.6, 1.0, gloss);
+      vec3 hd = normalize(vec3(-V.x, 0.02, -V.z) + vec3(1e-4, 0.0, 0.0));
+      c = mix(c, skyL(hd), 1.0 - exp(-dist / uFogD));
+      gl_FragColor = vec4(clamp(c, 0.0, 16.0), 1.0);
+    }`,
+});
+{
+  const g = new THREE.Group();
+  const navMat = (r, gg, b) => new THREE.MeshBasicMaterial({ color: new THREE.Color(r, gg, b) });
+  const glow = new THREE.Mesh(KS.glowG, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide }));
+  SHIP.nav = { red: new THREE.Mesh(KS.navG.red, navMat(6, 0.25, 0.15)), green: new THREE.Mesh(KS.navG.green, navMat(0.2, 5, 0.6)), strobe: new THREE.Mesh(KS.navG.strobe, navMat(14, 14, 14)) };
+  g.add(new THREE.Mesh(KS.hullG, shipMat), new THREE.Mesh(KS.partsG, shipMat), new THREE.Mesh(KG.geo, shipMat), glow, SHIP.nav.red, SHIP.nav.green, SHIP.nav.strobe);
+  g.position.set(SHIP.x, SHIP.y, SHIP.z); g.rotation.y = SHIP.yaw;
+  g.traverse((o) => { o.frustumCulled = false; });
+  scene.add(g); SHIP.mesh = g;
+}
+// Kaki pendarat menahan pemain (lingkaran tapak + 0,3 m)
+function shipPush() {
+  for (const p of SHIP.pads) {
+    const dx = P.x - p.x, dz = P.z - p.z, d = Math.hypot(dx, dz), r = p.r + 0.3;
+    if (d < r) { const k = d > 1e-6 ? r / d : 0; P.x = d > 1e-6 ? p.x + dx * k : p.x + r; P.z = d > 1e-6 ? p.z + dz * k : P.z; const vn = (P.vx * dx + P.vz * dz) / Math.max(d * d, 1e-6); if (vn < 0) { P.vx -= vn * dx; P.vz -= vn * dz; } }
+  }
+}
+const shipDist = () => Math.hypot(P.x - SHIP.x, P.z - SHIP.z);
+function updateShip(dt, t) {
+  SHIP.navT += dt; SHIP.nav.strobe.visible = (SHIP.navT % 1.3) < 0.07;       // strobo putih berkedip
+  shipU.uWater.value = drawdown(SHIP.x - frontX(SHIP.z)) + CONFIG.chop.Hs * U.uChopK.value * 0.25;
+  // Ombak menabrak kaki: riak dan buih kecil tiap 0,6-0,9 s bila kaki di dalam petak riak
+  if ((SHIP.ripT -= dt) <= 0) {
+    SHIP.ripT = 0.6 + 0.3 * Math.random();
+    for (const p of SHIP.pads) if (Math.abs(p.x - P.x) < RIP.S * 0.45 && Math.abs(p.z - P.z) < RIP.S * 0.45) ripSource(p.x, p.z, p.r, -0.006 * U.uChopK.value, 0.12);
+  }
+}
+
 /* ---------------- Pemain dan kontrol ---------------- */
 const STATE = { started: false, simT: 0, visT: 0 };
 const P = { x: 0, z: 0, y: 0, vy: 0, vx: 0, vz: 0, ground: true, yaw: -Math.PI / 2 + 18 * DEG, pitch: 4 * DEG, view: 0, speed: 0, depth: 0 };
@@ -1551,6 +1628,7 @@ function stepPlayer(dt) {
   } else { P.vx = len > 0 ? mx / len * sp : 0; P.vz = len > 0 ? mz / len * sp : 0; }
   P.x += P.vx * dt; P.z += P.vz * dt;
   if (P.view === 0) P.x += currentAt(P.x, P.z) * CONFIG.current.push * dt;   // arus menarik ke arah gelombang
+  if (P.view === 0) shipPush();                                                // M3a: kaki pendarat shuttle
   if (P.view === 0) {
     const floor = seabed(P.x, P.z) + CONFIG.eye, vyIn = P.vy, wasAir = !P.ground;
     P.y += P.vy * dt - 0.5 * CONFIG.g * dt * dt; P.vy -= CONFIG.g * dt;   // tepat untuk g tetap
@@ -1759,6 +1837,7 @@ function updateHud(depth, dist, wob) {
     [t('Kedalaman air'), `${fmtN(depth, 2)} m`],
     [t('Ombak angin'), `${fmtN(CONFIG.chop.Hs * U.uChopK.value, 2)} m`],
     [t('Arus'), (() => { const c = currentAt(P.x, P.z); return c > 0.05 ? `${fmtN(c, 1)} m/s ${t('ke arah gelombang')}` : '-'; })(), currentAt(P.x, P.z) > 0.5 ? 'warn' : ''],
+    [t('Shuttle KS-07'), `${fmtN(shipDist())} m`],
     [t('Gelombang'), dist > 0 ? `${fmtN(dist / 1000, 1)} km, ${fmtN(waveHz(P.z))} m` : t('sudah lewat'), warn],
     [t('Tiba dalam'), dist > 0 ? `${fmtDur(eta)} (${fmtN(eta * CONFIG.dil / (365.25 * 86400), 1)} ${t('tahun')} ${t('di luar')})` : '-', warn],
     [t('Goyangan planet'), `${fmtN(wob, 2)}°`],
@@ -1813,6 +1892,7 @@ function frame(now) {
   updateMood(dt, STATE.visT);
   U.uChopK.value += (seaStateTarget(dist) - U.uChopK.value) * Math.min(1, sdt / CONFIG.seaState.tau);   // keadaan laut ikut jarak gelombang
   stepSplash(dt);
+  updateShip(dt, STATE.visT);
   SKYU.uTime.value = STATE.visT; GU_.uTime.value = STATE.visT * 1.5;   // waktu piringan (satuan rs/c), sekitar 30 s per putaran di tepi dalam
 
   const onFoot = P.view === 0, AM = updateAudio(dt, dist);
@@ -1848,7 +1928,8 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
   SWEEP, currentAt, SPRAY, US, ZS, M_COMP,
   AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
-  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob };
+  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob,
+  SHIP, shipPush, shipDist, shipMat };
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>
 </body>
