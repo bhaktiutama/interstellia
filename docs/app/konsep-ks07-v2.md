@@ -1,12 +1,12 @@
 # Konsep Shuttle KS-07 "Kestrel" v2
 
-Per 30 September 2026 · Status: v2b (simetris), menunggu persetujuan pemilik. Belum dipasang di game.
+Per 30 September 2026 · Status: v2b disimpan sebagai pilihan; konsep terbaru v3 hibrida ada di `konsep-ks07-v3.md`. Belum dipasang di game.
 
 ## Ringkasan
 
 - v2b simetris kiri-kanan. Susunannya dua tingkat: kabin awak (badan atas) duduk di atas badan bawah yang lebar (tangki dan kargo), dengan hidung paruh, punggung bertingkat, sirip ekor di tengah, dan empat rumah pendorong tegak di sisi badan bawah.
 - Kulit dan otot diambil dari sketsa referensi: pelat lambung menonjol, sambungan panel, blok pendorong tegak bertanda panah, rahang berlapis di bawah paruh, sirip dengan blok peralatan, registrasi besar di sisi. Gaya pelat bersudut tajam dan kesan berat diambil dari foto referensi.
-- Blokout 3D bisa diputar di `docs/app/kestrel/blokout-ks07.html` (seret = putar, 1-5 = sudut pandang).
+- Blokout 3D bisa diputar di `docs/app/kestrel/blokout-ks07-v2b.html` (seret = putar, 1-5 = sudut pandang).
 
 ![Lembar konsep KS-07 v2b](kestrel/ks07-v2b-lembar.jpg)
 
