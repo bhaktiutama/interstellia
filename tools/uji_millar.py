@@ -201,6 +201,27 @@ UJI = r"""
     M.U.uWX.value += 40000 - M.frontX(0);
   }
 
+  // 5h. tombol standar (patokan Copper Corn Station, docs/app/tombol.md)
+  {
+    const key = (code) => dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+    const up = (code) => dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
+    const r = {}, p0 = M.PRESET.idx, s0 = M.AUDIO.on, b0 = M.BOB.level;
+    key('KeyQ'); up('KeyQ'); r.Q = M.PRESET.idx === (p0 + 1) % M.PRESETS.length;
+    key('KeyP'); up('KeyP'); r.P = M.POST.mode === 1; key('KeyP'); up('KeyP'); key('KeyP'); up('KeyP'); r.P3 = M.POST.mode === 0;
+    key('KeyU'); up('KeyU'); r.U = M.AUDIO.on === !s0; key('KeyU'); up('KeyU');
+    key('Backquote'); up('Backquote'); r.panel = !document.getElementById('lab').hidden && document.querySelectorAll('#labBtns button').length === M.LAB.length;
+    document.querySelectorAll('#labBtns button')[4].click(); r.bobPanel = M.BOB.level !== b0;
+    key('Backquote'); up('Backquote'); r.panelTutup = document.getElementById('lab').hidden;
+    key('KeyB'); up('KeyB'); key('KeyM'); up('KeyM'); r.BM = M.BOB.level !== b0 && M.AUDIO.on === s0;   // B dan M tidak lagi dipakai
+    key('Slash'); up('Slash'); r.help = !document.getElementById('help').hidden && document.querySelectorAll('#helpRows tr').length >= 12;
+    key('Escape'); up('Escape'); r.helpTutup = document.getElementById('help').hidden;
+    key('KeyF'); up('KeyF'); r.F = M.PHOTO.on && document.body.classList.contains('photo');
+    key('Escape'); up('Escape'); r.Fkeluar = !M.PHOTO.on;
+    M.PRESET.idx !== p0 && M.applyPreset(p0); while (M.BOB.level !== b0) M.cycleBob();
+    const gagal = Object.keys(r).filter((k) => !r[k]);
+    out[`tombol: Q grafik, P efek layar (3 mode), U suara, \` panel (gerak kepala), ? bantuan, F foto; B dan M kosong; gagal: ${gagal.join(', ') || 'tidak ada'}`] = gagal.length === 0;
+  }
+
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua
   //    (dulu: dengan MSAA, kedalaman air diekstrapolasi negatif di segitiga kecil cakrawala -> nilai meledak)
   const r = M.renderer, from = M.THREE.DataUtils.fromHalfFloat;

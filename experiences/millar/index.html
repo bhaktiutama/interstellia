@@ -49,6 +49,21 @@
     background: rgba(232,183,101,0.2); color: #fff; cursor: pointer; }
   #start .links { margin-top: 10px; font-size: 12.5px; }
   #start .links a { color: var(--muted); }
+  #lab { right: 16px; top: 60px; width: 290px; padding: 10px 12px; z-index: 6; }
+  #lab[hidden], #help[hidden] { display: none; }
+  .lhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); letter-spacing: .06em; }
+  .lhead button, #labBtns button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+  #labBtns { display: grid; gap: 4px; }
+  #labBtns button { display: flex; justify-content: space-between; gap: 8px; text-align: left; }
+  #labBtns button:hover, .lhead button:hover { border-color: var(--accent); }
+  #labBtns kbd { color: var(--muted); font: inherit; }
+  #help { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(10,12,15,0.35); z-index: 7; }
+  #help .card { width: min(580px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; background: rgba(12,14,18,0.86);
+    border: 1px solid var(--line); border-radius: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+  #help table { border-collapse: collapse; width: 100%; }
+  #help td { padding: 4px 8px; vertical-align: top; border-top: 1px solid var(--line); }
+  #help td:first-child { color: var(--accent); white-space: nowrap; }
+  body.photo .panel { opacity: 0; pointer-events: none; }
   #err { position: fixed; inset: 16px; overflow: auto; background: rgba(30,0,0,0.92); color: #ffb4a8; padding: 16px; white-space: pre-wrap; border-radius: 8px; z-index: 9; }
   #err[hidden] { display: none; }
   @media (max-width: 640px) { #keys { display: none; } #hud { right: 16px; min-width: 0; } #lang { top: auto; bottom: 16px; } }
@@ -62,6 +77,16 @@
 </div>
 <div id="lang" class="panel"></div>
 <div id="keys" class="panel play" data-t-html="keys"></div>
+<div id="lab" class="panel" hidden>
+  <div class="lhead"><span data-t="Panel kontrol">Panel kontrol</span><button type="button" id="labClose" data-t="Tutup (`)">Tutup (`)</button></div>
+  <div id="labBtns"></div>
+</div>
+<div id="help" hidden>
+  <div class="card">
+    <div class="lhead"><span data-t="Bantuan">Bantuan</span><button type="button" id="helpClose" data-t="Tutup (?)">Tutup (?)</button></div>
+    <table id="helpRows"></table>
+  </div>
+</div>
 <div id="white"></div>
 <div id="msg"></div>
 <div id="start">
@@ -71,7 +96,7 @@
     <div class="plabel" data-t="Kualitas grafik">Kualitas grafik</div>
     <div class="pick" id="presetPick"></div>
     <label><input id="presetAuto" type="checkbox"> <span data-t="Turunkan otomatis bila FPS di bawah 30">Turunkan otomatis bila FPS di bawah 30</span></label>
-    <div class="pnote" data-t="Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan P.">Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan P.</div>
+    <div class="pnote" data-t="Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.">Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.</div>
     <div class="plabel" data-t="Suasana">Suasana</div>
     <div class="pick m3" id="moodPick"></div>
     <button id="go" type="button" data-t="Mulai">Mulai</button>
@@ -180,12 +205,27 @@ let LANG = 'id';
   if (!ok(c)) c = (navigator.language || 'id').slice(0, 2).toLowerCase();
   LANG = ok(c) ? c : 'id';
 }
-const KEYS_ID = '<b>Klik</b> kunci mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat<br><b>V</b> tampilan &middot; <b>G</b> panggil gelombang &middot; <b>Z</b> kecepatan waktu &middot; <b>P</b> grafik &middot; <b>N</b> suasana &middot; <b>B</b> gerak kepala &middot; <b>M</b> suara &middot; <b>R</b> kembali &middot; <b>H</b> sembunyikan';
+// Tombol mengikuti standar aplikasi (patokan Copper Corn Station): docs/app/tombol.md
+const KEYS_ID = '<b>Klik</b> kunci mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat<br><b>V</b> tampilan &middot; <b>G</b> panggil gelombang &middot; <b>Z</b> kecepatan waktu &middot; <b>N</b> suasana<br><b>Q</b> grafik &middot; <b>P</b> efek layar &middot; <b>U</b> suara &middot; <b>F</b> foto &middot; <b>R</b> kembali &middot; <b>H</b> sembunyikan<br><b>`</b> panel &middot; <b>?</b> bantuan';
 const I18N = { en: {
   '< Menu': '< Menu', 'Kembali ke menu utama': 'Back to main menu', 'Mulai': 'Start',
   'Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar': 'Water planet near Gargantua · 1.3 g · 1 hour = 7 years outside',
   'Kualitas grafik': 'Graphics quality', 'Turunkan otomatis bila FPS di bawah 30': 'Lower automatically when FPS drops below 30',
-  'Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan P.': 'Saver: for laptops without a dedicated GPU (MacBook M1). Change any time with P.',
+  'Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.': 'Saver: for laptops without a dedicated GPU (MacBook M1). Change any time with Q.',
+  'Panel kontrol': 'Control panel', 'Tutup (`)': 'Close (`)', 'Bantuan': 'Help', 'Tutup (?)': 'Close (?)',
+  'Efek layar: {m}': 'Screen effects: {m}', 'Kecepatan waktu: {x}': 'Time speed: {x}', 'Tampilan: {v}': 'View: {v}',
+  'Panggil gelombang': 'Summon wave', 'Mode foto': 'Photo mode', 'Kembali ke titik awal': 'Back to start point',
+  'Mode foto: Enter simpan PNG, F atau Esc keluar': 'Photo mode: Enter saves PNG, F or Esc exits', 'Foto disimpan': 'Photo saved',
+  'Melihat. Klik = kunci kursor, Esc = lepas kursor': 'Look around. Click = lock cursor, Esc = release cursor',
+  'Berjalan di air setinggi lutut (air menahan langkah)': 'Walk in knee-deep water (the water drags your steps)',
+  'Lari': 'Run', 'Lompat (1,3 g: 77% lompatan di Bumi)': 'Jump (1.3 g: 77% of an Earth jump)',
+  'Tampilan: jalan kaki, drone 60 m, tinggi 1,5 km': 'View: on foot, drone 60 m, high 1.5 km',
+  'Panggil gelombang raksasa (20 km di depan)': 'Summon the giant wave (20 km ahead)', 'Kecepatan waktu 1x, 5x, 20x, 60x': 'Time speed 1x, 5x, 20x, 60x',
+  'Suasana: otomatis, mendung, senja': 'Mood: auto, overcast, dusk', 'Kualitas grafik: Ultra, Tinggi, Sedang, Rendah, Hemat': 'Graphics quality: Ultra, High, Medium, Low, Saver',
+  'Efek layar: tinggi, sedang, mati (bloom, butiran, vinyet)': 'Screen effects: high, medium, off (bloom, grain, vignette)', 'Suara nyala / mati': 'Sound on / off',
+  'Mode foto: UI disembunyikan, Enter simpan PNG, F atau Esc keluar': 'Photo mode: UI hidden, Enter saves PNG, F or Esc exits',
+  'Kembali ke titik awal · sembunyikan HUD': 'Back to start point · hide HUD', 'Panel kontrol (termasuk gerak kepala)': 'Control panel (including head bob)',
+  'Tampilkan / tutup bantuan ini': 'Show / close this help', '? (atau F1)': '? (or F1)', '` (backtick)': '` (backtick)', 'Mouse': 'Mouse',
   'Suasana': 'Mood', 'Otomatis': 'Auto', 'Mendung': 'Overcast', 'Senja': 'Dusk',
   'Ultra': 'Ultra', 'Tinggi': 'High', 'Sedang': 'Medium', 'Rendah': 'Low', 'Hemat': 'Saver', ' (otomatis)': ' (auto)',
   'Waktu planet': 'Planet time', 'Waktu di luar': 'Time outside', 'Gravitasi': 'Gravity', 'Kedalaman air': 'Water depth',
@@ -197,7 +237,7 @@ const I18N = { en: {
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
   'Gelombang dipanggil: {d} km': 'Wave summoned: {d} km',
   'Grafik: {p}': 'Graphics: {p}', 'Suasana: {m}': 'Mood: {m}', 'FPS rendah: grafik diturunkan ke {p}.': 'Low FPS: graphics lowered to {p}.',
-  [KEYS_ID]: '<b>Click</b> lock mouse &middot; <b>WASD</b> walk &middot; <b>Shift</b> run &middot; <b>Space</b> jump<br><b>V</b> view &middot; <b>G</b> summon wave &middot; <b>Z</b> time speed &middot; <b>P</b> graphics &middot; <b>N</b> mood &middot; <b>B</b> head bob &middot; <b>M</b> sound &middot; <b>R</b> reset &middot; <b>H</b> hide',
+  [KEYS_ID]: '<b>Click</b> lock mouse &middot; <b>WASD</b> walk &middot; <b>Shift</b> run &middot; <b>Space</b> jump<br><b>V</b> view &middot; <b>G</b> summon wave &middot; <b>Z</b> time speed &middot; <b>N</b> mood<br><b>Q</b> graphics &middot; <b>P</b> screen effects &middot; <b>U</b> sound &middot; <b>F</b> photo &middot; <b>R</b> reset &middot; <b>H</b> hide<br><b>`</b> panel &middot; <b>?</b> help',
 } };
 function t(src, vars) {
   let s = LANG !== 'id' && I18N[LANG] && I18N[LANG][src] !== undefined ? I18N[LANG][src] : src;
@@ -213,6 +253,7 @@ function translateDom() {
   document.querySelectorAll('#lang button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
   document.querySelectorAll('#presetPick button').forEach((b, i) => { b.textContent = t(PRESETS[i].name); });
   document.querySelectorAll('#moodPick button').forEach((b, i) => { b.textContent = t(MOODS[i].key); });
+  if (typeof syncLab === 'function') { syncLab(); buildHelp(); }
 }
 for (const [c, name] of LANGS) {
   const b = document.createElement('button'); b.type = 'button'; b.dataset.lang = c; b.textContent = name;
@@ -1174,7 +1215,9 @@ const fsq = new THREE.Mesh(fsGeo); fsq.frustumCulled = false;
 const postScene = new THREE.Scene(); postScene.add(fsq);
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const pmat = (fs, uniforms, defines = {}) => new THREE.ShaderMaterial({ uniforms, defines, vertexShader: FSV, fragmentShader: fs, depthTest: false, depthWrite: false });
-const POST = { hdr: null, ldr: null, down: [], up: [], w: 0, h: 0, levels: 6 };
+const POST = { hdr: null, ldr: null, down: [], up: [], w: 0, h: 0, levels: 6, mode: 0 };
+// Efek layar (tombol P, seperti Copper Corn Station): pengali bloom, butiran, vinyet; tone mapping dan FXAA selalu jalan
+const POST_MODES = [{ name: 'Tinggi', bloom: 1, grain: 1, vig: 1 }, { name: 'Sedang', bloom: 0.5, grain: 0, vig: 1 }, { name: 'Mati', bloom: 0, grain: 0, vig: 0 }];
 const M_PRE = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; varying vec2 vUv;
   vec3 s(vec2 o) { vec3 c = texture2D(tSrc, vUv + o * uPx).rgb; return any(isnan(c)) ? vec3(0.0) : clamp(c, 0.0, 64.0); }
   void main() { vec3 c = (s(vec2(-1.0)) + s(vec2(1.0, -1.0)) + s(vec2(-1.0, 1.0)) + s(vec2(1.0))) * 0.25;
@@ -1213,7 +1256,7 @@ const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform float uExp, uBloomK
     c = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));                      // ke ruang tampilan (sRGB didekati gamma 2,2)
     gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));        // alpha = luma untuk FXAA
   }`, { tHdr: { value: null }, tBloom: { value: null }, uExp: { value: CONFIG.exposure }, uBloomK: { value: 0.08 }, uUnder: { value: 0 }, uTime: { value: 0 } });
-const M_FINAL = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; uniform float uTime, uGrain; varying vec2 vUv;
+const M_FINAL = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; uniform float uTime, uGrain, uVig; varying vec2 vUv;
   float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
   vec3 fxaa() {
     vec4 M = texture2D(tSrc, vUv);
@@ -1230,10 +1273,10 @@ const M_FINAL = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; uniform float uT
   }
   void main() {
     vec3 c = fxaa();
-    vec2 v = vUv - 0.5; c *= 1.0 - 0.28 * dot(v, v) * 2.0;           // vinyet
+    vec2 v = vUv - 0.5; c *= 1.0 - 0.28 * uVig * dot(v, v) * 2.0;    // vinyet
     c += (h12(gl_FragCoord.xy + fract(uTime * 7.13) * 517.0) - 0.5) * 0.028 * uGrain;
     gl_FragColor = vec4(c, 1.0);
-  }`, { tSrc: { value: null }, uPx: { value: new THREE.Vector2() }, uTime: { value: 0 }, uGrain: { value: 1 } });
+  }`, { tSrc: { value: null }, uPx: { value: new THREE.Vector2() }, uTime: { value: 0 }, uGrain: { value: 1 }, uVig: { value: 1 } });
 function pass(mat, target) { fsq.material = mat; renderer.setRenderTarget(target); renderer.render(postScene, postCam); }
 function makePost(w, h, P) {
   for (const r of [POST.hdr, POST.ldr, ...POST.down, ...POST.up]) if (r) r.dispose();
@@ -1246,14 +1289,18 @@ function makePost(w, h, P) {
   POST.w = w; POST.h = h;
 }
 function postRender(time) {
-  const D = POST.down, Up = POST.up, n = POST.levels;
-  M_PRE.uniforms.tSrc.value = POST.hdr.texture; M_PRE.uniforms.uPx.value.set(1 / POST.w, 1 / POST.h); pass(M_PRE, D[0]);
-  for (let i = 1; i < n; i++) { M_DOWN.uniforms.tSrc.value = D[i - 1].texture; M_DOWN.uniforms.uPx.value.set(1 / D[i - 1].width, 1 / D[i - 1].height); pass(M_DOWN, D[i]); }
-  let src = D[n - 1];
-  for (let i = n - 2; i >= 0; i--) {
-    M_UP.uniforms.tSrc.value = src.texture; M_UP.uniforms.tCur.value = D[i].texture; M_UP.uniforms.uPx.value.set(1 / src.width, 1 / src.height);
-    pass(M_UP, Up[i]); src = Up[i];
+  const D = POST.down, Up = POST.up, n = POST.levels, PM = POST_MODES[POST.mode];
+  let src = D[0];
+  if (PM.bloom > 0) {                                                 // efek layar Mati: rantai bloom dilewati
+    M_PRE.uniforms.tSrc.value = POST.hdr.texture; M_PRE.uniforms.uPx.value.set(1 / POST.w, 1 / POST.h); pass(M_PRE, D[0]);
+    for (let i = 1; i < n; i++) { M_DOWN.uniforms.tSrc.value = D[i - 1].texture; M_DOWN.uniforms.uPx.value.set(1 / D[i - 1].width, 1 / D[i - 1].height); pass(M_DOWN, D[i]); }
+    src = D[n - 1];
+    for (let i = n - 2; i >= 0; i--) {
+      M_UP.uniforms.tSrc.value = src.texture; M_UP.uniforms.tCur.value = D[i].texture; M_UP.uniforms.uPx.value.set(1 / src.width, 1 / src.height);
+      pass(M_UP, Up[i]); src = Up[i];
+    }
   }
+  M_COMP.uniforms.uBloomK.value = 0.08 * PM.bloom; M_FINAL.uniforms.uGrain.value = PRESETS[PRESET.idx].grain * PM.grain; M_FINAL.uniforms.uVig.value = PM.vig;
   M_COMP.uniforms.tHdr.value = POST.hdr.texture; M_COMP.uniforms.tBloom.value = src.texture; pass(M_COMP, POST.ldr);
   M_FINAL.uniforms.tSrc.value = POST.ldr.texture; M_FINAL.uniforms.uPx.value.set(1 / POST.w, 1 / POST.h); M_FINAL.uniforms.uTime.value = time;
   pass(M_FINAL, null);
@@ -1307,7 +1354,6 @@ function applyPreset(i) {
   makeSplash(P);
   makeSkyCube(P.cube);
   makeGCube(P);
-  M_FINAL.uniforms.uGrain.value = P.grain;
   resize();
   try { localStorage.setItem('millar.preset', JSON.stringify({ idx: i, auto: PRESET.auto })); } catch (e) { /* abaikan */ }
   document.querySelectorAll('#presetPick button').forEach((b, k) => b.classList.toggle('on', k === i));
@@ -1379,21 +1425,93 @@ function start() {
   try { canvas.requestPointerLock(); } catch (e) { /* abaikan */ }
   startAudio();                                        // AudioContext hanya boleh dibuat setelah gestur pengguna
 }
+/* Tombol standar aplikasi (patokan Copper Corn Station, docs/app/tombol.md): Q grafik, P efek layar, U suara, N suasana/cuaca,
+   Z waktu, V tampilan, F foto, R kembali, H sembunyikan, ` panel, ? atau F1 bantuan. Khusus Millar: G panggil gelombang.
+   Gerak kepala pindah ke panel (B di Copper = lempar bola). */
+const PHOTO = { on: false, shot: false };
+function cyclePreset() { PRESET.auto = false; applyPreset((PRESET.idx + 1) % PRESETS.length); toast(t('Grafik: {p}', { p: t(PRESETS[PRESET.idx].name) }), 2); syncLab(); }
+function cyclePost() { POST.mode = (POST.mode + 1) % POST_MODES.length; toast(t('Efek layar: {m}', { m: t(POST_MODES[POST.mode].name) }), 2); syncLab(); }
+function cycleMood() { setMood((MOOD.idx + 1) % MOODS.length); toast(t('Suasana: {m}', { m: t(MOODS[MOOD.idx].key) }), 2); syncLab(); }
+function toggleSound() { setSound(!AUDIO.on); startAudio(); toast(t('Suara: {m}', { m: t(AUDIO.on ? 'Nyala' : 'Mati') }), 2); syncLab(); }
+function cycleBob() {
+  BOB.level = (BOB.level + 1) % BOB_LEVELS.length; try { localStorage.setItem('millar.bob', String(BOB.level)); } catch (e) { /* abaikan */ }
+  toast(t('Gerak kepala: {m}', { m: t(BOB_LEVELS[BOB.level][0]) }), 2); syncLab();
+}
+function cycleSpeed() { P.speed = (P.speed + 1) % CONFIG.speeds.length; syncLab(); }
+function cycleView() { P.view = (P.view + 1) % CONFIG.views.length; if (P.view === 0) P.y = seabed(P.x, P.z) + CONFIG.eye; syncLab(); }
+function summonWave() { U.uWX.value += P.x + W.summon - frontX(P.z); toast(t('Gelombang dipanggil: {d} km', { d: fmtN(W.summon / 1000) }), 2.5); }
+function togglePhoto(on = !PHOTO.on) {
+  PHOTO.on = on; document.body.classList.toggle('photo', on);
+  if (on) { labEl.hidden = true; toast(t('Mode foto: Enter simpan PNG, F atau Esc keluar'), 3); }
+}
+function savePhoto() {           // dipanggil tepat setelah frame digambar (tanpa preserveDrawingBuffer)
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `millar-${new Date().toISOString().replace(/[:.]/g, '-')}.png`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }, 'image/png');
+  toast(t('Foto disimpan'), 1.5);
+}
+// Panel kontrol (`) dan bantuan (? / F1)
+const labEl = document.getElementById('lab'), helpEl = document.getElementById('help');
+const LAB = [
+  ['Q', () => t('Grafik: {p}', { p: t(PRESETS[PRESET.idx].name) + (PRESET.auto ? t(' (otomatis)') : '') }), cyclePreset],
+  ['P', () => t('Efek layar: {m}', { m: t(POST_MODES[POST.mode].name) }), cyclePost],
+  ['N', () => t('Suasana: {m}', { m: t(MOODS[MOOD.idx].key) }), cycleMood],
+  ['U', () => t('Suara: {m}', { m: t(AUDIO.on ? 'Nyala' : 'Mati') }), toggleSound],
+  ['', () => t('Gerak kepala: {m}', { m: t(BOB_LEVELS[BOB.level][0]) }), cycleBob],
+  ['Z', () => t('Kecepatan waktu: {x}', { x: CONFIG.speeds[P.speed] + 'x' }), cycleSpeed],
+  ['V', () => t('Tampilan: {v}', { v: t(CONFIG.views[P.view].key) }), cycleView],
+  ['G', () => t('Panggil gelombang'), summonWave],
+  ['F', () => t('Mode foto'), () => togglePhoto(true)],
+  ['R', () => t('Kembali ke titik awal'), resetPlayer],
+];
+LAB.forEach(([k, , fn]) => {
+  const b = document.createElement('button'); b.type = 'button';
+  b.addEventListener('click', () => { fn(); b.blur(); }); b.dataset.k = k; document.getElementById('labBtns').appendChild(b);
+});
+function syncLab() { document.querySelectorAll('#labBtns button').forEach((b, i) => { b.innerHTML = `<span>${LAB[i][1]()}</span><kbd>${LAB[i][0]}</kbd>`; }); }
+function toggleLab(on = labEl.hidden) { labEl.hidden = !on; if (on) { syncLab(); if (document.pointerLockElement) document.exitPointerLock(); } }
+function buildHelp() {
+  const rows = [
+    ['Mouse', t('Melihat. Klik = kunci kursor, Esc = lepas kursor')],
+    ['W A S D', t('Berjalan di air setinggi lutut (air menahan langkah)')], ['Shift', t('Lari')], ['Space', t('Lompat (1,3 g: 77% lompatan di Bumi)')],
+    ['V', t('Tampilan: jalan kaki, drone 60 m, tinggi 1,5 km')], ['G', t('Panggil gelombang raksasa (20 km di depan)')],
+    ['Z', t('Kecepatan waktu 1x, 5x, 20x, 60x')], ['N', t('Suasana: otomatis, mendung, senja')],
+    ['Q', t('Kualitas grafik: Ultra, Tinggi, Sedang, Rendah, Hemat')], ['P', t('Efek layar: tinggi, sedang, mati (bloom, butiran, vinyet)')],
+    ['U', t('Suara nyala / mati')], ['F', t('Mode foto: UI disembunyikan, Enter simpan PNG, F atau Esc keluar')],
+    ['R · H', t('Kembali ke titik awal · sembunyikan HUD')], [t('` (backtick)'), t('Panel kontrol (termasuk gerak kepala)')],
+    [t('? (atau F1)'), t('Tampilkan / tutup bantuan ini')],
+  ];
+  document.getElementById('helpRows').innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+}
+function toggleHelp(on = helpEl.hidden) { helpEl.hidden = !on; if (on && document.pointerLockElement) document.exitPointerLock(); }
+document.getElementById('labClose').addEventListener('click', () => toggleLab(false));
+document.getElementById('helpClose').addEventListener('click', () => toggleHelp(false));
+try { const b = +localStorage.getItem('millar.bob'); if (localStorage.getItem('millar.bob') !== null && BOB_LEVELS[b]) BOB.level = b; } catch (e) { /* abaikan */ }
+// isi panel dan bantuan dibuat di translateDom() (setelah AUDIO ada)
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
+  if (!helpEl.hidden && (e.code === 'Escape' || e.code === 'Slash' || e.code === 'F1')) { e.preventDefault(); toggleHelp(false); return; }
+  if (e.code === 'Slash' || e.code === 'F1') { e.preventDefault(); toggleHelp(true); return; }
   if (!STATE.started) { if (e.code === 'Enter') start(); return; }
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
   if (e.repeat) return;
-  if (e.code === 'KeyV') { P.view = (P.view + 1) % CONFIG.views.length; if (P.view === 0) P.y = seabed(P.x, P.z) + CONFIG.eye; }
-  if (e.code === 'KeyG') { U.uWX.value += P.x + W.summon - frontX(P.z); toast(t('Gelombang dipanggil: {d} km', { d: fmtN(W.summon / 1000) }), 2.5); }
-  if (e.code === 'KeyZ') P.speed = (P.speed + 1) % CONFIG.speeds.length;
-  if (e.code === 'KeyP') { PRESET.auto = false; applyPreset((PRESET.idx + 1) % PRESETS.length); toast(t('Grafik: {p}', { p: t(PRESETS[PRESET.idx].name) }), 2); }
-  if (e.code === 'KeyN') { setMood((MOOD.idx + 1) % MOODS.length); toast(t('Suasana: {m}', { m: t(MOODS[MOOD.idx].key) }), 2); }
+  if (e.code === 'KeyF') { togglePhoto(); return; }
+  if (PHOTO.on && (e.code === 'Enter' || e.code === 'NumpadEnter')) { PHOTO.shot = true; return; }
+  if (PHOTO.on && e.code === 'Escape') { togglePhoto(false); return; }
+  if (e.code === 'Backquote') toggleLab();
+  if (e.code === 'KeyV') cycleView();
+  if (e.code === 'KeyG') summonWave();
+  if (e.code === 'KeyZ') cycleSpeed();
+  if (e.code === 'KeyQ') cyclePreset();
+  if (e.code === 'KeyP') cyclePost();
+  if (e.code === 'KeyN') cycleMood();
+  if (e.code === 'KeyU') toggleSound();
   if (e.code === 'KeyR') resetPlayer();
   if (e.code === 'KeyH') document.body.classList.toggle('hide');
-  if (e.code === 'KeyM') { setSound(!AUDIO.on); startAudio(); toast(t('Suara: {m}', { m: t(AUDIO.on ? 'Nyala' : 'Mati') }), 2); }
-  if (e.code === 'KeyB') { BOB.level = (BOB.level + 1) % BOB_LEVELS.length; toast(t('Gerak kepala: {m}', { m: t(BOB_LEVELS[BOB.level][0]) }), 2); }
   if (e.code === 'Space' && P.view === 0 && P.ground) { P.vy = CONFIG.jumpV; P.ground = false; }
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -1719,6 +1837,7 @@ function frame(now) {
   probeOcean(P.x, P.z);
   gpuBegin('sc'); renderer.setRenderTarget(POST.hdr); renderer.clear(); renderer.render(scene, camera); gpuEnd();
   gpuBegin('po'); postRender(now / 1000); gpuEnd();
+  if (PHOTO.shot) { PHOTO.shot = false; savePhoto(); }
   gpuFrameEnd();
   requestAnimationFrame(frame);
 }
@@ -1728,7 +1847,8 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   frontX, waveTop, waterAt, seabed, chopAt, CHOP, stepPlayer, simStep, start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_, OCEAN, makeOcean, updateOcean,
   RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
   SWEEP, currentAt, SPRAY, US, ZS, M_COMP,
-  AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact };
+  AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
+  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob };
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>
 </body>
