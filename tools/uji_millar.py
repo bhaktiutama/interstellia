@@ -11,6 +11,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 UJI = r"""
 (async () => {
   const M = window.__millar, out = {}, wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  M.CINE.enabled = false;                                   // sinematik M4 diuji tersendiri di 5k
   // 1. kamus English: semua t('...') di kode dan semua data-t
   const EN = M.I18N.en, src = document.querySelector('script[type=module]').textContent;
   const re = /\bt\((['`])((?:\\.|(?!\1).)*)\1/g; let m; const hilang = [];
@@ -367,6 +368,46 @@ UJI = r"""
     const moved = Math.hypot(M.SHIP.x - x0, M.SHIP.z - z0), pd = Math.hypot(P.x - M.SHIP.door.x, P.z - M.SHIP.door.z);
     out[`mode Jelajah: terbang dan mendarat ${moved.toFixed(0)} m dari tempat semula, pemain turun ${pd.toFixed(1)} m dari tangga`] = !FL.on && moved > 10 && pd < 2 && M.SHIP.legs.visible;
     M.flyReset(); P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.view = 0;
+  }
+
+  // 5k. M4: pandangan orbit dan sinematik kedatangan / keberangkatan
+  {
+    const hdrCheck = () => { const T = M.POST.hdr, b = new Uint16Array(T.width * T.height * 4); M.renderer.readRenderTargetPixels(T, 0, 0, T.width, T.height, b);
+      let nb = 0, mx = 0, lum = 0; for (let k = 0; k < b.length; k += 4) for (let c = 0; c < 3; c++) { const x = M.THREE.DataUtils.fromHalfFloat(b[k + c]); if (!Number.isFinite(x)) nb++; else { mx = Math.max(mx, x); lum += x; } }
+      return { nb, mx, lum: lum / (b.length * 0.75) }; };
+    const C = M.CINE, P = M.P, dt = 1 / 30;
+    M.CINE.enabled = true; M.CINE.played = false; M.STATE.started = false; M.setMode('misi');
+    M.startWithCine();
+    const shots = [];
+    for (const tt of [3, 10, 17]) { C.t = tt; await wait(900); const h = hdrCheck(); shots.push(`${tt} s ${C.orbit ? 'orbit' : 'dunia'} tidak valid ${h.nb} terang ${h.lum.toFixed(3)}`); if (!(C.orbit && h.nb === 0 && h.lum > 0.001)) shots.push('GAGAL'); }
+    out[`sinematik orbit: ${shots.join(', ')}`] = C.on && C.kind === 'arrive' && !shots.includes('GAGAL') && !M.STATE.started;
+    // jalan penuh 21-35 s dengan langkah tetap: kapal tidak pernah di bawah titik mendarat, kamera di atas air, berakhir di titik semula
+    C.t = 20.9; let minGap = 1e9, camLow = 0, steps = 0; const yl = (() => { M.placeShip(...M.SHIP.home); return M.SHIP.y; })();
+    while (C.on && steps++ < 600) { M.cineStep(dt); if (C.world) { minGap = Math.min(minGap, M.SHIP.mesh.position.y - yl); if (M.camera.position.y < M.drawdown(M.camera.position.x - M.frontX(M.camera.position.z)) + 0.5) camLow++; } }
+    const home = M.SHIP.home, dHome = Math.hypot(M.SHIP.x - home[0], M.SHIP.z - home[1]);
+    out[`kedatangan: mendarat ${dHome.toFixed(2)} m dari titik semula, celah terendah ${minGap.toFixed(2)} m, kamera di bawah air ${camLow}x, misi mulai ${M.MIS.on}, pemain di titik awal ${Math.hypot(P.x, P.z).toFixed(1)} m`] =
+      !C.on && dHome < 0.01 && minGap > -0.01 && camLow === 0 && M.MIS.on && M.STATE.started && Math.hypot(P.x, P.z) < 0.5 && M.SHIP.legs.visible;
+    // lewati: Spasi langsung ke permainan
+    M.stopMission(); M.STATE.started = false; C.played = false; M.startWithCine(); C.t = 12;
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }));
+    out[`lewati (Spasi): sinematik ${C.on ? 'masih jalan' : 'berhenti'}, permainan mulai ${M.STATE.started}`] = !C.on && M.STATE.started && M.MIS.on;
+    // keberangkatan: misi berhasil -> naik ke orbit, hasil baru tampil sesudah 14 s, Ulangi = misi baru tanpa sinematik kedatangan
+    for (const S of M.MIS.sites) S.got = true; P.x = M.SHIP.door.x; P.z = M.SHIP.door.z; M.missionAction();
+    Object.assign(M.FLY, { landed: false, spool: 1 }); M.FLY.y += 300;
+    M.finishMission(true, 'lolos');
+    const res = () => !document.getElementById('result').hidden;
+    const early = res(); let t0 = 0; for (let k = 0; k < 150; k++) { M.cineStep(0.1); if (res() && !t0) t0 = C.t; }
+    await wait(700); const hd = hdrCheck();
+    document.getElementById('resAgain').click(); await wait(300);
+    out[`keberangkatan: hasil tampil di awal ${early}, tampil pada ${t0.toFixed(1)} s (orbit, tidak valid ${hd.nb}); Ulangi -> sinematik ${C.on}, misi ${M.MIS.on}, terbang ${M.FLY.on}`] =
+      !early && t0 >= 14 && t0 < 14.5 && hd.nb === 0 && !C.on && M.MIS.on && !M.FLY.on && M.STATE.started;
+    // pandangan orbit dari panel: ditolak saat misi berjalan, jalan di Jelajah, tombol apa saja kembali
+    M.startCine('orbit'); const refused = !C.on;
+    M.stopMission(); M.setMode('jelajah'); M.STATE.started = true; M.startCine('orbit'); const onO = C.on && C.kind === 'orbit';
+    await wait(600); const ho = hdrCheck();
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'w' })); window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w' }));
+    out[`pandangan orbit (panel): ditolak saat misi ${refused}, tampil di Jelajah ${onO} (tidak valid ${ho.nb}), tombol = kembali ${!C.on && M.STATE.started}`] = refused && onO && ho.nb === 0 && !C.on && M.STATE.started;
+    M.CINE.enabled = false; M.flyReset(); P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.view = 0; M.keys.KeyW = false;
   }
 
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua

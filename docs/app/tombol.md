@@ -41,6 +41,8 @@ Per 30 September 2026. Patokan: Copper Corn Station. Fungsi yang sama memakai to
 
 Pengecualian yang sudah ada: Millar G = panggil gelombang raksasa (aksi eksperimen, setara G jatuhkan bola di Copper). Millar M = radar misi (setara M peta di Copper), E = ambil barang / naik ke KS-07 / mendarat (setara E aksi di Copper). Di wahana Millar berlaku tombol pesawat Copper: W/S, A/D, R/F (Space juga naik), Shift, mouse, V kamera, E.
 
+Sinematik (Millar M4): Spasi, Enter, Esc, atau klik = lewati. Pandangan orbit tidak memakai tombol baru, dibuka dari panel kontrol (`); tombol apa saja kembali. Di kokpit wahana (V) layar MFD tidak butuh tombol.
+
 ## Perubahan 30 September 2026
 
 | Experience | Sebelum | Sesudah |

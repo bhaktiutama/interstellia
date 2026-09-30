@@ -78,7 +78,7 @@ Per 27 September 2026 · Bhakti · Status: konsep; prototipe low poly ada (`prot
 | M1 | Laut dangkal, dasar laut, lengkung planet, berjalan di air 1,3 g, langit dengan Gargantua (cubemap), jam dilatasi | Tampilan dan FPS dasar |
 | M2 | Siklus goyangan, gelombang (tampak di cakrawala, air surut, datang, lewat), tersapu, audio gemuruh | Kesan skala dan ketegangan |
 | M3 | Shuttle KS-07 mendarat, naik, lepas landas; misi suar | Alur permainan |
-| M4 | Pandangan orbit (planet di dekat Gargantua), sinematik kedatangan, preset kualitas, penyelarasan dengan menu | Keseluruhan |
+| M4 | Pandangan orbit (planet di dekat Gargantua), sinematik kedatangan, preset kualitas, penyelarasan dengan menu (selesai: `rencana-m4-millar.md`) | Keseluruhan |
 
 ## Keputusan yang perlu kamu pilih
 

@@ -1,6 +1,6 @@
 # Rencana M3 Millar's World: Shuttle KS-07 v3 dan Misi Radar
 
-Per 30 September 2026 · Status: M3a sampai M3d selesai (lihat bagian "Status"); wahana kini KS-07 v5
+Per 30 September 2026 · Status: M3a sampai M3e selesai (lihat bagian "Status"); wahana kini KS-07 v5, juga di Copper Corn Station
 
 ## Ringkasan
 
@@ -176,4 +176,15 @@ Uji: `tools/uji_millar.py` kini 60 pemeriksaan, semua lulus, termasuk: v5 tanpa 
 
 Catatan: rute terpanjang (330 m) menyisakan sekitar 20 s. Bila terasa terlalu ketat saat diuji, `CONFIG.mission.tourMax` bisa diturunkan atau pilih tingkat Santai.
 
-Berikutnya M3e (Copper memakai model baru) atau M4 (pandangan orbit, sinematik kedatangan).
+## Status M3e
+
+Selesai 30 September 2026 (dengan v5, bukan v3). Copper Corn Station memakai KS-07 v5 untuk shuttle pemain dan shuttle terjadwal, beserta kokpit v5 (`docs/app/konsep-kokpit-ks07-v5.md`).
+
+| Bagian | Isi |
+| --- | --- |
+| Model | `KESTREL.buildV5()` sama dengan Millar, kaki dan tangga disembunyikan (ditarik di angkasa), nyala nosel biru seperti v1, kaca satu sisi mengilap |
+| Sandar | Badan digeser 0,62 m ke arah sumbu supaya punggung menempel ujung tabung sandar berth; kotak panduan sandar diperkecil seukuran v5 (12 x 4,6 x 12,5 m) |
+| Kokpit | Kokpit v5 dengan 3 layar: kiri data sandar, tengah penunjuk arah berth 1, kanan mode / jarak stasiun / mesin. Mata pilot `SHUTTLE_EYE`; badan tetap tampil saat di kokpit (hidung dan sayap terlihat lewat kaca) |
+| Uji | `uji_spaceport` (pintu terminal, gerbang B1 ke kokpit, lepas sandar, sandar otomatis) dan `uji_bahasa` lulus |
+
+Berikutnya M4 (pandangan orbit, sinematik kedatangan): `docs/millar/rencana-m4-millar.md`.

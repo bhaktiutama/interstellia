@@ -1,6 +1,6 @@
 # Konsep KS-07 v5 (versi kecil dan lincah)
 
-Per 30 September 2026 · Status: dipilih pemilik. Terpasang di Millar's World (`KESTREL.buildV5`, tahap M3d) dengan warna gelap doff, kotor, dan gosong. v3 disimpan.
+Per 30 September 2026 · Status: dipilih pemilik. Terpasang di Millar's World (`KESTREL.buildV5`, tahap M3d) dengan warna gelap doff, kotor, dan gosong, dan di Copper Corn Station (M3e). Kokpit: `konsep-kokpit-ks07-v5.md`. v3 disimpan.
 
 ## Ringkasan
 
