@@ -1,108 +1,108 @@
 # Konsep Shuttle KS-07 "Kestrel" v2
 
-Per 30 September 2026 · Status: konsep, menunggu persetujuan pemilik. Belum dipasang di game.
+Per 30 September 2026 · Status: v2b (simetris), menunggu persetujuan pemilik. Belum dipasang di game.
 
 ## Ringkasan
 
-- KS-07 sekarang (badan pengangkat bulat, sayap, sirip ganda) terlihat seperti pesawat Bumi. Versi 2 diganti menjadi kendaraan kerja luar angkasa: kotak bersudut potong, tidak simetris, semua bagian punya fungsi yang terlihat.
-- Ketidakseimbangan disengaja: kokpit menonjol di kiri depan, sponson bahan bakar di kanan, dua pod angkat miring di kiri, sirip radiator di kanan belakang, dua mesin utama beda ukuran. Berat tetap seimbang karena tangki di kanan mengimbangi kokpit dan pod di kiri.
-- Panjang tetap sekitar 24 m supaya dermaga Copper Corn Station tidak perlu diubah. Blokout 3D bisa diputar di `docs/app/kestrel/blokout-ks07.html` (seret = putar, 1-5 = sudut pandang).
+- v2b simetris kiri-kanan. Susunannya dua tingkat: kabin awak (badan atas) duduk di atas badan bawah yang lebar (tangki dan kargo), dengan hidung paruh, punggung bertingkat, sirip ekor di tengah, dan empat rumah pendorong tegak di sisi badan bawah.
+- Kulit dan otot diambil dari sketsa referensi: pelat lambung menonjol, sambungan panel, blok pendorong tegak bertanda panah, rahang berlapis di bawah paruh, sirip dengan blok peralatan, registrasi besar di sisi. Gaya pelat bersudut tajam dan kesan berat diambil dari foto referensi.
+- Blokout 3D bisa diputar di `docs/app/kestrel/blokout-ks07.html` (seret = putar, 1-5 = sudut pandang).
 
-![Lembar konsep KS-07 v2](kestrel/ks07-v2-lembar.jpg)
+![Lembar konsep KS-07 v2b](kestrel/ks07-v2b-lembar.jpg)
 
-## Masalah versi sekarang
+## Riwayat konsep
 
-| Bagian | Versi 1 | Kesan |
+| Versi | Isi | Keputusan pemilik |
 | --- | --- | --- |
-| Badan | Badan pengangkat halus membulat (superellipse) | Pesawat terbang / pesawat ulang-alik Bumi |
-| Sayap dan sirip | Sayap pendek + dua sirip miring | Pesawat tempur |
-| Simetri | Simetris kiri-kanan penuh | Rapi seperti mainan, tidak terasa "dipakai" |
-| Kaki di Millar | Tiga kaki ramping | Tidak cocok dengan badan pesawat terbang |
+| v1 (di game sekarang) | Badan pengangkat membulat, sayap, dua sirip miring | Terlalu mirip pesawat Bumi |
+| v2a | Kotak, sangat tidak simetris: kokpit kiri, sponson kanan, pod miring di kiri | Terlalu tidak simetris ([lembar v2a](kestrel/ks07-v2a-lembar.jpg)) |
+| v2b | Simetris, dua tingkat, empat rumah pendorong tegak, kulit dan otot dari sketsa | Menunggu |
 
-## Prinsip desain v2
+## Referensi dan hak cipta
 
-| Prinsip | Wujud |
-| --- | --- |
-| Kotak, bukan aerodinamis | Badan segi delapan (sudut dipotong), sambungan panel menonjol, punggung bertingkat. Shuttle ini turun ke planet memakai mesin angkat dan perisai panas di perut, bukan sayap |
-| Tidak simetris tapi seimbang | Bagian berat dibagi tidak sama di kiri dan kanan, dan pusat massa dijaga di tengah oleh tangki kanan dan dorongan pod yang bisa diatur |
-| Fungsi terlihat | Nosel angkat di bawah, kisi masuk udara di atas pod, pipa radiator di sirip, cincin sandar di punggung, tangga dan pintu yang jelas |
-| Realistis dan dipakai | Warna abu terang dengan nada panel berbeda, perut hitam (perisai panas), tanda bahaya jingga hanya di dekat nosel dan kaki, registrasi KS-07 dicat stensil |
+| Referensi | Yang diambil | Yang tidak diambil |
+| --- | --- | --- |
+| Foto kendaraan pendarat (kiriman terakhir) | Gaya umum: pelat datar bersudut tajam, badan rendah dan berat, perut bersudut potong besar, warna logam abu | Foto ini kendaraan pendarat dari film. Aturan proyek melarang meniru desain kendaraan film, jadi susunannya tidak dipakai: badan tengah dengan empat pod besar bersudut di keempat sudut |
+| Sketsa pensil | Komposisi dan detail: badan atas di atas kotak bawah yang lebar, hidung paruh dengan kaca miring, blok pendorong tegak di sisi dengan tanda panah, sirip tinggi dengan blok peralatan, pelat lambung, registrasi besar di sisi kotak bawah | Garis, proporsi persis, dan tulisan sketsa tidak dijiplak; nomor yang dipakai hanya KS-07 |
+
+Perbedaan utama dengan kendaraan film: KS-07 v2b punya sirip ekor, hidung paruh dengan kaca celah, kabin awak terpisah di atas, dan pendorong berupa rumah tegak ramping yang menempel di sisi badan bawah (bukan pod besar di sudut yang menggantung).
 
 ## Bagian-bagian
 
-| No | Bagian | Posisi | Fungsi dan alasan |
+| No | Bagian | Posisi dan ukuran | Fungsi |
 | --- | --- | --- | --- |
-| 1 | Badan utama | Tengah, 17 m x 5,4-5,8 m x 3,5-3,7 m, sedikit melebar ke belakang | Kabin awak dan kargo, perut rata hitam sebagai perisai panas saat masuk atmosfer |
-| 2 | Kokpit | Kiri depan, menonjol 3,4 m ke depan dari badan | Kabin tumpul seperti kabin derek: kaca depan miring tiga panel, jendela samping kiri dan atap. Pilot duduk di kiri supaya bisa melihat ke bawah saat mendarat vertikal |
-| 3 | Blok sensor | Kanan depan, lebih pendek dan lebih rendah dari kokpit | Kubah lidar, dua lampu sorot, tiang sensor. Mengisi sisi kanan hidung, membuat siluet depan bertingkat |
-| 4 | Sponson kanan | Sisi kanan bawah, 14 m | Tangki bahan bakar + dua nosel angkat + dua kaki kanan. Garis bahaya jingga di dekat nosel, teluk peralatan berlapis foil emas |
-| 5 | Dua pod angkat kiri | Kiri depan dan kiri belakang, di lengan pendek, miring 8 derajat ke luar, lebih tinggi dari atap | Mesin angkat berkipas (kisi udara di atas, nosel di bawah). Bisa diputar untuk mengatur keseimbangan dan arah saat melayang |
-| 6 | Mesin utama | Belakang: satu besar di kiri-tengah, satu kecil di kanan, knalpot APU di kanan atas | Dorongan maju di luar angkasa; dua ukuran berbeda untuk gerak halus dan cadangan |
-| 7 | Punggung bertingkat | Atas, sedikit ke kiri | Modul awak kedua, cincin sandar untuk dermaga Copper, kisi ventilasi |
-| 8 | Sirip radiator | Kanan belakang, miring ke luar | Membuang panas (lima pipa radiator). Bukan sirip terbang, jadi boleh miring dan tidak simetris |
-| 9 | Pintu dan tangga | Sisi kiri tengah, di antara dua pod | Pintu awak dengan tangga lipat 4 anak tangga ke air/tanah. Dipakai untuk E naik di Millar (M3b) |
-| 10 | Kaki pendarat | 4 kaki: dua di sponson kanan, dua di bawah pod kiri | Batang teleskop dengan kerah jingga dan penopang diagonal, tapak lebar 1,8 m. Perut 2,55 m di atas tapak (pemain di air setinggi lutut bisa berjalan di bawahnya) |
-| 11 | RCS dan antena | Empat sudut badan, antena di punggung | Pendorong kecil empat arah untuk sandar; antena komunikasi |
+| 1 | Badan bawah | 17,8 m x 6,2 m x 2,6 m, perut bersudut potong besar | Tangki bahan bakar dan ruang kargo; perut hitam = perisai panas |
+| 2 | Badan atas | 19,4 m x 4,4 m x 1,9 m, di atas badan bawah | Kabin awak dan ruang penumpang |
+| 3 | Hidung paruh | Turun miring ke depan, 3,7 m | Kokpit dua kursi; kaca celah miring di kedua bahu, panel anti-silau di tengah, probe di ujung |
+| 4 | Rahang bawah | Di bawah paruh | Pelat berlapis, dua lampu sorot pendaratan |
+| 5 | Otot bahu | Pelat bersudut memanjang di kiri dan kanan badan atas | Saluran kabel dan pipa, pelindung benturan |
+| 6 | Punggung bertingkat | Dek tengah 8,2 m x 3,4 m, cincin sandar di atasnya | Modul sandar untuk dermaga Copper, kisi ventilasi |
+| 7 | Sirip ekor | Tengah belakang, 5,9 m menyapu, tebal 0,56 m | Radiator dan antena; blok peralatan di kedua sisi, strobo di puncak |
+| 8 | Rumah pendorong | Empat, tegak di sisi badan bawah (2 kiri, 2 kanan), 1,35 m x 2,3 m x 4,6 m | Mesin angkat untuk melayang dan mendarat: kisi udara di atas bertanda panah, nosel bersudut di bawah, garis bahaya jingga |
+| 9 | Mesin belakang | Blok mesin + dua nosel sejajar | Dorongan maju di luar angkasa |
+| 10 | Pintu awak | Kiri dan kanan badan bawah, di antara rumah pendorong; tangga lipat di kiri | Naik dan turun (E di Millar) |
+| 11 | Kaki pendarat | Empat, satu di bawah tiap rumah pendorong, tapak segi delapan 1,9 m | Mendarat di air atau tanah, penopang diagonal ke rumah pendorong |
+| 12 | Kulit | Sambungan panel melingkar, pelat lambung menonjol, stensil KS-07 besar di sisi badan bawah dan kecil di dekat kokpit, RCS di empat sudut | Kesan kendaraan kerja yang nyata |
 
 ## Ukuran (dari blokout)
 
 | Ukuran | Nilai |
 | --- | --- |
-| Panjang (ujung kokpit sampai ujung nosel mesin) | sekitar 23,6 m |
-| Lebar (pod kiri sampai sponson kanan) | sekitar 9,8 m |
-| Tinggi badan | 3,5-3,7 m; dengan punggung 4,6 m |
-| Tinggi total saat mendarat (tapak sampai ujung sirip) | sekitar 9,5 m |
-| Jarak perut ke tapak | 2,55 m |
+| Panjang (hidung sampai ujung nosel) | sekitar 25,7 m (26,5 m dengan probe hidung) |
+| Lebar (luar rumah pendorong) | sekitar 8,5 m |
+| Tinggi saat mendarat (tapak sampai puncak sirip) | sekitar 10,5 m |
+| Jarak perut ke tapak | 2,3 m |
 
-## Hubungan dengan referensi dan hak cipta
+## Warna
 
-| Referensi | Yang diambil | Yang tidak diambil |
-| --- | --- | --- |
-| Sketsa pensil (kiriman pemilik) | Watak umum: badan kotak panjang, hidung miring bersudut, pod dorong tegak di samping, sirip tinggi | Bentuk, tata letak, dan tulisan sketsa tidak dijiplak |
-| Foto kendaraan pendarat | Kesan kendaraan kerja kotak dengan pod besar, pintu samping | Gambar kedua mirip kendaraan dari film. Sesuai aturan proyek (jangan meniru desain kendaraan film), susunan empat pod kotak yang sama besar dan simetris tidak dipakai. KS-07 v2 memakai susunan sendiri: 2 pod miring di kiri + sponson di kanan, kokpit samping |
+| Bagian | Warna |
+| --- | --- |
+| Badan atas | Abu sangat terang, nada tiap panel sedikit berbeda |
+| Badan bawah dan rumah pendorong | Abu sedang (lebih gelap dari badan atas, seperti arsiran sketsa) |
+| Perut | Hitam (perisai panas) |
+| Tanda | Jingga hanya di tanda panah, garis bahaya dekat nosel, kerah kaki, strobo sirip |
 
 ## Gerak (untuk M3b dan Copper)
 
 | Gerak | Isi |
 | --- | --- |
-| Pod angkat | Miring 0-90 derajat: tegak saat melayang, mendatar saat terbang maju |
-| Kaki | Ditarik masuk saat terbang, keluar sebelum mendarat |
+| Rumah pendorong | Nosel bawah bisa miring maju-mundur untuk bergerak saat melayang |
+| Kaki | Ditarik ke dalam rumah pendorong saat terbang |
 | Pintu dan tangga | Pintu bergeser, tangga turun saat pemain dekat (E) |
-| Lampu | Lampu navigasi di ujung sponson dan pod, strobo di sirip, lampu sorot blok sensor |
-| Semburan | Nosel angkat meniup air dan kabut ke samping saat lepas landas di Millar |
+| Lampu | Lampu sorot rahang, strobo sirip, lampu navigasi merah-hijau di rumah pendorong depan |
+| Semburan | Empat nosel meniup air dan kabut saat lepas landas di Millar |
 
 ## Dampak ke experience
 
 | Experience | Perubahan |
 | --- | --- |
-| Copper Corn Station | Shuttle pemain dan shuttle terjadwal di dermaga ganti model. Cincin sandar kini di punggung (dulu di atas badan, posisi serupa). Posisi mata kokpit berubah dari tengah ke kiri depan, jadi interior kokpit Copper perlu disesuaikan. Uji spaceport dijalankan ulang |
-| Millar's World | Shuttle mendarat memakai kaki v2 (4 kaki). Tabrakan kaki, posisi pintu untuk E, dan jarak perut disesuaikan |
-| Modul bersama | `shared/kestrel.js`: `build()` diganti v2, versi 1 disimpan sebagai `buildV1()` selama masa transisi |
+| Copper Corn Station | Shuttle pemain dan terjadwal di dermaga ganti model. Panjang naik sekitar 1,7 m, jadi posisi sandar di berth perlu dicek. Cincin sandar tetap di punggung. Kokpit tetap di tengah, jadi posisi mata cukup digeser ke paruh baru. Uji spaceport dijalankan ulang |
+| Millar's World | Shuttle mendarat dengan 4 kaki, perut 2,3 m di atas tapak. Tabrakan kaki dan posisi pintu kiri untuk E disesuaikan |
+| Modul bersama | `shared/kestrel.js`: `build()` diganti v2b, v1 disimpan sebagai `buildV1()` selama masa transisi |
 
 ## Pilihan untuk pemilik
 
 | No | Pertanyaan | Pilihan | Disarankan |
 | --- | --- | --- | --- |
-| 1 | Letak kokpit | a. Kiri depan menonjol (seperti blokout) · b. Tengah depan, tetap kotak | a |
-| 2 | Pod angkat kiri | a. Miring ke luar 8 derajat · b. Tegak | a |
-| 3 | Warna | a. Abu terang dengan nada panel berbeda + perut hitam · b. Abu gelap (lebih militer) · c. Putih dengan blok jingga besar | a |
-| 4 | Jumlah kaki | a. 4 kaki (dua sponson, dua pod) · b. 3 kaki | a |
-| 5 | Sirip | a. Satu sirip radiator di kanan belakang · b. Tanpa sirip, radiator rata di punggung | a |
+| 1 | Sirip ekor | a. Satu sirip tengah (seperti sketsa) · b. Tanpa sirip (lebih rata dan berat) | a |
+| 2 | Hidung | a. Paruh tumpul (blokout sekarang) · b. Lebih panjang dan runcing seperti sketsa | a |
+| 3 | Warna | a. Atas terang, bawah abu sedang · b. Seluruhnya abu logam (seperti foto) | a |
+| 4 | Pintu | a. Kiri dan kanan · b. Kiri saja | a |
 
 ## Gambar
 
-| Sudut | Berkas |
+| Sudut | Gambar |
 | --- | --- |
-| 3/4 depan kiri | ![3/4 depan kiri](kestrel/ks07-v2-depan-kiri.jpg) |
-| Samping kiri | ![Samping kiri](kestrel/ks07-v2-samping-kiri.jpg) |
-| Depan | ![Depan](kestrel/ks07-v2-depan.jpg) |
-| Atas | ![Atas](kestrel/ks07-v2-atas.jpg) |
-| 3/4 belakang kanan | ![3/4 belakang kanan](kestrel/ks07-v2-belakang-kanan.jpg) |
+| 3/4 depan kiri | ![3/4 depan kiri](kestrel/ks07-v2b-depan-kiri.jpg) |
+| Samping kiri | ![Samping kiri](kestrel/ks07-v2b-samping-kiri.jpg) |
+| Depan | ![Depan](kestrel/ks07-v2b-depan.jpg) |
+| Atas | ![Atas](kestrel/ks07-v2b-atas.jpg) |
+| 3/4 belakang kanan | ![3/4 belakang kanan](kestrel/ks07-v2b-belakang-kanan.jpg) |
 
-Catatan: gambar ini blokout (bentuk dan tata letak), bukan tampilan akhir. Versi di game akan memakai shading masing-masing experience (langit mendung di Millar, cahaya Matahari dan dermaga di Copper), ditambah detail kecil: garis panel, pegangan, stensil, kotoran dan bekas panas.
+Catatan: ini blokout (bentuk dan tata letak), bukan tampilan akhir. Versi di game memakai shading masing-masing experience dan tambahan detail kecil: pegangan, baut, kotoran, bekas panas di sekitar nosel.
 
 ## Langkah setelah disetujui
 
-1. Model v2 di `shared/kestrel.js` (loft segi delapan, tanpa addon three.js), sidik jari geometri dicatat di uji.
-2. Millar: ganti shuttle, kaki 4, pintu kiri untuk E, lalu lanjut M3b (naik dan terbang).
-3. Copper: ganti model di dermaga, sesuaikan kokpit dan cincin sandar, uji spaceport.
+1. Model v2b di `shared/kestrel.js` (loft segi delapan, tanpa addon three.js), sidik jari geometri dicatat di uji.
+2. Millar: ganti shuttle, 4 kaki, pintu kiri untuk E, lalu lanjut M3b (naik dan terbang).
+3. Copper: ganti model di dermaga, cek posisi sandar dan mata kokpit, uji spaceport.

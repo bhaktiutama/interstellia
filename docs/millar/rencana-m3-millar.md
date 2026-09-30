@@ -6,7 +6,7 @@ Per 30 September 2026 · Status: M3a selesai (lihat "Status M3a"), berikutnya M3
 
 - M3 memberi alur permainan: tiba di samping shuttle KS-07 yang mendarat di air, menjelajah, lalu naik dan lepas landas sebelum gelombang raksasa tiba.
 - Shuttle memakai modul bersama pertama `shared/kestrel.js` (geometri sama persis dengan Copper Corn Station), ditambah kaki pendarat.
-- Desain shuttle akan diganti ke KS-07 v2 (kotak, tidak simetris): konsep di `docs/app/konsep-ks07-v2.md`, menunggu persetujuan. M3b dikerjakan setelah model v2 terpasang.
+- Desain shuttle akan diganti ke KS-07 v2b (kotak, simetris, dua tingkat): konsep di `docs/app/konsep-ks07-v2.md`, menunggu persetujuan. M3b dikerjakan setelah model v2 terpasang.
 - Dibagi 3 tahap: M3a shuttle mendarat, M3b naik dan terbang, M3c misi suar. Pandangan orbit dan sinematik kedatangan tetap di M4.
 
 ## Tahapan
