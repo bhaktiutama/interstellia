@@ -289,8 +289,8 @@
   }
 
   /* KS-07 v5 (konsep docs/app/konsep-ks07-v5.md, blokout docs/app/kestrel/blokout-ks07-v5.html): wahana kecil satu kursi.
-     Warna gelap doff, lalu diberi lapisan kotor dan gosong per titik: jelaga di belakang nosel, perut hangus, ujung hidung
-     terbakar saat masuk atmosfer, noda aliran memanjang. Kaca bernada biru (penanda kaca di shader: biru > merah).
+     Warna gelap doff, lalu diberi lapisan kotor dan gosong per titik: jelaga di belakang nosel, gosong masuk atmosfer
+     bergradasi (putih pudar di bagian terpanas, abu-abu, lalu jelaga hitam, baru cat), noda aliran memanjang. Kaca bernada biru (penanda kaca di shader: biru > merah).
      Mengembalikan badan dan kaki (termasuk tangga) terpisah (kaki ditarik saat terbang). */
   // penampang badan v5 (z, lebar, tinggi, pusat y): dipakai badan luar dan pelapis kokpit
   const V5_RINGS = [[-6.2, 1.5, 0.45, -0.15], [-5.4, 1.9, 0.7, -0.08], [-2.6, 2.2, 1.2, 0.1], [-0.6, 2.4, 1.6, 0.25], [3.0, 2.4, 1.6, 0.25], [4.6, 2.0, 1.2, 0.2]];
@@ -359,10 +359,13 @@
     {
       const F = (w, h, cy) => oct(w, h, cy, 0, 0.35, 0.25);
       // cincin z -3,6 disisipkan di garis lurus (bentuk tetap) supaya kaca kokpit memanjang ke depan: pilot bisa melihat melewati hidung
-      const rings = V5_RINGS.map(([z, w, h, cy]) => ({ z, pts: F(w, h, cy) }));
-      rings.splice(2, 0, { z: -3.6, pts: F(...v5At(-3.6)) });
-      parts.push(loft(rings, (i, r) => (i < 0 ? FRAME : (r === 2 || r === 3) && (i === 3 || i === 4 || i === 5) ? GLASS
-        : weather(r < 3 ? PALE : BEIGE, i, r < 2 ? r : r - 1, 3))));
+      // cincin tambahan di garis lurus (bentuk tetap) tiap sekitar 0,6 m: gradasi gosong halus di sepanjang perut
+      const zs = [...V5_RINGS.map((q) => q[0]), -3.6].sort((a, b) => a - b), rings = [];
+      for (let k = 0; k < zs.length - 1; k++) { const n = Math.max(1, Math.ceil((zs[k + 1] - zs[k]) / 0.6)); for (let j = 0; j < n; j++) { const z = zs[k] + (zs[k + 1] - zs[k]) * j / n; rings.push({ z, pts: F(...v5At(z)) }); } }
+      rings.push({ z: zs[zs.length - 1], pts: F(...v5At(zs[zs.length - 1])) });
+      // kaca: sisi 3, 4, 5 di z -3,6 sampai -0,6; nada panel per pita 1,5 m (dulu per cincin)
+      parts.push(loft(rings, (i, r, z0, z1) => { const zm = (z0 + z1) / 2;
+        return i < 0 ? FRAME : zm > -3.6 && zm < -0.6 && (i === 3 || i === 4 || i === 5) ? GLASS : weather(zm < -0.6 ? PALE : BEIGE, i, Math.floor((zm + 7) / 1.5), 3); }));
       for (const z of [-4.0, 1.2]) parts.push(seamRing(F(...v5At(z)), z));   // penampang di z itu (dulu memakai penampang belakang: cincin melayang di depan kanopi)
       // rangka kaca kokpit
       parts.push(box(1.2, 0.035, 0.05, 0, 0.9, -1.6, PALE));  // palang kaca (tipis: dari kursi pilot hanya 0,45 m di depan mata)
@@ -422,12 +425,20 @@
         let k = 1, warm = 0;
         const soot = sm(2.6, 4.7, z) * Math.max(0, 1 - Math.abs(Math.abs(x) - 1.75) / 1.4);        // jelaga di belakang nosel
         k *= 1 - 0.55 * soot; warm += 0.35 * soot * sm(3.9, 4.7, z);                                  // warna perunggu panas di bibir nosel
-        k *= 1 - 0.45 * Math.max(0, -ny);                                                           // perut hangus
-        k *= 1 - 0.35 * sm(-4.6, -6.2, z);                                                          // hidung terbakar saat masuk atmosfer
         const streak = h3(Math.floor(x * 4), 1.7, 3.1), fall = sm(-2, 4.5, z);                      // noda aliran memanjang ke belakang
         k *= 1 - 0.18 * streak * fall * (ny > 0.3 ? 1 : 0.5);
         k *= 0.9 + 0.2 * h3(Math.floor(x * 2), Math.floor(y * 2), Math.floor(z * 2));               // bintik kotor per panel
-        c[i] = c[i] * k + warm * 0.09; c[i + 1] = c[i + 1] * k + warm * 0.05; c[i + 2] = c[i + 2] * k + warm * 0.02;
+        let r = c[i] * k + warm * 0.09, gg = c[i + 1] * k + warm * 0.05, b = c[i + 2] * k + warm * 0.02;
+        // gosong masuk atmosfer bergradasi: panas tertinggi (hidung, perut depan, tepi depan) memutih pudar, lalu abu-abu,
+        // lalu jelaga hitam di tepi dan di hilir aliran, baru warna cat. Panas turun dari hidung ke belakang, bergaris searah aliran.
+        const nz = n[i + 2], hn = sm(4.6, -6.2, z), belly = Math.max(0, -ny), lead = Math.max(0, -nz) * (y < 0.4 ? 1 : 0.4);   // hn: 1 di hidung, 0 di ekor
+        let heat = belly * (0.25 + 0.75 * hn) + lead * (0.3 + 0.5 * hn) + 0.4 * hn * hn * sm(-0.2, -0.9, ny);
+        heat *= 0.82 + 0.3 * h3(Math.floor(x * 5), 2.3, Math.floor(z * 0.8));                    // garis searah aliran
+        heat = Math.min(1, heat);
+        const lerp3 = (A, B, t) => [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t, A[2] + (B[2] - A[2]) * t];
+        const BLEACH = [0.5, 0.49, 0.47], ASH = [0.27, 0.265, 0.26], SOOT = [0.045, 0.04, 0.04], base = [r, gg, b];
+        const burnt = heat > 0.72 ? lerp3(ASH, BLEACH, sm(0.72, 0.97, heat)) : heat > 0.44 ? lerp3(SOOT, ASH, sm(0.44, 0.72, heat)) : lerp3(base, SOOT, sm(0.16, 0.44, heat));
+        c[i] = burnt[0]; c[i + 1] = burnt[1]; c[i + 2] = burnt[2];
       }
     }
     // kaca kanopi dipisah dari badan: dirender satu sisi (dari dalam kokpit tembus pandang)

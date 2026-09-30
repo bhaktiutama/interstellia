@@ -17,8 +17,8 @@ Per 30 September 2026 · Status: selesai (lihat bagian "Status")
 | 0-7 s | Jauh | Planet sabit di depan piringan Gargantua, kamera mendekat dari 62.000 ke 44.000 km. Judul "Millar's World" dan "1 jam di sini = 7 tahun di luar" |
 | 7-14 s | Orbit | KS-07 di 350 km di atas awan, kamera memutar di belakang-atas |
 | 14-21 s | Masuk atmosfer | Hidung turun, ketinggian 350 ke 70 km, plasma jingga, guncangan, gemuruh, memutih |
-| 21-35 s | Turun di dunia | Muncul dari putih 450 m di atas laut, 900 m di belakang titik pendaratan, melambat, melayang, turun vertikal dengan kipas menyala, semburan air, kaki turun di bawah 6 m. Kamera mengejar lalu berpindah ke mata pemain di titik awal |
-| 35 s | Mulai | Wahana di titik semula, pemain di titik awal menghadap wahana, misi dan hitung mundur mulai |
+| 21-35 s | Turun di dunia | Dilihat dari kursi pilot (orang pertama, layar MFD hidup): muncul dari putih 450 m di atas laut, 900 m di belakang titik pendaratan, melambat, melayang, turun vertikal dengan kipas menyala, semburan air, kaki turun di bawah 6 m, guncangan kecil saat menyentuh air |
+| 35-36 s | Mulai | Kilas putih, pemain turun di samping tangga menghadap serong ke laut, misi dan hitung mundur mulai (lokasi pecahan dihitung dari posisi ini) |
 
 Spasi, Enter, Esc, atau klik = lewati langsung ke permainan.
 
@@ -88,3 +88,26 @@ Uji: `tools/uji_millar.py` kini 68 pemeriksaan, semua lulus, tanpa error halaman
 | Kokpit v5 | Kaca terpisah (36 titik) menghadap keluar 12/12, pelapis menghadap ke dalam 52/52, urutan segitiga badan 2.436/2.436, mata 0,27 m di bawah atap, pandangan lewat hidung 5,5 derajat; di pandangan kokpit layar tengah tergambar, tanpa nilai tidak valid |
 
 Catatan: pemanggilan kunci kursor kini lewat `lockPointer()` (menangkap penolakan promise "Pointer is already locked" yang sempat muncul di uji).
+## Perbaikan setelah uji pemilik (M4b)
+
+Per 30 September 2026.
+
+| No | Permintaan | Perbaikan |
+| --- | --- | --- |
+| 1 | Percikan di kaki kurang terlihat | Tiap langkah kini sekitar 280 butir (dua kaki, preset Tinggi), tetes 1,9 kali lebih besar, naik sampai 0,57 m, terlempar ke depan searah langkah. Ditambah semburan terus-menerus di depan tulang kering saat bergerak di air (makin banyak saat lari dan air makin dalam). Tetes lebih terang dan lebih pekat dari buih agar tidak tenggelam di permukaan putih |
+| 2 | Bayangan dari cahaya Gargantua | Peta bayangan searah cahaya piringan (22 derajat di atas cakrawala), 96 x 96 m di sekitar kamera, 2.048 px (Ultra, Tinggi), 1.024 (Sedang, Rendah), 512 (Hemat). Penghalang: KS-07, pecahan misi, dan tubuh pemain (kepala, badan, lengan, kaki berayun ikut langkah; hanya untuk bayangan). Penerima: dasar laut dekat (cahaya dasar, kaustik, hamburan, buih) dan wahana/pecahan (cahaya langsung hangat + bayangan sendiri). Mendung: tipis dan lembut; cerah: tegas. Tepi halus dengan 8 sampel cakram berputar acak |
+| 3 | Gosong harus bergradasi, bukan hitam total | Model panas masuk atmosfer: terpanas di hidung dan perut depan (putih pudar), lalu abu-abu, lalu jelaga hitam di hilir dan tepi, baru warna cat; bergaris searah aliran. Badan diberi cincin tambahan tiap 0,6 m (bentuk tetap) supaya gradasi halus. Berlaku juga di Copper |
+| 4 | A = miring ke kanan tapi belok ke kiri | Tanda guling dibalik: A kini belok kiri dengan sayap kiri turun (dan sebaliknya). Laju belok naik-turun halus (tidak langsung penuh), miring juga sedikit saat melayang. Cakrawala buatan di layar MFD ikut dibalik |
+| 5 | Pendaratan sebaiknya orang pertama | Adegan 21-35 s kini dari kursi pilot, lalu pemain mulai di samping tangga |
+
+Uji: `tools/uji_millar.py` kini 72 pemeriksaan, semua lulus. Baru:
+
+| Uji | Hasil |
+| --- | --- |
+| Percikan kaki | 282 butir per langkah, tinggi 0,57 m, terlempar sampai 4,11 m ke depan (pemain berlari 3 m/s) |
+| Belok kiri (A) | Arah +64 derajat dalam 1,5 s, miring 23,2 derajat, ujung sayap kiri 3,89 m lebih rendah dari kanan |
+| Bayangan | Terang di bayangan KS-07 15% lebih gelap dibanding bayangan dimatikan (cerah, kuat 0,70), peta 2.048 px |
+| Gosong | Rata-rata warna perut: hidung 0,487 (putih pudar), tengah 0,264 (abu-abu), hilir 0,054 (jelaga) |
+| Kedatangan | Kokpit tampil 447 langkah, mendarat 0,00 m dari titik semula, kamera tidak pernah di bawah air, pemain 1,0 m dari tangga |
+
+Catatan: bayangan paling jelas saat menunduk atau di air jernih; di sudut landai, pantulan langit di permukaan lebih kuat daripada dasar laut (seperti di laut sungguhan). Percikan kaki paling terlihat saat berlari sambil sedikit menunduk.

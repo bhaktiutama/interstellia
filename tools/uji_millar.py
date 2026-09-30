@@ -382,11 +382,12 @@ UJI = r"""
     for (const tt of [3, 10, 17]) { C.t = tt; await wait(900); const h = hdrCheck(); shots.push(`${tt} s ${C.orbit ? 'orbit' : 'dunia'} tidak valid ${h.nb} terang ${h.lum.toFixed(3)}`); if (!(C.orbit && h.nb === 0 && h.lum > 0.001)) shots.push('GAGAL'); }
     out[`sinematik orbit: ${shots.join(', ')}`] = C.on && C.kind === 'arrive' && !shots.includes('GAGAL') && !M.STATE.started;
     // jalan penuh 21-35 s dengan langkah tetap: kapal tidak pernah di bawah titik mendarat, kamera di atas air, berakhir di titik semula
-    C.t = 20.9; let minGap = 1e9, camLow = 0, steps = 0; const yl = (() => { M.placeShip(...M.SHIP.home); return M.SHIP.y; })();
-    while (C.on && steps++ < 600) { M.cineStep(dt); if (C.world) { minGap = Math.min(minGap, M.SHIP.mesh.position.y - yl); if (M.camera.position.y < M.drawdown(M.camera.position.x - M.frontX(M.camera.position.z)) + 0.5) camLow++; } }
+    C.t = 20.9; let minGap = 1e9, camLow = 0, steps = 0, ckSeen = 0; const yl = (() => { M.placeShip(...M.SHIP.home); return M.SHIP.y; })();
+    while (C.on && steps++ < 600) { M.cineStep(dt); if (C.world) { minGap = Math.min(minGap, M.SHIP.mesh.position.y - yl); if (M.camera.position.y < M.drawdown(M.camera.position.x - M.frontX(M.camera.position.z)) + 0.5) camLow++; if (M.COCKPIT.group.visible) ckSeen++; } }
     const home = M.SHIP.home, dHome = Math.hypot(M.SHIP.x - home[0], M.SHIP.z - home[1]);
-    out[`kedatangan: mendarat ${dHome.toFixed(2)} m dari titik semula, celah terendah ${minGap.toFixed(2)} m, kamera di bawah air ${camLow}x, misi mulai ${M.MIS.on}, pemain di titik awal ${Math.hypot(P.x, P.z).toFixed(1)} m`] =
-      !C.on && dHome < 0.01 && minGap > -0.01 && camLow === 0 && M.MIS.on && M.STATE.started && Math.hypot(P.x, P.z) < 0.5 && M.SHIP.legs.visible;
+    const dDoor = Math.hypot(P.x - M.SHIP.door.x, P.z - M.SHIP.door.z);
+    out[`kedatangan (dari kokpit): mendarat ${dHome.toFixed(2)} m dari titik semula, celah terendah ${minGap.toFixed(2)} m, kamera di bawah air ${camLow}x, kokpit tampil ${ckSeen}x, misi mulai ${M.MIS.on}, pemain ${dDoor.toFixed(1)} m dari tangga`] =
+      !C.on && dHome < 0.01 && minGap > -0.01 && camLow === 0 && ckSeen > 100 && M.MIS.on && M.STATE.started && dDoor < 2 && M.SHIP.legs.visible && !M.COCKPIT.group.visible;
     // lewati: Spasi langsung ke permainan
     M.stopMission(); M.STATE.started = false; C.played = false; M.startWithCine(); C.t = 12;
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }));
@@ -408,6 +409,45 @@ UJI = r"""
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyW', key: 'w' })); window.dispatchEvent(new KeyboardEvent('keyup', { code: 'KeyW', key: 'w' }));
     out[`pandangan orbit (panel): ditolak saat misi ${refused}, tampil di Jelajah ${onO} (tidak valid ${ho.nb}), tombol = kembali ${!C.on && M.STATE.started}`] = refused && onO && ho.nb === 0 && !C.on && M.STATE.started;
     M.CINE.enabled = false; M.flyReset(); P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.view = 0; M.keys.KeyW = false;
+  }
+
+  // 5l. Perbaikan: percikan kaki, arah miring wahana, bayangan dari cahaya Gargantua, gosong bergradasi
+  {
+    const P = M.P, V3 = M.THREE.Vector3, S = M.SPL;
+    // percikan: satu langkah lari di air 0,5 m, butir naik setinggi lutut dan terlempar ke depan
+    for (let k = 0; k < 200; k++) M.stepSplash(0.05);
+    P.view = 0; P.x = 0; P.z = 0; P.depth = 0.5; P.yaw = 0; P.vx = 0; P.vz = -3; const y0 = M.seabed(0, 0) + 0.5;
+    M.footstep(1.2, true); let n0 = 0; for (let i = 0; i < S.max; i++) if (S.life[i] > 0) n0++;
+    let hMax = 0, fMax = 0; for (let k = 0; k < 40; k++) { M.stepSplash(1 / 60); for (let i = 0; i < S.max; i++) if (S.life[i] > 0) { hMax = Math.max(hMax, S.pos[i * 3 + 1] - y0); fMax = Math.max(fMax, -S.pos[i * 3 + 2]); } }
+    P.vz = 0;
+    out[`percikan kaki: ${n0} butir per langkah (dua kaki), tinggi ${hMax.toFixed(2)} m, terlempar ${fMax.toFixed(2)} m ke depan`] = n0 > 40 && hMax > 0.3 && fMax > 0.6;
+    // arah miring: A = belok kiri dan sayap kiri turun (dulu miring ke kanan)
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission();
+    P.x = M.SHIP.door.x; P.z = M.SHIP.door.z; M.missionAction(); const FL = M.FLY;
+    Object.assign(FL, { landed: false, spool: 1 }); FL.y += 20;
+    const y0w = FL.yaw; M.keys.KeyW = true; for (let k = 0; k < 90; k++) M.updateFly(1 / 30);
+    M.keys.KeyA = true; for (let k = 0; k < 45; k++) M.updateFly(1 / 30); M.keys.KeyA = false; M.keys.KeyW = false;
+    M.SHIP.mesh.updateMatrixWorld(true);
+    const L = M.SHIP.mesh.localToWorld(new V3(-5, 0, 1.3)), R = M.SHIP.mesh.localToWorld(new V3(5, 0, 1.3));
+    out[`belok kiri (A): arah +${((FL.yaw - y0w) * 180 / Math.PI).toFixed(0)} derajat, miring ${(FL.roll * 180 / Math.PI).toFixed(1)} derajat, ujung sayap kiri ${(L.y - R.y).toFixed(2)} m dari kanan`] = FL.yaw > y0w + 0.3 && FL.roll > 0.05 && L.y < R.y - 0.3;
+    M.flyReset();
+    // bayangan: kamera menatap bayangan KS-07 di dasar laut; terang turun dibanding bayangan dimatikan
+    M.MOOD.brk = 1; const sy = M.seabed(M.SHIP.x, M.SHIP.z), h = M.SHIP.y + 0.3 - sy, G = M.THREE.Vector3;
+    const gd = new V3(Math.cos(22 * Math.PI / 180) * Math.cos(28 * Math.PI / 180), Math.sin(22 * Math.PI / 180), -Math.cos(22 * Math.PI / 180) * Math.sin(28 * Math.PI / 180));
+    const sx = M.SHIP.x - gd.x * h / gd.y, sz = M.SHIP.z - gd.z * h / gd.y;
+    P.x = sx + 9; P.z = sz + 9; P.y = M.seabed(P.x, P.z) + M.CONFIG.eye; P.yaw = Math.atan2(-(sx - P.x), -(sz - P.z)); P.pitch = -Math.atan2(1.7, Math.hypot(sx - P.x, sz - P.z));
+    const lumC = () => { const T = M.POST.hdr, w = T.width, hh = T.height, n = 24, b = new Uint16Array(n * n * 4); M.renderer.readRenderTargetPixels(T, (w - n) >> 1, (hh - n) >> 1, n, n, b);
+      let l = 0; for (let k = 0; k < b.length; k += 4) l += 0.3 * M.THREE.DataUtils.fromHalfFloat(b[k]) + 0.59 * M.THREE.DataUtils.fromHalfFloat(b[k + 1]) + 0.11 * M.THREE.DataUtils.fromHalfFloat(b[k + 2]); return l / (n * n); };
+    await wait(1200); const l1 = lumC(), k1 = M.U.uShK.value;
+    M.makeShadow(0); await wait(900); const l0 = lumC();
+    M.makeShadow(M.SHD_SIZE[M.PRESET.idx]); await wait(300);
+    out[`bayangan Gargantua: terang di bayangan KS-07 ${l1.toFixed(4)} vs tanpa bayangan ${l0.toFixed(4)} (${(100 * (1 - l1 / l0)).toFixed(0)}% lebih gelap, kuat ${k1.toFixed(2)}), peta ${M.SHD.size} px`] = M.SHD.size > 0 && k1 > 0 && l1 < l0 * 0.93;
+    // gosong bergradasi di perut: hidung memutih pudar > tengah abu-abu > belakang jelaga
+    const g = M.KS.geo, pa = g.attributes.position.array, na = g.attributes.normal.array, ca = g.attributes.color.array, acc = { nose: [0, 0], mid: [0, 0], rear: [0, 0] };
+    for (let i = 0; i < pa.length; i += 3) { if (na[i + 1] > -0.95 || Math.abs(pa[i]) > 0.7) continue; const z = pa[i + 2], key = z < -4.8 ? 'nose' : z > -2.4 && z < -0.4 ? 'mid' : z > 0.6 && z < 2.4 ? 'rear' : null; if (!key) continue; acc[key][0] += (ca[i] + ca[i + 1] + ca[i + 2]) / 3; acc[key][1]++; }
+    const lm = (k) => acc[k][0] / Math.max(1, acc[k][1]);
+    out[`gosong perut bergradasi: hidung (putih pudar) ${lm('nose').toFixed(3)}, tengah (abu-abu) ${lm('mid').toFixed(3)}, hilir (jelaga) ${lm('rear').toFixed(3)}`] = lm('nose') > 0.3 && lm('nose') > lm('mid') && lm('mid') > lm('rear') && lm('rear') < 0.1;
+    P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -Math.PI / 2 + 0.3;
   }
 
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua
