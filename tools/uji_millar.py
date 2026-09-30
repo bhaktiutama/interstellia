@@ -1,6 +1,6 @@
-"""Uji Millar's World R1 + R1b + R2 + R3 + R4 + R5 + M3a: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
+"""Uji Millar's World R1 + R1b + R2 + R3 + R4 + R5 + M3a + M3b: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
 tidak ada daratan (dasar laut selalu di bawah air terendah), fisika (1,3 g, lompat 77%), gelombang 125 m/s, jam dilatasi,
-tersapu = kembali dengan penalti waktu, audio (lapisan ikut jarak gelombang, efek, bisu), shuttle KS-07 (modul bersama = geometri Copper, tapak di dasar laut, kaki menahan pemain), lensa Gargantua (radius bayangan, busur terbelokkan), tidak ada nilai tidak valid (NaN/Inf) di render HDR tiap preset.
+tersapu = kembali dengan penalti waktu, audio (lapisan ikut jarak gelombang, efek, bisu), shuttle KS-07 v3 (v1 di modul bersama tetap = Copper, tapak di dasar laut, kaki dan blok belakang menahan pemain, pintu), lensa Gargantua (radius bayangan, busur terbelokkan), tidak ada nilai tidak valid (NaN/Inf) di render HDR tiap preset.
 Pakai: python tools/uji_millar.py   (butuh: pip install playwright && playwright install chromium)
 Tanpa akses CDN langsung: THREE_LOCAL=<folder berisi three.module.js dan three.core.js> python tools/uji_millar.py
 Chromium sendiri: CHROMIUM=<jalur executable>"""
@@ -201,30 +201,40 @@ UJI = r"""
     M.U.uWX.value += 40000 - M.frontX(0);
   }
 
-  // 5i. M3a: shuttle KS-07 mendarat di air (modul bersama shared/kestrel.js)
+  // 5i. M3a + M3b: shuttle KS-07 v3 mendarat di air (modul bersama shared/kestrel.js)
   {
     const S = M.SHIP, K = window.KESTREL, KS = K.build(M.THREE);
     const fp = (g) => { let h = 0, n = 0; for (const a of [...Object.values(g.attributes), g.index].filter(Boolean)) for (let j = 0; j < a.array.length; j++) { h = (h * 31 + Math.round(a.array[j] * 1e5)) % 2147483647; n++; } return `n${n} h${h}`; };
     const sid = [fp(KS.hullG), fp(KS.partsG), fp(KS.glowG)].join(', ');
-    // sidik jari geometri Copper Corn Station tahap 11d (sebelum dipindah ke modul bersama)
-    out[`KS-07 dari modul bersama = geometri Copper (${sid})`] = sid === 'n24318 h620106941, n14256 h2123920359, n1458 h-1932132836';
-    const gap = S.pads.map((p) => S.y - S.padDrop - M.seabed(p.x, p.z)), belly = S.y - Math.max(...[0.3, 0.5, 0.7, 0.9].map((t) => K.HB(t)));
-    out[`tapak di dasar laut: celah ${gap.map((g) => g.toFixed(2)).join(' / ')} m; perut ${belly.toFixed(2)} m di atas muka air rata-rata`] = gap.every((g) => g >= -0.001 && g < 0.4) && belly > 1.2;
+    // v1 tetap identik untuk Copper Corn Station (sidik jari tahap 11d)
+    out[`KS-07 v1 di modul bersama tetap = geometri Copper (${sid})`] = sid === 'n24318 h620106941, n14256 h2123920359, n1458 h-1932132836';
+    const g = M.KS.geo, pa = g.attributes.position.array, na = g.attributes.normal.array;
+    let bad = 0; for (let i = 0; i < pa.length; i++) if (!Number.isFinite(pa[i]) || !Number.isFinite(na[i])) bad++;
+    out[`KS-07 v3: ${g.attributes.position.count} titik, 4 kaki, tidak valid ${bad}`] = bad === 0 && S.pads.length === 4 && g.attributes.color;
+    const gap = S.pads.map((p) => S.y - S.padDrop - M.seabed(p.x, p.z));
+    out[`tapak di dasar laut: celah ${gap.map((x) => x.toFixed(2)).join(' / ')} m; bawah lengan ${S.belly.toFixed(2)} m di atas muka air rata-rata`] = gap.every((x) => x >= -0.001 && x < 0.4) && S.belly > 1.5;
     const P = M.P, p0 = S.pads[1]; P.view = 0; P.x = p0.x - 3; P.z = p0.z; P.vx = P.vz = 0; P.yaw = -Math.PI / 2;   // menghadap +x ke kaki
     M.U.uWX.value += 40000 - M.frontX(0);
-    M.keys.KeyW = true; let dmin = 1e9; for (let i = 0; i < 240; i++) { M.stepPlayer(1 / 60); dmin = Math.min(dmin, Math.hypot(P.x - p0.x, P.z - p0.z)); } M.keys.KeyW = false;
+    const walk = (n) => { let dmin = 1e9; M.keys.KeyW = true; for (let i = 0; i < n; i++) { M.stepPlayer(1 / 60); dmin = Math.min(dmin, Math.hypot(P.x - p0.x, P.z - p0.z)); } M.keys.KeyW = false; return dmin; };
+    const dmin = walk(240);
     out[`kaki pendarat menahan pemain: jarak terdekat ${dmin.toFixed(2)} m (batas ${(p0.r + 0.3).toFixed(2)} m)`] = dmin >= p0.r + 0.29;
+    // blok belakang rendah: berjalan dari belakang lurus ke arah hidung tidak boleh masuk ke bawahnya
+    const L = M.KS.low[0], [bx, bz] = M.shipToWorld(0, L.z1 + 4), [fx, fz] = M.shipToWorld(0, 0);
+    P.x = bx; P.z = bz; P.vx = P.vz = 0; P.yaw = Math.atan2(-(fx - bx), -(fz - bz));
+    let inside = 0; M.keys.KeyW = true; for (let i = 0; i < 300; i++) { M.stepPlayer(1 / 60); const [mx, mz] = M.worldToShip(P.x, P.z); if (mx > L.x0 && mx < L.x1 && mz > L.z0 && mz < L.z1) inside++; } M.keys.KeyW = false;
+    out[`blok belakang menahan pemain: ${inside} langkah di bawahnya`] = inside === 0;
     const eye = M.seabed(S.x, S.z) + M.CONFIG.eye;
-    out[`bisa berjalan di bawah badan: mata ${eye.toFixed(2)} m, perut ${belly.toFixed(2)} m`] = belly - eye > 0.3;
+    out[`bisa berjalan di bawah lengan dan badan tengah: mata ${eye.toFixed(2)} m, bawah badan ${S.belly.toFixed(2)} m`] = S.belly - eye > 0.4;
+    out[`pintu di sisi yang menghadap titik awal: ${Math.hypot(S.door.x, S.door.z).toFixed(1)} m (pusat ${Math.hypot(S.x, S.z).toFixed(1)} m)`] = Math.hypot(S.door.x, S.door.z) < Math.hypot(S.x, S.z);
     const pos = M.seaFar.geometry.attributes.position, ix = M.seaFar.geometry.index.array, v = (k) => new M.THREE.Vector3().fromBufferAttribute(pos, ix[k]);
     const nrm = new M.THREE.Vector3().crossVectors(v(1).sub(v(0)), v(2).sub(v(0)));
     out[`laut jauh menghadap ke atas (normal y ${nrm.y.toFixed(3)}; dulu terbalik dan dibuang culling)`] = nrm.y > 0;
     // render dengan shuttle di layar: tanpa nilai tidak valid atau titik menyala
     P.x = 0; P.z = 0; P.pitch = 0.06; P.yaw = Math.atan2(-(S.x), -(S.z)); await wait(1500);
     const T = M.POST.hdr, w = T.width, h = T.height, bb = new Uint16Array(w * h * 4); M.renderer.readRenderTargetPixels(T, 0, 0, w, h, bb);
-    const from = M.THREE.DataUtils.fromHalfFloat; let bad = 0, hot = 0;
-    for (let k = 0; k < bb.length; k += 4) for (let c = 0; c < 3; c++) { const x = from(bb[k + c]); if (!Number.isFinite(x)) bad++; else if (x > 50) hot++; }
-    out[`shuttle di layar: tidak valid ${bad}, titik > 50: ${hot}`] = bad === 0 && hot === 0;
+    const from = M.THREE.DataUtils.fromHalfFloat; let nb = 0, hot = 0;
+    for (let k = 0; k < bb.length; k += 4) for (let c = 0; c < 3; c++) { const x = from(bb[k + c]); if (!Number.isFinite(x)) nb++; else if (x > 50) hot++; }
+    out[`shuttle di layar: tidak valid ${nb}, titik > 50: ${hot}`] = nb === 0 && hot === 0;
     P.yaw = -Math.PI / 2 + 18 * Math.PI / 180;
   }
 

@@ -1408,16 +1408,21 @@ function seaStateTarget(dist) {
 }
 
 /* ---------------- Shuttle KS-07 mendarat di air (M3a, rencana: docs/millar/rencana-m3-millar.md) ----------------
-   Geometri dari modul bersama shared/kestrel.js (sama dengan Copper Corn Station) + kaki pendarat tiga titik bertapak lebar.
-   Diletakkan di samping titik awal; perut sekitar 1,5 m di atas muka air, pemain bisa berjalan di bawahnya. Tabrakan: hanya kaki.
+   M3b: model KS-07 v3 dari modul bersama shared/kestrel.js (KESTREL.buildV3; Copper masih memakai v1) dengan 4 kaki.
+   Diletakkan di samping titik awal; bawah lengan dan badan tengah sekitar 2 m di atas muka air (bisa dilewati). Tabrakan: kaki dan blok belakang.
    Shading sendiri seperti laut: albedo warna vertex, cahaya langit mendung (uAmb) + pantulan cubemap langit (Fresnel),
    bagian yang terkena air lebih gelap dan berkilap, kabut ke cakrawala, turun mengikuti lengkung planet. */
-const SHIP = { x: 22.3, z: 20.1, yaw: 2.675, padDrop: 3.8, y: 0, pads: [], navT: 0, ripT: 0, mesh: null };
-const KS = window.KESTREL.build(THREE), KG = window.KESTREL.gear(THREE, SHIP.padDrop);
+// M3b: model KS-07 v3 (KESTREL.buildV3), sisi kiri berpintu menghadap titik awal, hidung ke arah datangnya gelombang
+const SHIP = { x: 22.3, z: 20.1, yaw: -0.736, padDrop: 0, y: 0, pads: [], navT: 0, ripT: 0, mesh: null };
+const KS = window.KESTREL.buildV3(THREE);
+const shipToWorld = (x, z) => { const c = Math.cos(SHIP.yaw), sn = Math.sin(SHIP.yaw); return [SHIP.x + x * c + z * sn, SHIP.z - x * sn + z * c]; };   // model -> dunia (rotasi y)
+const worldToShip = (x, z) => { const c = Math.cos(SHIP.yaw), sn = Math.sin(SHIP.yaw), dx = x - SHIP.x, dz = z - SHIP.z; return [dx * c - dz * sn, dx * sn + dz * c]; };
 {
-  const c = Math.cos(SHIP.yaw), sn = Math.sin(SHIP.yaw);
-  SHIP.pads = KG.pads.map((p) => ({ x: SHIP.x + p.x * c + p.z * sn, z: SHIP.z - p.x * sn + p.z * c, r: p.r }));   // model -> dunia (rotasi y)
+  SHIP.padDrop = -KS.PAD_Y;
+  SHIP.pads = KS.pads.map((p) => { const [x, z] = shipToWorld(p.x, p.z); return { x, z, r: p.r }; });
   SHIP.y = Math.max(...SHIP.pads.map((p) => seabed(p.x, p.z))) + SHIP.padDrop;   // tapak tertinggi menyentuh dasar laut
+  SHIP.belly = SHIP.y + KS.belly;                                                  // bawah lengan dan badan tengah (bisa dilewati)
+  const [dx, dz] = shipToWorld(KS.door.x, KS.door.z); SHIP.door = { x: dx, z: dz, y: SHIP.y + KS.door.y };
 }
 const shipU = { ...U, uWater: { value: 0 } };
 const shipMat = new THREE.ShaderMaterial({
@@ -1458,15 +1463,23 @@ const shipMat = new THREE.ShaderMaterial({
 {
   const g = new THREE.Group();
   const navMat = (r, gg, b) => new THREE.MeshBasicMaterial({ color: new THREE.Color(r, gg, b) });
-  const glow = new THREE.Mesh(KS.glowG, new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide }));
-  SHIP.nav = { red: new THREE.Mesh(KS.navG.red, navMat(6, 0.25, 0.15)), green: new THREE.Mesh(KS.navG.green, navMat(0.2, 5, 0.6)), strobe: new THREE.Mesh(KS.navG.strobe, navMat(14, 14, 14)) };
-  g.add(new THREE.Mesh(KS.hullG, shipMat), new THREE.Mesh(KS.partsG, shipMat), new THREE.Mesh(KG.geo, shipMat), glow, SHIP.nav.red, SHIP.nav.green, SHIP.nav.strobe);
+  const lamp = (p, s, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), mat); m.position.set(...p); return m; };
+  SHIP.nav = { red: lamp(KS.nav.red, 0.3, navMat(6, 0.25, 0.15)), green: lamp(KS.nav.green, 0.3, navMat(0.2, 5, 0.6)), strobe: lamp(KS.nav.strobe, 0.35, navMat(14, 14, 14)) };
+  g.add(new THREE.Mesh(KS.geo, shipMat), SHIP.nav.red, SHIP.nav.green, SHIP.nav.strobe);
   g.position.set(SHIP.x, SHIP.y, SHIP.z); g.rotation.y = SHIP.yaw;
   g.traverse((o) => { o.frustumCulled = false; });
   scene.add(g); SHIP.mesh = g;
 }
-// Kaki pendarat menahan pemain (lingkaran tapak + 0,3 m)
+// Kaki pendarat menahan pemain (lingkaran tapak + 0,3 m); bagian rendah (blok belakang, bawahnya di bawah kepala) = kotak
 function shipPush() {
+  for (const L of KS.low) {
+    const [mx, mz] = worldToShip(P.x, P.z), m = 0.3;
+    if (mx > L.x0 - m && mx < L.x1 + m && mz > L.z0 - m && mz < L.z1 + m) {
+      const d = [mx - (L.x0 - m), L.x1 + m - mx, mz - (L.z0 - m), L.z1 + m - mz], k = d.indexOf(Math.min(...d));
+      const nx = k === 0 ? L.x0 - m : k === 1 ? L.x1 + m : mx, nz = k === 2 ? L.z0 - m : k === 3 ? L.z1 + m : mz;
+      [P.x, P.z] = shipToWorld(nx, nz);
+    }
+  }
   for (const p of SHIP.pads) {
     const dx = P.x - p.x, dz = P.z - p.z, d = Math.hypot(dx, dz), r = p.r + 0.3;
     if (d < r) { const k = d > 1e-6 ? r / d : 0; P.x = d > 1e-6 ? p.x + dx * k : p.x + r; P.z = d > 1e-6 ? p.z + dz * k : P.z; const vn = (P.vx * dx + P.vz * dz) / Math.max(d * d, 1e-6); if (vn < 0) { P.vx -= vn * dx; P.vz -= vn * dz; } }
@@ -1929,7 +1942,7 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   SWEEP, currentAt, SPRAY, US, ZS, M_COMP,
   AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
   PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob,
-  SHIP, shipPush, shipDist, shipMat };
+  SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip };
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>
 </body>

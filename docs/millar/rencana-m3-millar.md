@@ -1,49 +1,101 @@
-# Rencana M3 Millar's World: Shuttle KS-07 dan Misi Suar
+# Rencana M3 Millar's World: Shuttle KS-07 v3 dan Misi Radar
 
-Per 30 September 2026 · Status: M3a selesai (lihat "Status M3a"), berikutnya M3b
+Per 30 September 2026 · Status: M3a dan M3b selesai (lihat bagian "Status"), berikutnya M3c misi radar
 
 ## Ringkasan
 
-- M3 memberi alur permainan: tiba di samping shuttle KS-07 yang mendarat di air, menjelajah, lalu naik dan lepas landas sebelum gelombang raksasa tiba.
-- Shuttle memakai modul bersama pertama `shared/kestrel.js` (geometri sama persis dengan Copper Corn Station), ditambah kaki pendarat.
-- Desain shuttle akan diganti: konsep terbaru KS-07 v3 hibrida `docs/app/konsep-ks07-v3.md` (v2b disimpan di `docs/app/konsep-ks07-v2.md`), menunggu persetujuan. M3b dikerjakan setelah model v2 terpasang.
-- Dibagi 3 tahap: M3a shuttle mendarat, M3b naik dan terbang, M3c misi suar. Pandangan orbit dan sinematik kedatangan tetap di M4.
+- Model shuttle: KS-07 v3 (hibrida, `docs/app/konsep-ks07-v3.md`), dipilih pemilik. Dipasang lewat modul bersama `shared/kestrel.js`; Copper Corn Station tetap memakai model lama sampai tahap M3e.
+- Misi: pakai radar untuk menemukan 3 pecahan pesawat misi sebelumnya (salah satunya membawa blackbox), ambil barang di tiap lokasi, kembali ke shuttle, lepas landas, dan lolos dari gelombang raksasa. Seluruh misi bisa diselesaikan di bawah 5 menit, dengan gelombang tiba tepat di menit ke-5.
+- Tahap: M3b model v3, M3c misi radar, M3d naik dan lolos, M3e Copper memakai v3. Pandangan orbit dan sinematik kedatangan tetap di M4.
+
+## Alur permainan (mode Misi)
+
+| Langkah | Yang dilakukan pemain | Yang terjadi |
+| --- | --- | --- |
+| 1. Tiba | Berdiri di samping KS-07, hitung mundur 5:00 mulai | Laut tenang, gelombang 37,5 km di balik cakrawala |
+| 2. Buka radar | M (tombol peta di Copper) | Layar radar genggam: sapuan 2 s, jangkauan 250 m, tanda 3 sinyal. Makin dekat, makin tepat |
+| 3. Ke lokasi | Berjalan atau lari di air (Shift) | Suar kuning berkedip di tiap pecahan terlihat dari sekitar 150 m; blackbox berbunyi ping yang makin cepat saat mendekat |
+| 4. Ambil barang | Tahan E 2 s di dekat barang | Barang masuk daftar (1/3, 2/3, 3/3) |
+| 5. Ulangi | Sampai 3 lokasi | Keadaan laut naik saat gelombang mendekat, arus surut 20 s terakhir |
+| 6. Kembali | Ke pintu KS-07, E naik | Masuk kokpit |
+| 7. Lolos | E lepas landas, naik di atas puncak gelombang (1,2 km) | Gelombang lewat di bawah: selamat. Masih di air atau terlalu rendah: tersapu, misi gagal |
+| 8. Hasil | Layar ringkasan | Waktu planet terpakai, waktu di luar (hari dan tahun), barang, tombol ulangi (posisi baru) |
+
+## Angka waktu (dari kode)
+
+| Item | Nilai | Dasar |
+| --- | --- | --- |
+| Kecepatan lari di air | sekitar 1,7 m/s | 4,2 m/s x (1 - 0,9 x kedalaman 0,66 m) = 0,41 dari `stepPlayer()` |
+| Kecepatan jalan di air | sekitar 0,6 m/s | 1,5 m/s x 0,41 |
+| Batas waktu | 5:00 (300 s) | Permintaan pemilik |
+| Jarak awal gelombang | 37,5 km | 300 s x 125 m/s |
+| Panjang rute (shuttle, 3 lokasi, kembali) | 250-330 m, diacak tiap percobaan | Rute terpendek dihitung saat memilih lokasi |
+| Waktu lari rute | 150-195 s | 330 m / 1,7 m/s |
+| Ambil barang | 3 x 2 s | Tahan E |
+| Membaca radar, belok, ragu | sekitar 20 s | Perkiraan |
+| Naik, lepas landas, naik ke 1,3 km | sekitar 45 s | Pintu 5 s, lepas landas 5 s, naik rata-rata 37 m/s |
+| Total perkiraan | 225-270 s | Sisa 30-75 s |
+| Waktu di luar untuk 5 menit planet | sekitar 213 hari (0,58 tahun) | 1 jam = 7 tahun |
+
+Semua angka jadi parameter di `CONFIG.mission` (batas waktu, jangkauan lokasi, panjang rute, laju naik), dan ada pilihan tingkat: Santai 7:00, Normal 5:00, Sulit 4:00.
+
+## Radar
+
+| Hal | Rancangan |
+| --- | --- |
+| Tombol | M buka/tutup (sama dengan peta di Copper). Bisa berjalan saat radar terbuka |
+| Tampilan | Lingkaran di bawah tengah layar, arah pandang di atas, sapuan berputar 2 s, cincin 50 m |
+| Sinyal | Tiap sapuan memperbarui titik sinyal dengan galat 5% jarak + 2 m (jauh = kabur, dekat = tepat). Di luar 250 m: panah di tepi dengan jarak kira-kira |
+| Warna | Pecahan kuning, blackbox jingga berkedip, shuttle putih, sudah diambil = abu |
+| Suara | Bip sapuan; blackbox mengirim ping sendiri (makin cepat dan makin keras saat dekat, arah kiri/kanan) |
+
+## Lokasi pecahan (desain orisinal)
+
+| Lokasi | Isi | Barang |
+| --- | --- | --- |
+| Pecahan 1 | Panel lambung bengkok setengah terendam, kantong apung jingga | Modul data navigasi |
+| Pecahan 2 | Kaki pendarat patah dan tangki silinder | Modul data sensor |
+| Pecahan 3 | Potongan kabin terbesar, antena patah | Blackbox |
+
+Semua pecahan punya suar kuning berkedip dan riak di sekitarnya. Posisi diacak tiap percobaan: 50-130 m dari shuttle, jarak antarlokasi minimal 40 m, rute terpendek 250-330 m.
 
 ## Tahapan
 
 | Tahap | Isi | Yang diuji pemilik |
 | --- | --- | --- |
-| M3a Shuttle mendarat | Modul bersama `shared/kestrel.js` (Copper ikut memakainya, geometri identik), KS-07 berdiri di air dangkal di samping titik awal dengan kaki pendarat tiga titik bertapak lebar, perut sekitar 1,5 m di atas muka air rata-rata (bisa berjalan di bawahnya, sisa 0,6 m di atas mata), shading seperti laut (langit mendung, pantulan langit, bagian basah lebih gelap, kabut), lampu navigasi dan strobo, riak di kaki, kaki menahan pemain, jarak di HUD | Tampilan shuttle di bawah langit mendung, skala terhadap pemain |
-| M3b Naik dan terbang | E di dekat pintu samping = naik (tombol aksi Copper). Kokpit dari Copper dipindah ke modul bersama. Lepas landas vertikal (mesin angkat, semburan air dan kabut di bawah perut, suara mesin), lalu terbang dengan tombol pesawat Copper (W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L). Mendarat lagi di air (kaki keluar, E). Bila gelombang tiba saat shuttle masih di air: tersapu seperti pemain. Lolos di atas puncak gelombang = "selamat", catat waktu di luar yang terpakai | Rasa lepas landas, kendali terbang, ketegangan balapan dengan gelombang |
-| M3c Misi suar | Suar pendarat misi sebelumnya (desain orisinal: tiang pelampung, lampu berkedip, kotak data) 1-2 km dari titik awal. Penanda arah dan jarak di HUD, E ambil kotak data, kembali ke shuttle dan lepas landas. Skor = tahun di luar yang terpakai (makin sedikit makin baik). Bisa dimatikan di panel (mode jelajah) | Tujuan permainan, keterbacaan penanda |
-| M4 (konsep) | Pandangan orbit, sinematik kedatangan, penyelarasan dengan menu | Keseluruhan |
+| M3a Shuttle mendarat | Selesai (model lama v1, lihat status) | - |
+| M3b KS-07 v3 | `KESTREL.buildV3(THREE)` di modul bersama (loft segi delapan, tanpa addon), Millar memakai v3: 4 kaki, pintu dan tangga di sisi luar lengan kiri, tabrakan kaki dan blok belakang, lampu navigasi dan strobo, riak di kaki. Copper tetap v1 | Tampilan v3 di laut mendung, skala |
+| M3c Misi radar | Pilihan mode Misi / Jelajah di layar awal, 3 lokasi pecahan acak, radar M, ping blackbox, ambil barang dengan E, HUD tujuan dan hitung mundur, gelombang tiba tepat di batas waktu, tingkat Santai / Normal / Sulit | Keterbacaan radar, apakah 5 menit pas |
+| M3d Naik dan lolos | E di pintu = naik, kokpit, E = lepas landas vertikal (semburan air, suara mesin), kendali terbang tombol pesawat Copper (W/S, A/D, R/F, mouse, Shift), lolos bila di atas puncak saat gelombang lewat, gagal bila tersapu, layar hasil dan ulangi | Ketegangan lepas landas, layar hasil |
+| M3e Copper memakai v3 | Model v3 di dermaga, cincin sandar di punggung badan tengah, posisi mata kokpit, uji spaceport | Dermaga Copper |
+| M4 (konsep) | Pandangan orbit, sinematik kedatangan | Keseluruhan |
 
 ## Keputusan (dipakai pilihan yang disarankan, masih bisa diganti)
 
 | No | Pertanyaan | Pilihan | Dipakai |
 | --- | --- | --- | --- |
-| 1 | Titik awal | a. Di samping shuttle (konsep, disarankan) · b. Di dalam kokpit | a |
-| 2 | Tersapu saat shuttle belum lepas landas | a. Kembali ke titik awal dengan penalti waktu, shuttle ikut kembali (disarankan) · b. Misi gagal, mulai ulang | a |
-| 3 | Kokpit | a. Kokpit Copper dipindah ke modul bersama (disarankan) · b. Kokpit baru khusus Millar | a |
-| 4 | Setelah lepas landas | a. Terbang bebas rendah sampai sekitar 3 km, orbit menyusul di M4 (disarankan) · b. Langsung sinematik ke orbit | a |
-| 5 | Misi suar | a. Masuk di M3c, bisa dimatikan (disarankan) · b. Murni menjelajah | a |
+| 1 | Isi 3 lokasi | a. 3 pecahan, blackbox ada di pecahan ketiga (disarankan) · b. 3 pecahan + blackbox terpisah (4 lokasi) | a |
+| 2 | Urutan lokasi | a. Bebas (disarankan) · b. Harus berurutan | a |
+| 3 | Gagal (tersapu) | a. Layar hasil "gagal" + ulangi dengan posisi baru (disarankan) · b. Kembali ke titik awal, waktu jalan terus | a |
+| 4 | Tombol radar | a. M (seperti peta di Copper, disarankan) · b. Radar kecil selalu tampil | a |
+| 5 | Mode Jelajah | a. Tetap ada (perilaku sekarang, G panggil gelombang) (disarankan) · b. Dihapus | a |
 
 ## Catatan teknis
 
 | Hal | Keputusan |
 | --- | --- |
-| Modul bersama | Skrip biasa (bukan modul ES) yang memasang `window.KESTREL`, dimuat dengan `<script src="../../shared/kestrel.js">` sebelum skrip modul. Modul ES tidak bisa diimpor dari file:// (aturan CORS peramban), jadi pola ini sama dengan aset motor Copper |
-| Identitas geometri | Sidik jari atribut (posisi, normal, warna, indeks) badan, bagian, dan cahaya mesin sama persis sebelum dan sesudah pemindahan; diuji di `tools/uji_millar.py` dengan angka dari Copper |
-| Material di Millar | Shader sendiri (bukan MeshLambert) agar cahaya, kabut, dan lengkung planet sama dengan laut |
-| Tabrakan | M3a hanya kaki (lingkaran tapak + 0,3 m). Badan cukup tinggi untuk dilewati |
+| Modul bersama | Skrip biasa (bukan modul ES) yang memasang `window.KESTREL`, dimuat dengan `<script src="../../shared/kestrel.js">` sebelum skrip modul (modul ES tidak bisa diimpor dari file://) |
+| Model lama | `KESTREL.build()` (v1) tetap ada dan identik untuk Copper sampai M3e |
+| Material di Millar | Shader sendiri agar cahaya, kabut, dan lengkung planet sama dengan laut |
+| Waktu gelombang | Mode Misi memasang muka gelombang di 37,5 km saat mulai dan mematikan G; mode Jelajah tetap seperti sekarang |
 
 ## Risiko
 
 | Risiko | Penanganan |
 | --- | --- |
-| Shuttle terlalu terang atau terlalu putih di bawah langit mendung | Shading dari `uAmb` suasana; pemilik menilai visual, angka mudah disetel di `shipMat` |
-| Kokpit Copper bergantung pada kode Copper (layar, suara) | Dipindah bertahap seperti geometri: sidik jari sebelum dan sesudah |
-| Fisika terbang di 1,3 g | Percepatan mesin angkat dihitung dari 1,3 g (bukan angka Copper di orbit) |
+| 5 menit terlalu ketat atau terlalu longgar | Semua angka di `CONFIG.mission`, tingkat Santai / Normal / Sulit; uji otomatis menjalankan rute terpendek dengan kecepatan lari dan memeriksa sisa waktu |
+| Radar membingungkan | Galat mengecil saat dekat, suar kuning terlihat dari 150 m, ping blackbox |
+| Pemain tersesat jauh | Panah shuttle di tepi radar, jarak shuttle di HUD |
 
 ## Status M3a
 
@@ -66,4 +118,20 @@ Uji: `tools/uji_millar.py` kini 50 pemeriksaan, semua lulus, termasuk: sidik jar
 
 Belum: gelombang raksasa melewati shuttle tanpa efek (shuttle tertutup dinding air lalu tampak lagi); ditangani di M3b bersama lepas landas.
 
-Berikutnya M3b: naik (E), kokpit bersama, lepas landas dan terbang, balapan dengan gelombang.
+## Status M3b
+
+Selesai 30 September 2026.
+
+| Bagian | Isi |
+| --- | --- |
+| Modul bersama | `KESTREL.buildV3(THREE)`: geometri disalin dari blokout v3 (satu geometri berwarna, 18.276 titik, normal datar per sisi), ditambah pintu awak dan tangga di sisi luar lengan kiri. Mengembalikan tapak 4 kaki, pintu, lampu navigasi, kotak bagian rendah, ukuran. `build()` v1 tetap ada dan identik untuk Copper |
+| Millar | Shuttle diganti v3. Sisi berpintu menghadap titik awal (pintu 25 m dari titik awal), hidung ke arah datangnya gelombang, tapak di dasar laut, bawah lengan dan badan tengah 2,06 m di atas muka air rata-rata (bisa dilewati), blok belakang menahan pemain (bawahnya lebih rendah dari kepala) |
+| Lampu | Merah di ujung lengan kiri, hijau di kanan, strobo di atas blok belakang |
+| Copper | Tidak berubah: sidik jari 8 mesh shuttle sama persis, halaman termuat tanpa error |
+| Kartu menu | `preview.jpg` dibuat ulang dengan v3 |
+
+Uji: `tools/uji_millar.py` kini 53 pemeriksaan, semua lulus, termasuk: v1 di modul bersama tetap sama dengan Copper, v3 tanpa nilai tidak valid, celah tapak 0,00-0,05 m, kaki menahan pemain di 1,25 m, 0 langkah di bawah blok belakang, pintu di sisi yang menghadap titik awal, render dengan shuttle tanpa nilai tidak valid atau titik menyala.
+
+Belum: stensil KS-07 (tekstur tulisan) belum dipasang di game; gelombang masih melewati shuttle tanpa efek (M3d).
+
+Berikutnya M3c: misi radar.
