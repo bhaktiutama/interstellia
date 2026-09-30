@@ -206,13 +206,26 @@ UJI = r"""
     const S = M.SHIP, K = window.KESTREL, KS = K.build(M.THREE);
     const fp = (g) => { let h = 0, n = 0; for (const a of [...Object.values(g.attributes), g.index].filter(Boolean)) for (let j = 0; j < a.array.length; j++) { h = (h * 31 + Math.round(a.array[j] * 1e5)) % 2147483647; n++; } return `n${n} h${h}`; };
     const sid = [fp(KS.hullG), fp(KS.partsG), fp(KS.glowG)].join(', ');
-    // v1 tetap identik untuk Copper Corn Station (sidik jari tahap 11d)
-    out[`KS-07 v1 di modul bersama tetap = geometri Copper (${sid})`] = sid === 'n24318 h620106941, n14256 h2123920359, n1458 h-1932132836';
+    // v1 disimpan di modul bersama tanpa perubahan (sidik jari tahap 11d; Copper memakai v5 sejak M3e)
+    out[`KS-07 v1 di modul bersama tidak berubah (${sid})`] = sid === 'n24318 h620106941, n14256 h2123920359, n1458 h-1932132836';
     const g = M.KS.geo, pa = g.attributes.position.array, na = g.attributes.normal.array, ca = g.attributes.color.array;
     let bad = 0, lum = 0, glass = 0; for (let i = 0; i < pa.length; i++) if (!Number.isFinite(pa[i]) || !Number.isFinite(na[i])) bad++;
     for (let i = 0; i < ca.length; i += 3) { lum += 0.3 * ca[i] + 0.59 * ca[i + 1] + 0.11 * ca[i + 2]; if (ca[i + 2] - ca[i] > 0.035 && ca[i + 1] < 0.1) glass++; }
     lum /= ca.length / 3;
-    out[`KS-07 v5: ${g.attributes.position.count} titik, 3 kaki, tidak valid ${bad}, warna gelap rata-rata ${lum.toFixed(3)}, titik kaca ${glass}`] = bad === 0 && S.pads.length === 3 && lum < 0.25 && glass > 0;
+    const gc = M.KS.glass.attributes.color.array; let gOk = 0; for (let i = 0; i < gc.length; i += 3) if (gc[i + 2] - gc[i] > 0.035 && gc[i + 1] < 0.1) gOk++;
+    out[`KS-07 v5: ${g.attributes.position.count} titik, 3 kaki, tidak valid ${bad}, warna gelap rata-rata ${lum.toFixed(3)}, kaca terpisah ${gOk} titik (sisa di badan ${glass})`] = bad === 0 && S.pads.length === 3 && lum < 0.25 && glass === 0 && gOk > 0 && gOk === gc.length / 3;
+    // urutan segitiga = arah normal, kaca menghadap keluar (dulu loft terbalik: tersamar DoubleSide, gosong perut salah sisi)
+    { const V3 = M.THREE.Vector3, eye = new V3(...M.CK.eye); let agree = 0, dis = 0, gout = 0, gin = 0, lin = 0, lout = 0;
+      const faces = (geo, fn) => { const pp = geo.attributes.position, nn = geo.attributes.normal; for (let i = 0; i < pp.count; i += 3) { const a = new V3().fromBufferAttribute(pp, i), b = new V3().fromBufferAttribute(pp, i + 1), c = new V3().fromBufferAttribute(pp, i + 2); fn(a, b, c, new V3().fromBufferAttribute(nn, i), i); } };
+      faces(g, (a, b, c, n) => { const f = b.clone().sub(a).cross(c.clone().sub(a)); if (f.lengthSq() > 1e-12) { if (f.dot(n) > 0) agree++; else dis++; } });
+      faces(M.KS.glass, (a, b, c, n) => { if (n.dot(eye.clone().sub(a)) < 0) gout++; else gin++; });
+      faces(M.CK.geo, (a, b, c, n, i) => { if (i < 156) { if (n.dot(eye.clone().sub(a)) > 0) lin++; else lout++; } });
+      out[`urutan segitiga badan sesuai normal ${agree}/${agree + dis}, kaca menghadap keluar ${gout}/${gout + gin}, pelapis kokpit menghadap ke dalam ${lin}/${lin + lout}`] = dis === 0 && gin === 0 && gout > 0 && lout === 0 && lin > 0; }
+    // kokpit v5: geometri valid, mata di dalam badan, di atas kursi, bisa melihat melewati hidung
+    { const cg = M.CK.geo.attributes, [w, h, cy] = window.KESTREL.v5At(M.CK.eye[2]); let cb = 0;
+      for (const a of [cg.position.array, cg.normal.array, M.CK.stick.attributes.position.array, M.CK.throttle.attributes.position.array]) for (const x of a) if (!Number.isFinite(x)) cb++;
+      const top = cy + h / 2, nose = window.KESTREL.v5At(-5.4), look = Math.atan2(M.CK.eye[1] - (nose[2] + nose[1] / 2), M.CK.eye[2] + 5.4) * 180 / Math.PI;
+      out[`kokpit v5: ${cg.position.count} titik, tidak valid ${cb}, 3 layar MFD, mata ${(top - M.CK.eye[1]).toFixed(2)} m di bawah atap, pandangan lewat hidung ${look.toFixed(1)} derajat ke bawah`] = cb === 0 && M.CK.screens.length === 3 && top - M.CK.eye[1] > 0.2 && look > 3; }
     const gap = S.pads.map((p) => S.y - S.padDrop - M.seabed(p.x, p.z));
     out[`tapak di dasar laut: celah ${gap.map((x) => x.toFixed(2)).join(' / ')} m; perut ${S.belly.toFixed(2)} m di atas muka air rata-rata`] = gap.every((x) => x >= -0.001 && x < 0.4) && S.belly > 0.3;
     const P = M.P, p0 = S.pads[1]; P.view = 0; P.x = p0.x - 3; P.z = p0.z; P.vx = P.vz = 0; P.yaw = -Math.PI / 2;   // menghadap +x ke kaki
@@ -235,6 +248,17 @@ UJI = r"""
     const from = M.THREE.DataUtils.fromHalfFloat; let nb = 0, hot = 0;
     for (let k = 0; k < bb.length; k += 4) for (let c = 0; c < 3; c++) { const x = from(bb[k + c]); if (!Number.isFinite(x)) nb++; else if (x > 50) hot++; }
     out[`shuttle di layar: tidak valid ${nb}, titik > 50: ${hot}`] = nb === 0 && hot === 0;
+    // pandangan kokpit (V) saat terbang: interior tampil, layar MFD tergambar, tanpa nilai tidak valid
+    { const keep = { x: P.x, y: P.y, z: P.z }, FL = M.FLY;
+      P.x = S.door.x; P.z = S.door.z; M.missionAction();
+      Object.assign(FL, { landed: false, spool: 1, view: 1 }); FL.y += 30; await wait(1500);
+      const vis = M.COCKPIT.group.visible, sc = M.COCKPIT.screens.tengah, px = sc.g.getImageData(0, 0, sc.cv.width, sc.cv.height).data; let lit = 0;
+      for (let k = 0; k < px.length; k += 4) if (px[k] + px[k + 1] + px[k + 2] > 150) lit++;
+      const T3 = M.POST.hdr, b3 = new Uint16Array(T3.width * T3.height * 4); M.renderer.readRenderTargetPixels(T3, 0, 0, T3.width, T3.height, b3);
+      let nb3 = 0, hot3 = 0; for (let k = 0; k < b3.length; k += 4) for (let c = 0; c < 3; c++) { const x = M.THREE.DataUtils.fromHalfFloat(b3[k + c]); if (!Number.isFinite(x)) nb3++; else if (x > 50) hot3++; }
+      M.flyReset(); const off = !M.COCKPIT.group.visible;
+      out[`pandangan kokpit: interior tampil ${vis}, layar tengah ${lit} piksel terang, tidak valid ${nb3}, titik > 50: ${hot3}; mendarat/atur ulang = interior disembunyikan ${off}`] = vis && lit > 50 && nb3 === 0 && hot3 === 0 && off;
+      Object.assign(P, keep); }
     P.yaw = -Math.PI / 2 + 18 * Math.PI / 180;
   }
 

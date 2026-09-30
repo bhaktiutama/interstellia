@@ -248,7 +248,7 @@ const I18N = { en: {
   'Di kokpit KS-07. R naik, F turun, W/S maju/mundur, A/D belok, Shift cepat, V kamera, E mendarat.': 'In the KS-07 cockpit. R up, F down, W/S forward/back, A/D turn, Shift fast, V camera, E land.',
   'Terlalu tinggi atau terlalu cepat untuk mendarat.': 'Too high or too fast to land.', 'Mendarat. E di tangga untuk naik lagi.': 'Landed. E at the ladder to board again.',
   'KS-07 tertelan gelombang.': 'KS-07 was swallowed by the wave.', 'Lolos dari gelombang.': 'Escaped the wave.', 'Menyalakan mesin...': 'Starting engines...',
-  'R: lepas landas': 'R: take off', 'E: mendarat': 'E: land', 'Ketinggian': 'Altitude', 'Kecepatan': 'Speed', 'tegak': 'vertical', 'Puncak gelombang': 'Wave crest',
+  'R: lepas landas': 'R: take off', 'TGI': 'ALT', 'TEGAK': 'VS', 'ARAH': 'HDG', 'PINDAI': 'SCAN', 'LOLOS': 'CLEAR', 'GELOMBANG': 'WAVE', 'MESIN': 'ENGINE', 'BARANG': 'ITEMS', 'KAKI TURUN': 'GEAR DOWN', 'KAKI NAIK': 'GEAR UP', 'E: mendarat': 'E: land', 'Ketinggian': 'Altitude', 'Kecepatan': 'Speed', 'tegak': 'vertical', 'Puncak gelombang': 'Wave crest',
   'Ketinggian saat gelombang lewat': 'Altitude as the wave passed', 'KS-07 lolos di atas gelombang dengan semua barang.': 'KS-07 cleared the wave with every item.',
   'Terbang KS-07: R/F naik-turun, W/S maju-mundur, A/D belok, Shift cepat, V kamera, E mendarat': 'Fly KS-07: R/F up-down, W/S forward-back, A/D turn, Shift fast, V camera, E land',
   'Mode': 'Mode', 'Tingkat misi': 'Mission level', 'Misi': 'Mission', 'Jelajah': 'Explore', 'Santai': 'Relaxed', 'Sulit': 'Hard',
@@ -1475,10 +1475,11 @@ function placeShip(x, z, yaw) {
   SHIP.y = Math.max(...SHIP.pads.map((p) => seabed(p.x, p.z))) + SHIP.padDrop;   // tapak tertinggi menyentuh dasar laut
   SHIP.belly = SHIP.y + KS.belly;
   const [dx, dz] = shipToWorld(KS.door.x, KS.door.z); SHIP.door = { x: dx, z: dz, y: SHIP.y + KS.door.y };
-  if (SHIP.mesh) { SHIP.mesh.position.set(SHIP.x, SHIP.y, SHIP.z); SHIP.mesh.rotation.set(0, SHIP.yaw, 0); SHIP.legs.visible = true; }
+  if (SHIP.mesh) { SHIP.mesh.position.set(SHIP.x, SHIP.y, SHIP.z); SHIP.mesh.rotation.set(0, SHIP.yaw, 0); SHIP.legs.visible = true; COCKPIT.group.visible = false; }
 }
 placeShip(...SHIP.home);
 const shipU = { ...U, uWater: { value: 0 }, uMatte: { value: 1 } };
+const CK = window.KESTREL.buildCockpitV5(THREE), COCKPIT = { group: null, stick: null, throttle: null, screens: {}, drawT: 0, sx: 0, sy: 0 };
 const shipMat = new THREE.ShaderMaterial({
   uniforms: shipU, defines: { NW: 1, NM: 1 }, side: THREE.DoubleSide,
   vertexShader: LOG_VS + COMMON + /* glsl */`
@@ -1509,11 +1510,17 @@ const shipMat = new THREE.ShaderMaterial({
       float F = mix(0.04, 0.08, win) + (1.0 - mix(0.04, 0.08, win)) * pow(1.0 - nv, 5.0);
       vec3 sky = uAmb * (0.62 + 0.38 * n.y) + uAmb * vec3(0.30, 0.34, 0.36) * max(-n.y, 0.0);   // langit dari atas, pantulan laut dari bawah
       vec3 c = alb * sky * 1.25 + mix(uAmb, env, gloss) * F * mix(0.6, 1.0, gloss) * mix(1.0, 0.45, uMatte * (1.0 - win));
+      #ifdef INTERIOR
+      c *= 0.45 + 0.35 * max(n.y, 0.0);                                // kokpit: ruang tertutup, cahaya hanya lewat kaca atas
+      #endif
       vec3 hd = normalize(vec3(-V.x, 0.02, -V.z) + vec3(1e-4, 0.0, 0.0));
       c = mix(c, skyL(hd), 1.0 - exp(-dist / uFogD));
       gl_FragColor = vec4(clamp(c, 0.0, 16.0), 1.0);
     }`,
 });
+// kaca kanopi satu sisi (dari dalam tembus pandang) dan pelapis kokpit (shader sama, uniform sama)
+const shipGlassMat = new THREE.ShaderMaterial({ uniforms: shipU, defines: { NW: 1, NM: 1 }, side: THREE.FrontSide, vertexShader: shipMat.vertexShader, fragmentShader: shipMat.fragmentShader });
+const cockMat = new THREE.ShaderMaterial({ uniforms: shipU, defines: { NW: 1, NM: 1, INTERIOR: 1 }, side: THREE.DoubleSide, vertexShader: shipMat.vertexShader, fragmentShader: shipMat.fragmentShader });
 {
   const g = new THREE.Group();
   const navMat = (r, gg, b) => new THREE.MeshBasicMaterial({ color: new THREE.Color(r, gg, b) });
@@ -1525,7 +1532,21 @@ const shipMat = new THREE.ShaderMaterial({
   SHIP.fanMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0), side: THREE.DoubleSide });
   for (const p of KS.nozzles) { const m = new THREE.Mesh(new THREE.CircleGeometry(0.42, 16), SHIP.glowMat); m.position.set(...p); g.add(m); }
   for (const p of KS.fans) { const m = new THREE.Mesh(new THREE.CircleGeometry(0.62, 18), SHIP.fanMat); m.rotation.x = Math.PI / 2; m.position.set(...p); g.add(m); }
-  g.add(new THREE.Mesh(KS.geo, shipMat), SHIP.legs, SHIP.nav.red, SHIP.nav.green, SHIP.nav.strobe);
+  g.add(new THREE.Mesh(KS.geo, shipMat), new THREE.Mesh(KS.glass, shipGlassMat), SHIP.legs, SHIP.nav.red, SHIP.nav.green, SHIP.nav.strobe);
+  // kokpit satu kursi (KESTREL.buildCockpitV5): hanya tampil di pandangan kokpit (V)
+  const ck = new THREE.Group(); ck.visible = false;
+  ck.add(new THREE.Mesh(CK.geo, cockMat));
+  COCKPIT.stick = new THREE.Mesh(CK.stick, cockMat); COCKPIT.stick.position.set(...CK.stickAt); COCKPIT.stick.rotation.order = 'YXZ';
+  COCKPIT.throttle = new THREE.Mesh(CK.throttle, cockMat); COCKPIT.throttle.position.set(...CK.throttleAt);
+  ck.add(COCKPIT.stick, COCKPIT.throttle);
+  for (const S of CK.screens) {
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = Math.round(256 * S.h / S.w);
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(S.w, S.h), new THREE.MeshBasicMaterial({ map: tex, color: new THREE.Color(1.4, 1.4, 1.4), fog: false }));
+    m.position.set(...S.c); m.rotation.set(S.rx, S.ry, 0, 'YXZ'); ck.add(m);
+    COCKPIT.screens[S.name] = { cv, g: cv.getContext('2d'), tex };
+  }
+  g.add(ck); COCKPIT.group = ck;
   g.rotation.order = 'YXZ';
   g.traverse((o) => { o.frustumCulled = false; });
   scene.add(g); SHIP.mesh = g; placeShip(...SHIP.home);
@@ -2219,12 +2240,80 @@ function updateFly(dt) {
   if (promptEl.innerHTML !== html) promptEl.innerHTML = html;
   flyAudio();
 }
+const _ckE = new THREE.Euler(), _ckQ = new THREE.Quaternion();
+// Kokpit: tongkat dan tuas gas mengikuti kendali, 3 layar MFD digambar 10 kali per detik
+function cockpitUpdate() {
+  const f = (keys.KeyW ? 1 : 0) - (keys.KeyS ? 1 : 0), side = (keys.KeyD ? 1 : 0) - (keys.KeyA ? 1 : 0);
+  COCKPIT.sx += (side - COCKPIT.sx) * 0.2; COCKPIT.sy += (f - COCKPIT.sy) * 0.2;
+  COCKPIT.stick.rotation.set(-0.22 * COCKPIT.sy, 0, -0.25 * COCKPIT.sx);
+  COCKPIT.throttle.rotation.x = 0.35 - 0.8 * FLY.thr;
+  const now = performance.now(); if (now - COCKPIT.drawT < 100) return; COCKPIT.drawT = now;
+  drawMfdFlight(COCKPIT.screens.kiri); drawMfdScan(COCKPIT.screens.tengah); drawMfdStatus(COCKPIT.screens.kanan);
+}
+const MFD_G = '#6ff0c8', MFD_A = '#f2c14e', MFD_R = '#ff5a48';
+function drawMfdFlight(S) {                            // kiri: sikap terbang, ketinggian di atas air, kecepatan, arah
+  const { g, cv } = S, w = cv.width, h = cv.height, cx = w / 2, cy = h / 2, alt = FLY.y - FLY.water;
+  g.fillStyle = '#041014'; g.fillRect(0, 0, w, h);
+  g.save(); g.beginPath(); g.rect(4, 4, w - 8, h - 8); g.clip();
+  g.translate(cx, cy + FLY.pitch * 160); g.rotate(-FLY.roll);
+  g.fillStyle = '#123f5a'; g.fillRect(-300, -300, 600, 300); g.fillStyle = '#3a2a18'; g.fillRect(-300, 0, 600, 300);
+  g.strokeStyle = '#e8eef2'; g.lineWidth = 2; g.beginPath(); g.moveTo(-300, 0); g.lineTo(300, 0);
+  for (const k of [-2, -1, 1, 2]) { g.moveTo(-18, -k * 28); g.lineTo(18, -k * 28); } g.stroke();
+  g.restore();
+  g.strokeStyle = MFD_A; g.lineWidth = 3; g.beginPath(); g.moveTo(cx - 40, cy); g.lineTo(cx - 12, cy); g.lineTo(cx, cy + 10); g.lineTo(cx + 12, cy); g.lineTo(cx + 40, cy); g.stroke();
+  g.font = 'bold 17px monospace'; g.textAlign = 'left'; g.fillStyle = alt < 6 ? MFD_R : MFD_G;
+  g.fillText(`${t('TGI')} ${Math.round(alt)} m`, 8, 22);
+  g.fillStyle = MFD_G; g.fillText(`${t('TEGAK')} ${FLY.vy >= 0 ? '+' : ''}${FLY.vy.toFixed(0)}`, 8, h - 10);
+  g.textAlign = 'right'; g.fillText(`${Math.round(Math.hypot(FLY.vx, FLY.vz) * 3.6)} km/h`, w - 8, 22);
+  const hd = ((-FLY.yaw * 180 / Math.PI) % 360 + 360) % 360; g.fillText(`${t('ARAH')} ${String(Math.round(hd)).padStart(3, '0')}`, w - 8, h - 10);
+  S.tex.needsUpdate = true;
+}
+function drawMfdScan(S) {                              // tengah: pindai tinggi air 400 m (hidung ke atas): tubuh gelombang, barang misi
+  const { g, cv } = S, w = cv.width, h = cv.height, cx = w / 2, cy = h / 2 + 6, R = Math.min(w, h) / 2 - 12, RANGE = 400, N = 24;
+  g.fillStyle = '#031008'; g.fillRect(0, 0, w, h);
+  const fx = -Math.sin(FLY.yaw), fz = -Math.cos(FLY.yaw), rx = Math.cos(FLY.yaw), rz = -Math.sin(FLY.yaw), cell = 2 * R / N, calm = drawdown(FLY.x - frontX(FLY.z));
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    const a = ((i + 0.5) / N * 2 - 1) * RANGE, b = (1 - (j + 0.5) / N * 2) * RANGE;
+    if (a * a + b * b > RANGE * RANGE) continue;
+    const x = FLY.x + rx * a + fx * b, z = FLY.z + rz * a + fz * b, dh = waveTop(x, z) - calm;
+    if (dh < 3) continue;
+    const k = Math.min(1, dh / Math.max(30, FLY.y - calm)), over = dh > FLY.y - calm - 5;   // merah = air lebih tinggi dari wahana
+    g.fillStyle = over ? `rgba(255,90,72,${0.35 + 0.5 * k})` : `rgba(80,170,255,${0.25 + 0.5 * k})`;
+    g.fillRect(cx - R + i * cell, cy - R + j * cell, cell + 0.5, cell + 0.5);
+  }
+  g.strokeStyle = '#1f6b4a'; g.lineWidth = 2;
+  for (const k of [1, 0.5]) { g.beginPath(); g.arc(cx, cy, R * k, 0, 7); g.stroke(); }
+  g.beginPath(); g.moveTo(cx - R, cy); g.lineTo(cx + R, cy); g.moveTo(cx, cy - R); g.lineTo(cx, cy + R); g.stroke();
+  if (MIS.on) for (const Sx of MIS.sites) {
+    if (Sx.got) continue;
+    const dx = Sx.x - FLY.x, dz = Sx.z - FLY.z, a = (dx * rx + dz * rz) / RANGE * R, b = (dx * fx + dz * fz) / RANGE * R;
+    if (a * a + b * b < R * R) { g.fillStyle = MFD_A; g.beginPath(); g.arc(cx + a, cy - b, 4, 0, 7); g.fill(); }
+  }
+  g.fillStyle = '#e8eef2'; g.beginPath(); g.moveTo(cx, cy - 8); g.lineTo(cx - 6, cy + 6); g.lineTo(cx + 6, cy + 6); g.fill();
+  g.font = 'bold 15px monospace'; g.textAlign = 'left'; g.fillStyle = MFD_G; g.fillText(`${t('PINDAI')} ${RANGE} m`, 6, 16);
+  S.tex.needsUpdate = true;
+}
+function drawMfdStatus(S) {                            // kanan: gelombang (jarak, waktu), misi, mesin, kaki
+  const { g, cv } = S, w = cv.width, h = cv.height, du = frontX(FLY.z) - FLY.x, alt = FLY.y - FLY.water;
+  g.fillStyle = '#140804'; g.fillRect(0, 0, w, h); g.textAlign = 'left';
+  g.font = 'bold 17px monospace'; g.fillStyle = FLY.passed ? MFD_G : MFD_R; g.fillText(FLY.passed ? t('LOLOS') : t('GELOMBANG'), 8, 22);
+  g.font = 'bold 30px monospace'; g.fillText(FLY.passed ? '--' : du > 0 ? fmtMS(du / W.v) : `${Math.round(-du)} m`, 8, 56);
+  const k = Math.max(0, Math.min(1, 1 - du / 15000));
+  g.fillStyle = '#3a1a10'; g.fillRect(8, 66, w - 16, 10); g.fillStyle = FLY.passed ? MFD_G : MFD_R; g.fillRect(8, 66, (w - 16) * (FLY.passed ? 1 : k), 10);
+  g.font = 'bold 15px monospace'; g.fillStyle = MFD_A;
+  g.fillText(`${t('MESIN')} ${Math.round(FLY.thr * 100)}%`, 8, 100);
+  if (MIS.on) g.fillText(`${t('BARANG')} ${MIS.sites.filter((x) => x.got).length}/3`, 8, 120);
+  g.fillStyle = alt < CONFIG.fly.gearUp ? MFD_A : MFD_G; g.fillText(alt < CONFIG.fly.gearUp ? t('KAKI TURUN') : t('KAKI NAIK'), 8, h - 10);
+  S.tex.needsUpdate = true;
+}
 function flyCamera() {
   const C = CONFIG.fly, cy = FLY.yaw + FLY.lookY, cp = FLY.lookP;
-  if (FLY.view === 1) {                                 // kokpit: mata di atas kaca, ikut sikap wahana
-    const e = KS.eye, c = Math.cos(FLY.yaw), sn = Math.sin(FLY.yaw);
-    camera.position.set(FLY.x + e[0] * c + e[2] * sn, FLY.y + e[1] + 0.35, FLY.z - e[0] * sn + e[2] * c);
-    camera.rotation.set(cp + 0.15 + FLY.pitch * 0.5, cy, FLY.roll * 0.6);
+  COCKPIT.group.visible = FLY.view === 1;
+  if (FLY.view === 1) {                                 // kokpit: mata pilot di kursi, ikut sikap wahana penuh (angguk, guling)
+    const M = SHIP.mesh; M.updateMatrix();
+    camera.position.set(...CK.eye).applyMatrix4(M.matrix);
+    _ckE.set(cp + 0.12, FLY.lookY, 0, 'YXZ'); camera.quaternion.copy(M.quaternion).multiply(_ckQ.setFromEuler(_ckE));
+    cockpitUpdate();
     return;
   }
   const dx = -Math.sin(cy) * Math.cos(cp), dy = Math.sin(cp), dz = -Math.cos(cy) * Math.cos(cp);
@@ -2374,7 +2463,7 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob,
   FLY, boardShip, flyLand, updateFly, flyReset, placeShip,
   MIS, missionSites, startMission, stopMission, restartMission, finishMission, updateMission, missionAction, toggleRadar, radarFix, setMode, setLevel, fmtMS,
-  SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip };
+  SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip, CK, COCKPIT, cockpitUpdate };
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>
 </body>

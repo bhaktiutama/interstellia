@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kokpit KS-07 v5</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8e979e; font: 12px/1.4 system-ui, sans-serif; color: #222; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #info { position: fixed; left: 12px; top: 10px; background: rgba(255,255,255,0.75); padding: 6px 10px; border-radius: 8px; max-width: 520px; }
+</style>
+</head>
+<body>
+<div id="info">Konsep kokpit KS-07 v5 (desain orisinal, geometri dari <code>shared/kestrel.js</code> <code>buildCockpitV5</code>). Seret = putar, roda = zoom.
+1 = pandangan pilot, 2 = potongan samping, 3 = potongan atas, 4 = luar 3/4 depan, 5 = dasbor dekat.</div>
+<script src="../../../shared/kestrel.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+const K = window.KESTREL, KS = K.buildV5(THREE), CK = K.buildCockpitV5(THREE);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.localClippingEnabled = true; renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x8e979e);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.02, 200);
+scene.add(new THREE.HemisphereLight(0xdfe8ee, 0x3a3f44, 1.6));
+const sun = new THREE.DirectionalLight(0xfff2e0, 2.2); sun.position.set(-4, 9, -3); scene.add(sun);
+// potongan: bidang yang dipakai tergantung sudut pandang
+const CUT = { side: [new THREE.Plane(new THREE.Vector3(1, 0, 0), 0)], top: [new THREE.Plane(new THREE.Vector3(0, -1, 0), 0.62)], none: [] };
+const hullMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+const glassMat = new THREE.MeshLambertMaterial({ color: 0x0a1a2c, transparent: true, opacity: 0.28, depthWrite: false });
+const cockMat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+const ship = new THREE.Group(); scene.add(ship);
+ship.add(new THREE.Mesh(KS.geo, hullMat), new THREE.Mesh(KS.glass, glassMat), new THREE.Mesh(KS.legs, hullMat), new THREE.Mesh(CK.geo, cockMat));
+const stick = new THREE.Mesh(CK.stick, cockMat); stick.position.set(...CK.stickAt); stick.rotation.set(-0.12, 0, 0.08);
+const thr = new THREE.Mesh(CK.throttle, cockMat); thr.position.set(...CK.throttleAt); thr.rotation.x = -0.35; ship.add(stick, thr);
+// layar MFD contoh (isi sama dengan yang dipakai di Millar: terbang, radar, gelombang)
+function mfd(S, draw) {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = Math.round(256 * S.h / S.w); draw(cv.getContext('2d'), cv.width, cv.height);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(S.w, S.h), new THREE.MeshBasicMaterial({ map: tex }));
+  m.position.set(...S.c); m.rotation.set(S.rx, S.ry, 0, 'YXZ'); ship.add(m);
+}
+const G = '#6ff0c8', A = '#f2c14e', R = '#ff5a48';
+mfd(CK.screens[0], (g, w, h) => {                       // kiri: sikap terbang, ketinggian, kecepatan
+  g.fillStyle = '#041014'; g.fillRect(0, 0, w, h);
+  g.save(); g.translate(w / 2, h / 2); g.rotate(-0.12); g.fillStyle = '#123f5a'; g.fillRect(-200, -200, 400, 190); g.fillStyle = '#3a2a18'; g.fillRect(-200, -10, 400, 200); g.strokeStyle = '#e8eef2'; g.lineWidth = 2; g.beginPath(); g.moveTo(-200, -10); g.lineTo(200, -10); g.stroke(); g.restore();
+  g.strokeStyle = A; g.lineWidth = 3; g.beginPath(); g.moveTo(w / 2 - 40, h / 2); g.lineTo(w / 2 - 12, h / 2); g.lineTo(w / 2, h / 2 + 10); g.lineTo(w / 2 + 12, h / 2); g.lineTo(w / 2 + 40, h / 2); g.stroke();
+  g.font = 'bold 18px monospace'; g.fillStyle = G; g.fillText('TGI  42 m', 8, 22); g.fillText('VS +18', 8, h - 12); g.fillText('V 64 m/s', w - 110, 22);
+});
+mfd(CK.screens[1], (g, w, h) => {                       // tengah: radar
+  g.fillStyle = '#031008'; g.fillRect(0, 0, w, h); const cx = w / 2, cy = h / 2 + 8, r = h * 0.44;
+  g.strokeStyle = '#1f6b4a'; g.lineWidth = 2; for (const k of [1, 0.66, 0.33]) { g.beginPath(); g.arc(cx, cy, r * k, 0, Math.PI * 2); g.stroke(); }
+  g.beginPath(); g.moveTo(cx - r, cy); g.lineTo(cx + r, cy); g.moveTo(cx, cy - r); g.lineTo(cx, cy + r); g.stroke();
+  const gr = g.createConicGradient(-Math.PI / 2 - 0.6, cx, cy); gr.addColorStop(0, 'rgba(80,255,160,0)'); gr.addColorStop(0.09, 'rgba(80,255,160,0.45)'); gr.addColorStop(0.1, 'rgba(80,255,160,0)');
+  g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.fill();
+  for (const [x, y, c] of [[0.3, -0.5, G], [-0.55, 0.2, G], [0.1, 0.62, A]]) { g.fillStyle = c; g.beginPath(); g.arc(cx + x * r, cy + y * r, 5, 0, Math.PI * 2); g.fill(); }
+  g.fillStyle = '#e8eef2'; g.beginPath(); g.moveTo(cx, cy - 8); g.lineTo(cx - 6, cy + 6); g.lineTo(cx + 6, cy + 6); g.fill();
+  g.font = 'bold 16px monospace'; g.fillStyle = G; g.fillText('RADAR 250 m', 8, 18);
+});
+mfd(CK.screens[2], (g, w, h) => {                       // kanan: gelombang, mesin, barang
+  g.fillStyle = '#140804'; g.fillRect(0, 0, w, h); g.font = 'bold 18px monospace';
+  g.fillStyle = R; g.fillText('GELOMBANG', 8, 24); g.font = 'bold 34px monospace'; g.fillText('02:41', 8, 64);
+  g.fillStyle = '#3a1a10'; g.fillRect(8, 78, w - 16, 12); g.fillStyle = R; g.fillRect(8, 78, (w - 16) * 0.54, 12);
+  g.font = 'bold 16px monospace'; g.fillStyle = A; g.fillText('MESIN  78%', 8, 118); g.fillText('BARANG 3/3', 8, 142); g.fillStyle = G; g.fillText('KAKI NAIK', 8, 166);
+});
+// kontrol orbit
+let yaw = 0, pitch = 0, dist = 6; const tgt = new THREE.Vector3();
+const VIEWS = {
+  1: { p: [0, 0.68, -1.15], t: [0, 0.45, -3.2], fov: 72, cut: 'none', eye: true },
+  2: { p: [-5.2, 0.9, -1.6], t: [0, 0.2, -1.6], fov: 40, cut: 'side' },
+  3: { p: [0.01, 5.5, -1.7], t: [0, 0, -1.7], fov: 40, cut: 'top' },
+  4: { p: [-5.5, 3.2, -8.5], t: [0, 0.3, -1.5], fov: 38, cut: 'none' },
+  5: { p: [0.35, 0.55, -1.45], t: [0, 0.1, -2.35], fov: 55, cut: 'none', eye: true },
+};
+let eyeMode = false;
+function setCut(k) { for (const m of [hullMat, glassMat, cockMat]) { m.clippingPlanes = CUT[k]; m.needsUpdate = true; } }
+function setView(k) {
+  const v = VIEWS[k]; camera.fov = v.fov; tgt.set(...v.t); eyeMode = !!v.eye; setCut(v.cut);
+  const d = new THREE.Vector3(...v.p).sub(tgt); dist = d.length(); yaw = Math.atan2(d.x, d.z); pitch = Math.asin(d.y / dist);
+  if (eyeMode) { camera.position.set(...v.p); camera.lookAt(tgt); }
+  resize();
+}
+function place() {
+  if (eyeMode) return;
+  camera.position.set(tgt.x + dist * Math.cos(pitch) * Math.sin(yaw), tgt.y + dist * Math.sin(pitch), tgt.z + dist * Math.cos(pitch) * Math.cos(yaw)); camera.lookAt(tgt);
+}
+function resize() { renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize);
+let drag = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; if (eyeMode) { eyeMode = false; } });
+addEventListener('pointerup', () => { drag = null; });
+addEventListener('pointermove', (e) => { if (!drag) return; yaw -= (e.clientX - drag[0]) * 0.006; pitch = Math.max(-1.4, Math.min(1.4, pitch + (e.clientY - drag[1]) * 0.006)); drag = [e.clientX, e.clientY]; });
+addEventListener('wheel', (e) => { dist = Math.max(0.5, Math.min(40, dist * (e.deltaY > 0 ? 1.1 : 0.9))); });
+addEventListener('keydown', (e) => { if (VIEWS[e.key]) setView(e.key); });
+setView(4);
+function loop() { place(); renderer.render(scene, camera); requestAnimationFrame(loop); }
+loop();
+window.__ks = { setView, hullMat, glassMat, cockMat, ship };
+</script>
+</body>
+</html>
