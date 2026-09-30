@@ -39,14 +39,14 @@ Per 30 September 2026. Patokan: Copper Corn Station. Fungsi yang sama memakai to
 | J | Musik |
 | Y | Tur sinematik |
 
-Pengecualian yang sudah ada: Millar G = panggil gelombang raksasa (aksi eksperimen, setara G jatuhkan bola di Copper).
+Pengecualian yang sudah ada: Millar G = panggil gelombang raksasa (aksi eksperimen, setara G jatuhkan bola di Copper). Millar M = radar misi (setara M peta di Copper), E = ambil barang / naik ke KS-07 (setara E aksi di Copper).
 
 ## Perubahan 30 September 2026
 
 | Experience | Sebelum | Sesudah |
 | --- | --- | --- |
 | Millar | P grafik | Q grafik, P efek layar |
-| Millar | M suara | U suara (M kosong, di Copper = peta) |
+| Millar | M suara | U suara; M kini radar (setara peta di Copper, M3c) |
 | Millar | B gerak kepala | Panel kontrol ` (seperti tab Gerak di Copper; B di Copper = lempar bola) |
 | Millar | tidak ada | F mode foto, ` panel, ? / F1 bantuan |
 | Gargantua | F layar penuh | Tombol "Layar penuh" di panel; F = mode foto |

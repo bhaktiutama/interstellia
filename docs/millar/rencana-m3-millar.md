@@ -1,6 +1,6 @@
 # Rencana M3 Millar's World: Shuttle KS-07 v3 dan Misi Radar
 
-Per 30 September 2026 · Status: M3a dan M3b selesai (lihat bagian "Status"), berikutnya M3c misi radar
+Per 30 September 2026 · Status: M3a, M3b, dan M3c selesai (lihat bagian "Status"), berikutnya M3d naik dan lolos
 
 ## Ringkasan
 
@@ -134,4 +134,26 @@ Uji: `tools/uji_millar.py` kini 53 pemeriksaan, semua lulus, termasuk: v1 di mod
 
 Belum: stensil KS-07 (tekstur tulisan) belum dipasang di game; gelombang masih melewati shuttle tanpa efek (M3d).
 
-Berikutnya M3c: misi radar.
+## Status M3c
+
+Selesai 30 September 2026.
+
+| Bagian | Isi |
+| --- | --- |
+| Layar awal | Pilihan Mode (Misi / Jelajah) dan Tingkat misi (Santai 7:00, Normal 5:00, Sulit 4:00), tersimpan di localStorage `millar.mode` / `millar.level` |
+| Lokasi | 3 pecahan diacak tiap percobaan: 50-130 m dari KS-07, antarlokasi minimal 40 m, rute terpendek (titik awal, 3 lokasi, pintu) 250-330 m |
+| Pecahan | Desain orisinal lander misi sebelumnya: panel lambung bengkok + kantong apung jingga, tangki rebah + kaki patah, potongan kabin + antena patah. Tiap pecahan punya tiang suar kuning berkedip, barang dengan LED hijau berkedip, riak di sekitarnya, dan menahan pemain |
+| Radar (M) | Lingkaran di bawah tengah layar, arah pandang di atas, cincin tiap 50 m, jangkauan 250 m, sapuan 2 s dengan klik halus. Titik sinyal diperbarui saat disapu, galat 5% jarak + 2 m (terukur 14,6 m di 200 m, 3,5 m di 15 m). Di luar jangkauan: panah di tepi + jarak kira-kira. Kuning = pecahan, jingga berkedip = blackbox, abu = sudah diambil, putih = KS-07 |
+| Ping blackbox | Bip 1,45 kHz, selang 0,35-3 s dan makin keras saat dekat, arah kiri/kanan dari pandangan |
+| Ambil | Tahan E 2 s dalam 3,2 m dari barang (petunjuk + batang kemajuan), bip naik saat berhasil |
+| Naik | Setelah 3 barang: E di pintu KS-07 (3,5 m) = misi berhasil. Lepas landas menyusul di M3d |
+| Gelombang | Diletakkan agar tiba tepat di batas waktu; G dimatikan di mode Misi. Tersapu = misi gagal |
+| HUD | Baris "Misi" (barang / kembali ke KS-07) dan "Gelombang tiba" (hitung mundur, merah di menit terakhir) |
+| Layar hasil | Berhasil / gagal, waktu planet, waktu di luar, barang, tingkat, sisa waktu; tombol Ulangi (posisi baru) dan Mode Jelajah |
+| Panel ` | Radar nyala/mati, mulai ulang misi |
+
+Uji: `tools/uji_millar.py` kini 58 pemeriksaan, semua lulus, termasuk: 200/200 benih lokasi memenuhi syarat (rute 254-330 m), gelombang tiba dalam 300,0 s di tingkat Normal, galat radar mengecil saat dekat, simulasi pemain berlari menyusuri rute terpendek 311 m + ambil 3 barang + naik = 207 s (ditambah cadangan lepas landas 45 s tetap di bawah 300 s), tersapu = layar hasil gagal. Uji fisika lama kini dijalankan di mode Jelajah.
+
+Catatan: simulasi rute memakai laut saat gelombang masih jauh; di permainan nyata ombak membesar dan arus surut menarik pemain di 20 s terakhir, jadi sisa waktu sebenarnya lebih kecil. Angka mudah disetel di `CONFIG.mission`.
+
+Berikutnya M3d: naik, lepas landas, dan lolos dari gelombang (serta pilihan wahana kecil v5, `docs/app/konsep-ks07-v5.md`).

@@ -1,6 +1,6 @@
-"""Uji Millar's World R1 + R1b + R2 + R3 + R4 + R5 + M3a + M3b: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
+"""Uji Millar's World R1 + R1b + R2 + R3 + R4 + R5 + M3a + M3b + M3c: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
 tidak ada daratan (dasar laut selalu di bawah air terendah), fisika (1,3 g, lompat 77%), gelombang 125 m/s, jam dilatasi,
-tersapu = kembali dengan penalti waktu, audio (lapisan ikut jarak gelombang, efek, bisu), shuttle KS-07 v3 (v1 di modul bersama tetap = Copper, tapak di dasar laut, kaki dan blok belakang menahan pemain, pintu), lensa Gargantua (radius bayangan, busur terbelokkan), tidak ada nilai tidak valid (NaN/Inf) di render HDR tiap preset.
+tersapu = kembali dengan penalti waktu, audio (lapisan ikut jarak gelombang, efek, bisu), misi radar (lokasi, gelombang tepat waktu, galat radar, rute terpendek bisa ditempuh, gagal bila tersapu), shuttle KS-07 v3 (v1 di modul bersama tetap = Copper, tapak di dasar laut, kaki dan blok belakang menahan pemain, pintu), lensa Gargantua (radius bayangan, busur terbelokkan), tidak ada nilai tidak valid (NaN/Inf) di render HDR tiap preset.
 Pakai: python tools/uji_millar.py   (butuh: pip install playwright && playwright install chromium)
 Tanpa akses CDN langsung: THREE_LOCAL=<folder berisi three.module.js dan three.core.js> python tools/uji_millar.py
 Chromium sendiri: CHROMIUM=<jalur executable>"""
@@ -30,7 +30,7 @@ UJI = r"""
   out[`jumlah amplitudo ombak ${trough.toFixed(3)} m (batas atas lembah, info)`] = true;
 
   // 3. mulai, fisika lompat dengan langkah tetap
-  M.start(); await wait(200);
+  M.setMode('jelajah'); M.start(); await wait(200);          // uji fisika lama memakai mode Jelajah; mode Misi diuji di 5j
   const P = M.P; P.view = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.ground = true;
   const y0 = P.y; P.vy = M.CONFIG.jumpV; P.ground = false; let top = y0;
   for (let i = 0; i < 240; i++) { M.stepPlayer(1 / 120); top = Math.max(top, P.y); }
@@ -249,14 +249,64 @@ UJI = r"""
     key('Backquote'); up('Backquote'); r.panel = !document.getElementById('lab').hidden && document.querySelectorAll('#labBtns button').length === M.LAB.length;
     document.querySelectorAll('#labBtns button')[4].click(); r.bobPanel = M.BOB.level !== b0;
     key('Backquote'); up('Backquote'); r.panelTutup = document.getElementById('lab').hidden;
-    key('KeyB'); up('KeyB'); key('KeyM'); up('KeyM'); r.BM = M.BOB.level !== b0 && M.AUDIO.on === s0;   // B dan M tidak lagi dipakai
+    key('KeyB'); up('KeyB'); r.B = M.BOB.level !== b0;                                                  // B tidak lagi dipakai
+    key('KeyM'); up('KeyM'); r.M = M.MIS.radar && !document.getElementById('radar').hidden && M.AUDIO.on === s0; key('KeyM'); up('KeyM'); r.M2 = !M.MIS.radar;   // M = radar
     key('Slash'); up('Slash'); r.help = !document.getElementById('help').hidden && document.querySelectorAll('#helpRows tr').length >= 12;
     key('Escape'); up('Escape'); r.helpTutup = document.getElementById('help').hidden;
     key('KeyF'); up('KeyF'); r.F = M.PHOTO.on && document.body.classList.contains('photo');
     key('Escape'); up('Escape'); r.Fkeluar = !M.PHOTO.on;
     M.PRESET.idx !== p0 && M.applyPreset(p0); while (M.BOB.level !== b0) M.cycleBob();
     const gagal = Object.keys(r).filter((k) => !r[k]);
-    out[`tombol: Q grafik, P efek layar (3 mode), U suara, \` panel (gerak kepala), ? bantuan, F foto; B dan M kosong; gagal: ${gagal.join(', ') || 'tidak ada'}`] = gagal.length === 0;
+    out[`tombol: Q grafik, P efek layar (3 mode), U suara, \` panel (gerak kepala), ? bantuan, F foto, M radar; B kosong; gagal: ${gagal.join(', ') || 'tidak ada'}`] = gagal.length === 0;
+  }
+
+  // 5j. M3c: misi radar (lokasi, gelombang tepat waktu, radar, rute bisa ditempuh sebelum gelombang, gagal bila tersapu)
+  {
+    const C = M.CONFIG.mission, SH = M.SHIP, P = M.P, dd = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
+    P.x = 0; P.z = 0;
+    let okN = 0, tmin = 1e9, tmax = 0;
+    for (let sd = 1; sd <= 200; sd++) {
+      const g = M.missionSites(sd * 7919); if (!g) continue;
+      const pts = g.pts, rs = pts.map((p) => dd(p, SH)), seps = [dd(pts[0], pts[1]), dd(pts[0], pts[2]), dd(pts[1], pts[2])];
+      if (rs.every((r) => r >= C.rMin - 0.01 && r <= C.rMax + 0.01) && seps.every((x) => x >= C.sep) && g.tour >= C.tourMin && g.tour <= C.tourMax) okN++;
+      tmin = Math.min(tmin, g.tour); tmax = Math.max(tmax, g.tour);
+    }
+    out[`lokasi misi: ${okN}/200 benih memenuhi syarat (jarak ${C.rMin}-${C.rMax} m, antarlokasi >= ${C.sep} m), rute ${tmin.toFixed(0)}-${tmax.toFixed(0)} m`] = okN === 200;
+    M.setMode('misi'); M.setLevel(1); M.startMission();
+    const eta = (M.frontX(P.z) - P.x) / M.CONFIG.wave.v;
+    out[`mode Misi Normal: gelombang tiba dalam ${eta.toFixed(1)} s (batas ${M.MIS.limit} s), 3 pecahan di layar`] = Math.abs(eta - 300) < 0.5 && M.MIS.sites.length === 3 && M.MIS.group;
+    // radar: galat mengecil saat dekat
+    const S0 = M.MIS.sites[0], err = (dist) => { P.x = S0.x - dist; P.z = S0.z; let e = 0; for (let k = 0; k < 400; k++) { M.radarFix(S0); e += Math.hypot(S0.blip.x - S0.x, S0.blip.z - S0.z); } return e / 400; };
+    const eFar = err(200), eNear = err(15);
+    out[`radar: galat rata-rata ${eFar.toFixed(1)} m di 200 m, ${eNear.toFixed(1)} m di 15 m`] = eNear < eFar / 3 && eNear < 5;
+    M.stopMission(); M.startMission();
+    // rute: lari (Shift + W) ke tiap barang menurut urutan terpendek, tahan E 2 s, lalu ke pintu KS-07 dan E
+    const MI = M.MIS, targets = [...MI.order.map((i) => ({ x: MI.sites[i].ix, z: MI.sites[i].iz, i })), { x: SH.door.x, z: SH.door.z, door: true }];
+    const dt = 1 / 30; let T = 0, stuck = 0, side = 0, last = { x: P.x, z: P.z }, lastT = 0, holds = 0;
+    M.keys.ShiftLeft = true;
+    for (const tg of targets) {
+      const R = tg.door ? C.doorR - 0.8 : C.pickR - 0.8;
+      while (Math.hypot(tg.x - P.x, tg.z - P.z) > R && T < 420) {
+        P.yaw = Math.atan2(-(tg.x - P.x), -(tg.z - P.z)) + (side > 0 ? 1.2 : 0);
+        M.keys.KeyW = true; M.stepPlayer(dt); M.updateMission(dt, dt); T += dt; side -= dt;
+        if (T - lastT > 1) { if (Math.hypot(P.x - last.x, P.z - last.z) < 0.4) { side = 1.5; stuck++; } last = { x: P.x, z: P.z }; lastT = T; }
+      }
+      M.keys.KeyW = false;
+      for (let k = 0; k < 20; k++) { M.stepPlayer(dt); M.updateMission(dt, dt); T += dt; }      // berhenti (inersia air)
+      if (tg.door) M.missionAction();
+      else { M.keys.KeyE = true; for (let k = 0; k < 66 && !MI.sites[tg.i].got; k++) { M.stepPlayer(dt); M.updateMission(dt, dt); T += dt; } M.keys.KeyE = false; if (MI.sites[tg.i].got) holds++; }
+    }
+    M.keys.ShiftLeft = false;
+    const R0 = MI.result;
+    out[`rute terpendek ${MI.tour.toFixed(0)} m: lari + ambil ${holds}/3 + naik = ${T.toFixed(0)} s, cadangan lepas landas 45 s, batas ${MI.limit} s (tersendat ${stuck}x)`] = !!R0 && R0.ok && holds === 3 && T + 45 <= MI.limit;
+    document.getElementById('result').hidden = true; M.STATE.started = true;
+    // gagal: gelombang 300 m di depan, tersapu -> layar hasil gagal
+    M.startMission(); P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye;
+    M.U.uWX.value += P.x + 300 - M.frontX(P.z);
+    for (let k = 0; k < 400 && !MI.result; k++) M.simStep(dt, dt);
+    out[`tersapu di mode Misi = misi gagal (layar hasil tampil: ${!document.getElementById('result').hidden})`] = !!MI.result && !MI.result.ok && !document.getElementById('result').hidden;
+    document.getElementById('result').hidden = true; M.stopMission(); M.setMode('jelajah'); M.STATE.started = true;
+    M.U.uWX.value += 40000 - M.frontX(0); P.x = 0; P.z = 0;
   }
 
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua
