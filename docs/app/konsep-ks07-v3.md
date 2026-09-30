@@ -49,7 +49,8 @@ Per 30 September 2026 · Status: konsep, menunggu persetujuan pemilik. Model v2b
 | v1 | Badan pengangkat membulat, sayap | Di game sekarang; terlalu mirip pesawat Bumi |
 | v2a | Kotak, sangat tidak simetris | Ditolak (terlalu tidak simetris) |
 | v2b | Simetris, dua tingkat, empat rumah pendorong tegak | Disimpan |
-| v3 | Simetris, garpu depan, blok belakang berat, lapuk | Menunggu |
+| v3 | Simetris, garpu depan, blok belakang berat, lapuk | Disimpan |
+| v4 | Badan tengah + dua nacelle menerus (`konsep-ks07-v4.md`) | Menunggu |
 
 ## Dampak ke experience
 
