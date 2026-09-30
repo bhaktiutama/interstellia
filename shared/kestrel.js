@@ -5,7 +5,7 @@
    Pakai: <script src="../../shared/kestrel.js"></script> sebelum skrip modul, lalu KESTREL.build(THREE).
    Sumbu model: hidung di -z, atas +y, satuan meter. Geometri berwarna per vertex (atribut color), normal selalu ada.
    build() = v1 (badan pengangkat), identik dengan Copper Corn Station tahap 11d (diuji dengan sidik jari atribut); dipakai Copper
-   sampai tahap M3e. buildV3() = KS-07 v3 hibrida (dipilih pemilik), dipakai Millar's World.
+   sampai tahap M3e. buildV3() = KS-07 v3 hibrida (disimpan). buildV5() = KS-07 v5 kecil gelap doff, dipakai Millar's World (M3d).
    ===================================================================== */
 (function () {
   const TAU = Math.PI * 2;
@@ -288,5 +288,157 @@
     };
   }
 
-  window.KESTREL = { build, buildV3, gear, mergeColored, GEAR, L, W, HT, HB };
+  /* KS-07 v5 (konsep docs/app/konsep-ks07-v5.md, blokout docs/app/kestrel/blokout-ks07-v5.html): wahana kecil satu kursi.
+     Warna gelap doff, lalu diberi lapisan kotor dan gosong per titik: jelaga di belakang nosel, perut hangus, ujung hidung
+     terbakar saat masuk atmosfer, noda aliran memanjang. Kaca bernada biru (penanda kaca di shader: biru > merah).
+     Mengembalikan badan dan kaki (termasuk tangga) terpisah (kaki ditarik saat terbang). */
+  function buildV5(THREE) {
+    const PAD_Y = -1.9;
+    function oct(w, h, cy = 0, cx = 0, chT = 0.5, chB = 0.3) {   // segi delapan: sudut atas dipotong chT, bawah chB
+      const a = w / 2, b = h / 2;
+      return [[cx - a + chB, cy - b], [cx + a - chB, cy - b], [cx + a, cy - b + chB], [cx + a, cy + b - chT],
+              [cx + a - chT, cy + b], [cx - a + chT, cy + b], [cx - a, cy + b - chT], [cx - a, cy - b + chB]];
+    }
+    // sisi segi delapan: 0 bawah, 1 bawah-kanan, 2 kanan, 3 atas-kanan, 4 atas, 5 atas-kiri, 6 kiri, 7 bawah-kiri
+    function loft(rings, colorFn, caps = true) {
+      const pos = [], col = [];
+      const push = (p, c) => { pos.push(...p); col.push(...c); };
+      const n = rings[0].pts.length;
+      for (let r = 0; r < rings.length - 1; r++) {
+        const A = rings[r], B = rings[r + 1];
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n, c = colorFn(i, r, A.z, B.z);
+          const a0 = [A.pts[i][0], A.pts[i][1], A.z], a1 = [A.pts[j][0], A.pts[j][1], A.z], b0 = [B.pts[i][0], B.pts[i][1], B.z], b1 = [B.pts[j][0], B.pts[j][1], B.z];
+          push(a0, c); push(b0, c); push(a1, c); push(a1, c); push(b0, c); push(b1, c);
+        }
+      }
+      if (caps) for (const [R, flip] of [[rings[0], true], [rings[rings.length - 1], false]]) {
+        const c = colorFn(-1, -1, R.z, R.z);
+        const cx = R.pts.reduce((s, p) => s + p[0], 0) / n, cy = R.pts.reduce((s, p) => s + p[1], 0) / n;
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n, p0 = [cx, cy, R.z], p1 = [R.pts[i][0], R.pts[i][1], R.z], p2 = [R.pts[j][0], R.pts[j][1], R.z];
+          if (flip) { push(p0, c); push(p1, c); push(p2, c); } else { push(p0, c); push(p2, c); push(p1, c); }
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+      g.computeVertexNormals();
+      return g;
+    }
+    // warna: dasar abu terang dengan beda nada per panel (kesan lapisan panel dan pelapukan)
+    const WHITE = [0.3, 0.3, 0.29], GREY = [0.22, 0.22, 0.22], DARK = [0.07, 0.07, 0.075], BELLY = [0.06, 0.06, 0.065],
+          ORANGE = [0.4, 0.19, 0.07], METAL = [0.26, 0.26, 0.27], GLASS = [0.02, 0.045, 0.085], GOLD = [0.36, 0.28, 0.12];
+    const tone = (c, k) => c.map((v) => Math.min(1, v * k));
+    const hash = (a, b) => { const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return s - Math.floor(s); };
+    const hullColor = (i, r) => i === 0 || i === 1 || i === 7 ? BELLY : tone(WHITE, 0.93 + 0.1 * hash(i, r));
+
+    function box(w, h, d, x, y, z, c) { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return paint(g, c); }
+    function cyl(r0, r1, len, x, y, z, c, axis = 'y', seg = 16, open = false) {
+      const g = new THREE.CylinderGeometry(r1, r0, len, seg, 1, open);
+      if (axis === 'z') g.rotateX(Math.PI / 2); if (axis === 'x') g.rotateZ(-Math.PI / 2);
+      g.translate(x, y, z); return paint(g, c);
+    }
+    function paint(g, c) { g = g.index ? g.toNonIndexed() : g; const n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set(c, i * 3); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); if (!g.attributes.normal) g.computeVertexNormals(); return g; }
+    function tilt(g, ax, ang, px, py, pz) { g.translate(-px, -py, -pz); if (ax === 'x') g.rotateX(ang); else if (ax === 'y') g.rotateY(ang); else g.rotateZ(ang); g.translate(px, py, pz); return g; }
+
+    const parts = [];
+    const SYM = [-1, 1];
+    // palet v5: keluarga v3 (abu-krem lapuk, jingga), panel berpola gelap di punggung
+    const BEIGE = [0.23, 0.23, 0.22], BEIGE2 = [0.16, 0.16, 0.16], PALE = [0.3, 0.3, 0.29], RUST = [0.28, 0.17, 0.1], FRAME = [0.08, 0.08, 0.085];
+    const weather = (base, i, r, seed) => (i === 0 || i === 1 || i === 7 ? FRAME : tone(base, 0.88 + 0.16 * hash(i + seed, r)));
+    const seamRing = (pts, z, c = tone(BEIGE, 0.62)) => loft([{ z, pts: pts.map(([x, y]) => [x * 1.02, y * 1.02]) }, { z: z + 0.05, pts: pts.map(([x, y]) => [x * 1.02, y * 1.02]) }], () => c, false);
+
+    // ---------- 1. badan: baji bersudut, hidung datar lebar dengan sensor, kokpit satu kursi ----------
+    {
+      const F = (w, h, cy) => oct(w, h, cy, 0, 0.35, 0.25);
+      const rings = [
+        { z: -6.2, pts: F(1.5, 0.45, -0.15) },
+        { z: -5.4, pts: F(1.9, 0.7, -0.08) },
+        { z: -2.6, pts: F(2.2, 1.2, 0.1) },
+        { z: -0.6, pts: F(2.4, 1.6, 0.25) },
+        { z: 3.0, pts: F(2.4, 1.6, 0.25) },
+        { z: 4.6, pts: F(2.0, 1.2, 0.2) },
+      ];
+      parts.push(loft(rings, (i, r) => (i < 0 ? FRAME : r === 2 && (i === 3 || i === 4 || i === 5) ? GLASS : weather(r < 2 ? PALE : BEIGE, i, r, 3))));
+      for (const z of [-4.0, 1.2]) parts.push(seamRing(F(2.4, 1.6, 0.25), z));
+      // rangka kaca kokpit
+      parts.push(box(1.2, 0.06, 0.08, 0, 0.9, -1.6, PALE));   // palang kaca
+      // hidung: bibir sensor gelap dan lampu
+      parts.push(box(1.3, 0.12, 0.1, 0, -0.18, -6.22, FRAME));
+      for (const sx of SYM) parts.push(box(0.14, 0.08, 0.05, sx * 0.45, -0.1, -6.24, [1, 0.95, 0.8]));
+      // panel permukaan berpola di punggung (ceruk bersudut gelap)
+      for (let k = 0; k < 6; k++) for (const sx of SYM) {
+        const z = 0.1 + k * 0.55, w = 0.34 + 0.08 * (k % 2), x = sx * (0.35 + 0.2 * ((k + (sx > 0 ? 1 : 0)) % 2));
+        parts.push(tilt(box(w, 0.04, 0.38, x, 1.06, z, FRAME), 'y', sx * 0.3 * (k % 2 ? 1 : -1), x, 1.06, z));
+      }
+      parts.push(box(0.5, 0.35, 1.8, 0, 1.1, 3.4, BEIGE2), box(0.12, 0.9, 1.3, 0, 1.6, 3.9, PALE));   // punggung belakang + sirip kecil
+    }
+    // ---------- 2. sayap pendek menyapu dengan kipas angkat tertanam, ujung dengan sirip kecil ----------
+    for (const sx of SYM) {
+      const sh = new THREE.Shape([new THREE.Vector2(0, -1.2), new THREE.Vector2(3.9, 0.9), new THREE.Vector2(3.9, 2.6), new THREE.Vector2(0, 3.9)]);
+      const w = new THREE.ExtrudeGeometry(sh, { depth: 0.22, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 1 }); w.rotateX(Math.PI / 2);
+      if (sx < 0) w.scale(-1, 1, 1);
+      w.translate(sx * 1.1, -0.05, -0.3); parts.push(tilt(paint(w, tone(BEIGE, 0.98)), 'z', sx * -0.1, sx * 1.1, 0, 0));
+      // kipas angkat (cincin + kisi) di tengah sayap
+      const fx = sx * 2.9, fz = 1.3;
+      const t = new THREE.TorusGeometry(0.72, 0.08, 6, 24); t.rotateX(Math.PI / 2); t.translate(fx, -0.13, fz); parts.push(paint(t, FRAME));
+      parts.push(cyl(0.7, 0.7, 0.06, fx, -0.16, fz, DARK, 'y', 24));
+      for (let k = 0; k < 4; k++) parts.push(tilt(box(1.3, 0.03, 0.08, fx, -0.11, fz, METAL), 'y', k * Math.PI / 4, fx, -0.11, fz));
+      // sirip kecil di ujung sayap (lampu navigasi)
+      parts.push(box(0.12, 0.8, 1.2, sx * 5.0, 0.0, 1.7, PALE), box(0.14, 0.14, 0.14, sx * 5.0, 0.44, 1.3, sx < 0 ? [0.9, 0.1, 0.08] : [0.1, 0.8, 0.2]));
+      for (let k = 0; k < 3; k++) parts.push(box(0.03, 0.05, 1.5, sx * (2.0 + k * 0.9), 0.1, 2.6, k % 2 ? FRAME : ORANGE));   // garis jingga
+    }
+    // ---------- 3. dua mesin di pangkal sayap: saluran masuk berkipas di depan, nosel di belakang ----------
+    for (const sx of SYM) {
+      const x = sx * 1.75, y = 0.45;
+      parts.push(cyl(0.55, 0.6, 3.6, x, y, 2.0, tone(BEIGE2, 1.05), 'z', 16), cyl(0.5, 0.5, 0.06, x, y, 0.18, DARK, 'z', 16));
+      for (let k = 0; k < 3; k++) parts.push(tilt(box(0.9, 0.04, 0.05, x, y, 0.22, METAL), 'z', k * Math.PI / 3, x, y, 0.22));   // bilah kipas masuk
+      const lip = new THREE.TorusGeometry(0.56, 0.07, 6, 18); lip.translate(x, y, 0.2); parts.push(paint(lip, PALE));
+      parts.push(cyl(0.45, 0.62, 0.8, x, y, 4.2, METAL, 'z', 16, true), cyl(0.44, 0.44, 0.05, x, y, 3.82, DARK, 'z', 16));
+      for (let k = 0; k < 4; k++) parts.push(box(0.03, 0.09, 0.3, x + sx * 0.6, y, 1.0 + k * 0.6, FRAME));   // kisi samping
+    }
+    const NBODY = parts.length;
+    // ---------- 4. kaki pendarat: satu di hidung, dua di bawah mesin; tapak lebar untuk air ----------
+    for (const [x, z, top] of [[0, -3.8, -0.45], [-1.75, 2.4, -0.1], [1.75, 2.4, -0.1]]) {
+      parts.push(cyl(0.1, 0.1, top - (PAD_Y + 0.3), x, (top + PAD_Y + 0.3) / 2, z, [0.78, 0.8, 0.82]), cyl(0.13, 0.13, 0.12, x, top - 0.1, z, ORANGE));
+      parts.push(box(0.55, 0.08, 0.9, x, PAD_Y + 0.04, z, FRAME), tilt(cyl(0.04, 0.04, 0.9, x, top - 0.45, z + 0.35, METAL), 'x', 0.5, x, top - 0.45, z + 0.35));
+    }
+
+    // ---------- tangga di sisi kiri kokpit (ikut kaki: ditarik saat terbang) ----------
+    for (let k = 0; k < 4; k++) parts.push(box(0.4, 0.04, 0.5, -1.45, -0.35 - k * 0.38, -1.6, METAL));
+    parts.push(box(0.04, 1.6, 0.04, -1.62, -1.1, -1.85, METAL), box(0.04, 1.6, 0.04, -1.62, -1.1, -1.35, METAL));
+    const body = mergeColored(THREE, parts.slice(0, NBODY).map((g) => ({ geo: g }))), legs = mergeColored(THREE, parts.slice(NBODY).map((g) => ({ geo: g })));
+    // lapisan kotor dan gosong (ditentukan posisi dan normal tiap titik)
+    const h3 = (x, y, z) => { const s = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453; return s - Math.floor(s); };
+    const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    for (const g of [body, legs]) {
+      const p = g.attributes.position.array, n = g.attributes.normal.array, c = g.attributes.color.array;
+      for (let i = 0; i < p.length; i += 3) {
+        const x = p[i], y = p[i + 1], z = p[i + 2], ny = n[i + 1];
+        if (c[i + 2] - c[i] > 0.035 && c[i + 1] < 0.1) continue;                                   // kaca tetap bersih
+        let k = 1, warm = 0;
+        const soot = sm(2.6, 4.7, z) * Math.max(0, 1 - Math.abs(Math.abs(x) - 1.75) / 1.4);        // jelaga di belakang nosel
+        k *= 1 - 0.55 * soot; warm += 0.35 * soot * sm(3.9, 4.7, z);                                  // warna perunggu panas di bibir nosel
+        k *= 1 - 0.45 * Math.max(0, -ny);                                                           // perut hangus
+        k *= 1 - 0.35 * sm(-4.6, -6.2, z);                                                          // hidung terbakar saat masuk atmosfer
+        const streak = h3(Math.floor(x * 4), 1.7, 3.1), fall = sm(-2, 4.5, z);                      // noda aliran memanjang ke belakang
+        k *= 1 - 0.18 * streak * fall * (ny > 0.3 ? 1 : 0.5);
+        k *= 0.9 + 0.2 * h3(Math.floor(x * 2), Math.floor(y * 2), Math.floor(z * 2));               // bintik kotor per panel
+        c[i] = c[i] * k + warm * 0.09; c[i + 1] = c[i + 1] * k + warm * 0.05; c[i + 2] = c[i + 2] * k + warm * 0.02;
+      }
+    }
+    return {
+      geo: body, legs, PAD_Y,
+      pads: [[0, -3.8], [-1.75, 2.4], [1.75, 2.4]].map(([x, z]) => ({ x, z, r: 0.55 })),
+      door: { x: -1.95, y: -0.2, z: -2.2, nx: -1 },                                                   // titik naik di kaki tangga (sisi kiri kokpit, di luar kotak tabrakan)
+      nav: { red: [-5.0, 0.52, 1.3], green: [5.0, 0.52, 1.3], strobe: [0, 2.1, 3.9] },
+      nozzles: [[-1.75, 0.45, 4.62], [1.75, 0.45, 4.62]], fans: [[-2.9, -0.3, 1.3], [2.9, -0.3, 1.3]],
+      low: [{ x0: -1.3, x1: 1.3, z0: -6.3, z1: 4.7, y: -0.55 }, { x0: -3.0, x1: 3.0, z0: -1.2, z1: 4.2, y: -0.4 },
+            { x0: -5.1, x1: 5.1, z0: 0.3, z1: 4.2, y: -0.4 }],                                          // badan, sayap dalam, sayap luar (menyapu): lebih rendah dari kepala
+      belly: -0.55, eye: [0, 0.95, -1.9],
+      size: { L: 10.8, W: 10.1, H: 4.0 },
+    };
+  }
+
+  window.KESTREL = { build, buildV3, buildV5, gear, mergeColored, GEAR, L, W, HT, HB };
 })();

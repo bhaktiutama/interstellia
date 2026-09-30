@@ -1,6 +1,6 @@
 # Rencana M3 Millar's World: Shuttle KS-07 v3 dan Misi Radar
 
-Per 30 September 2026 · Status: M3a, M3b, dan M3c selesai (lihat bagian "Status"), berikutnya M3d naik dan lolos
+Per 30 September 2026 · Status: M3a sampai M3d selesai (lihat bagian "Status"); wahana kini KS-07 v5
 
 ## Ringkasan
 
@@ -14,7 +14,7 @@ Per 30 September 2026 · Status: M3a, M3b, dan M3c selesai (lihat bagian "Status
 | --- | --- | --- |
 | 1. Tiba | Berdiri di samping KS-07, hitung mundur 5:00 mulai | Laut tenang, gelombang 37,5 km di balik cakrawala |
 | 2. Buka radar | M (tombol peta di Copper) | Layar radar genggam: sapuan 2 s, jangkauan 250 m, tanda 3 sinyal. Makin dekat, makin tepat |
-| 3. Ke lokasi | Berjalan atau lari di air (Shift) | Suar kuning berkedip di tiap pecahan terlihat dari sekitar 150 m; blackbox berbunyi ping yang makin cepat saat mendekat |
+| 3. Ke lokasi | Berjalan atau lari di air (Shift) | Pecahan kecil dan sebagian terendam; suar redup hanya terlihat dari 40 m; blackbox berbunyi ping yang makin cepat saat mendekat |
 | 4. Ambil barang | Tahan E 2 s di dekat barang | Barang masuk daftar (1/3, 2/3, 3/3) |
 | 5. Ulangi | Sampai 3 lokasi | Keadaan laut naik saat gelombang mendekat, arus surut 20 s terakhir |
 | 6. Kembali | Ke pintu KS-07, E naik | Masuk kokpit |
@@ -156,4 +156,24 @@ Uji: `tools/uji_millar.py` kini 58 pemeriksaan, semua lulus, termasuk: 200/200 b
 
 Catatan: simulasi rute memakai laut saat gelombang masih jauh; di permainan nyata ombak membesar dan arus surut menarik pemain di 20 s terakhir, jadi sisa waktu sebenarnya lebih kecil. Angka mudah disetel di `CONFIG.mission`.
 
-Berikutnya M3d: naik, lepas landas, dan lolos dari gelombang (serta pilihan wahana kecil v5, `docs/app/konsep-ks07-v5.md`).
+## Status M3d
+
+Selesai 30 September 2026. Atas permintaan pemilik: wahana diganti KS-07 v5 (kecil, satu kursi) dengan warna gelap doff, kotor, dan gosong; pecahan misi dikecilkan agar tidak terlihat tanpa radar.
+
+| Bagian | Isi |
+| --- | --- |
+| Wahana v5 | `KESTREL.buildV5()`: geometri blokout v5, palet gelap doff, lapisan kotor dan gosong per titik (jelaga dan warna perunggu panas di belakang nosel, perut hangus, hidung terbakar, noda aliran memanjang, bintik per panel), kaca bernada biru satu-satunya bagian mengilap. Kaki dan tangga terpisah (ditarik di atas 6 m). Shader `shipMat` diberi `uMatte` (kilap cat turun, pantulan hanya di kaca dan bagian basah) |
+| Di laut | 30 m dari titik awal, tangga di sisi kiri kokpit menghadap titik awal, 3 kaki bertapak di dasar laut, badan dan sayap menahan pemain (lebih rendah dari kepala) |
+| Pecahan misi | Diperkecil 0,5 kali dan diturunkan 0,3 m (sebagian besar terendam), tiang suar pendek, suar redup berkedip hanya terlihat dalam 40 m, LED barang dalam 16 m, jarak ambil 2,6 m |
+| Naik | E di kaki tangga: mode Misi setelah 3 barang, mode Jelajah kapan saja |
+| Terbang | Mesin menyala 2 s, R (atau Space) naik 40 m/s (Shift 65), F turun, W/S maju/mundur (60 m/s, Shift 130 m/s), A/D belok, mouse melihat sekeliling (kembali sendiri ke belakang wahana), V kamera belakang / kokpit, E mendarat (rendah dan pelan) |
+| Tampilan | Nosel dan kipas angkat menyala sesuai dorongan, wahana menunduk saat mempercepat dan miring saat belok, semburan air dan riak di bawah kipas saat rendah, dengung mesin |
+| Gelombang | Tertelan bila air gelombang lebih tinggi dari perut wahana (termasuk masih di air); lolos bila muka gelombang sudah 300 m di belakang dan wahana selamat |
+| Hasil | Misi berhasil = lolos di atas gelombang dengan semua barang (ketinggian saat gelombang lewat ditampilkan); gagal = tersapu (jalan kaki) atau tertelan (wahana). Mode Jelajah: tertelan = kembali ke titik awal, wahana kembali ke tempatnya |
+| HUD | Ketinggian, kecepatan (km/h dan m/s tegak), puncak gelombang |
+
+Uji: `tools/uji_millar.py` kini 60 pemeriksaan, semua lulus, termasuk: v5 tanpa nilai tidak valid, warna rata-rata 0,138 (gelap), 18 titik kaca; badan dan sayap menahan pemain; simulasi rute terpendek 325 m + ambil 3 barang + naik = 233 s (ditambah cadangan lepas landas 45 s = 278 s, di bawah 300 s); naik ke 1.300 m dalam 23,4 s dan lolos di atas gelombang (ketinggian 1.919 m saat lewat), render terbang tanpa nilai tidak valid atau titik menyala; wahana yang masih di air saat gelombang tiba = tertelan; mode Jelajah: terbang, mendarat 56 m dari tempat semula, pemain turun 1,0 m dari tangga.
+
+Catatan: rute terpanjang (330 m) menyisakan sekitar 20 s. Bila terasa terlalu ketat saat diuji, `CONFIG.mission.tourMax` bisa diturunkan atau pilih tingkat Santai.
+
+Berikutnya M3e (Copper memakai model baru) atau M4 (pandangan orbit, sinematik kedatangan).

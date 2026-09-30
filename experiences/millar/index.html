@@ -245,6 +245,12 @@ const I18N = { en: {
   'Kualitas grafik': 'Graphics quality', 'Turunkan otomatis bila FPS di bawah 30': 'Lower automatically when FPS drops below 30',
   'Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.': 'Saver: for laptops without a dedicated GPU (MacBook M1). Change any time with Q.',
   'Panel kontrol': 'Control panel',
+  'Di kokpit KS-07. R naik, F turun, W/S maju/mundur, A/D belok, Shift cepat, V kamera, E mendarat.': 'In the KS-07 cockpit. R up, F down, W/S forward/back, A/D turn, Shift fast, V camera, E land.',
+  'Terlalu tinggi atau terlalu cepat untuk mendarat.': 'Too high or too fast to land.', 'Mendarat. E di tangga untuk naik lagi.': 'Landed. E at the ladder to board again.',
+  'KS-07 tertelan gelombang.': 'KS-07 was swallowed by the wave.', 'Lolos dari gelombang.': 'Escaped the wave.', 'Menyalakan mesin...': 'Starting engines...',
+  'R: lepas landas': 'R: take off', 'E: mendarat': 'E: land', 'Ketinggian': 'Altitude', 'Kecepatan': 'Speed', 'tegak': 'vertical', 'Puncak gelombang': 'Wave crest',
+  'Ketinggian saat gelombang lewat': 'Altitude as the wave passed', 'KS-07 lolos di atas gelombang dengan semua barang.': 'KS-07 cleared the wave with every item.',
+  'Terbang KS-07: R/F naik-turun, W/S maju-mundur, A/D belok, Shift cepat, V kamera, E mendarat': 'Fly KS-07: R/F up-down, W/S forward-back, A/D turn, Shift fast, V camera, E land',
   'Mode': 'Mode', 'Tingkat misi': 'Mission level', 'Misi': 'Mission', 'Jelajah': 'Explore', 'Santai': 'Relaxed', 'Sulit': 'Hard',
   'Misi: temukan 3 pecahan pesawat dengan radar (M), ambil barangnya (tahan E), lalu kembali ke KS-07 sebelum gelombang tiba.': 'Mission: find 3 pieces of wreckage with the radar (M), recover their items (hold E), then return to KS-07 before the wave arrives.',
   'Ulangi (posisi baru)': 'Retry (new positions)', 'Mode Jelajah': 'Explore mode', 'Misi berhasil': 'Mission complete', 'Misi gagal': 'Mission failed',
@@ -1453,23 +1459,26 @@ function seaStateTarget(dist) {
 }
 
 /* ---------------- Shuttle KS-07 mendarat di air (M3a, rencana: docs/millar/rencana-m3-millar.md) ----------------
-   M3b: model KS-07 v3 dari modul bersama shared/kestrel.js (KESTREL.buildV3; Copper masih memakai v1) dengan 4 kaki.
-   Diletakkan di samping titik awal; bawah lengan dan badan tengah sekitar 2 m di atas muka air (bisa dilewati). Tabrakan: kaki dan blok belakang.
+   M3d: model KS-07 v5 dari modul bersama shared/kestrel.js (KESTREL.buildV5; Copper masih memakai v1) dengan 3 kaki.
+   Diletakkan di samping titik awal. Tabrakan: kaki + kotak badan dan sayap (lebih rendah dari kepala).
    Shading sendiri seperti laut: albedo warna vertex, cahaya langit mendung (uAmb) + pantulan cubemap langit (Fresnel),
    bagian yang terkena air lebih gelap dan berkilap, kabut ke cakrawala, turun mengikuti lengkung planet. */
-// M3b: model KS-07 v3 (KESTREL.buildV3), sisi kiri berpintu menghadap titik awal, hidung ke arah datangnya gelombang
-const SHIP = { x: 22.3, z: 20.1, yaw: -0.736, padDrop: 0, y: 0, pads: [], navT: 0, ripT: 0, mesh: null };
-const KS = window.KESTREL.buildV3(THREE);
+// M3d: model KS-07 v5 (KESTREL.buildV5): wahana kecil satu kursi, gelap doff, kotor dan gosong. Tangga di sisi kiri kokpit
+// menghadap titik awal, hidung ke arah datangnya gelombang. placeShip() dipakai lagi saat mendarat di tempat lain.
+const SHIP = { x: 22.3, z: 20.1, yaw: -0.736, home: [22.3, 20.1, -0.736], padDrop: 0, y: 0, pads: [], navT: 0, ripT: 0, mesh: null, legs: null };
+const KS = window.KESTREL.buildV5(THREE);
 const shipToWorld = (x, z) => { const c = Math.cos(SHIP.yaw), sn = Math.sin(SHIP.yaw); return [SHIP.x + x * c + z * sn, SHIP.z - x * sn + z * c]; };   // model -> dunia (rotasi y)
 const worldToShip = (x, z) => { const c = Math.cos(SHIP.yaw), sn = Math.sin(SHIP.yaw), dx = x - SHIP.x, dz = z - SHIP.z; return [dx * c - dz * sn, dx * sn + dz * c]; };
-{
-  SHIP.padDrop = -KS.PAD_Y;
-  SHIP.pads = KS.pads.map((p) => { const [x, z] = shipToWorld(p.x, p.z); return { x, z, r: p.r }; });
+function placeShip(x, z, yaw) {
+  SHIP.x = x; SHIP.z = z; SHIP.yaw = yaw; SHIP.padDrop = -KS.PAD_Y;
+  SHIP.pads = KS.pads.map((p) => { const [px, pz] = shipToWorld(p.x, p.z); return { x: px, z: pz, r: p.r }; });
   SHIP.y = Math.max(...SHIP.pads.map((p) => seabed(p.x, p.z))) + SHIP.padDrop;   // tapak tertinggi menyentuh dasar laut
-  SHIP.belly = SHIP.y + KS.belly;                                                  // bawah lengan dan badan tengah (bisa dilewati)
+  SHIP.belly = SHIP.y + KS.belly;
   const [dx, dz] = shipToWorld(KS.door.x, KS.door.z); SHIP.door = { x: dx, z: dz, y: SHIP.y + KS.door.y };
+  if (SHIP.mesh) { SHIP.mesh.position.set(SHIP.x, SHIP.y, SHIP.z); SHIP.mesh.rotation.set(0, SHIP.yaw, 0); SHIP.legs.visible = true; }
 }
-const shipU = { ...U, uWater: { value: 0 } };
+placeShip(...SHIP.home);
+const shipU = { ...U, uWater: { value: 0 }, uMatte: { value: 1 } };
 const shipMat = new THREE.ShaderMaterial({
   uniforms: shipU, defines: { NW: 1, NM: 1 }, side: THREE.DoubleSide,
   vertexShader: LOG_VS + COMMON + /* glsl */`
@@ -1483,23 +1492,23 @@ const shipMat = new THREE.ShaderMaterial({
       #include <logdepthbuf_vertex>
     }`,
   fragmentShader: LOG_FS + COMMON + /* glsl */`
-    uniform float uWater; varying vec3 vC, vN, vR, vW;
+    uniform float uWater, uMatte; varying vec3 vC, vN, vR, vW;
     void main() {
       #include <logdepthbuf_fragment>
       float nl = length(vN); vec3 n = nl > 1e-6 ? vN / nl : vec3(0.0, 1.0, 0.0);
       float dist = max(length(vR), 1e-3); vec3 V = -vR / dist;
       if (dot(n, V) < 0.0) n = -n;                                     // sisi dalam sirip dan sayap (DoubleSide)
       vec3 alb = pow(max(vC, vec3(0.0)), vec3(2.2));                   // warna vertex sRGB -> linear
-      float win = step(max(vC.r, max(vC.g, vC.b)), 0.1);               // jendela kokpit: gelap, mengilap
+      float win = step(0.035, vC.b - vC.r) * step(vC.g, 0.1);          // kaca kokpit (warna gelap bernada biru): mengilap
       float wet = 1.0 - smoothstep(0.0, 0.6, vW.y - uWater);           // dekat dan di bawah muka air: basah
       alb *= 1.0 - 0.35 * wet;
       float nv = clamp(dot(n, V), 0.0, 1.0);
       vec3 R = reflect(-V, n); R.y = abs(R.y) * 0.9 + 0.1 * R.y; R = normalize(R + vec3(0.0, 1e-3, 0.0));
       vec3 env = skyL(R);
-      float gloss = mix(0.35, 1.0, max(win, wet * 0.8));
+      float gloss = mix(0.35 * (1.0 - 0.75 * uMatte), 1.0, max(win, wet * 0.8));   // uMatte: cat doff, kilap hanya di kaca dan bagian basah
       float F = mix(0.04, 0.08, win) + (1.0 - mix(0.04, 0.08, win)) * pow(1.0 - nv, 5.0);
       vec3 sky = uAmb * (0.62 + 0.38 * n.y) + uAmb * vec3(0.30, 0.34, 0.36) * max(-n.y, 0.0);   // langit dari atas, pantulan laut dari bawah
-      vec3 c = alb * sky * 1.25 + mix(uAmb, env, gloss) * F * mix(0.6, 1.0, gloss);
+      vec3 c = alb * sky * 1.25 + mix(uAmb, env, gloss) * F * mix(0.6, 1.0, gloss) * mix(1.0, 0.45, uMatte * (1.0 - win));
       vec3 hd = normalize(vec3(-V.x, 0.02, -V.z) + vec3(1e-4, 0.0, 0.0));
       c = mix(c, skyL(hd), 1.0 - exp(-dist / uFogD));
       gl_FragColor = vec4(clamp(c, 0.0, 16.0), 1.0);
@@ -1509,14 +1518,21 @@ const shipMat = new THREE.ShaderMaterial({
   const g = new THREE.Group();
   const navMat = (r, gg, b) => new THREE.MeshBasicMaterial({ color: new THREE.Color(r, gg, b) });
   const lamp = (p, s, mat) => { const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), mat); m.position.set(...p); return m; };
-  SHIP.nav = { red: lamp(KS.nav.red, 0.3, navMat(6, 0.25, 0.15)), green: lamp(KS.nav.green, 0.3, navMat(0.2, 5, 0.6)), strobe: lamp(KS.nav.strobe, 0.35, navMat(14, 14, 14)) };
-  g.add(new THREE.Mesh(KS.geo, shipMat), SHIP.nav.red, SHIP.nav.green, SHIP.nav.strobe);
-  g.position.set(SHIP.x, SHIP.y, SHIP.z); g.rotation.y = SHIP.yaw;
+  SHIP.nav = { red: lamp(KS.nav.red, 0.16, navMat(6, 0.25, 0.15)), green: lamp(KS.nav.green, 0.16, navMat(0.2, 5, 0.6)), strobe: lamp(KS.nav.strobe, 0.18, navMat(14, 14, 14)) };
+  SHIP.legs = new THREE.Mesh(KS.legs, shipMat);
+  // cahaya nosel (mesin utama) dan kipas angkat: kuat sesuai dorongan saat terbang
+  SHIP.glowMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0), side: THREE.DoubleSide });
+  SHIP.fanMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0, 0, 0), side: THREE.DoubleSide });
+  for (const p of KS.nozzles) { const m = new THREE.Mesh(new THREE.CircleGeometry(0.42, 16), SHIP.glowMat); m.position.set(...p); g.add(m); }
+  for (const p of KS.fans) { const m = new THREE.Mesh(new THREE.CircleGeometry(0.62, 18), SHIP.fanMat); m.rotation.x = Math.PI / 2; m.position.set(...p); g.add(m); }
+  g.add(new THREE.Mesh(KS.geo, shipMat), SHIP.legs, SHIP.nav.red, SHIP.nav.green, SHIP.nav.strobe);
+  g.rotation.order = 'YXZ';
   g.traverse((o) => { o.frustumCulled = false; });
-  scene.add(g); SHIP.mesh = g;
+  scene.add(g); SHIP.mesh = g; placeShip(...SHIP.home);
 }
 // Kaki pendarat menahan pemain (lingkaran tapak + 0,3 m); bagian rendah (blok belakang, bawahnya di bawah kepala) = kotak
 function shipPush() {
+  if (FLY.on) return;
   for (const L of KS.low) {
     const [mx, mz] = worldToShip(P.x, P.z), m = 0.3;
     if (mx > L.x0 - m && mx < L.x1 + m && mz > L.z0 - m && mz < L.z1 + m) {
@@ -1533,7 +1549,8 @@ function shipPush() {
 const shipDist = () => Math.hypot(P.x - SHIP.x, P.z - SHIP.z);
 function updateShip(dt, t) {
   SHIP.navT += dt; SHIP.nav.strobe.visible = (SHIP.navT % 1.3) < 0.07;       // strobo putih berkedip
-  shipU.uWater.value = drawdown(SHIP.x - frontX(SHIP.z)) + CONFIG.chop.Hs * U.uChopK.value * 0.25;
+  shipU.uWater.value = drawdown(SHIP.mesh.position.x - frontX(SHIP.mesh.position.z)) + CONFIG.chop.Hs * U.uChopK.value * 0.25;
+  if (FLY.on) return;
   // Ombak menabrak kaki: riak dan buih kecil tiap 0,6-0,9 s bila kaki di dalam petak riak
   if ((SHIP.ripT -= dt) <= 0) {
     SHIP.ripT = 0.6 + 0.3 * Math.random();
@@ -1615,7 +1632,7 @@ function buildHelp() {
   const rows = [
     ['Mouse', t('Melihat. Klik = kunci kursor, Esc = lepas kursor')],
     ['W A S D', t('Berjalan di air setinggi lutut (air menahan langkah)')], ['Shift', t('Lari')], ['Space', t('Lompat (1,3 g: 77% lompatan di Bumi)')],
-    ['M', t('Radar: cari 3 pecahan pesawat (mode Misi)')], ['E', t('Tahan untuk mengambil barang, tekan di pintu untuk naik ke KS-07')],
+    ['M', t('Radar: cari 3 pecahan pesawat (mode Misi)')], ['KS-07', t('Terbang KS-07: R/F naik-turun, W/S maju-mundur, A/D belok, Shift cepat, V kamera, E mendarat')], ['E', t('Tahan untuk mengambil barang, tekan di pintu untuk naik ke KS-07')],
     ['V', t('Tampilan: jalan kaki, drone 60 m, tinggi 1,5 km')], ['G', t('Panggil gelombang raksasa (20 km di depan)')],
     ['Z', t('Kecepatan waktu 1x, 5x, 20x, 60x')], ['N', t('Suasana: otomatis, mendung, senja')],
     ['Q', t('Kualitas grafik: Ultra, Tinggi, Sedang, Rendah, Hemat')], ['P', t('Efek layar: tinggi, sedang, mati (bloom, butiran, vinyet)')],
@@ -1638,6 +1655,13 @@ addEventListener('keydown', (e) => {
   keys[e.code] = true;
   if (e.code === 'Space') e.preventDefault();
   if (e.repeat) return;
+  if (FLY.on) {                                          // di wahana: tombol pesawat Copper (R/F naik-turun, V kamera, E mendarat)
+    if (e.code === 'KeyE') missionAction();
+    if (e.code === 'KeyV') FLY.view = 1 - FLY.view;
+    if (e.code === 'KeyM') toggleRadar();
+    if (e.code === 'Backquote') toggleLab();
+    if (!['KeyQ', 'KeyP', 'KeyN', 'KeyU', 'KeyZ', 'KeyH', 'KeyG'].includes(e.code)) return;   // tombol umum tetap jalan
+  }
   if (e.code === 'KeyF') { togglePhoto(); return; }
   if (e.code === 'KeyM') toggleRadar();
   if (e.code === 'KeyE') missionAction();
@@ -1670,6 +1694,7 @@ addEventListener('pointermove', (e) => {
   let dx = 0, dy = 0;
   if (document.pointerLockElement === canvas) { dx = e.movementX; dy = e.movementY; }
   else if (drag) { dx = e.clientX - drag.x; dy = e.clientY - drag.y; drag = { x: e.clientX, y: e.clientY }; }
+  if (FLY.on) { FLY.lookY -= dx * 0.0022; FLY.lookP = Math.max(-1.3, Math.min(0.9, FLY.lookP - dy * 0.0022)); FLY.lookT = 0; return; }
   P.yaw -= dx * 0.0022; P.pitch = Math.max(-1.45, Math.min(1.45, P.pitch - dy * 0.0022));
 });
 
@@ -1743,7 +1768,7 @@ function simStep(sdt, dt) {
   if (frontX(P.z) - P.x < -60000) U.uWX.value += (P.x + W.spawn) - frontX(P.z);
   const top = waveTop(P.x, P.z), S = CONFIG.sweep;
   // Tersapu (R4): hantaman buih putih -> terguling di bawah air -> memutih -> kembali ke titik awal
-  if (!SWEEP.on && CLK.swept <= 0 && top > P.y + 0.2) {
+  if (!SWEEP.on && !FLY.on && CLK.swept <= 0 && top > P.y + 0.2) {
     Object.assign(SWEEP, { on: true, t: 0, rx: 0, ry: 0, rz: 0, wx: 2.5 + 2 * srnd(), wy: (srnd() - 0.5) * 3, wz: (srnd() < 0.5 ? -1 : 1) * (1.5 + 2 * srnd()) });
     sfxImpact();
   }
@@ -1891,7 +1916,8 @@ function updateAudio(dt, dist) {
    Tahan E 2 s di dekat barang = ambil. Setelah 3 barang: E di pintu KS-07 = naik (lepas landas menyusul di M3d).
    Gelombang diletakkan agar tiba tepat di batas waktu (Santai 7:00, Normal 5:00, Sulit 4:00). Tersapu = misi gagal. */
 CONFIG.mission = { levels: [['Santai', 420], ['Normal', 300], ['Sulit', 240]], rMin: 50, rMax: 130, sep: 40, tourMin: 250, tourMax: 330,
-  radarR: 250, sweep: 2, err: 0.05, err0: 2, pickR: 3.2, hold: 2, doorR: 3.5, wreckR: 1.5 };
+  radarR: 250, sweep: 2, err: 0.05, err0: 2, pickR: 2.6, hold: 2, doorR: 3.0, wreckR: 0.9,
+  wreckScale: 0.5, wreckSink: -0.3, lampR: 40, ledR: 16 };   // pecahan kecil dan sebagian terendam: tanpa radar sulit terlihat
 const ITEMS = ['Modul data navigasi', 'Modul data sensor', 'Blackbox'], SITE_NAMES = ['Pecahan 1', 'Pecahan 2', 'Pecahan 3'];
 const MIS = { mode: 'misi', level: 1, on: false, t: 0, limit: 300, sites: [], order: [], tour: 0, hold: 0, radar: false, sweepA: 0, blink: 0,
   pingT: 0, result: null, group: null, seed: 1 };
@@ -1938,7 +1964,7 @@ function wreckGeo(kind) {
     P.push(wpart(B(3.05, 0.25, 0.2), WK.O, 0, 0.1, 1.2, 0.25, 0.5, -0.2), wpart(Cy(0.05, 1.8, 6), WK.G, -0.8, 2.2, 0.3, 0.3, 0, 0.7));
     P.push(wpart(B(1.4, 0.15, 1.1), WK.G, 1.9, -0.1, 1.4, 0.2, 0.9, 0.4));
   }
-  P.push(wpart(Cy(0.06, 2.4, 6), WK.G, -1.0, 1.0, 0.9));                                           // tiang suar
+  P.push(wpart(Cy(0.06, 1.4, 6), WK.G, -1.0, 0.8, 0.9));                                           // tiang suar pendek
   return window.KESTREL.mergeColored(THREE, P.map((g) => ({ geo: g })));
 }
 function itemGeo(kind) {
@@ -1947,18 +1973,19 @@ function itemGeo(kind) {
 }
 function clearWrecks() { if (MIS.group) { scene.remove(MIS.group); MIS.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); MIS.group = null; } MIS.sites = []; }
 function startMission() {
-  clearWrecks(); resetPlayer(); P.view = 0;
+  clearWrecks(); flyReset(); resetPlayer(); P.view = 0;
   MIS.seed = (Math.random() * 1e9) | 0;
   const g = missionSites(MIS.seed);
   MIS.order = g.order; MIS.tour = g.tour;
-  const grp = new THREE.Group(), lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(9, 7, 1) }), ledMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.3, 6, 0.8) });
+  const grp = new THREE.Group(), lampMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(2.6, 1.9, 0.3) }), ledMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.2, 3, 0.5) });
+  const C = CONFIG.mission, ks = C.wreckScale;
   MIS.sites = g.pts.map((p, i) => {
-    const ry = rng(MIS.seed + i)() * Math.PI * 2, c = Math.cos(ry), sn = Math.sin(ry), it = WRECK_ITEM[i];
-    const w = new THREE.Group(); w.position.set(p.x, 0, p.z); w.rotation.y = ry;
+    const ry = rng(MIS.seed + i)() * Math.PI * 2, c = Math.cos(ry), sn = Math.sin(ry), it = WRECK_ITEM[i].map((v) => v * ks);
+    const w = new THREE.Group(); w.position.set(p.x, C.wreckSink, p.z); w.rotation.y = ry; w.scale.setScalar(ks);
     w.add(new THREE.Mesh(wreckGeo(i), shipMat));
-    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.25, 0.25), lampMat); lamp.position.set(-1.0, 2.3, 0.9); w.add(lamp);
-    const item = new THREE.Mesh(itemGeo(i), shipMat); item.position.set(...it); w.add(item);
-    const led = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.08), ledMat); led.position.set(it[0], it[1] + 0.22, it[2]); w.add(led);
+    const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 0.2), lampMat); lamp.position.set(-1.0, 1.55, 0.9); w.add(lamp);
+    const item = new THREE.Mesh(itemGeo(i), shipMat); item.position.set(...WRECK_ITEM[i]); w.add(item);
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), ledMat); led.position.set(WRECK_ITEM[i][0], WRECK_ITEM[i][1] + 0.25, WRECK_ITEM[i][2]); w.add(led);
     w.traverse((o) => { o.frustumCulled = false; }); grp.add(w);
     return { x: p.x, z: p.z, kind: i, got: false, ix: p.x + it[0] * c + it[2] * sn, iz: p.z - it[0] * sn + it[2] * c, lamp, item, led, ph: i * 0.37, blip: null, ripT: i * 0.3 };
   });
@@ -1971,7 +1998,7 @@ function startMission() {
   syncLab();
 }
 function stopMission() {
-  clearWrecks(); MIS.on = false; MIS.result = null; MIS.radar = false; document.getElementById('prompt').textContent = '';
+  clearWrecks(); flyReset(); MIS.on = false; MIS.result = null; MIS.radar = false; document.getElementById('prompt').textContent = '';
 }
 function restartMission() { if (MIS.mode !== 'misi') return; document.getElementById('result').hidden = true; STATE.started = false; start(); }
 function toggleRadar(on = !MIS.radar) { MIS.radar = on; document.getElementById('radar').hidden = !on; syncLab(); }
@@ -1981,24 +2008,26 @@ function collectItem(i) {
   toast(n < 3 ? t('Didapat: {x} ({n}/3)', { x: t(ITEMS[S.kind]), n }) : t('Semua barang didapat. Kembali ke KS-07!'), 3);
   sfxPickup();
 }
-function missionAction() {                            // E: naik ke KS-07 (penahanan E untuk mengambil barang di updateMission)
-  if (!MIS.on || MIS.result || P.view !== 0) return;
+function missionAction() {                            // E: naik ke KS-07 di tangga (penahanan E untuk mengambil barang di updateMission)
+  if (FLY.on) { flyLand(); return; }
+  if (MIS.result || P.view !== 0) return;
   if (Math.hypot(P.x - SHIP.door.x, P.z - SHIP.door.z) > CONFIG.mission.doorR) return;
-  if (MIS.sites.some((x) => !x.got)) { toast(t('Masih ada barang yang belum diambil.'), 2); return; }
-  finishMission(true);
+  if (MIS.on && MIS.sites.some((x) => !x.got)) { toast(t('Masih ada barang yang belum diambil.'), 2); return; }
+  boardShip();
 }
-function finishMission(ok) {
-  MIS.result = { ok, t: MIS.t, got: MIS.sites.filter((x) => x.got).length };
+function finishMission(ok, why = ok ? 'lolos' : 'tersapu') {
+  MIS.result = { ok, why, t: MIS.t, got: MIS.sites.filter((x) => x.got).length, alt: FLY.on ? FLY.y - FLY.water : 0 };
+  FLY.thr = 0; if (AUDIO.eng) flyAudio();
   STATE.started = false; toggleRadar(false);
   try { document.exitPointerLock(); } catch (e) { /* abaikan */ }
   const R = MIS.result, rows = [
     [t('Waktu planet'), fmtMS(R.t)], [t('Waktu di luar'), fmtOutside(R.t * CONFIG.dil)], [t('Barang'), `${R.got}/3`],
     [t('Tingkat'), `${t(CONFIG.mission.levels[MIS.level][0])} ${fmtMS(MIS.limit)}`],
   ];
-  if (ok) rows.push([t('Sisa waktu'), fmtMS(MIS.limit - R.t)]);
+  if (why !== 'tersapu') rows.push([t('Ketinggian saat gelombang lewat'), `${fmtN(R.alt)} m`]);
   const h = document.getElementById('resTitle'); h.textContent = t(ok ? 'Misi berhasil' : 'Misi gagal'); h.className = ok ? 'ok' : 'fail';
   document.getElementById('resRows').innerHTML = rows.map(([a, b]) => `<div>${a}</div><div>${b}</div>`).join('') +
-    `<div style="grid-column:1/-1;margin-top:6px">${t(ok ? 'Kembali ke KS-07 dengan semua barang.' : 'Tersapu gelombang sebelum kembali ke KS-07.')}${ok ? ' ' + t('Lepas landas menyusul di tahap berikutnya (M3d).') : ''}</div>`;
+    `<div style="grid-column:1/-1;margin-top:6px">${t(why === 'lolos' ? 'KS-07 lolos di atas gelombang dengan semua barang.' : why === 'tertelan' ? 'KS-07 tertelan gelombang.' : 'Tersapu gelombang sebelum kembali ke KS-07.')}</div>`;
   document.getElementById('result').hidden = false;
   if (!ok) CLK.white = 0.85;
 }
@@ -2074,7 +2103,10 @@ const promptEl = document.getElementById('prompt');
 function updateMission(dt, sdt) {
   const C = CONFIG.mission;
   MIS.blink += dt;
-  for (const S of MIS.sites) { S.lamp.visible = (MIS.blink + S.ph) % 1 < 0.18; S.led.visible = !S.got && (MIS.blink * 2 + S.ph) % 1 < 0.5; }
+  for (const S of MIS.sites) {                         // suar dan LED kecil, hanya terlihat dari dekat
+    const d = Math.hypot(S.x - P.x, S.z - P.z);
+    S.lamp.visible = d < C.lampR && (MIS.blink + S.ph) % 1.6 < 0.14; S.led.visible = !S.got && d < C.ledR && (MIS.blink * 2 + S.ph) % 1 < 0.5;
+  }
   drawRadar(dt);
   if (!MIS.on || MIS.result) return;
   MIS.t += sdt;
@@ -2083,14 +2115,14 @@ function updateMission(dt, sdt) {
     const S = MIS.sites[i];
     // pecahan menahan pemain (lingkaran), riak di sekitarnya bila dekat
     const dx = P.x - S.x, dz = P.z - S.z, d = Math.hypot(dx, dz);
-    if (P.view === 0 && d < C.wreckR && d > 1e-6) { P.x = S.x + dx / d * C.wreckR; P.z = S.z + dz / d * C.wreckR; }
+    if (P.view === 0 && !FLY.on && d < C.wreckR && d > 1e-6) { P.x = S.x + dx / d * C.wreckR; P.z = S.z + dz / d * C.wreckR; }
     if ((S.ripT -= dt) <= 0) { S.ripT = 0.7 + 0.4 * Math.random(); if (Math.abs(S.x - P.x) < RIP.S * 0.45 && Math.abs(S.z - P.z) < RIP.S * 0.45) ripSource(S.x, S.z, 1.2, -0.005 * U.uChopK.value, 0.15); }
-    if (!S.got && P.view === 0 && Math.hypot(P.x - S.ix, P.z - S.iz) < C.pickR) near = i;
+    if (!S.got && P.view === 0 && !FLY.on && Math.hypot(P.x - S.ix, P.z - S.iz) < C.pickR) near = i;
   }
   if (near >= 0 && keys.KeyE) { MIS.hold += dt; if (MIS.hold >= C.hold) { collectItem(near); MIS.hold = 0; near = -1; } } else MIS.hold = 0;
   if (near >= 0) html = `${t('Tahan E: ambil {x}', { x: t(ITEMS[MIS.sites[near].kind]) })}<div class="bar" style="width:${Math.round(100 * MIS.hold / C.hold)}%"></div>`;
-  else if (P.view === 0 && MIS.sites.every((x) => x.got) && Math.hypot(P.x - SHIP.door.x, P.z - SHIP.door.z) < C.doorR) html = t('E: naik ke KS-07');
-  if (promptEl.innerHTML !== html) promptEl.innerHTML = html;
+  else if (P.view === 0 && !FLY.on && MIS.sites.every((x) => x.got) && Math.hypot(P.x - SHIP.door.x, P.z - SHIP.door.z) < C.doorR) html = t('E: naik ke KS-07');
+  if (!FLY.on && promptEl.innerHTML !== html) promptEl.innerHTML = html;
   // ping blackbox: selang 0,35-3 s tergantung jarak, arah kiri/kanan dari pandangan
   const bb = MIS.sites.find((x) => x.kind === 2);
   if (bb && !bb.got && (MIS.pingT -= dt) <= 0) {
@@ -2098,6 +2130,120 @@ function updateMission(dt, sdt) {
     MIS.pingT = Math.min(3, Math.max(0.35, 0.35 + d / 90));
     tone2(1450, 1380, 0.12, Math.min(0.25, 0.25 / (1 + d / 60) + 0.02), rt / Math.max(d, 1));
   }
+}
+
+/* ---------------- Terbang dengan KS-07 v5 (M3d) ----------------
+   E di tangga = naik. Mesin menyala 2 s, lalu R (atau Space) naik, F turun, W/S maju/mundur, A/D belok, Shift cepat, mouse
+   melihat sekeliling (kembali ke belakang wahana sendiri), V = kamera belakang / kokpit, E dekat air = mendarat.
+   Naik 40 m/s (Shift 65): dari air ke 1.300 m sekitar 22-35 s. Lolos bila muka gelombang lewat di bawah (300 m di belakang
+   puncak) dan wahana di atas air; tertelan bila air gelombang lebih tinggi dari perut wahana. */
+CONFIG.fly = { climb: 40, climbBoost: 65, sink: 18, fwd: 60, fwdBoost: 130, acc: 14, vacc: 22, yawRate: 0.9, spool: 2, gearUp: 6,
+  landH: 4, landV: 6, camDist: 20, camUp: 5, passU: 300 };
+const FLY = { on: false, landed: true, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, pitch: 0, roll: 0, spool: 0, thr: 0,
+  lookY: 0, lookP: -0.15, lookT: 9, view: 0, water: 0, passed: false, sprayT: 0 };
+function flyReset() {
+  FLY.on = false; FLY.passed = false; placeShip(...SHIP.home);
+  if (promptEl) promptEl.textContent = '';
+}
+function boardShip() {
+  Object.assign(FLY, { on: true, landed: true, x: SHIP.x, y: SHIP.y, z: SHIP.z, vx: 0, vy: 0, vz: 0, yaw: SHIP.yaw, pitch: 0, roll: 0, spool: 0, thr: 0,
+    lookY: 0, lookP: -0.15, lookT: 9, view: 0, passed: false });
+  toggleRadar(false);
+  toast(t('Di kokpit KS-07. R naik, F turun, W/S maju/mundur, A/D belok, Shift cepat, V kamera, E mendarat.'), 6);
+  tone2(220, 440, 0.6, 0.15, 0);
+}
+function flyLand() {
+  const C = CONFIG.fly, sp = Math.hypot(FLY.vx, FLY.vz);
+  if (FLY.y - FLY.water > C.landH + SHIP.padDrop || sp > C.landV || Math.abs(FLY.vy) > C.landV) { toast(t('Terlalu tinggi atau terlalu cepat untuk mendarat.'), 2); return; }
+  placeShip(FLY.x, FLY.z, FLY.yaw); FLY.on = false;
+  P.x = SHIP.door.x - Math.cos(SHIP.yaw) * 1.0; P.z = SHIP.door.z + Math.sin(SHIP.yaw) * 1.0;   // turun di samping tangga (sisi kiri wahana)
+  P.y = seabed(P.x, P.z) + CONFIG.eye; P.vx = P.vz = P.vy = 0; P.ground = true; P.yaw = FLY.yaw + FLY.lookY; P.pitch = 0; RIP.fresh = true;
+  promptEl.textContent = ''; toast(t('Mendarat. E di tangga untuk naik lagi.'), 3);
+}
+function flyEngulfed() {
+  if (MIS.on && !MIS.result) { finishMission(false, 'tertelan'); return; }
+  SWEEP.on = false; CLK.white = 1; flyReset(); resetPlayer(); P.view = 0;
+  U.uWX.value += P.x - 50000 - frontX(P.z); CLK.swept = 2.5;
+  toast(t('KS-07 tertelan gelombang.'), 5);
+}
+function updateFly(dt) {
+  if (!FLY.on) { if (AUDIO.eng) flyAudio(); return; }
+  const C = CONFIG.fly, run = !!(keys.ShiftLeft || keys.ShiftRight), up = !!(keys.KeyR || keys.Space), down = !!keys.KeyF;
+  FLY.spool = Math.min(1, FLY.spool + dt / C.spool);
+  const calm = drawdown(FLY.x - frontX(FLY.z)), inWave = waveTop(FLY.x, FLY.z) > calm + 1;   // di atas laut biasa atau di atas tubuh gelombang
+  FLY.water = Math.max(calm, waveTop(FLY.x, FLY.z));
+  if (FLY.landed && up && FLY.spool >= 1) FLY.landed = false;
+  // kecepatan tegak menuju sasaran (percepatan terbatas)
+  const vT = FLY.landed ? 0 : up ? (run ? C.climbBoost : C.climb) : down ? -C.sink : 0;
+  FLY.vy += Math.max(-C.vacc * dt, Math.min(C.vacc * dt, vT - FLY.vy));
+  // maju/mundur searah hidung, geser samping teredam
+  const fx = -Math.sin(FLY.yaw), fz = -Math.cos(FLY.yaw), rx = Math.cos(FLY.yaw), rz = -Math.sin(FLY.yaw);
+  let vf = FLY.vx * fx + FLY.vz * fz, vs = FLY.vx * rx + FLY.vz * rz;
+  const fT = FLY.landed ? 0 : keys.KeyW ? (run ? C.fwdBoost : C.fwd) : keys.KeyS ? -C.fwd * 0.35 : 0;
+  const a0 = vf; vf += Math.max(-C.acc * dt, Math.min(C.acc * dt, fT - vf)); vs *= Math.exp(-2 * dt);
+  const yr = FLY.landed ? 0 : (keys.KeyA ? 1 : 0) - (keys.KeyD ? 1 : 0);
+  FLY.yaw += yr * C.yawRate * dt;
+  FLY.vx = fx * vf + rx * vs; FLY.vz = fz * vf + rz * vs;
+  FLY.x += FLY.vx * dt; FLY.z += FLY.vz * dt; FLY.y += FLY.vy * dt;
+  // tidak menembus laut biasa: kaki di dasar saat mendarat, perut di atas air saat terbang rendah (air gelombang tidak menahan: tertelan)
+  const floor = calm + (FLY.landed ? SHIP.padDrop : 0.9);
+  if (!inWave && FLY.y < floor) { FLY.y = floor; FLY.vy = Math.max(0, FLY.vy); }
+  const alt = FLY.y - FLY.water;
+  // sikap tampilan: menunduk saat mempercepat, miring saat belok
+  FLY.pitch += ((a0 - vf) / Math.max(dt, 1e-3) * 0.012 - FLY.pitch) * Math.min(1, dt * 3);
+  FLY.roll += (-yr * Math.min(1, Math.abs(vf) / 30) * 0.35 - FLY.roll) * Math.min(1, dt * 3);
+  FLY.thr = FLY.spool * (0.35 + 0.65 * Math.min(1, Math.abs(vT) / C.climbBoost + Math.abs(fT) / C.fwdBoost));
+  SHIP.mesh.position.set(FLY.x, FLY.y, FLY.z); SHIP.mesh.rotation.set(Math.max(-0.35, Math.min(0.35, FLY.pitch)), FLY.yaw, FLY.roll);
+  SHIP.legs.visible = alt < C.gearUp;
+  SHIP.glowMat.color.setRGB(3.2 * FLY.thr, 1.1 * FLY.thr, 0.35 * FLY.thr); SHIP.fanMat.color.setRGB(1.6 * FLY.thr, 0.9 * FLY.thr, 0.5 * FLY.thr);
+  // semburan air di bawah kipas saat rendah
+  if (alt < 10 && FLY.spool > 0.3 && (FLY.sprayT -= dt) <= 0) {
+    FLY.sprayT = 0.12; const k = (1 - alt / 10) * FLY.thr;
+    for (const f of KS.fans) {
+      const c = Math.cos(FLY.yaw), sn = Math.sin(FLY.yaw), wx = FLY.x + f[0] * c + f[2] * sn, wz = FLY.z - f[0] * sn + f[2] * c;
+      if (Math.abs(wx - P.x) < RIP.S * 0.45 && Math.abs(wz - P.z) < RIP.S * 0.45) ripSource(wx, wz, 1.5, -0.03 * k, 0.6 * k);
+      spawnSplash(wx, FLY.water, wz, Math.round(40 * k * SPL.max / 2500), (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 6, 1.4 * k);
+    }
+  }
+  // kamera dan petak laut ikut wahana
+  P.x = FLY.x; P.z = FLY.z;
+  FLY.lookT += dt; if (FLY.lookT > 1.5) { FLY.lookY *= Math.exp(-dt * 1.2); FLY.lookP += (-0.15 - FLY.lookP) * Math.min(1, dt * 1.2); }
+  // gelombang: tertelan atau lolos
+  if (inWave && FLY.water > FLY.y + KS.belly + 0.4) { flyEngulfed(); return; }
+  if (!FLY.passed && FLY.x - frontX(FLY.z) > C.passU) {
+    FLY.passed = true;
+    if (MIS.on && !MIS.result) finishMission(true, 'lolos'); else toast(t('Lolos dari gelombang.'), 4);
+  }
+  // petunjuk
+  const html = FLY.landed ? (FLY.spool < 1 ? t('Menyalakan mesin...') : t('R: lepas landas')) : alt < C.landH + SHIP.padDrop && Math.hypot(FLY.vx, FLY.vz) < C.landV ? t('E: mendarat') : '';
+  if (promptEl.innerHTML !== html) promptEl.innerHTML = html;
+  flyAudio();
+}
+function flyCamera() {
+  const C = CONFIG.fly, cy = FLY.yaw + FLY.lookY, cp = FLY.lookP;
+  if (FLY.view === 1) {                                 // kokpit: mata di atas kaca, ikut sikap wahana
+    const e = KS.eye, c = Math.cos(FLY.yaw), sn = Math.sin(FLY.yaw);
+    camera.position.set(FLY.x + e[0] * c + e[2] * sn, FLY.y + e[1] + 0.35, FLY.z - e[0] * sn + e[2] * c);
+    camera.rotation.set(cp + 0.15 + FLY.pitch * 0.5, cy, FLY.roll * 0.6);
+    return;
+  }
+  const dx = -Math.sin(cy) * Math.cos(cp), dy = Math.sin(cp), dz = -Math.cos(cy) * Math.cos(cp);
+  camera.position.set(FLY.x - dx * C.camDist, Math.max(FLY.water + 1.5, FLY.y - dy * C.camDist + C.camUp * 0.4), FLY.z - dz * C.camDist);
+  camera.rotation.set(cp, cy, 0);
+}
+function flyAudio() {                                   // dengung mesin: noise rendah + nada gergaji, ikut dorongan
+  const A = AUDIO, c = A.ctx; if (!c) return;
+  if (!A.eng) {
+    const src = c.createBufferSource(); src.buffer = A.brown; src.loop = true; src.start();
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 160; f.Q.value = 0.7;
+    const g = c.createGain(); g.gain.value = 0; src.connect(f).connect(g).connect(A.world);
+    const o = c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 55; const lf = c.createBiquadFilter(); lf.type = 'lowpass'; lf.frequency.value = 260;
+    const og = c.createGain(); og.gain.value = 0; o.connect(lf).connect(og).connect(A.world); o.start();
+    A.eng = { g, og, o, f };
+  }
+  const t0 = c.currentTime, k = FLY.on ? FLY.thr : 0;
+  A.eng.g.gain.setTargetAtTime(0.5 * k, t0, 0.2); A.eng.og.gain.setTargetAtTime(0.06 * k, t0, 0.2);
+  A.eng.o.frequency.setTargetAtTime(45 + 60 * k, t0, 0.3); A.eng.f.frequency.setTargetAtTime(120 + 400 * k, t0, 0.3);
 }
 
 /* ---------------- HUD ---------------- */
@@ -2111,12 +2257,18 @@ function fmtOutside(s) {
 function fmtDur(s) { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m > 0 ? `${m} ${t('mnt')} ${s % 60} ${t('dtk')}` : `${s} ${t('dtk')}`; }
 let hudT = 0, fps = 60;
 function updateHud(depth, dist, wob) {
+  const rows0 = [];
   const eta = dist / W.v, warn = dist > 0 && dist < 15000 ? 'warn' : '';
   const got = MIS.sites.filter((x) => x.got).length;
+  if (FLY.on) {
+    rows0.push([t('Ketinggian'), `${fmtN(FLY.y - FLY.water)} m`, 'big'], [t('Kecepatan'), `${fmtN(Math.hypot(FLY.vx, FLY.vz) * 3.6)} km/h, ${fmtN(FLY.vy, 1)} m/s ${t('tegak')}`],
+      [t('Puncak gelombang'), `${fmtN(waveHz(FLY.z))} m`]);
+  }
   const rows = MIS.on ? [
     [t('Misi'), got < 3 ? `${got}/3 ${t('barang')}` : t('Kembali ke KS-07'), 'big'],
     [t('Gelombang tiba'), dist > 0 ? fmtMS(eta) : '-', eta < 60 ? 'warn' : 'big'],
   ] : [];
+  rows.push(...rows0);
   rows.push(
     [t('Waktu planet'), fmtClock(CLK.planet), 'big'],
     [t('Waktu di luar'), fmtOutside(CLK.planet * CONFIG.dil), 'big'],
@@ -2171,7 +2323,7 @@ function frame(now) {
   autoPreset(dt);
   const sdt = dt * CONFIG.speeds[P.speed];
   STATE.visT += sdt;
-  if (STATE.started) { if (!SWEEP.on) depthNow = stepPlayer(dt); simStep(sdt, dt); }
+  if (STATE.started) { if (!SWEEP.on && !FLY.on) depthNow = stepPlayer(dt); simStep(sdt, dt); if (!MIS.result) updateFly(dt); else if (AUDIO.eng) flyAudio(); }
   const dist = frontX(P.z) - P.x;
   // Goyangan planet: langit bergoyang pelan, makin kuat saat gelombang mendekat
   const close = 1 - Math.min(1, Math.max(0, (dist - 10000) / 140000));
@@ -2185,13 +2337,14 @@ function frame(now) {
   updateMission(dt, STATE.started ? sdt : 0);
   SKYU.uTime.value = STATE.visT; GU_.uTime.value = STATE.visT * 1.5;   // waktu piringan (satuan rs/c), sekitar 30 s per putaran di tepi dalam
 
-  const onFoot = P.view === 0, AM = updateAudio(dt, dist);
+  const onFoot = P.view === 0 && !FLY.on, AM = updateAudio(dt, dist);
   // Getaran tanah (R5): gemuruh gelombang raksasa terasa di kaki, ikut tingkat gerak kepala (B)
   const shk = onFoot && !SWEEP.on ? AM.shake * BOB_LEVELS[BOB.level][1] : 0, tv = now / 1000;
   const shY = shk * (Math.sin(tv * 81.7) + 0.6 * Math.sin(tv * 107.3 + 1.3)), shX = shk * 0.5 * Math.sin(tv * 94.2 + 0.7);
   camera.position.set(P.x + (onFoot ? Math.cos(P.yaw) * (BOB.dx + shX) : 0), P.y + (onFoot ? BOB.dy + shY : 0) + (SWEEP.on ? SWEEP.t * 6 : 0), P.z - (onFoot ? Math.sin(P.yaw) * (BOB.dx + shX) : 0));
   if (SWEEP.on) camera.rotation.set(P.pitch + SWEEP.rx, P.yaw + SWEEP.ry, SWEEP.rz);
   else camera.rotation.set(P.pitch, P.yaw, onFoot ? BOB.roll : 0);
+  if (FLY.on) flyCamera();
   M_COMP.uniforms.uUnder.value = SWEEP.under; M_COMP.uniforms.uTime.value = STATE.visT;
   camera.updateMatrixWorld();
   U.uT.value = STATE.visT; U.uCam.value.copy(camera.position);
@@ -2219,6 +2372,7 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   SWEEP, currentAt, SPRAY, US, ZS, M_COMP,
   AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
   PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob,
+  FLY, boardShip, flyLand, updateFly, flyReset, placeShip,
   MIS, missionSites, startMission, stopMission, restartMission, finishMission, updateMission, missionAction, toggleRadar, radarFix, setMode, setLevel, fmtMS,
   SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip };
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
