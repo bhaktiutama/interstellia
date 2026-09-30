@@ -1,6 +1,6 @@
 # Rencana Millar's World Versi Realistis
 
-Per 29 September 2026 · Status: R1, R1b, R2, R3, dan R4 selesai (lihat bagian "Status"), berikutnya R5
+Per 30 September 2026 · Status: R1, R1b, R2, R3, R4, dan R5 selesai (lihat bagian "Status")
 
 ## Ringkasan
 
@@ -209,3 +209,41 @@ Uji: `tools/uji_millar.py` kini 39 pemeriksaan, semua lulus, termasuk: urutan te
 Belum diukur: biaya gelombang (mesh 31.600 titik dengan noise per vertex) dan peta aliran arus (dua kali ambil tekstur ombak di zona arus) di GTX 1060 dan M1.
 
 Berikutnya R5: audio (angin, gemericik ombak, langkah di air, gemuruh gelombang frekuensi rendah yang makin keras, getaran).
+
+## Status R5
+
+Selesai 30 September 2026. Semua suara disintesis dengan Web Audio (tanpa berkas suara, jalan dari file://).
+
+| Lapisan | Isi |
+| --- | --- |
+| Angin | Noise pink tersaring, berembus pelan, makin keras saat keadaan laut naik |
+| Ombak dan gemericik | Desir laut ikut keadaan laut, letupan gemericik acak 3-9 kali per detik (lebih sering saat ombak besar) |
+| Kecipak jalan | Ikut kecepatan saat kaki di air; tiap langkah cipratan kiri/kanan (stereo) |
+| Arus air surut | Deras rendah, ikut kecepatan arus (paling keras 1,6 m/s) |
+| Gemuruh gelombang | Noise brown + dengung sub 27 dan 38,5 Hz. Jauh = hanya frekuensi rendah dan pelan, dekat = keras dan terbuka (lowpass 55 Hz sampai sekitar 1.300 Hz). Arah kiri/kanan ikut arah pandang |
+| Deru air pecah | Hanya di 4 km terakhir, makin keras sampai muka gelombang |
+| Tersapu | Hantaman (noise turun + dentum 60 ke 30 Hz), lalu semua suara teredam lowpass 330 Hz di bawah air dengan gelembung acak |
+| Getaran tanah | Kamera bergetar 13-17 Hz saat gelombang dekat (sampai sekitar 3 cm di 2 km), ikut tingkat gerak kepala (B: Mati = tanpa getaran) |
+
+Keras gelombang = 1 / (1 + (jarak / 8 km)^1,5): 0,012 di 150 km, 0,19 di 20 km, 0,48 di 8 km, 0,84 di 2 km.
+
+Terukur di sandbox (keluaran master setelah kompresor, skala penuh = 1; keadaan laut ikut jarak):
+
+| Jarak gelombang | RMS | Puncak |
+| --- | --- | --- |
+| 100 km | 0,028 | 0,109 |
+| 20 km | 0,062 | 0,218 |
+| 8 km | 0,081 | 0,336 |
+| 3 km | 0,135 | 0,458 |
+| 1,2 km | 0,161 | 0,621 |
+| 0,4 km | 0,147 | 0,425 |
+| 40 km, berjalan 1,5 m/s | 0,055 | 0,201 |
+
+Puncak tetap di bawah 1 (tidak terpotong). Di 0,4 km sedikit lebih pelan dari 1,2 km karena kompresor dan letupan acak. Dengung sub semula tanpa peredam (RMS 0,68 di 1,5 km, terlalu keras), kini 0,12.
+
+Tombol M = suara nyala/mati (tersimpan di localStorage `millar.sound`), baris HUD "Suara". AudioContext dibuat saat tombol Mulai (aturan peramban: butuh gestur pengguna) dan dilanjutkan saat klik bila ditangguhkan.
+
+Uji: `tools/uji_millar.py` kini 43 pemeriksaan, semua lulus, termasuk: AudioContext berjalan, gemuruh naik dan makin terbuka saat mendekat (150 / 60 / 20 / 8 / 2 / 0,5 km), deru hanya di bawah 4 km, lowpass bawah air 330 Hz, efek langkah dan hantaman terhitung, keluaran tidak senyap, M membisukan master.
+
+Belum diuji: kesan dengar di speaker dan headphone (pemilik proyek), biaya CPU audio di M1 (perkiraan kecil: 6 sumber loop + letupan pendek).
+

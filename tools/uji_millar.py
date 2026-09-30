@@ -1,6 +1,6 @@
-"""Uji Millar's World R1 + R1b + R2 + R3 + R4: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
+"""Uji Millar's World R1 + R1b + R2 + R3 + R4 + R5: halaman termuat tanpa error, kamus English lengkap, 5 preset bisa berganti (dan ?preset=hemat),
 tidak ada daratan (dasar laut selalu di bawah air terendah), fisika (1,3 g, lompat 77%), gelombang 125 m/s, jam dilatasi,
-tersapu = kembali dengan penalti waktu, lensa Gargantua (radius bayangan, busur terbelokkan), tidak ada nilai tidak valid (NaN/Inf) di render HDR tiap preset.
+tersapu = kembali dengan penalti waktu, audio (lapisan ikut jarak gelombang, efek, bisu), lensa Gargantua (radius bayangan, busur terbelokkan), tidak ada nilai tidak valid (NaN/Inf) di render HDR tiap preset.
 Pakai: python tools/uji_millar.py   (butuh: pip install playwright && playwright install chromium)
 Tanpa akses CDN langsung: THREE_LOCAL=<folder berisi three.module.js dan three.core.js> python tools/uji_millar.py
 Chromium sendiri: CHROMIUM=<jalur executable>"""
@@ -179,6 +179,28 @@ UJI = r"""
     M.U.uWX.value += 40000 - M.frontX(0); P.pitch = 0.02;
   }
 
+  // 5g. R5: audio (AudioContext berjalan setelah start, tingkat lapisan ikut jarak gelombang, efek, bisu)
+  {
+    const A = M.AUDIO, ctx = A.ctx;
+    out[`audio: AudioContext ${ctx ? ctx.state : 'tidak ada'}, ${ctx ? ctx.sampleRate : 0} Hz`] = !!ctx && ctx.state === 'running';
+    const km = [150, 60, 20, 8, 2, 0.5], mx = km.map((k) => M.audioMix(k * 1000, 1, 0, 0, 0.5, 0));
+    const inc = (f) => mx.every((m, i) => i === 0 || f(m) > f(mx[i - 1]));
+    out[`gemuruh ${km.map((k, i) => k + ' km ' + mx[i].rumble.toFixed(3)).join(', ')}; naik dan makin terbuka saat mendekat`] = inc((m) => m.rumble) && inc((m) => m.rumbleLP) && mx[0].rumble < 0.02;
+    out[`deru air pecah: 8 km ${mx[3].roar.toFixed(2)}, 2 km ${mx[4].roar.toFixed(2)}, 500 m ${mx[5].roar.toFixed(2)}`] = mx[3].roar === 0 && mx[4].roar > 0 && mx[5].roar > mx[4].roar;
+    const uw = M.audioMix(2000, 1, 0, 0, 0.5, 1), dry = M.audioMix(2000, 1, 0, 0, 0, 0), wd = M.audioMix(40000, 1, 0, 1.5, 0.5, 0);
+    const cur = M.audioMix(2500, 1, M.CONFIG.current.max, 0, 0.5, 0), vals = [...mx, uw, dry, wd, cur, M.audioMix(0, 1.5, 0, 0, 0, 0), M.audioMix(-3000, 1.5, 0, 0, 0, 0)];
+    const valid = vals.every((m) => Object.values(m).every(Number.isFinite));
+    out[`bawah air: lowpass ${uw.lp} Hz (di atas ${dry.lp} Hz); kecipak jalan ${wd.wade.toFixed(2)}, diam ${dry.wade}; arus ${cur.current.toFixed(2)}; semua nilai valid ${valid}`] = uw.lp <= 400 && dry.lp >= 20000 && wd.wade > 0.2 && dry.wade === 0 && cur.current > 0.3 && valid;
+    const P = M.P; P.view = 0; P.depth = 0.5; const n0 = A.sfx; M.footstep(1, true); M.sfxImpact(); const n1 = A.sfx;
+    out[`efek suara: langkah dua kaki + hantaman = ${n1 - n0} bunyi`] = n1 - n0 === 3;
+    M.U.uWX.value += 1500 - M.frontX(0); await wait(1200);
+    let rms = 0;
+    if (ctx) { const d = new Float32Array(A.an.fftSize); A.an.getFloatTimeDomainData(d); rms = Math.sqrt(d.reduce((s, x) => s + x * x, 0) / d.length); }
+    M.setSound(false); await wait(500); const g = ctx ? A.master.gain.value : 0; M.setSound(true);
+    out[`keluaran (gelombang 1,5 km): RMS ${rms.toFixed(4)}; M bisu -> gain master ${g.toFixed(4)}`] = rms > 0.001 && Number.isFinite(rms) && g < 0.01;
+    M.U.uWX.value += 40000 - M.frontX(0);
+  }
+
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua
   //    (dulu: dengan MSAA, kedalaman air diekstrapolasi negatif di segitiga kecil cakrawala -> nilai meledak)
   const r = M.renderer, from = M.THREE.DataUtils.fromHalfFloat;
@@ -200,7 +222,7 @@ async def main():
     local = os.environ.get('THREE_LOCAL')
     async with async_playwright() as p:
         exe = os.environ.get('CHROMIUM')                              # opsional: jalur Chromium sendiri
-        b = await p.chromium.launch(args=['--use-angle=swiftshader', '--enable-unsafe-swiftshader'], **({'executable_path': exe} if exe else {}))
+        b = await p.chromium.launch(args=['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--autoplay-policy=no-user-gesture-required'], **({'executable_path': exe} if exe else {}))
         errs = []
         async def page(q):
             pg = await b.new_page(viewport={'width': 480, 'height': 270})
