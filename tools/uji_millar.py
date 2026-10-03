@@ -435,7 +435,8 @@ UJI = r"""
     M.MOOD.brk = 1; const sy = M.seabed(M.SHIP.x, M.SHIP.z), h = M.SHIP.y + 0.3 - sy, G = M.THREE.Vector3;
     const gd = new V3(Math.cos(22 * Math.PI / 180) * Math.cos(28 * Math.PI / 180), Math.sin(22 * Math.PI / 180), -Math.cos(22 * Math.PI / 180) * Math.sin(28 * Math.PI / 180));
     const sx = M.SHIP.x - gd.x * h / gd.y, sz = M.SHIP.z - gd.z * h / gd.y;
-    const gh = Math.hypot(gd.x, gd.z); P.x = sx - gd.x / gh * 4; P.z = sz - gd.z / gh * 4; P.y = M.seabed(P.x, P.z) + M.CONFIG.eye;   // 4 m dari bayangan, sudut curam (sudut landai: pantulan langit menutupi dasar) P.yaw = Math.atan2(-(sx - P.x), -(sz - P.z)); P.pitch = -Math.atan2(1.7, Math.hypot(sx - P.x, sz - P.z));
+    const gh = Math.hypot(gd.x, gd.z); P.x = sx - gd.x / gh * 4; P.z = sz - gd.z / gh * 4; P.y = M.seabed(P.x, P.z) + M.CONFIG.eye;   // 4 m dari bayangan, sudut curam (sudut landai: pantulan langit menutupi dasar)
+    P.yaw = Math.atan2(-(sx - P.x), -(sz - P.z)); P.pitch = -Math.atan2(1.7, Math.hypot(sx - P.x, sz - P.z));
     const lumC = () => { const T = M.POST.hdr, w = T.width, hh = T.height, n = 24, b = new Uint16Array(n * n * 4); M.renderer.readRenderTargetPixels(T, (w - n) >> 1, (hh - n) >> 1, n, n, b);
       let l = 0; for (let k = 0; k < b.length; k += 4) l += 0.3 * M.THREE.DataUtils.fromHalfFloat(b[k]) + 0.59 * M.THREE.DataUtils.fromHalfFloat(b[k + 1]) + 0.11 * M.THREE.DataUtils.fromHalfFloat(b[k + 2]); return l / (n * n); };
     // kedua render di frame yang sama (dulu dua frame berbeda: buih dan ombak yang bergerak membuat hasil acak);
@@ -488,6 +489,31 @@ UJI = r"""
     M.CONFIG.views[1].h = 60; P.view = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0;
     out[`laut dari ${off.hgt.toFixed(0)} m: korelasi pada geser satu petak FFT (${on.dx} px) ${off.r.toFixed(3)} -> ${on.r.toFixed(3)} dengan variasi makro, tidak valid ${off.nb + on.nb}`] =
       on.r < off.r * 0.7 && on.nb === 0 && off.nb === 0 && M.U.uMacroK.value === 1;
+  }
+
+  // 5o. M5c: percikan lari menyatu dengan laut: semburan tidak terlempar jauh ke depan kaki, tonjolan haluan di depan tulang
+  //     kering dan cekung di belakang, buih jejak, mahkota air tampil lalu hilang, render tanpa nilai tidak valid
+  {
+    const P = M.P, S = M.SPL, R = M.RIP, from = M.THREE.DataUtils.fromHalfFloat;
+    for (let k = 0; k < 200; k++) M.stepSplash(0.05);
+    P.view = 0; P.x = 0; P.z = 0; P.depth = 0.5; P.yaw = 0; P.vx = 0; P.vz = -3; P.ground = true;
+    M.footstep(1.2, true); let fRel = 0, t = 0, nb = 0;
+    for (let k = 0; k < 50; k++) { M.stepSplash(1 / 60); t += 1 / 60; for (let i = 0; i < S.max; i++) if (S.life[i] > 0) fRel = Math.max(fRel, -(S.pos[i * 3 + 2] + 0.15 + 3 * t)); }
+    const up = M.CROWN.slots.filter((q) => q.t < 1).length; let tc = 0;
+    for (let k = 0; k < 120 && M.CROWN.slots.some((q) => q.t < 1); k++) { M.stepCrown(1 / 60); tc += 1 / 60; }
+    // tonjolan dan cekung: kaki tetap di tempat, kaki terus mendorong air selama 0,25 s
+    for (let i = 0; i < 90; i++) M.updateRipple(1 / 60);
+    const ph = M.BOB.phase; for (let k = 0; k < 15; k++) { M.BOB.phase = ph; M.headBob(1 / 60, 3, true, 0.5); M.updateRipple(1 / 60); }
+    const N = R.N, b = new Uint16Array(N * N * 4); M.renderer.readRenderTargetPixels(R.rt[R.i], 0, 0, N, N, b);
+    const at = (x, z, c) => { const i = Math.round((x - R.ox) / R.dx + N / 2 - 0.5), j = Math.round((z - R.oz) / R.dx + N / 2 - 0.5); return from(b[(j * N + i) * 4 + c]); };
+    const lx = M.CONFIG.walk.legs, hF = at(lx, -0.14, 0), hB = at(lx, 0.12, 0), fB = at(lx, 0.12, 2);
+    // render dengan mahkota tampil
+    P.vz = 0; P.pitch = -1.0; M.footstep(1.2, true); for (let k = 0; k < 10; k++) M.stepCrown(1 / 60);
+    M.renderer.setRenderTarget(M.POST.hdr); M.renderer.clear(); M.renderer.render(M.scene, M.camera);
+    { const T = M.POST.hdr, bb = new Uint16Array(T.width * T.height * 4); M.renderer.readRenderTargetPixels(T, 0, 0, T.width, T.height, bb); for (const x of bb) if (!Number.isFinite(from(x))) nb++; }
+    P.pitch = 0;
+    out[`percikan menyatu (M5c): semburan paling jauh ${fRel.toFixed(2)} m di depan kaki (lari 3 m/s), tonjolan depan ${(hF * 1000).toFixed(1)} mm / cekung belakang ${(hB * 1000).toFixed(1)} mm, buih jejak ${fB.toFixed(2)}, mahkota ${up} tampil lalu hilang ${tc.toFixed(2)} s, tidak valid ${nb}`] =
+      fRel < 1.2 && hF > 0 && hB < hF && fB > 0.05 && up === 2 && tc < 0.8 && nb === 0;
   }
 
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua

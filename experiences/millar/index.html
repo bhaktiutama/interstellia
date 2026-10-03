@@ -944,21 +944,31 @@ const SPL = { max: 0, head: 0, mesh: null, pos: null, vel: null, life: null, siz
 const splMat = new THREE.ShaderMaterial({
   uniforms: { uFoamC: U.uFoamC, uAmb: U.uAmb, uScale: { value: 500 } }, transparent: true, depthWrite: false,
   vertexShader: LOG_VS + /* glsl */`
-    attribute float aLife, aSize; uniform float uScale; varying float vA;
+    attribute float aLife, aSize; attribute vec3 aVel; uniform float uScale; varying float vA, vStr; varying vec2 vDir;
     void main() {
       vec4 mv = modelViewMatrix * vec4(position, 1.0);
       gl_Position = projectionMatrix * mv;
-      gl_PointSize = aLife > 0.0 ? clamp(aSize * uScale / max(-mv.z, 0.05), 1.0, 24.0) : 0.0;
+      // M5c: tetes diregang searah geraknya di layar (jejak selama sekitar 1/40 s), bukan titik bulat
+      vec4 m2 = modelViewMatrix * vec4(position + aVel * 0.025, 1.0), p2 = projectionMatrix * m2;
+      float sz = aLife > 0.0 ? clamp(aSize * uScale / max(-mv.z, 0.05), 1.0, 9.0) : 0.0;
+      vec2 ds = (p2.xy / max(p2.w, 1e-4) - gl_Position.xy / max(gl_Position.w, 1e-4)) * vec2(uScale, uScale);
+      float L = length(ds);
+      vDir = L > 1e-3 ? vec2(ds.x, -ds.y) / L : vec2(1.0, 0.0);
+      vStr = clamp(L / max(sz, 1.0), 0.0, 2.0);
+      gl_PointSize = sz * (1.0 + vStr);
       vA = aLife;
       #include <logdepthbuf_vertex>
     }`,
   fragmentShader: LOG_FS + /* glsl */`
-    uniform vec3 uFoamC, uAmb; varying float vA;
+    uniform vec3 uFoamC, uAmb; varying float vA, vStr; varying vec2 vDir;
     void main() {
       #include <logdepthbuf_fragment>
-      vec2 c = gl_PointCoord - 0.5; float d = dot(c, c) * 4.0;
+      vec2 c = (gl_PointCoord - 0.5) * 2.0;
+      vec2 q = vec2(dot(c, vDir), dot(c, vec2(-vDir.y, vDir.x)) * (1.0 + vStr));   // elips: panjang searah gerak
+      float d = dot(q, q);
       if (d > 1.0 || vA <= 0.0) discard;
-      gl_FragColor = vec4(uFoamC * uAmb * 1.45, smoothstep(1.0, 0.35, d) * clamp(vA * 1.6, 0.0, 1.0) * 0.95);   // tetes bertepi tegas, bukan kabut; lebih terang dari buih agar terlihat
+      // warna air diterangi langit (tidak lebih terang dari buih), sebagian tembus pandang
+      gl_FragColor = vec4(uFoamC * uAmb * 0.95, smoothstep(1.0, 0.3, d) * clamp(vA * 1.6, 0.0, 1.0) * 0.7);
     }`,
 });
 function makeSplash(P) {
@@ -969,6 +979,7 @@ function makeSplash(P) {
   g.setAttribute('position', new THREE.BufferAttribute(SPL.pos, 3).setUsage(THREE.DynamicDrawUsage));
   g.setAttribute('aLife', new THREE.BufferAttribute(SPL.life, 1).setUsage(THREE.DynamicDrawUsage));
   g.setAttribute('aSize', new THREE.BufferAttribute(SPL.size, 1));
+  g.setAttribute('aVel', new THREE.BufferAttribute(SPL.vel, 3).setUsage(THREE.DynamicDrawUsage));
   SPL.mesh = new THREE.Points(g, splMat); SPL.mesh.frustumCulled = false; SPL.mesh.renderOrder = 45; scene.add(SPL.mesh);
 }
 const srnd = rng(23);
@@ -994,7 +1005,73 @@ function stepSplash(dt) {
     if (SPL.life[i] > 0) alive++; else SPL.life[i] = 0;
   }
   SPL.alive = alive;
-  const a = SPL.mesh.geometry.attributes; a.position.needsUpdate = true; a.aLife.needsUpdate = true;
+  const a = SPL.mesh.geometry.attributes; a.position.needsUpdate = true; a.aLife.needsUpdate = true; a.aVel.needsUpdate = true;
+}
+
+/* ---------------- Mahkota air (M5c): lembar air tipis berbentuk cincin di sekitar kaki tiap langkah ----------------
+   Satu mesh berisi CROWN.n cincin (atribut aSlot); posisi, umur, arah, dan ukuran tiap cincin lewat uniform. Cincin melebar,
+   naik 0,3-0,5 m (lebih tinggi di depan, searah langkah) lalu jatuh dan hilang dalam CROWN.life s. Warna = air: pantulan langit
+   + hamburan, tembus pandang, tepi atas putih pecah. */
+const CROWN = { n: 6, i: 0, life: 0.55, slots: [], mesh: null };
+{
+  const seg = 32, rows = 6, pos = [], slot = [], idx = [];
+  for (let s = 0; s < CROWN.n; s++) {
+    const b = pos.length / 3;
+    for (let r = 0; r <= rows; r++) for (let k = 0; k <= seg; k++) { const a = k / seg * Math.PI * 2; pos.push(Math.cos(a), r / rows, Math.sin(a)); slot.push(s); }
+    for (let r = 0; r < rows; r++) for (let k = 0; k < seg; k++) { const a = b + r * (seg + 1) + k, c = a + seg + 1; idx.push(a, c, a + 1, a + 1, c, c + 1); }
+    CROWN.slots.push({ t: 1 });
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aSlot', new THREE.Float32BufferAttribute(slot, 1)); g.setIndex(idx);
+  const m = new THREE.ShaderMaterial({
+    uniforms: { ...U, uCr: { value: Array.from({ length: CROWN.n }, () => new THREE.Vector4(0, 0, 0, 1)) }, uCd: { value: Array.from({ length: CROWN.n }, () => new THREE.Vector4(1, 0, 1, 1)) } },
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, defines: { NW: 16, NM: 12 },
+    vertexShader: LOG_VS + COMMON + /* glsl */`
+      attribute float aSlot; uniform vec4 uCr[${CROWN.n}], uCd[${CROWN.n}];
+      varying vec3 vR, vN; varying float vV, vT, vA;
+      void main() {
+        int s = int(aSlot + 0.5); vec4 c = uCr[s], d = uCd[s];
+        float t = c.w, v = position.y, a = atan(position.z, position.x);
+        vec2 rd = position.xz, dir = d.xy;
+        float ff = 0.5 + 0.5 * dot(rd, dir);                               // 1 = depan langkah
+        float brk = 0.7 + 0.3 * sin(a * 7.0 + aSlot * 1.7) * sin(a * 3.0 + aSlot * 4.1);   // tepi atas tidak rata
+        float r = d.z * (0.06 + 0.15 * sqrt(clamp(t, 0.0, 1.0))) * (1.0 + 0.6 * v * v) * (0.85 + 0.3 * ff);   // dinding tipis hampir tegak, sedikit mekar di atas
+        float hgt = d.w * d.z * (0.12 + 0.26 * ff) * brk * sin(3.14159 * clamp(t, 0.0, 1.0));
+        vec3 w = vec3(c.x + rd.x * r + dir.x * 0.12 * t * d.z, c.y + hgt * v * (1.0 - 0.25 * v), c.z + rd.y * r + dir.y * 0.12 * t * d.z);
+        vN = normalize(vec3(rd.x, 0.45 - 0.6 * v, rd.y));                  // panjang tidak pernah nol (rd satuan)
+        vR = w - uCam; vV = v; vT = t; vA = a;
+        gl_Position = (t >= 1.0 || t < 0.0) ? vec4(0.0, 0.0, 2.0, 1.0) : projectionMatrix * viewMatrix * vec4(w, 1.0);
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: LOG_FS + COMMON + /* glsl */`
+      varying vec3 vR, vN; varying float vV, vT, vA;
+      void main() {
+        #include <logdepthbuf_fragment>
+        if (vT >= 1.0 || vT < 0.0) discard;
+        float L = length(vR); vec3 V = L > 1e-4 ? vR / L : vec3(0.0, -1.0, 0.0);
+        vec3 n = gl_FrontFacing ? vN : -vN;
+        float fr = 0.04 + 0.96 * pow(clamp(1.0 - abs(dot(n, V)), 0.0, 1.0), 5.0);
+        vec3 col = mix(uScat * uAmb * 3.0, skyL(reflect(V, n)), fr);
+        // tepi atas pecah jadi jari-jari buih; badan lembar hampir bening (terlihat dari pantulan Fresnel), menyatu di pangkal
+        float rim = smoothstep(0.62, 0.95, vV) * smoothstep(0.25, 0.85, (sin(vA * 23.0 + vV * 4.0 + vT * 3.0) * sin(vA * 9.7 + 2.1) + sin(vA * 41.3 - vT * 5.0) * 0.5) * 0.5 + 0.5);   // jari tidak seragam
+        col = mix(col, uFoamC * uAmb, clamp(rim, 0.0, 1.0) * 0.85);
+        float fade = pow(1.0 - vT, 1.5) * smoothstep(0.0, 0.08, vT);
+        float al = ((0.05 + 0.4 * fr) * smoothstep(0.0, 0.35, vV) * (1.0 - 0.6 * smoothstep(0.85, 1.0, vV)) + 0.5 * rim) * fade;
+        if (al < 0.01) discard;
+        gl_FragColor = vec4(col, clamp(al, 0.0, 0.9));
+      }`,
+  });
+  CROWN.mesh = new THREE.Mesh(g, m); CROWN.mesh.frustumCulled = false; CROWN.mesh.renderOrder = 44; scene.add(CROWN.mesh);
+}
+// x, y, z = titik di permukaan air; (dx, dz) arah langkah (satuan); size skala lebar (m), power tinggi relatif
+function spawnCrown(x, y, z, dx, dz, size, power) {
+  const k = CROWN.i++ % CROWN.n, u = CROWN.mesh.material.uniforms, L = Math.hypot(dx, dz) || 1;
+  CROWN.slots[k].t = 0; u.uCr.value[k].set(x, y, z, 0); u.uCd.value[k].set(dx / L, dz / L, size, power);
+}
+function stepCrown(dt) {
+  const u = CROWN.mesh.material.uniforms; let on = 0;
+  for (let k = 0; k < CROWN.n; k++) { const s = CROWN.slots[k]; if (s.t < 1) { s.t = Math.min(1, s.t + dt / CROWN.life); u.uCr.value[k].w = s.t; if (s.t < 1) on++; } }
+  CROWN.alive = on; CROWN.mesh.visible = on > 0;
 }
 
 /* ---------------- Laut: dekat = grid persegi rapat (FFT atau Gerstner), jauh = cincin polar sampai 270 km ----------------
@@ -1035,14 +1112,16 @@ vec3 fftDisp(vec2 p, float cell) {                    // perpindahan di titik gr
 #endif
   return o;
 }
+float fftBm(vec2 p, float far) { return smoothstep(0.3, 0.7, vn2(p / 90.0 + vec2(4.3, 1.7))) * uMacroK * far; }
+vec2 fftQ(vec2 p) { return (cRot(p, 2.2) + vec2(13.7, 29.1)) / uLc.x; }   // salinan kaskade utama yang diputar dan digeser
 vec2 fftSlope(vec2 p, float far, out float J) {       // kemiringan total dan Jacobian gabungan (1 - jumlah kompresi tiap kaskade)
   vec2 s = texture(tS0, p / uLc.x).xy; float jd = 1.0 - texture(tD0, p / uLc.x).w;
   // M5a-2: kaskade utama (petak 37 m) dicampur dengan salinannya yang diputar dan digeser, topeng noise sekitar 90 m, hanya di
   // luar 35-90 m dari kamera (dekat: shading tetap cocok dengan geometri). Dinormalkan agar kekuatan ombak tidak turun di
   // daerah campuran. Hanya shading: tinggi air (fftDisp, probeOcean) tidak berubah.
-  float bm = smoothstep(0.3, 0.7, vn2(p / 90.0 + vec2(4.3, 1.7))) * uMacroK * far;
+  float bm = fftBm(p, far);
   if (bm > 0.001) {
-    vec2 q = (cRot(p, 2.2) + vec2(13.7, 29.1)) / uLc.x;
+    vec2 q = fftQ(p);
     float nrm = inversesqrt(bm * bm + (1.0 - bm) * (1.0 - bm));
     s = mix(s, cRot(texture(tS0, q).xy, -2.2), bm) * nrm; jd = mix(jd, 1.0 - texture(tD0, q).w, bm) * nrm;
   }
@@ -1144,6 +1223,7 @@ function seaMat(near) {
         vec2 s = sO + rs;
         vec3 n = normalize(vec3(-s.x, 1.0, -s.y));
         float inst = smoothstep(uFoamJ, uFoamJ - 0.3, J), stay = texture(tFoam, vP / uLc.x).r;   // buih baru + buih sisa yang memudar
+        { float bmF = fftBm(vP, smoothstep(35.0, 90.0, dist)); if (bmF > 0.001) stay = mix(stay, texture(tFoam, fftQ(vP)).r, bmF); }   // M5a-2: buih sisa ikut dicampur
         float foam = clamp(max(max(max(inst, stay * 0.85), rf), curF), 0.0, 1.0) * (0.55 + 0.45 * vn2(vP * 3.1)) * 0.85;
       #if CAUST
         // Kaustik: permukaan cembung memfokuskan cahaya ke dasar (1 / (1 + d x laplasian)); kuat saat langit cerah
@@ -1910,10 +1990,13 @@ function footstep(power, both) {
   if (P.view !== 0 || P.depth < 0.05) return;
   const rx = Math.cos(P.yaw), rz = -Math.sin(P.yaw), fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), L = CONFIG.walk.legs, y = seabed(P.x, P.z) + P.depth;
   for (const sd of both ? [-1, 1] : [BOB.side ? 1 : -1]) {
-    // kaki menghantam air di depan badan: cipratan lebih banyak, tetes lebih besar, terlempar ke depan setinggi lutut-paha
-    const x = P.x + rx * L * sd + fx * 0.45, z = P.z + rz * L * sd + fz * 0.45, dk = Math.min(1, P.depth / 0.4);
-    ripSource(x, z, 0.26, -0.024 * power, 0.7 * power);
-    spawnSplash(x, y, z, Math.round((45 + 80 * power) * dk * SPL.max / 2500), P.vx, P.vz, (0.6 + 0.35 * dk) * power, 1.9, 1.6, 0.14);
+    // M5c: kaki masuk air tepat di bawah badan (0,15 m di depan, bukan 0,45): cekung + cincin buih di permukaan, mahkota air
+    // tipis, dan semburan yang terbawa hampir secepat pemain (bukan terlempar jauh ke depan)
+    const x = P.x + rx * L * sd + fx * 0.15, z = P.z + rz * L * sd + fz * 0.15, dk = Math.min(1, P.depth / 0.4);
+    ripSource(x, z, 0.26, -0.03 * power, 0.75 * power);
+    ripSource(x + fx * 0.1, z + fz * 0.1, 0.55, 0, 0.35 * power);                  // cincin buih lebar yang menempel di permukaan
+    spawnCrown(x, y, z, fx, fz, 0.75 + 0.6 * dk, Math.min(1.3, power) * (0.6 + 0.6 * dk));
+    spawnSplash(x, y, z, Math.round((25 + 45 * power) * dk * SPL.max / 2500), P.vx, P.vz, (0.5 + 0.3 * dk) * power, 1.0, 1.1, 0.16);
     sfxSplash(power * Math.min(1, P.depth / 0.3 + 0.3), sd * 0.35);
   }
   BOB.side = 1 - BOB.side; BOB.steps++;
@@ -1923,15 +2006,19 @@ function headBob(dt, speed, run, depth) {
   if (speed > 0.08 && P.ground) {
     BOB.phase += Math.PI * speed * dt / stride;
     if (Math.floor(BOB.phase / Math.PI) !== before) footstep(Math.min(1.3, 0.45 + speed * 0.35), false);
-    // kaki terus mendorong air: jejak V dan buih di belakang
-    const rx = Math.cos(P.yaw), rz = -Math.sin(P.yaw), L = Wk.legs, a = Math.min(0.004, speed * dt * 0.012);
-    if (depth > 0.05) for (const sd of [-1, 1]) ripSource(P.x + rx * L * sd, P.z + rz * L * sd, 0.16, -a, 0.02 * speed);
+    // kaki terus mendorong air (M5c): tonjolan haluan di depan tulang kering, cekung di belakang, buih jejak menempel
+    const rx = Math.cos(P.yaw), rz = -Math.sin(P.yaw), L = Wk.legs, a = Math.min(0.006, speed * dt * 0.018), fx0 = -Math.sin(P.yaw), fz0 = -Math.cos(P.yaw);
+    if (depth > 0.05) for (const sd of [-1, 1]) {
+      const lx = P.x + rx * L * sd, lz = P.z + rz * L * sd;
+      ripSource(lx + fx0 * 0.14, lz + fz0 * 0.14, 0.2, a, 0.03 * speed);
+      ripSource(lx - fx0 * 0.12, lz - fz0 * 0.12, 0.18, -a, 0.05 * speed);
+    }
     // semburan terus-menerus di depan tulang kering (gelombang haluan kaki): makin banyak saat lari dan air makin dalam
     if (depth > 0.08 && P.view === 0 && speed > 0.6) {
-      SPL.bow = (SPL.bow || 0) + dt * speed * Math.min(1, depth / 0.4) * 90 * SPL.max / 2500;
+      SPL.bow = (SPL.bow || 0) + dt * speed * Math.min(1, depth / 0.4) * 55 * SPL.max / 2500;
       const fx = -Math.sin(P.yaw), fz = -Math.cos(P.yaw), y = seabed(P.x, P.z) + depth;
       while (SPL.bow >= 4) { SPL.bow -= 4; const sd = srnd() < 0.5 ? -1 : 1;
-        spawnSplash(P.x + rx * L * sd + fx * 0.45, y, P.z + rz * L * sd + fz * 0.45, 4, P.vx, P.vz, 0.55 + 0.25 * speed, 1.6, 1.75, 0.12); }
+        spawnSplash(P.x + rx * L * sd + fx * 0.15, y, P.z + rz * L * sd + fz * 0.15, 4, P.vx, P.vz, 0.45 + 0.2 * speed, 0.9, 1.08, 0.14); }
     }
   }
   const target = speed > 0.08 && P.ground ? (run ? 0.055 : 0.034) : 0;
@@ -2978,7 +3065,7 @@ function frame(now) {
   U.uWob.value.setFromMatrix4(wobM4.makeRotationFromQuaternion(wobQ));
   updateMood(dt, STATE.visT);
   U.uChopK.value += (seaStateTarget(dist) - U.uChopK.value) * Math.min(1, sdt / CONFIG.seaState.tau);   // keadaan laut ikut jarak gelombang
-  stepSplash(dt);
+  stepSplash(dt); stepCrown(dt);
   updateShip(dt, STATE.visT);
   updateMission(dt, STATE.started ? sdt : 0);
   SKYU.uTime.value = STATE.visT; GU_.uTime.value = STATE.visT * 1.5;   // waktu piringan (satuan rs/c), sekitar 30 s per putaran di tepi dalam
@@ -3022,7 +3109,7 @@ try { renderer.compile(scene, camera); renderer.compile(skyScene, camera); rende
 requestAnimationFrame(frame);
 window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
   frontX, waveTop, waterAt, drawdown, seabed, chopAt, CHOP, stepPlayer, simStep, start: () => start(true), startWithCine: start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_, OCEAN, makeOcean, updateOcean,
-  RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
+  RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, CROWN, spawnCrown, stepCrown, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
   SWEEP, currentAt, SPRAY, US, ZS, M_COMP,
   AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
   PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob,
