@@ -2026,11 +2026,20 @@ function burst(freq, q, peak, dur, pan, type = 'bandpass', buf) {
   return f;
 }
 function sfxSplash(power, pan) {
-  if (!AUDIO.ctx) return;
-  const k = 0.6 * AUDIO.amb, j = 0.85 + 0.3 * Math.random();                                  // M5b: -40%, nada acak kecil
-  burst((900 + 1100 * Math.random()) * j, 0.9, 0.3 * power * k, 0.1 + 0.14 * power, pan);       // percik
-  burst((300 + 100 * Math.random()) * j, 0.8, 0.28 * power * k, 0.2 + 0.14 * power, pan * 0.5, 'lowpass', AUDIO.brown);   // kecipak rendah
-  AUDIO.sfx++;
+  const A = AUDIO, c = A.ctx; if (!c || !A.on) return;
+  // M5b: kaki diseret di air dangkal = desir lembut (serangan lambat, tanpa klik awal), bukan letupan "tak"
+  const t = c.currentTime, k = 0.6 * A.amb, j = 0.85 + 0.3 * Math.random(), dur = 0.55 + 0.35 * power + 0.15 * Math.random(), att = 0.07 + 0.05 * Math.random();
+  const lay = (buf, f0, f1, q, peak, type, d) => {
+    const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), p = c.createStereoPanner();
+    s.buffer = buf; f.type = type; f.Q.value = q; p.pan.value = Math.max(-1, Math.min(1, pan));
+    f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + d);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(Math.max(peak, 1e-4), t + att); g.gain.exponentialRampToValueAtTime(1e-4, t + d);
+    s.connect(f).connect(g).connect(p).connect(A.world); s.start(t, Math.random() * (buf.duration - d - 0.1), d + 0.05);
+  };
+  lay(A.pink, 700 * j, 260, 0.5, 0.2 * power * k, 'lowpass', dur);                    // desir seretan
+  lay(A.brown, 380 * j, 180, 0.6, 0.22 * power * k, 'lowpass', dur * 1.15);           // air bergerak
+  lay(A.pink, 1500 * j, 700, 1.2, 0.035 * power * k, 'bandpass', dur * 0.7);          // gemercik halus
+  A.sfx++;
 }
 function sfxImpact() {
   const A = AUDIO, c = A.ctx; if (!c || !A.on) return;
