@@ -194,8 +194,10 @@ const CONFIG = {
     start: 30000,       // jarak awal saat mulai (m)
     spawn: 150000,      // gelombang berikutnya muncul dari balik cakrawala (m)
     summon: 20000,      // tombol G
-    wf: 350, wc: 600, wb: 5000,   // lebar muka curam, bahu puncak, punggung landai (m)
-    lean: 0.33,         // condong puncak ke depan (x H)
+    // M5e: penampang tembok tebal. Muka cekung hampir tegak (eksponensial, skala wf), puncak dibulatkan wr, badan tebal
+    // (Gauss lebar wb, bagian bk) turun ke sekitar 20% dalam 1,5-2,5 km, lalu ekor landai (wt)
+    wf: 80, wr: 30, wb: 1100, bk: 0.8, wt: 6000,
+    lean: 0.06,         // condong puncak ke depan (x H); kecil karena muka sudah hampir tegak
     dd: 0.2,            // air surut di depan gelombang (m); dasar laut tetap terendam
     ddL: 6000,          // jangkauan air surut (m)
   },
@@ -398,9 +400,10 @@ uniform samplerCube uSky; uniform mat3 uWob;
 uniform vec4 uWA[16], uWB[16], uMA[12], uMB[12];
 float frontX(float z) { return uWX + 2500.0 * sin(z * 4.0e-5 + 1.3) + 900.0 * sin(z * 1.7e-4); }
 float waveHz(float z) { return uWH * (0.82 + 0.18 * sin(z * 9.0e-5 + 0.4)); }
-float waveG(float u) {
-  if (u < 0.0) { float k = u / ${W.wf.toFixed(1)}; return exp(-k * k); }
-  float k = u / ${W.wc.toFixed(1)}; return 0.35 * exp(-k * k) + 0.65 * exp(-u / ${W.wb.toFixed(1)});
+float waveG(float u) {                                  // M5e: tembok tebal (kembaran JS: waveG)
+  float r = sqrt(u * u + ${(W.wr * W.wr).toFixed(1)}) - ${W.wr.toFixed(1)};
+  if (u < 0.0) return exp(-r / ${W.wf.toFixed(1)});
+  float k = u / ${W.wb.toFixed(1)}; return ${W.bk.toFixed(3)} * exp(-k * k) + ${(1 - W.bk).toFixed(3)} * exp(-r / ${W.wt.toFixed(1)});
 }
 float drawdown(float u) { float k = (u + ${W.ddL.toFixed(1)}) / ${W.ddL.toFixed(1)}; return -${W.dd.toFixed(2)} * exp(-k * k); }
 // Arus air surut (m/s) ke arah gelombang (+x): paling kuat sekitar 2,5 km di depan muka
@@ -1266,21 +1269,24 @@ function buildSea(P) {
    Muka rapat dekat pemain (profil tiap 12-25 m, baris tiap 6 m), tonjolan air yang meluncur turun di muka (perpindahan
    vertex, normal ikut dihitung dari posisi tergeser), tekstur dua skala dan urat buih yang mengalir dengan kecepatan sama,
    puncak lebih terang (air tipis), semburan berlapis di puncak dan kabut di kaki. */
+// M5e: profil tembok: dari -800 sampai 450 m langkah dipilih agar tiap baris sekitar 18 m di permukaan (muka tegak 1.200 m
+// tinggi hanya sekitar 300 m mendatar), paling jauh 25 m mendatar; lalu punggung dan ekor makin jarang
 const US = (() => {
-  const a = [-4000, -3000, -2200, -1600, -1200, -950];
-  for (let u = -800; u <= 300;) { a.push(Math.round(u)); u += 12 + 13 * Math.min(1, Math.abs(u + 250) / 550); }
-  a.push(420, 580, 800, 1100, 1500, 2000, 2700, 3600, 4800, 6400, 8500, 11500, 15500, 21000, 28000, 37000, 50000);
+  const a = [-4000, -3000, -2200, -1600, -1200, -950], H = W.H * 0.91;
+  const gW = (u) => { const r = Math.sqrt(u * u + W.wr * W.wr) - W.wr; return u < 0 ? Math.exp(-r / W.wf) : W.bk * Math.exp(-((u / W.wb) ** 2)) + (1 - W.bk) * Math.exp(-r / W.wt); };
+  for (let u = -800; u < 450;) { a.push(Math.round(u * 10) / 10); const sl = H * (gW(u + 0.5) - gW(u - 0.5)); u += Math.max(2, Math.min(25, 18 / Math.sqrt(1 + sl * sl))); }
+  a.push(450, 520, 600, 700, 820, 960, 1120, 1300, 1500, 1720, 1960, 2250, 2600, 3000, 3600, 4800, 6400, 8500, 11500, 15500, 21000, 28000, 37000, 50000);
   return a;
 })();
 const ZS = []; { const n = 190, b = 0.037, a = 6 / b; for (let i = -n; i <= n; i++) ZS.push(Math.sign(i) * a * (Math.exp(b * Math.abs(i)) - 1)); }
 // Panjang busur sepanjang profil (m di permukaan, dari depan ke belakang): koordinat pola yang tidak meregang di kaki yang landai
 const ARC = (() => {
-  const H = W.H * 0.91, g = (u) => (u < 0 ? Math.exp(-((u / W.wf) ** 2)) : 0.35 * Math.exp(-((u / W.wc) ** 2)) + 0.65 * Math.exp(-u / W.wb)) * H;
+  const H = W.H * 0.91, g = (u) => { const r = Math.sqrt(u * u + W.wr * W.wr) - W.wr; return (u < 0 ? Math.exp(-r / W.wf) : W.bk * Math.exp(-((u / W.wb) ** 2)) + (1 - W.bk) * Math.exp(-r / W.wt)) * H; };
   const a = [0]; for (let i = 1; i < US.length; i++) {
     let s = 0; const n = 32; for (let k = 0; k < n; k++) { const u0 = US[i - 1] + (US[i] - US[i - 1]) * k / n, u1 = US[i - 1] + (US[i] - US[i - 1]) * (k + 1) / n; s += Math.hypot(u1 - u0, g(u1) - g(u0)); }
     a.push(a[i - 1] + s);
   }
-  const a0 = a[US.indexOf(0)] || 0; return a.map((v) => v - a0);         // 0 di muka (u = 0)
+  let i0 = 0; US.forEach((u, i) => { if (Math.abs(u) < Math.abs(US[i0])) i0 = i; }); const a0 = a[i0]; return a.map((v) => v - a0);         // 0 di muka (u = 0)
 })();
 function waveGeo() {
   const pos = [], arc = [], idx = [], nu = US.length;
@@ -1299,14 +1305,14 @@ const WAVE_VS = /* glsl */`
     hw = waveHz(z) * waveG(u);
     return hw + drawdown(u) - 3.0 * (1.0 - smoothstep(0.5, 3.0, hw));
   }
-  float waveLean(float u, float z) { float k = (u - 60.0) / 280.0; return uLean * waveHz(z) * exp(-k * k); }
+  float waveLean(float u, float z) { float k = (u - 20.0) / 160.0; return uLean * waveHz(z) * exp(-k * k); }   // M5e: puncak sempit sedikit condong
   vec3 wavePos(float u, float z, out float hw) { return vec3(frontX(z) + u - waveLean(u, z), waveY(u, z, hw), z); }
   float fbmW(vec2 p) { return vn2(p) * 0.5 + vn2(p * 2.07 + 5.3) * 0.3 + vn2(p * 4.3 + 1.7) * 0.2; }
   // Tonjolan air di muka: menonjol ke depan sampai sekitar 16 m, meluncur turun 33 m/s. Koordinat pola = panjang busur
   // profil (meter di permukaan: tidak meregang di kaki yang landai, tidak seperti u atau tinggi)
   vec3 wavePosD(float u, float z, float arc, out float hw) {
     vec3 P = wavePos(u, z, hw);
-    float m = smoothstep(-760.0, -420.0, u) * (1.0 - smoothstep(60.0, 220.0, u)) * smoothstep(0.05, 0.4, hw / uWH);
+    float m = smoothstep(-520.0, -300.0, u) * (1.0 - smoothstep(30.0, 160.0, u)) * smoothstep(0.05, 0.4, hw / uWH);
     float d = (fbmW(vec2(z / 70.0, arc / 70.0 + uT * 0.47)) - 0.5) * 32.0 * m;
     P.x -= d; P.y += d * 0.25;
     return P;
@@ -1351,11 +1357,12 @@ const waveMat = new THREE.ShaderMaterial({
       n = normalize(n + (nc - vec3(0.0, 1.0, 0.0)) * 0.6 * fade + vec3(0.0, 1e-4, 0.0));
       // Buih: puncak dan bibir, urat putih tak beraturan yang meluncur turun, air pecah di kaki
       float crest = smoothstep(0.85, 0.98, vG) * (1.0 - smoothstep(120.0, 260.0, vU)) * step(-120.0, vU);
-      float face = smoothstep(-620.0, -160.0, vU) * (1.0 - smoothstep(0.0, 60.0, vU));
-      vec2 w0 = vec2(vZ / 80.0, Hh / 80.0 + uT * 0.41);
-      vec2 wp = w0 + vec2(fbm2(w0 * 0.7 + 4.1), fbm2(w0 * 0.7 + 8.3)) * 1.6;
-      float streak = smoothstep(0.6, 0.8, fbm2(wp * 1.3)) * face;
-      float fine = smoothstep(0.62, 0.78, fbm2(vec2(vZ / 14.0, Hh / 14.0 + uT * 2.36))) * face * fade2;
+      float face = smoothstep(-460.0, -200.0, vU) * (1.0 - smoothstep(0.0, 50.0, vU));   // M5e: muka tegak -400..0 m
+      // M5e: urat buih memanjang searah turunnya air di muka tegak (skala busur 4-5 x skala sepanjang muka)
+      vec2 w0 = vec2(vZ / 45.0, Hh / 220.0 + uT * 0.15);
+      vec2 wp = w0 + vec2(fbm2(w0 * 0.7 + 4.1) * 0.6, fbm2(w0 * 0.7 + 8.3) * 1.6);
+      float streak = smoothstep(0.62, 0.8, fbm2(wp * 1.3)) * face;
+      float fine = smoothstep(0.64, 0.8, fbm2(vec2(vZ / 9.0, Hh / 45.0 + uT * 0.73))) * face * fade2;
       float base = smoothstep(0.02, 0.1, vG) * (1.0 - smoothstep(0.12, 0.3, vG)) * step(vU, 0.0) * smoothstep(0.42, 0.7, fbm2(vec2(vZ / 30.0, Hh / 30.0 + uT * 1.1)));   // air pecah di kaki: petak bergolak, bukan kolom
       float foam = clamp(crest * (0.65 + 0.35 * fbm2(vec2(vZ / 25.0, uT * 0.5))) + streak * 0.7 + fine * 0.35 + base * 0.8, 0.0, 1.0) * smoothstep(1.0, 30.0, vG * uWH);
       vec3 c = seaShade(vR, n, 40.0, foam, vec2(vZ, vU), 1.0);
@@ -1410,7 +1417,7 @@ function sprayMat(kind, seed, hMul) {
   });
 }
 const SPRAY = [];
-for (const [kind, u0, u1, seed, hm] of [[0, -30, 260, 0, 1.0], [0, 40, 380, 3.1, 1.35], [0, 130, 520, 7.7, 0.8], [1, -420, -250, 1.9, 1.0], [1, -300, -150, 5.3, 0.7]]) {
+for (const [kind, u0, u1, seed, hm] of [[0, -30, 260, 0, 1.0], [0, 40, 380, 3.1, 1.35], [0, 130, 520, 7.7, 0.8], [1, -470, -270, 1.9, 1.0], [1, -340, -200, 5.3, 0.7]]) {
   const m = new THREE.Mesh(sprayGeo(u0, u1, kind ? 5 : 6), sprayMat(kind, seed, hm)); m.frustumCulled = false; m.renderOrder = 40 + SPRAY.length; scene.add(m); SPRAY.push(m);
 }
 const spray = SPRAY[0], mist = SPRAY[3];
@@ -1599,7 +1606,7 @@ function setMood(i) {
 /* ---------------- Kembaran JS untuk fisika pemain dan HUD ---------------- */
 const frontX = (z) => U.uWX.value + 2500 * Math.sin(z * 4e-5 + 1.3) + 900 * Math.sin(z * 1.7e-4);
 const waveHz = (z) => U.uWH.value * (0.82 + 0.18 * Math.sin(z * 9e-5 + 0.4));
-const waveG = (u) => u < 0 ? Math.exp(-((u / W.wf) ** 2)) : 0.35 * Math.exp(-((u / W.wc) ** 2)) + 0.65 * Math.exp(-u / W.wb);
+const waveG = (u) => { const r = Math.sqrt(u * u + W.wr * W.wr) - W.wr; return u < 0 ? Math.exp(-r / W.wf) : W.bk * Math.exp(-((u / W.wb) ** 2)) + (1 - W.bk) * Math.exp(-r / W.wt); };   // M5e, sama dengan GLSL
 const drawdown = (u) => -W.dd * Math.exp(-(((u + W.ddL) / W.ddL) ** 2));
 const seabed = (x, z) => CONFIG.sea.bed + 0.06 * Math.sin(0.13 * x + 0.07 * z) + 0.05 * Math.sin(-0.05 * x + 0.21 * z + 1.7)
   + 0.03 * Math.sin(0.61 * x + 0.43 * z) + 0.04 * Math.sin(0.011 * x + 0.4) * Math.sin(0.013 * z + 1.1);
@@ -3110,7 +3117,7 @@ requestAnimationFrame(frame);
 window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
   frontX, waveTop, waterAt, drawdown, seabed, chopAt, CHOP, stepPlayer, simStep, start: () => start(true), startWithCine: start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_, OCEAN, makeOcean, updateOcean,
   RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, CROWN, spawnCrown, stepCrown, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
-  SWEEP, currentAt, SPRAY, US, ZS, M_COMP,
+  SWEEP, currentAt, SPRAY, US, ZS, ARC, M_COMP, waveG, waveHz, COMMON,
   AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
   PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob,
   FLY, boardShip, flyLand, updateFly, flyReset, placeShip,

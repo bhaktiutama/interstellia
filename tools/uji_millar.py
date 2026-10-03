@@ -163,7 +163,7 @@ UJI = r"""
   {
     const face = M.US.filter((u) => u >= -800 && u <= 300), gaps = face.slice(1).map((u, i) => u - face[i]);
     const zs = M.ZS.map(Math.abs).sort((a, b) => a - b), dz = zs[1] - zs[0];
-    out[`muka gelombang: ${M.US.length} sampel profil, ${face.length} di muka (jarak ${Math.min(...gaps)}-${Math.max(...gaps)} m), baris ${dz.toFixed(1)} m dekat pemain`] = face.length >= 50 && Math.max(...gaps) <= 26 && dz <= 6.5;
+    out[`muka gelombang: ${M.US.length} sampel profil, ${face.length} di muka (jarak ${Math.min(...gaps).toFixed(1)}-${Math.max(...gaps).toFixed(1)} m), baris ${dz.toFixed(1)} m dekat pemain`] = face.length >= 50 && Math.max(...gaps) <= 26 && dz <= 6.5;
     const P = M.P; P.x = 0; P.z = 0; P.vx = 0; P.vz = 0; P.view = 0;
     M.U.uWX.value += 30000 - M.frontX(0); const cFar = M.currentAt(0, 0);
     M.U.uWX.value += M.CONFIG.current.at - M.frontX(0); const cNear = M.currentAt(0, 0);
@@ -514,6 +514,26 @@ UJI = r"""
     P.pitch = 0;
     out[`percikan menyatu (M5c): semburan paling jauh ${fRel.toFixed(2)} m di depan kaki (lari 3 m/s), tonjolan depan ${(hF * 1000).toFixed(1)} mm / cekung belakang ${(hB * 1000).toFixed(1)} mm, buih jejak ${fB.toFixed(2)}, mahkota ${up} tampil lalu hilang ${tc.toFixed(2)} s, tidak valid ${nb}`] =
       fRel < 1.2 && hF > 0 && hB < hF && fB > 0.05 && up === 2 && tc < 0.8 && nb === 0;
+  }
+
+  // 5p. M5e: penampang gelombang raksasa = tembok tebal: profil JS = GLSL (50 titik di GPU), muka atas hampir tegak,
+  //     lebar badan pada setengah tinggi 0,8-2,5 km, punggung turun ke sekitar 20% dalam 1,5-2,5 km
+  {
+    const T3 = M.THREE, n = 50, u0 = -1500, u1 = 3500, uAt = (i) => u0 + (u1 - u0) * i / (n - 1);
+    const rt = new T3.WebGLRenderTarget(n, 1, { type: T3.FloatType, depthBuffer: false });
+    const mat = new T3.ShaderMaterial({ defines: { NW: 1, NM: 1 }, vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: M.COMMON + `void main() { float u = ${u0.toFixed(1)} + ${(u1 - u0).toFixed(1)} * (gl_FragCoord.x - 0.5) / ${(n - 1).toFixed(1)}; gl_FragColor = vec4(waveG(u), 0.0, 0.0, 1.0); }` });
+    const sc = new T3.Scene(), q = new T3.Mesh(new T3.PlaneGeometry(2, 2), mat); q.frustumCulled = false; sc.add(q);
+    M.renderer.setRenderTarget(rt); M.renderer.render(sc, new T3.OrthographicCamera(-1, 1, 1, -1, 0, 1));
+    const px = new Float32Array(n * 4); M.renderer.readRenderTargetPixels(rt, 0, 0, n, 1, px); M.renderer.setRenderTarget(null); rt.dispose(); mat.dispose();
+    let dMax = 0; for (let i = 0; i < n; i++) dMax = Math.max(dMax, Math.abs(px[i * 4] - M.waveG(uAt(i))) * M.CONFIG.wave.H);
+    // muka atas: kemiringan rata-rata antara 1/3 dan 0,9 tinggi, di bagian gelombang terendah (0,82 H)
+    const G = M.waveG; let ua = 0, ub = 0; for (let u = -2000; u < 0; u += 0.1) { if (!ua && G(u) >= 1 / 3) ua = u; if (!ub && G(u) >= 0.9) ub = u; }
+    const slope = Math.atan(M.CONFIG.wave.H * 0.82 * (0.9 - 1 / 3) / (ub - ua)) * 180 / Math.PI;
+    let wa = null, wb = 0; for (let u = -2000; u < 8000; u += 1) if (G(u) >= 0.5) { if (wa === null) wa = u; wb = u; }
+    let u20 = 0; for (let u = 0; u < 8000; u += 5) if (G(u) <= 0.22) { u20 = u; break; }
+    out[`gelombang tembok (M5e): profil JS = GLSL selisih ${dMax.toFixed(3)} m (${n} titik), muka atas ${slope.toFixed(1)} derajat, lebar setengah tinggi ${((wb - wa) / 1000).toFixed(2)} km, punggung 22% di ${(u20 / 1000).toFixed(2)} km`] =
+      dMax < 0.5 && slope > 75 && wb - wa > 800 && wb - wa < 2500 && u20 > 1500 && u20 < 2500;
   }
 
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua
