@@ -435,11 +435,13 @@ UJI = r"""
     M.MOOD.brk = 1; const sy = M.seabed(M.SHIP.x, M.SHIP.z), h = M.SHIP.y + 0.3 - sy, G = M.THREE.Vector3;
     const gd = new V3(Math.cos(22 * Math.PI / 180) * Math.cos(28 * Math.PI / 180), Math.sin(22 * Math.PI / 180), -Math.cos(22 * Math.PI / 180) * Math.sin(28 * Math.PI / 180));
     const sx = M.SHIP.x - gd.x * h / gd.y, sz = M.SHIP.z - gd.z * h / gd.y;
-    P.x = sx + 9; P.z = sz + 9; P.y = M.seabed(P.x, P.z) + M.CONFIG.eye; P.yaw = Math.atan2(-(sx - P.x), -(sz - P.z)); P.pitch = -Math.atan2(1.7, Math.hypot(sx - P.x, sz - P.z));
+    const gh = Math.hypot(gd.x, gd.z); P.x = sx - gd.x / gh * 4; P.z = sz - gd.z / gh * 4; P.y = M.seabed(P.x, P.z) + M.CONFIG.eye;   // 4 m dari bayangan, sudut curam (sudut landai: pantulan langit menutupi dasar) P.yaw = Math.atan2(-(sx - P.x), -(sz - P.z)); P.pitch = -Math.atan2(1.7, Math.hypot(sx - P.x, sz - P.z));
     const lumC = () => { const T = M.POST.hdr, w = T.width, hh = T.height, n = 24, b = new Uint16Array(n * n * 4); M.renderer.readRenderTargetPixels(T, (w - n) >> 1, (hh - n) >> 1, n, n, b);
       let l = 0; for (let k = 0; k < b.length; k += 4) l += 0.3 * M.THREE.DataUtils.fromHalfFloat(b[k]) + 0.59 * M.THREE.DataUtils.fromHalfFloat(b[k + 1]) + 0.11 * M.THREE.DataUtils.fromHalfFloat(b[k + 2]); return l / (n * n); };
-    await wait(1200); const l1 = lumC(), k1 = M.U.uShK.value;
-    M.makeShadow(0); await wait(900); const l0 = lumC();
+    // kedua render di frame yang sama (dulu dua frame berbeda: buih dan ombak yang bergerak membuat hasil acak);
+    // tunggu sampai kamera benar-benar di posisi pemain (frame SwiftShader bisa lebih dari 1 s)
+    for (let w = 0; w < 60 && Math.hypot(M.camera.position.x - P.x, M.camera.position.z - P.z) > 0.3; w++) await wait(250); await wait(600); const rd = () => { M.updateShadow(); M.renderer.setRenderTarget(M.POST.hdr); M.renderer.clear(); M.renderer.render(M.scene, M.camera); return lumC(); };
+    const l1 = rd(), k1 = M.U.uShK.value; M.makeShadow(0); const l0 = rd();
     M.makeShadow(M.SHD_SIZE[M.PRESET.idx]); await wait(300);
     out[`bayangan Gargantua: terang di bayangan KS-07 ${l1.toFixed(4)} vs tanpa bayangan ${l0.toFixed(4)} (${(100 * (1 - l1 / l0)).toFixed(0)}% lebih gelap, kuat ${k1.toFixed(2)}), peta ${M.SHD.size} px`] = M.SHD.size > 0 && k1 > 0 && l1 < l0 * 0.93;
     // gosong bergradasi di perut: hidung memutih pudar > tengah abu-abu > belakang jelaga
@@ -448,6 +450,44 @@ UJI = r"""
     const lm = (k) => acc[k][0] / Math.max(1, acc[k][1]);
     out[`gosong perut bergradasi: hidung (putih pudar) ${lm('nose').toFixed(3)}, tengah (abu-abu) ${lm('mid').toFixed(3)}, hilir (jelaga) ${lm('rear').toFixed(3)}`] = lm('nose') > 0.3 && lm('nose') > lm('mid') && lm('mid') > lm('rear') && lm('rear') < 0.1;
     P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -Math.PI / 2 + 0.3;
+  }
+
+  // 5m. M5d: plasma masuk atmosfer mengikuti bentuk wahana (bukan bola); perut yang menghadap aliran paling terang
+  {
+    const C = M.CINE, hdr = (n) => { const T = M.POST.hdr, w = T.width, h = T.height, b = new Uint16Array(n * n * 4); M.renderer.readRenderTargetPixels(T, (w - n) >> 1, (h - n) >> 1, n, n, b);
+      let l = 0, nb = 0; for (let k = 0; k < b.length; k += 4) { const r = M.THREE.DataUtils.fromHalfFloat(b[k]), g = M.THREE.DataUtils.fromHalfFloat(b[k + 1]), bl = M.THREE.DataUtils.fromHalfFloat(b[k + 2]); if (!Number.isFinite(r + g + bl)) nb++; else l += 0.3 * r + 0.59 * g + 0.11 * bl; } return { l: l / (n * n), nb }; };
+    let spheres = 0; M.ORB.plasma.traverse((o) => { if (o.geometry && o.geometry.type === 'SphereGeometry') spheres++; });
+    M.CINE.enabled = true; M.CINE.played = false; M.STATE.started = false; M.setMode('jelajah'); M.startWithCine(); C.t = 17; await wait(900);
+    const shot = (el) => { M.cineStep(0); M.orbShipCam(0.03, Math.PI * 0.55, el, 0); M.renderOrbit(performance.now()); return hdr(20); };
+    const below = shot(-0.9), above = shot(0.9), full = (() => { const T = M.POST.hdr, b = new Uint16Array(T.width * T.height * 4); M.renderer.readRenderTargetPixels(T, 0, 0, T.width, T.height, b); let nb = 0; for (const x of b) if (!Number.isFinite(M.THREE.DataUtils.fromHalfFloat(x))) nb++; return nb; })();
+    M.cineStop(); M.CINE.enabled = false; M.STATE.started = true;
+    out[`plasma masuk atmosfer: bola di grup plasma ${spheres}, terang dilihat dari bawah (perut) ${below.l.toFixed(3)} vs dari atas ${above.l.toFixed(3)}, tidak valid ${below.nb + above.nb + full}`] =
+      spheres === 0 && below.l > above.l * 1.3 && below.nb + above.nb + full === 0 && M.ORB_U.uFlowL.value.y < -0.3;
+  }
+
+  // 5n. M5a-2: laut dari ketinggian tidak berulang tiap petak FFT (korelasi pada geser 37 m turun), tanpa nilai tidak valid
+  {
+    const P = M.P; M.applyPreset(1); await wait(1500); M.flyReset(); P.view = 1; P.x = 300; P.z = -200; P.yaw = 0; P.pitch = -Math.PI / 2 + 0.002; M.MOOD.brk = 0;
+    const corr = async (k) => {
+      M.U.uMacroK.value = k; M.CONFIG.views[1].h = 120; P.y = 120;                       // 120 m: seluruh layar di luar laut dekat
+      for (let w = 0; w < 80 && Math.abs(M.camera.position.y - 120) > 2; w++) await wait(250); await wait(1200);
+      const T = M.POST.hdr, w = T.width, h = T.height, b = new Uint16Array(w * h * 4); M.renderer.readRenderTargetPixels(T, 0, 0, w, h, b);
+      const L0i = new Float32Array(w * h); let nb = 0; for (let i = 0; i < w * h; i++) { const r = M.THREE.DataUtils.fromHalfFloat(b[i * 4]), g = M.THREE.DataUtils.fromHalfFloat(b[i * 4 + 1]); if (!Number.isFinite(r + g)) { nb++; continue; } L0i[i] = 0.4 * r + 0.6 * g; }
+      // high-pass: kurangi rata-rata lokal 13 x 13 px (gradasi pantulan langit tidak ikut dihitung sebagai pola)
+      const I = new Float64Array((w + 1) * (h + 1)); for (let y = 0; y < h; y++) { let rs = 0; for (let x = 0; x < w; x++) { rs += L0i[y * w + x]; I[(y + 1) * (w + 1) + x + 1] = I[y * (w + 1) + x + 1] + rs; } }
+      const L = new Float32Array(w * h), R = 6; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const x0 = Math.max(0, x - R), x1 = Math.min(w, x + R + 1), y0 = Math.max(0, y - R), y1 = Math.min(h, y + R + 1);
+        const sm = I[y1 * (w + 1) + x1] - I[y0 * (w + 1) + x1] - I[y1 * (w + 1) + x0] + I[y0 * (w + 1) + x0]; L[y * w + x] = L0i[y * w + x] - sm / ((x1 - x0) * (y1 - y0)); }
+      const hgt = M.camera.position.y - M.drawdown(M.camera.position.x - M.frontX(M.camera.position.z)), mpp = 2 * hgt * Math.tan(M.camera.fov * Math.PI / 360) / h;
+      const L0 = M.OCEAN.casc[0] ? M.OCEAN.casc[0].L : 37, dx = Math.round(L0 / mpp);
+      let sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0, n = 0;
+      for (let y = Math.round(h * 0.2); y < h * 0.8; y++) for (let x = Math.round(w * 0.1); x + dx < w * 0.9; x++) { const a = L[y * w + x], c = L[y * w + x + dx]; sa += a; sb += c; saa += a * a; sbb += c * c; sab += a * c; n++; }
+      const cv = sab / n - (sa / n) * (sb / n), va = saa / n - (sa / n) ** 2, vb = sbb / n - (sb / n) ** 2;
+      return { r: cv / Math.sqrt(Math.max(va * vb, 1e-20)), nb, dx, hgt };
+    };
+    const off = await corr(0), on = await corr(1);
+    M.CONFIG.views[1].h = 60; P.view = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0;
+    out[`laut dari ${off.hgt.toFixed(0)} m: korelasi pada geser satu petak FFT (${on.dx} px) ${off.r.toFixed(3)} -> ${on.r.toFixed(3)} dengan variasi makro, tidak valid ${off.nb + on.nb}`] =
+      on.r < off.r * 0.7 && on.nb === 0 && off.nb === 0 && M.U.uMacroK.value === 1;
   }
 
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua

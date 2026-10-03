@@ -131,5 +131,5 @@ Bentuk sekarang (`waveG()` di `COMMON`, kembaran JS di `waveG`/`waveTop`, `ARC`)
 | --- | --- | --- |
 | 1 (Medium, Sonnet 5.5) | M5a-1 | Selesai: pusat laut dekat dan jauh = posisi kamera (`SEA.cx/cz` di `frame()`); radius dekat tidak dinaikkan karena grid dekat berukuran tetap 2 x near. Menunggu uji visual pemilik |
 | 1 (Medium, Sonnet 5.5) | M5b | Selesai: angin 0,05-0,14 lowpass 900 Hz, kecipak brown lowpass 450 Hz maks 0,18 berdenyut ikut `BOB.phase`, `sfxSplash` -40%; penggeser Volume dan Angin dan laut (`millar.vol`, `millar.amb`). Uji disesuaikan (ambang kecipak). Pemeriksaan RMS/spektrum otomatis belum ditambahkan |
-| 2 (High, Opus 5.5) | M5d, M5a-2 | Belum |
+| 2 (High, Opus 5.5) | M5d, M5a-2 | Selesai 3 Oktober 2026, menunggu uji pemilik. Plasma: tanpa bola, terang dari bawah (perut) 0,670 vs dari atas 0,338, tanpa nilai tidak valid. Laut: kaskade 1-2 diputar (`SEA_ROT`), kaskade 0 dicampur salinan berputar di jauh, variasi makro `seaMacro` + ombak panjang `swellS` (`uMacroK`). Catatan: uji 5l (bayangan) dan 5n (korelasi laut 120 m) gagal di run terakhir karena kamera belum mengikuti pemain saat diukur (waktu uji, bukan error halaman); perlu tunggu kamera sebelum mengukur |
 | 3 (High, Opus 5.5) | M5c, M5e | Belum |
