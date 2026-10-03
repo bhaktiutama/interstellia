@@ -70,6 +70,8 @@
   .lhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); letter-spacing: .06em; }
   .lhead button, #labBtns button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
   #labBtns { display: grid; gap: 4px; }
+  #labVol { display: grid; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  #labVol label { display: grid; gap: 2px; } #labVol input { width: 100%; accent-color: var(--accent); }
   #labBtns button { display: flex; justify-content: space-between; gap: 8px; text-align: left; }
   #labBtns button:hover, .lhead button:hover { border-color: var(--accent); }
   #labBtns kbd { color: var(--muted); font: inherit; }
@@ -107,6 +109,7 @@
 <div id="lab" class="panel" hidden>
   <div class="lhead"><span data-t="Panel kontrol">Panel kontrol</span><button type="button" id="labClose" data-t="Tutup (`)">Tutup (`)</button></div>
   <div id="labBtns"></div>
+  <div id="labVol"><label><span id="volT"></span><input type="range" id="volR" min="0" max="100"></label><label><span id="ambT"></span><input type="range" id="ambR" min="0" max="100"></label></div>
 </div>
 <div id="help" hidden>
   <div class="card">
@@ -300,7 +303,7 @@ const I18N = { en: {
   'Gelombang': 'Wave', 'Tiba dalam': 'Arrives in', 'sudah lewat': 'passed', 'di luar': 'outside', 'Goyangan planet': 'Planet wobble',
   'Tampilan': 'View', 'Kecepatan waktu': 'Time speed', 'Jalan kaki': 'On foot', 'Drone 60 m': 'Drone 60 m', 'Tinggi 1,5 km': 'High 1.5 km',
   'Grafik': 'Graphics', 'GPU (langit / laut / scene / post)': 'GPU (sky / sea / scene / post)', 'Ombak angin': 'Wind waves', 'Arus': 'Current', 'ke arah gelombang': 'toward the wave',
-  'Gerak kepala: {m}': 'Head bob: {m}', 'Mati': 'Off', 'Suara: {m}': 'Sound: {m}', 'Nyala': 'On', 'Suara': 'Sound', 'Halus': 'Subtle', 'Normal': 'Normal',
+  'Gerak kepala: {m}': 'Head bob: {m}', 'Mati': 'Off', 'Suara: {m}': 'Sound: {m}', 'Nyala': 'On', 'Suara': 'Sound', 'Volume': 'Volume', 'Angin dan laut': 'Wind and sea', 'Halus': 'Subtle', 'Normal': 'Normal',
   'tahun': 'y', 'hari': 'd', 'jam': 'h', 'mnt': 'min', 'dtk': 's',
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
   'Gelombang dipanggil: {d} km': 'Wave summoned: {d} km',
@@ -1138,7 +1141,7 @@ function seaMat(near) {
 }
 const seaNear = new THREE.Mesh(new THREE.BufferGeometry(), seaMat(true)); seaNear.frustumCulled = false; seaNear.renderOrder = 10; scene.add(seaNear);
 const seaFar = new THREE.Mesh(new THREE.BufferGeometry(), seaMat(false)); seaFar.frustumCulled = false; seaFar.renderOrder = 11; scene.add(seaFar);
-const SEA = { cell: 1, near: 70 };
+const SEA = { cell: 1, near: 70, cx: 0, cz: 0 };
 function buildSea(P) {
   SEA.cell = P.cell; SEA.near = P.near;
   const size = 2 * P.near + 4 * P.cell, n = Math.round(size / P.cell);
@@ -1758,7 +1761,14 @@ LAB.forEach(([k, , fn]) => {
   const b = document.createElement('button'); b.type = 'button';
   b.addEventListener('click', () => { fn(); b.blur(); }); b.dataset.k = k; document.getElementById('labBtns').appendChild(b);
 });
-function syncLab() { document.querySelectorAll('#labBtns button').forEach((b, i) => { b.innerHTML = `<span>${LAB[i][1]()}</span><kbd>${LAB[i][0]}</kbd>`; }); }
+function setVol(k, v) {
+  AUDIO[k] = Math.min(1, Math.max(0, v)); try { localStorage.setItem(k === 'vol' ? 'millar.vol' : 'millar.amb', String(AUDIO[k])); } catch (e) { /* abaikan */ }
+  if (AUDIO.ctx) { if (k === 'vol') AUDIO.master.gain.setTargetAtTime(AUDIO.on ? 0.85 * AUDIO.vol : 0, AUDIO.ctx.currentTime, 0.05); else AUDIO.ambBus.gain.setTargetAtTime(AUDIO.amb, AUDIO.ctx.currentTime, 0.05); }
+}
+for (const [id, k] of [['volR', 'vol'], ['ambR', 'amb']]) document.getElementById(id).addEventListener('input', (e) => { setVol(k, e.target.value / 100); syncLab(); });
+function syncLab() {
+  document.getElementById('volR').value = Math.round(AUDIO.vol * 100); document.getElementById('ambR').value = Math.round(AUDIO.amb * 100);
+  document.getElementById('volT').textContent = t('Volume') + ': ' + Math.round(AUDIO.vol * 100) + '%'; document.getElementById('ambT').textContent = t('Angin dan laut') + ': ' + Math.round(AUDIO.amb * 100) + '%'; document.querySelectorAll('#labBtns button').forEach((b, i) => { b.innerHTML = `<span>${LAB[i][1]()}</span><kbd>${LAB[i][0]}</kbd>`; }); }
 function toggleLab(on = labEl.hidden) { labEl.hidden = !on; if (on) { syncLab(); if (document.pointerLockElement) document.exitPointerLock(); } }
 function buildHelp() {
   const rows = [
@@ -1941,18 +1951,19 @@ function simStep(sdt, dt) {
    ombak dan gemericik (ikut keadaan laut), kecipak saat berjalan, deras arus air surut, gemuruh gelombang raksasa
    (frekuensi rendah dari jauh, makin keras dan makin terbuka saat mendekat, arah kiri/kanan), deru air pecah di beberapa
    km terakhir. Efek: cipratan tiap langkah, hantaman saat tersapu, gelembung di bawah air. M = suara nyala/mati. */
-const AUDIO = { ctx: null, ok: true, on: true, sfx: 0, tBurst: 0, mix: null };
+const AUDIO = { ctx: null, ok: true, on: true, sfx: 0, tBurst: 0, mix: null, vol: 1, amb: 1 };
 try { AUDIO.on = localStorage.getItem('millar.sound') !== '0'; } catch (e) { AUDIO.on = true; }
+try { for (const [k, key] of [['vol', 'millar.vol'], ['amb', 'millar.amb']]) { const v = parseFloat(localStorage.getItem(key)); if (isFinite(v)) AUDIO[k] = Math.min(1, Math.max(0, v)); } } catch (e) { /* abaikan */ }
 // Tingkat tiap lapisan dari keadaan dunia (fungsi murni, juga dipakai uji)
 function audioMix(dist, chopK, cur, speed, depth, under) {
   const a = Math.abs(dist), L = 1 / (1 + Math.pow(a / 8000, 1.5));                 // keras gelombang: 0,01 di 150 km, 0,5 di 8 km, 0,9 di 2 km
   const sea = (chopK - CONFIG.seaState.far) / (CONFIG.seaState.near - CONFIG.seaState.far);
   return {
     loud: L,
-    wind: 0.16 + 0.16 * Math.max(0, sea),
-    sea: 0.16 * chopK,
+    wind: 0.05 + 0.09 * Math.max(0, sea),                                      // M5b: jauh lebih tenang (dulu 0,16-0,32)
+    sea: 0.12 * chopK,
     lap: 3 + 6 * chopK,                                                       // gemericik per detik
-    wade: depth > 0.05 ? Math.min(1, speed / 2.2) * 0.42 : 0,
+    wade: depth > 0.05 ? Math.min(1, speed / 2.2) * 0.18 : 0,                  // M5b: dulu 0,42
     current: Math.min(1, cur / CONFIG.current.max) * 0.32,
     rumble: 0.95 * L,
     rumbleLP: 55 + 1500 * L * L,                                              // jauh: hanya gemuruh rendah; dekat: terbuka
@@ -1980,18 +1991,21 @@ function startAudio() {
     const c = AUDIO.ctx = new AC(), A = AUDIO;
     A.white = noiseBuf(c, 2.5, 'white'); A.pink = noiseBuf(c, 4, 'pink'); A.brown = noiseBuf(c, 6, 'brown');
     A.comp = c.createDynamicsCompressor(); A.comp.threshold.value = -14; A.comp.ratio.value = 4; A.comp.connect(c.destination);
-    A.master = c.createGain(); A.master.gain.value = A.on ? 0.85 : 0; A.master.connect(A.comp);
+    A.master = c.createGain(); A.master.gain.value = A.on ? 0.85 * A.vol : 0; A.master.connect(A.comp);
     A.uw = c.createBiquadFilter(); A.uw.type = 'lowpass'; A.uw.frequency.value = 22000; A.uw.Q.value = 0.5; A.uw.connect(A.master);
     A.world = c.createGain(); A.world.connect(A.uw);
     A.an = c.createAnalyser(); A.an.fftSize = 1024; A.master.connect(A.an);
     const loop = (buf) => { const s = c.createBufferSource(); s.buffer = buf; s.loop = true; s.start(0, Math.random() * buf.duration); return s; };
-    const chain = (src, ...nodes) => { let n = src; for (const x of nodes) { n.connect(x); n = x; } n.connect(A.world); return nodes; };
+    A.ambBus = c.createGain(); A.ambBus.gain.value = A.amb; A.ambBus.connect(A.world);   // lapisan lingkungan (angin, laut, kecipak, arus)
+    let dst = A.ambBus;
+    const chain = (src, ...nodes) => { let n = src; for (const x of nodes) { n.connect(x); n = x; } n.connect(dst); return nodes; };
     const filt = (type, f, q) => { const b = c.createBiquadFilter(); b.type = type; b.frequency.value = f; b.Q.value = q; return b; };
     const gain = () => { const g = c.createGain(); g.gain.value = 0; return g; };
-    [A.windF, A.windG] = chain(loop(A.pink), filt('bandpass', 500, 0.6), gain());
+    [A.windF, A.windG] = chain(loop(A.pink), filt('lowpass', 900, 0.5), gain());
     [A.seaF, A.seaG] = chain(loop(A.pink), filt('lowpass', 700, 0.7), gain());
-    [, A.wadeG] = chain(loop(A.white), filt('bandpass', 750, 0.8), gain());
+    [, A.wadeG] = chain(loop(A.brown), filt('lowpass', 450, 0.6), gain());
     [, A.curG] = chain(loop(A.pink), filt('bandpass', 260, 0.7), gain());
+    dst = A.world;
     [A.rumF, A.rumG, A.rumP] = chain(loop(A.brown), filt('lowpass', 60, 0.8), gain(), c.createStereoPanner());
     [, A.roarG, A.roarP] = chain(loop(A.white), filt('bandpass', 1100, 0.45), gain(), c.createStereoPanner());
     const sub = c.createGain(); sub.gain.value = 0.12; sub.connect(A.rumG);
@@ -2000,7 +2014,7 @@ function startAudio() {
 }
 function setSound(on) {
   AUDIO.on = on; try { localStorage.setItem('millar.sound', on ? '1' : '0'); } catch (e) { /* abaikan */ }
-  if (AUDIO.ctx) AUDIO.master.gain.setTargetAtTime(on ? 0.85 : 0, AUDIO.ctx.currentTime, 0.05);
+  if (AUDIO.ctx) AUDIO.master.gain.setTargetAtTime(on ? 0.85 * AUDIO.vol : 0, AUDIO.ctx.currentTime, 0.05);
 }
 // Letupan pendek noise tersaring (cipratan, gemericik, hantaman)
 function burst(freq, q, peak, dur, pan, type = 'bandpass', buf) {
@@ -2013,8 +2027,9 @@ function burst(freq, q, peak, dur, pan, type = 'bandpass', buf) {
 }
 function sfxSplash(power, pan) {
   if (!AUDIO.ctx) return;
-  burst(1000 + 1500 * Math.random(), 0.9, 0.3 * power, 0.14 + 0.22 * power, pan);          // percik
-  burst(320 + 120 * Math.random(), 0.8, 0.28 * power, 0.28 + 0.2 * power, pan * 0.5);     // kecipak rendah
+  const k = 0.6 * AUDIO.amb, j = 0.85 + 0.3 * Math.random();                                  // M5b: -40%, nada acak kecil
+  burst((900 + 1100 * Math.random()) * j, 0.9, 0.3 * power * k, 0.1 + 0.14 * power, pan);       // percik
+  burst((300 + 100 * Math.random()) * j, 0.8, 0.28 * power * k, 0.2 + 0.14 * power, pan * 0.5, 'lowpass', AUDIO.brown);   // kecipak rendah
   AUDIO.sfx++;
 }
 function sfxImpact() {
@@ -2037,9 +2052,9 @@ function updateAudio(dt, dist) {
   const M = A.mix = audioMix(dist, U.uChopK.value, currentAt(P.x, P.z), P.view === 0 ? speed : 0, P.view === 0 ? P.depth : 0, SWEEP.under);
   const c = A.ctx; if (!c) return M;
   const t = c.currentTime, set = (prm, v, tc = 0.25) => prm.setTargetAtTime(v, t, tc);
-  const gust = 0.75 + 0.25 * Math.sin(STATE.visT * 0.37) * Math.sin(STATE.visT * 0.13 + 1.1);
-  set(A.windG.gain, M.wind * gust, 0.6); set(A.windF.frequency, 380 + 260 * gust, 0.6);
-  set(A.seaG.gain, M.sea * (0.8 + 0.2 * Math.sin(STATE.visT * 1.7))); set(A.wadeG.gain, M.wade, 0.12); set(A.curG.gain, M.current, 0.5);
+  const gust = 0.7 + 0.3 * Math.sin(STATE.visT * 0.65) * Math.sin(STATE.visT * 0.27 + 1.1);   // hembusan 6-12 s
+  set(A.windG.gain, M.wind * gust, 0.6); set(A.windF.frequency, 600 + 300 * gust, 0.6);
+  set(A.seaG.gain, M.sea * (0.8 + 0.2 * Math.sin(STATE.visT * 1.7))); set(A.wadeG.gain, M.wade * (0.55 + 0.45 * Math.max(0, Math.sin(BOB.phase))), 0.06);   // denyut per langkah set(A.curG.gain, M.current, 0.5);
   set(A.rumG.gain, M.rumble, 0.5); set(A.rumF.frequency, M.rumbleLP, 0.5); set(A.roarG.gain, M.roar, 0.4);
   const pan = Math.max(-0.9, Math.min(0.9, Math.cos(P.yaw) * Math.sign(dist || 1)));    // gelombang datang dari +x: kiri/kanan dari arah pandang
   set(A.rumP.pan, pan * 0.6, 0.2); set(A.roarP.pan, pan * 0.8, 0.2);
@@ -2857,8 +2872,10 @@ function frame(now) {
   M_COMP.uniforms.uUnder.value = SWEEP.under; M_COMP.uniforms.uTime.value = STATE.visT;
   camera.updateMatrixWorld();
   U.uT.value = STATE.visT; U.uCam.value.copy(camera.position);
-  seaNear.material.uniforms.uOff.value.set(Math.round(P.x / SEA.cell) * SEA.cell, 0, Math.round(P.z / SEA.cell) * SEA.cell);
-  seaFar.material.uniforms.uOff.value.set(P.x, 0, P.z);
+  // M5a-1: pusat laut = kamera (uji buang dan pudar di shader memakai jarak ke kamera); riak tetap di pemain
+  SEA.cx = camera.position.x; SEA.cz = camera.position.z;
+  seaNear.material.uniforms.uOff.value.set(Math.round(SEA.cx / SEA.cell) * SEA.cell, 0, Math.round(SEA.cz / SEA.cell) * SEA.cell);
+  seaFar.material.uniforms.uOff.value.set(SEA.cx, 0, SEA.cz);
   waveU.uOff.value.set(0, 0, Math.round(P.z / 12) * 12);
   if (CLK.msgT > 0 && (CLK.msgT -= dt) <= 0) msgEl.classList.remove('on');
   whiteEl.style.opacity = CLK.white.toFixed(3);

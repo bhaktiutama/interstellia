@@ -191,7 +191,7 @@ UJI = r"""
     const uw = M.audioMix(2000, 1, 0, 0, 0.5, 1), dry = M.audioMix(2000, 1, 0, 0, 0, 0), wd = M.audioMix(40000, 1, 0, 1.5, 0.5, 0);
     const cur = M.audioMix(2500, 1, M.CONFIG.current.max, 0, 0.5, 0), vals = [...mx, uw, dry, wd, cur, M.audioMix(0, 1.5, 0, 0, 0, 0), M.audioMix(-3000, 1.5, 0, 0, 0, 0)];
     const valid = vals.every((m) => Object.values(m).every(Number.isFinite));
-    out[`bawah air: lowpass ${uw.lp} Hz (di atas ${dry.lp} Hz); kecipak jalan ${wd.wade.toFixed(2)}, diam ${dry.wade}; arus ${cur.current.toFixed(2)}; semua nilai valid ${valid}`] = uw.lp <= 400 && dry.lp >= 20000 && wd.wade > 0.2 && dry.wade === 0 && cur.current > 0.3 && valid;
+    out[`bawah air: lowpass ${uw.lp} Hz (di atas ${dry.lp} Hz); kecipak jalan ${wd.wade.toFixed(2)}, diam ${dry.wade}; arus ${cur.current.toFixed(2)}; semua nilai valid ${valid}`] = uw.lp <= 400 && dry.lp >= 20000 && wd.wade > 0.1 && wd.wade <= 0.18 && mx[0].wind <= 0.14 && dry.wade === 0 && cur.current > 0.3 && valid;
     const P = M.P; P.view = 0; P.depth = 0.5; const n0 = A.sfx; M.footstep(1, true); M.sfxImpact(); const n1 = A.sfx;
     out[`efek suara: langkah dua kaki + hantaman = ${n1 - n0} bunyi`] = n1 - n0 === 3;
     M.U.uWX.value += 1500 - M.frontX(0); await wait(1200);
