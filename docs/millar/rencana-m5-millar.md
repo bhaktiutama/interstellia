@@ -1,6 +1,6 @@
 # Rencana M5 Millar's World: Penyempurnaan setelah uji pemilik
 
-Per 3 Oktober 2026 · Status: rencana, belum dikerjakan. Pilihan pemilik: gelombang = tembok tebal; pengerjaan dikelompokkan menurut tingkat thinking (low, medium, high), tiap kelompok berhenti untuk diuji pemilik.
+Per 3 Oktober 2026 · Status: rencana, belum dikerjakan. Pilihan pemilik: gelombang = tembok tebal; pengerjaan dikelompokkan menurut effort CLAUDE.md (Medium, High), tiap kelompok berhenti untuk diuji pemilik.
 
 ## Context
 
@@ -11,24 +11,26 @@ Pemilik menguji M4b dan menemukan 5 hal yang masih kurang meyakinkan:
 4. Suara terlalu berisik (angin dan langkah lari).
 5. Penampang gelombang raksasa harus seperti tembok tinggi (gambar 5), bukan bukit landai.
 
-Tiap butir dikerjakan sebagai tahap terpisah (M5a-M5e), dikelompokkan menurut tingkat thinking (low, medium, high) atas permintaan pemilik. Tiap tahap punya uji otomatis dan commit sendiri; tiap kelompok berhenti untuk diuji pemilik.
+Tiap butir dikerjakan sebagai tahap terpisah (M5a-M5e), dikelompokkan menurut effort di CLAUDE.md atas permintaan pemilik. Tiap tahap punya uji otomatis dan commit sendiri; tiap kelompok berhenti untuk diuji pemilik.
 
 Cara menjalankan di sesi baru: "jalankan kelompok 1 dari `docs/millar/rencana-m5-millar.md`" (lalu kelompok 2, lalu 3). Perbarui bagian Status di bawah tiap tahap selesai.
 
 Hak cipta: gambar 5 memuat judul dan logo film. Yang dipakai hanya bentuk fisik penampang gelombang (tembok air tinggi), bukan judul, huruf, atau grafisnya.
 
-## Kelompok menurut tingkat thinking dan model
+## Kelompok menurut effort dan model (aturan CLAUDE.md "Pengelompokan task berdasarkan effort")
 
-Catatan: CLAUDE.md proyek tidak mendefinisikan tingkat thinking atau model. Pengelompokan di bawah memakai daftar model yang tersedia di sesi ini (Opus 5.5 paling mampu, Sonnet 5.5) dan tingkat usaha low / medium / high. Tiap kelompok dikerjakan dalam satu jalan, commit dan push per tahap, lalu berhenti untuk diuji pemilik sebelum kelompok berikutnya.
+Label mengikuti tabel effort di CLAUDE.md: shader GLSL kustom dan bug sulit = High (Opus 5.5), fitur yang menyentuh beberapa bagian kode atau suara baru = Medium (Sonnet 5.5), teks UI, entri kamus, dan dokumen = Low (Haiku 4.5). Rencana ini disusun Opus 5.5. Tiap kelompok dikerjakan dalam satu jalan, commit dan push per tahap, lalu berhenti untuk diuji pemilik sebelum kelompok berikutnya.
 
-| Kelompok | Tahap | Isi | Model + thinking | Alasan | Risiko |
-| --- | --- | --- | --- | --- | --- |
-| 1. Low | M5a-1 | Sabit putih (bug pusat grid laut) | Sonnet 5.5, low | Sebab sudah ditemukan, perbaikan beberapa baris di `frame()` dan `seaMat()` | Rendah |
-| 1. Low | M5b | Suara lebih tenang | Sonnet 5.5, low | Penyetelan angka dan filter di `audioMix()` / `startAudio()` / `sfxSplash()`, 2 penggeser di panel | Rendah |
-| 2. Medium | M5a-2 | Pola laut sintetis dari ketinggian | Opus 5.5, medium | Variasi makro di shader laut, perlu menjaga FPS dan uji ombak FFT | Sedang |
-| 2. Medium | M5d | Selubung plasma mengikuti bentuk wahana | Opus 5.5, medium | Shader baru tetapi terisolasi di adegan orbit | Rendah (hanya sinematik) |
-| 3. High | M5c | Percikan lari menyatu dengan laut | Opus 5.5, high | Gabungan riak, buih, mahkota air, dan partikel; menyentuh sim `RIP` dan shader laut dekat | Sedang |
-| 3. High | M5e | Penampang gelombang raksasa = tembok tebal | Opus 5.5, high | Profil GLSL + kembaran JS + geometri + semburan + fisika tersapu/terbang + uji | Tinggi (banyak sistem bergantung pada `waveG`) |
+| Kelompok | Tahap | Isi | Effort | Model | Alasan | Risiko |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | M5a-1 | Sabit putih (bug pusat grid laut) | Medium | Sonnet 5.5 | Sebab sudah ditemukan; perbaikan di `frame()` dan satu baris uji buang di `seaMat()`, tanpa rancangan shader baru | Rendah |
+| 1 | M5b | Suara lebih tenang + 2 penggeser volume | Medium | Sonnet 5.5 | "Suara baru" dan panel = Medium; `audioMix()` / `startAudio()` / `sfxSplash()` | Rendah |
+| 2 | M5d | Selubung plasma mengikuti bentuk wahana | High | Opus 5.5 | Shader GLSL kustom, terisolasi di adegan orbit | Rendah (hanya sinematik) |
+| 2 | M5a-2 | Pola laut sintetis dari ketinggian | High | Opus 5.5 | Shader laut (`seaShadeS`, `surfS`, FFT), harus aman di M1 (NaN) dan menjaga FPS | Sedang |
+| 3 | M5c | Percikan lari menyatu dengan laut | High | Opus 5.5 | Sim riak `RIP`, shader laut dekat, mesh mahkota air, partikel | Sedang |
+| 3 | M5e | Penampang gelombang raksasa = tembok tebal | High | Opus 5.5 | Profil GLSL + kembaran JS + geometri + semburan + fisika tersapu/terbang + uji | Tinggi (banyak sistem bergantung pada `waveG`) |
+
+Langkah mekanis di dalam tahap High (entri `I18N.en`, teks panel, pembaruan dokumen ini dan peta kode CLAUDE.md) berlabel Low dan boleh diserahkan ke Haiku 4.5, sesuai aturan "pecah task High menjadi langkah kecil".
 
 Isi teknis tiap tahap di bawah tetap memakai nomor M5a sampai M5e.
 
@@ -127,6 +129,6 @@ Bentuk sekarang (`waveG()` di `COMMON`, kembaran JS di `waveG`/`waveTop`, `ARC`)
 
 | Kelompok | Tahap | Status |
 | --- | --- | --- |
-| 1. Low | M5a-1, M5b | Belum |
-| 2. Medium | M5a-2, M5d | Belum |
-| 3. High | M5c, M5e | Belum |
+| 1 (Medium, Sonnet 5.5) | M5a-1, M5b | Belum |
+| 2 (High, Opus 5.5) | M5d, M5a-2 | Belum |
+| 3 (High, Opus 5.5) | M5c, M5e | Belum |
