@@ -30,6 +30,12 @@
   #ui.collapsed header .chev { transform: rotate(-90deg); }
   #ui.collapsed .body { display: none; }
   #ui .body { padding: 0 12px 12px; }
+  #uiTabs { display: flex; flex-wrap: wrap; gap: 3px; padding-bottom: 8px; border-bottom: 1px solid var(--panel-border); }
+  #uiTabs button { flex: 1 1 auto; padding: 5px 6px; font-size: 10.5px; background: rgba(255,255,255,0.03); }
+  #uiTabs button.on { border-color: var(--accent); color: #fff; background: rgba(232, 183, 101, 0.18); }
+  #ui .row select { max-width: 150px; min-width: 0; text-overflow: ellipsis; }
+  #ui .pane { display: none; } #ui .pane.on { display: block; }
+  #ui .pane > .sec:first-child { margin-top: 4px; border-top: 0; }
   .sec { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--panel-border);
     font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
   .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; margin-top: 7px; }
@@ -89,6 +95,8 @@
   @media (max-width: 640px) {
     #ui { top: 12px; right: 12px; left: 12px; width: auto; max-height: 60vh; }
     #hint { display: none; }
+    #uiTabs { border-bottom: 0; border-top: 1px solid var(--panel-border); padding: 8px 0 0; position: sticky; bottom: 0; background: var(--panel-bg); order: 2; }
+    #uiBody { display: flex; flex-direction: column; }
   }
 </style>
 </head>
@@ -949,6 +957,11 @@ const ID = {
   'Sound: on (U)': 'Suara: nyala (U)',
   'Sound: off (U)': 'Suara: mati (U)',
   'Sound on / off: synthesized; space carries no sound, so cabin and impact sounds travel through the hull, the disk roar is distilled': 'Suara nyala / mati: disintesis; ruang hampa tidak menghantarkan suara, jadi suara kabin dan tumbukan merambat lewat badan wahana, gemuruh piringan distilisasi',
+  'Graphics': 'Grafik',
+  'Sound': 'Suara',
+  'More': 'Lainnya',
+  'Photo': 'Foto',
+  'All sounds are synthesized. Space carries no sound: cabin, thruster and impact sounds travel through the hull; the disk roar is distilled. Crossing the horizon makes no sound.': 'Semua suara disintesis. Ruang hampa tidak menghantarkan suara: suara kabin, pendorong, dan tumbukan merambat lewat badan wahana; gemuruh piringan distilisasi. Lewat horizon tidak berbunyi.',
   'Disk light': 'Cahaya piringan', 'View': 'Tampilan', 'Cockpit': 'Kokpit', 'Chase': 'Kamera luar', 'Vessel': 'Wahana',
 };
 const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
@@ -2489,44 +2502,72 @@ function main() {
      ===================================================================== */
   const Q = () => CONFIG.presets[CONFIG.quality];
   function applyQuality(name) { CONFIG.quality = name; CONFIG.renderScale = CONFIG.presets[name].scale; state.lowTime = state.highTime = 0; }
+  // panel bertab seperti Copper Corn Station (labTab): { tab } membuka tab baru, kontrol berikutnya masuk ke tab itu
   const UI = [
-    { sec: 'Quality' },
-    { type: 'select', label: 'Preset', options: ['low', 'medium', 'high', 'ultra'], get: () => CONFIG.quality, set: applyQuality },
-    { type: 'check', label: 'Adaptive resolution', obj: CONFIG, key: 'adaptive' },
+    { tab: 'mission', label: 'Mission' },
+    { sec: 'Mission: fall into Gargantua' },
+    { type: 'select', label: 'Scenario', options: Object.keys(SCEN), names: (k) => SCEN[k].name, get: () => MIS.sc, set: (v) => { MIS.sc = v; } },
+    { type: 'select', label: 'Attitude (X)', options: LOCKS, names: lockName, get: () => MIS.lock, set: (v) => { MIS.lock = v; } },
+    { type: 'mission' },
+    { type: 'check', label: 'Relay view and spacetime diagram (M)', get: () => REL.on, set: (v) => { REL.on = v; } },
+    { type: 'buttons', defs: [['V', 'GX-01 vessel', cycleShipView]] },
+    { type: 'note', text: 'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT). The thick disk layer near the vessel is also exaggerated.' },
+    { tab: 'camera', label: 'Camera' },
+    { type: 'buttons', defs: [['1', 'Film', () => setPreset('film')], ['2', 'Edge-on', () => setPreset('edge')], ['3', 'Top-down', () => setPreset('top')],
+      ['4', 'Close approach', () => setPreset('close')], ['R', 'Reset', resetCamera]] },
+    { type: 'range', label: 'FOV (deg)', obj: CONFIG.camera, key: 'fov', min: 25, max: 100, step: 0.5 },
+    { type: 'check', label: 'Auto-orbit', obj: CONFIG.camera, key: 'autoOrbit' },
+    { type: 'check', label: 'Pause time (Space)', get: () => state.paused, set: (v) => { state.paused = v; } },
+    { sec: 'Photo' },
+    { type: 'buttons', defs: [['F', 'Photo mode', () => togglePhoto(true)], ['', 'Screenshot', () => { state.shot = true; }], ['', 'Fullscreen', toggleFullscreen]] },
+    { tab: 'disk', label: 'Disk' },
     { sec: 'Accretion disk' },
     { type: 'range', label: 'Inner radius (rs)', obj: CONFIG.disk, key: 'rIn', min: 1.6, max: 6, step: 0.05 },
     { type: 'range', label: 'Outer radius (rs)', obj: CONFIG.disk, key: 'rOut', min: 6, max: 20, step: 0.1 },
     { type: 'range', label: 'Brightness', obj: CONFIG.disk, key: 'brightness', min: 0, max: 3, step: 0.01 },
     { type: 'range', label: 'Turbulence', obj: CONFIG.disk, key: 'turbulence', min: 0, max: 1, step: 0.01 },
     { type: 'range', label: 'Rotation speed', obj: CONFIG.disk, key: 'speed', min: 0, max: 4, step: 0.01 },
+    { tab: 'physics', label: 'Physics' },
     { sec: 'Physics' },
     { type: 'check', label: 'Film mode (no Doppler)', obj: CONFIG.physics, key: 'film' },
     { type: 'check', label: 'Doppler beaming', obj: CONFIG.physics, key: 'doppler' },
     { type: 'check', label: 'Gravitational redshift', obj: CONFIG.physics, key: 'redshift' },
     { type: 'range', label: 'Spin (approx.)', obj: CONFIG.physics, key: 'spin', min: 0, max: 1, step: 0.01 },
+    { tab: 'graphics', label: 'Graphics' },
+    { sec: 'Quality' },
+    { type: 'select', label: 'Preset', options: ['low', 'medium', 'high', 'ultra'], get: () => CONFIG.quality, set: applyQuality },
+    { type: 'check', label: 'Adaptive resolution', obj: CONFIG, key: 'adaptive' },
     { sec: 'Post' },
     { type: 'range', label: 'Exposure', obj: CONFIG.post, key: 'exposure', min: 0.2, max: 3, step: 0.01 },
     { type: 'range', label: 'Bloom', obj: CONFIG.post, key: 'bloom', min: 0, max: 3, step: 0.01 },
     { type: 'range', label: 'Anamorphic streak', obj: CONFIG.post, key: 'streak', min: 0, max: 2, step: 0.01 },
     { type: 'range', label: 'Grain', obj: CONFIG.post, key: 'grain', min: 0, max: 1, step: 0.01 },
     { type: 'range', label: 'Stars', obj: CONFIG.sky, key: 'stars', min: 0, max: 3, step: 0.01 },
-    { sec: 'Camera' },
-    { type: 'range', label: 'FOV (deg)', obj: CONFIG.camera, key: 'fov', min: 25, max: 100, step: 0.5 },
-    { type: 'check', label: 'Auto-orbit', obj: CONFIG.camera, key: 'autoOrbit' },
-    { type: 'check', label: 'Pause time (Space)', get: () => state.paused, set: (v) => { state.paused = v; } },
-    { type: 'buttons' },
-    { sec: 'Mission: fall into Gargantua' },
-    { type: 'select', label: 'Scenario', options: Object.keys(SCEN), names: (k) => SCEN[k].name, get: () => MIS.sc, set: (v) => { MIS.sc = v; } },
-    { type: 'select', label: 'Attitude (X)', options: LOCKS, names: lockName, get: () => MIS.lock, set: (v) => { MIS.lock = v; } },
-    { type: 'mission' },
+    { type: 'readout' },
+    { tab: 'sound', label: 'Sound' },
     { type: 'check', label: 'Sound (U)', get: () => AUDIO.on, set: (v) => { if (v !== AUDIO.on) setSound(v); } },
-    { type: 'check', label: 'Relay view and spacetime diagram (M)', get: () => REL.on, set: (v) => { REL.on = v; } },
-    { type: 'note', text: 'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT). The thick disk layer near the vessel is also exaggerated.' },
+    { type: 'note', text: 'All sounds are synthesized. Space carries no sound: cabin, thruster and impact sounds travel through the hull; the disk roar is distilled. Crossing the horizon makes no sound.' },
+    { tab: 'more', label: 'More' },
+    { type: 'keys' },
+    { type: 'lang' },
   ];
   const syncers = [];
+  let uiTabId = 'mission';
+  try { uiTabId = localStorage.getItem('gargantua.panelTab') || uiTabId; } catch (e) { /* abaikan */ }
+  function uiTab(id) {                                           // seperti labTab() Copper: tab aktif diingat
+    uiTabId = id; try { localStorage.setItem('gargantua.panelTab', id); } catch (e) { /* abaikan */ }
+    $('#uiBody').querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
+    $('#uiBody').querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('on', p.dataset.pane === id));
+  }
   function buildUI() {
-    const body = $('#uiBody');
+    const root = $('#uiBody'), tabs = document.createElement('div'); tabs.id = 'uiTabs'; root.appendChild(tabs);
+    let body = root;
     for (const c of UI) {
+      if (c.tab) {
+        const b = document.createElement('button'); b.type = 'button'; b.dataset.tab = c.tab; b.textContent = txt(c.label);
+        b.addEventListener('click', () => { uiTab(c.tab); b.blur(); }); tabs.appendChild(b);
+        body = document.createElement('div'); body.className = 'pane'; body.dataset.pane = c.tab; root.appendChild(body); continue;
+      }
       if (c.sec) { const d = document.createElement('div'); d.className = 'sec'; d.textContent = txt(c.sec); body.appendChild(d); continue; }
       const get = c.get || (() => c.obj[c.key]);
       const set = c.set || ((v) => { c.obj[c.key] = v; });
@@ -2555,12 +2596,7 @@ function main() {
         sel.addEventListener('change', () => { set(sel.value); sel.blur(); });
         row.append(lab, sel); body.appendChild(row); syncers.push(sync);
       } else if (c.type === 'buttons') {
-        const box = document.createElement('div'); box.className = 'btns';
-        const defs = [['1', 'Film', () => setPreset('film')], ['2', 'Edge-on', () => setPreset('edge')],
-                      ['3', 'Top-down', () => setPreset('top')], ['4', 'Close approach', () => setPreset('close')],
-                      ['R', 'Reset', resetCamera], ['F', 'Photo mode', () => togglePhoto(true)],
-                      ['', 'Screenshot', () => { state.shot = true; }], ['', 'Fullscreen', toggleFullscreen],
-                      ['V', 'GX-01 vessel', cycleShipView]];
+        const box = document.createElement('div'), defs = c.defs; box.className = 'btns';
         for (const [k, t, fn] of defs) {
           const b = document.createElement('button'); b.innerHTML = `${k ? `<kbd>${k}</kbd>` : ''}${txt(t)}`;
           b.addEventListener('click', () => { fn(); b.blur(); }); box.appendChild(b);
@@ -2573,24 +2609,29 @@ function main() {
           const b = document.createElement('button'); b.textContent = txt(t); b.addEventListener('click', () => { fn(); b.blur(); }); box.appendChild(b);
         }
         body.appendChild(box);
+      } else if (c.type === 'readout') {
+        const ro = document.createElement('div'); ro.id = 'readout';
+        ro.innerHTML = `${txt('FPS')}<b id="rFps">-</b>${txt('Resolution')}<b id="rRes">-</b>${txt('Max steps')}<b id="rSteps">-</b>${txt('Distance')}<b id="rDist">-</b>${txt('Buffer')}<b id="rFmt">-</b>`;
+        body.appendChild(ro);
+      } else if (c.type === 'keys') {
+        const keys = document.createElement('div'); keys.className = 'keys';
+        keys.textContent = txt('Space pause · Q quality · P screen effects · U sound · F photo · V vessel · R reset · H hide UI · ` panel · ? help');
+        body.appendChild(keys);
+      } else if (c.type === 'lang') {
+        const lr = document.createElement('div'); lr.className = 'sec'; lr.textContent = txt('Language'); body.appendChild(lr);
+        const lb = document.createElement('div'); lb.className = 'btns';
+        for (const [lc, name] of LANGS) {                            // pilih bahasa: bangun ulang panel (tab tetap)
+          const b = document.createElement('button'); b.textContent = name; if (lc === LANG) b.classList.add('on');
+          b.addEventListener('click', () => { LANG = lc; try { localStorage.setItem('lazarus.lang', lc); } catch (e) { /* abaikan */ } applyStaticLang(); root.innerHTML = ''; syncers.length = 0; buildUI(); });
+          lb.appendChild(b);
+        }
+        body.appendChild(lb);
       } else if (c.type === 'note') {
         const d = document.createElement('div'); d.className = 'keys'; d.textContent = txt(c.text); body.appendChild(d);
       }
     }
-    const ro = document.createElement('div'); ro.id = 'readout';
-    ro.innerHTML = `${txt('FPS')}<b id="rFps">-</b>${txt('Resolution')}<b id="rRes">-</b>${txt('Max steps')}<b id="rSteps">-</b>${txt('Distance')}<b id="rDist">-</b>${txt('Buffer')}<b id="rFmt">-</b>`;
-    body.appendChild(ro);
-    const keys = document.createElement('div'); keys.className = 'keys';
-    keys.textContent = txt('Space pause · Q quality · P screen effects · U sound · F photo · V vessel · R reset · H hide UI · ` panel · ? help');
-    body.appendChild(keys);
-    const lr = document.createElement('div'); lr.className = 'sec'; lr.textContent = txt('Language'); body.appendChild(lr);
-    const lb = document.createElement('div'); lb.className = 'btns';
-    for (const [c, name] of LANGS) {                                 // pilih bahasa: bangun ulang panel
-      const b = document.createElement('button'); b.textContent = name; if (c === LANG) b.classList.add('on');
-      b.addEventListener('click', () => { LANG = c; try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ } applyStaticLang(); body.innerHTML = ''; syncers.length = 0; buildUI(); });
-      lb.appendChild(b);
-    }
-    body.appendChild(lb);
+    if (!root.querySelector(`[data-pane="${uiTabId}"]`)) uiTabId = 'mission';
+    uiTab(uiTabId);
     syncUI();
   }
   $('#uiHeader').addEventListener('click', () => $('#ui').classList.toggle('collapsed'));

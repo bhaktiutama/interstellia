@@ -488,5 +488,16 @@ async def kelompok7(pg):
     await pg.keyboard.press('KeyU')
     a2 = await pg.evaluate("() => ({ on: window.__gargantua.AUDIO.on, ls: localStorage.getItem('gargantua.sound'), panel: [...document.querySelectorAll('#uiBody label')].some((l) => l.textContent.includes('Suara (U)')) })")
     cek('suara: AudioContext dibuat setelah tombol, U bisu lalu nyala (tersimpan), pilihan di panel', a0['ctx'] and a0['on'] and not a1['on'] and a1['ls'] == '0' and a2['on'] and a2['ls'] == '1' and a2['panel'], f"{a0} {a1} {a2}")
+    # --- panel bertab (seperti Copper) ---
+    t = await pg.evaluate('''() => { const root = document.getElementById('uiBody'), tabs = [...root.querySelectorAll('#uiTabs [data-tab]')];
+      const n = root.querySelectorAll('input, select, button').length - tabs.length;
+      tabs.find((b) => b.dataset.tab === 'disk').click();
+      const vis = [...root.querySelectorAll('[data-pane]')].filter((p) => getComputedStyle(p).display !== 'none').map((p) => p.dataset.pane);
+      [...root.querySelectorAll('.btns button')].find((b) => b.textContent === 'English').click();
+      const after = document.getElementById('uiBody').querySelector('#uiTabs .on').dataset.tab, lbl = document.getElementById('uiBody').querySelector('#uiTabs .on').textContent;
+      [...document.querySelectorAll('#uiBody .btns button')].find((b) => b.textContent === 'Bahasa Indonesia').click();
+      return { tabs: tabs.map((b) => b.textContent), n, vis, after, lbl, ls: localStorage.getItem('gargantua.panelTab') }; }''')
+    cek('panel bertab: 7 tab, hanya satu pane tampil, tab diingat setelah ganti bahasa, semua kontrol tetap ada',
+        len(t['tabs']) == 7 and t['vis'] == ['disk'] and t['after'] == 'disk' and t['lbl'] == 'Disk' and t['ls'] == 'disk' and t['n'] == 38, str(t))
 
 asyncio.run(main())
