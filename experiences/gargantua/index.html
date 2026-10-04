@@ -79,10 +79,12 @@
   body.photo #dash { display: none; }
   #mend { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,0.72); z-index: 12; }
   #mend[hidden] { display: none; }
-  #mend .card { width: min(560px, calc(100vw - 32px)); padding: 16px; background: var(--panel-bg); border: 1px solid var(--panel-border);
+  #mend .card { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; background: var(--panel-bg); border: 1px solid var(--panel-border);
     border-radius: 10px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
   #mend .hh { color: var(--accent); letter-spacing: .12em; text-transform: uppercase; font-size: 11px; margin-bottom: 8px; }
   #mend p { margin: 6px 0; color: var(--text); font-size: 11.5px; line-height: 1.5; }
+  #tess { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 11; background: #000; }
+  #tess[hidden] { display: none; }
   #mendRelay { display: block; width: 100%; height: 230px; margin: 8px 0; border-radius: 6px; }
   @media (max-width: 640px) {
     #ui { top: 12px; right: 12px; left: 12px; width: auto; max-height: 60vh; }
@@ -101,6 +103,7 @@
 <div id="toast" class="overlay-text"></div>
 <div id="help" hidden><div class="card"><div class="hh"><span id="helpTitle">Help</span><button type="button" id="helpClose">Close (?)</button></div><table id="helpRows"></table></div></div>
 <canvas id="dash" hidden></canvas>
+<canvas id="tess" hidden></canvas>
 <div id="mend" hidden><div class="card"><div class="hh"><span id="mendTitle"></span></div><div id="mendBody"></div><canvas id="mendRelay"></canvas>
   <div class="btns"><button type="button" id="mendAgain">Fly again</button><button type="button" id="mendExit">Exit mission</button></div></div></div>
 <pre id="err" hidden></pre>
@@ -842,8 +845,8 @@ const ID = {
   'v local fall frame': 'v kerangka jatuh',
   'v vs static': 'v thd diam',
   'vs static': 'thd pengamat diam',
-  'Mission keys: W/S A/D R/F thrust, Shift main engine, drag orbits the chase camera around the vessel (double-click resets; in the cockpit drag turns the nose), right-drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, E flare, M relay view and spacetime diagram, Z time, V view, Esc ends': 'Tombol misi: W/S A/D R/F dorong, Shift mesin utama, seret memutar kamera luar mengitari wahana (klik ganda = kembali; di kokpit seret memutar hidung), seret kanan memutar hidung, X sikap (pusat, mendatar, lintasan, bebas), O autopilot susur, E suar, M pandangan relai dan diagram ruang-waktu, Z waktu, V tampilan, Esc mengakhiri',
-  'Start a mission from the panel (`): 9 ways to fall in, two of them skimming the disk': 'Mulai misi dari panel (`): 9 cara jatuh, dua di antaranya menyusur piringan',
+  'Mission keys: W/S A/D R/F thrust, Shift main engine, drag orbits the chase camera around the vessel (double-click resets; in the cockpit drag turns the nose), right-drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, E flare, M relay view and spacetime diagram, Z time, V view, Esc ends; tesseract scenario: W/S angle, A/D plane, Enter locks the aim': 'Tombol misi: W/S A/D R/F dorong, Shift mesin utama, seret memutar kamera luar mengitari wahana (klik ganda = kembali; di kokpit seret memutar hidung), seret kanan memutar hidung, X sikap (pusat, mendatar, lintasan, bebas), O autopilot susur, E suar, M pandangan relai dan diagram ruang-waktu, Z waktu, V tampilan, Esc mengakhiri; skenario tesseract: W/S sudut, A/D bidang, Enter mengunci bidikan',
+  'Start a mission from the panel (`): 10 ways to fall in, two of them skimming the disk, one aiming for the fictional tesseract': 'Mulai misi dari panel (`): 10 cara jatuh, dua di antaranya menyusur piringan, satu membidik tesseract fiksi',
   'Mission': 'Misi', 'In the mission': 'Dalam misi',
   'GX-01 vessel': 'Wahana GX-01', 'Vessel GX-01: chase camera (V cockpit, Esc exit)': 'Wahana GX-01: kamera luar (V kokpit, Esc keluar)',
   'Vessel GX-01: cockpit (V chase camera, Esc exit)': 'Wahana GX-01: kokpit (V kamera luar, Esc keluar)', 'Vessel GX-01: off': 'Wahana GX-01: mati',
@@ -916,6 +919,32 @@ const ID = {
   'Relay messages still reached the vessel inside the horizon: the last one received was sent at relay clock {c}.': 'Pesan relai tetap sampai ke wahana di dalam horizon: pesan terakhir yang diterima dikirim pada jam relai {c}.',
   'A flare fired outward inside the horizon still fell to r = 0.': 'Suar yang ditembakkan keluar dari dalam horizon tetap jatuh ke r = 0.',
   'Outside the horizon every pulse reaches the relay eventually: {n} pulses, the last one at relay clock {c}.': 'Di luar horizon setiap pulsa akhirnya tiba di relai: {n} pulsa, yang terakhir pada jam relai {c}.',
+  '4D hypercube: 16 corners, 32 edges, 24 square faces, 8 cubic cells, turning in the xw, yw and zw planes': 'Hiperkubus 4D: 16 titik sudut, 32 rusuk, 24 sisi persegi, 8 sel kubus, berputar di bidang xw, yw, dan zw',
+  'Aim': 'Bidikan',
+  'Aim for the tesseract (fiction)': 'Bidik tesseract (fiksi)',
+  'Aim locked: past the point of no return, engines locked. The vessel follows the predicted path.': 'Bidikan dikunci: lewat titik tanpa kembali, mesin dikunci. Wahana mengikuti lintasan prakiraan.',
+  'Aim: W/S angle d (Shift coarse) · A/D orbit plane · Enter lock and go · drag = orbit camera · V view · M relay · Esc end': 'Bidik: W/S sudut d (Shift kasar) · A/D bidang orbit · Enter kunci dan berangkat · seret = putar kamera · V tampilan · M relai · Esc akhiri',
+  'Aim: d = {d} degrees (critical 24.62), L / Lcrit = 1 - {q}, plane {p} degrees': 'Bidikan: d = {d} derajat (kritis 24,62), L / Lkrit = 1 - {q}, bidang {p} derajat',
+  'Entered the tesseract (fiction)': 'Masuk tesseract (fiksi)',
+  'Esc ends · the summary follows': 'Esc mengakhiri · ringkasan menyusul',
+  'Fiction / speculation: real physics knows no tesseract inside a black hole.': 'Fiksi / spekulatif: fisika nyata tidak mengenal tesseract di dalam lubang hitam.',
+  'Fiction / speculation: real physics knows no tesseract inside a black hole. Everything up to the gate (fall, horizon, whirl, capture angle) follows Schwarzschild physics.': 'Fiksi / spekulatif: fisika nyata tidak mengenal tesseract di dalam lubang hitam. Semua sampai gerbang (jatuh, horizon, putaran, sudut tangkap) mengikuti fisika Schwarzschild.',
+  'Gate': 'Gerbang',
+  'Lock aim and go (Enter)': 'Kunci bidikan dan berangkat (Enter)',
+  'Missed the tesseract gate by {e} degrees. The path continues to the singularity.': 'Meleset dari gerbang tesseract {e} derajat. Lintasan berlanjut ke singularitas.',
+  'ON TARGET: gate error {e} degrees': 'TEPAT SASARAN: galat gerbang {e} derajat',
+  'Orbit map: plane of the path, log radius': 'Peta orbit: bidang lintasan, jari-jari logaritmik',
+  'Swept {s} degrees around the hole ({n} turns) before reaching r = 0.6 rs; gate error {e} degrees (tolerance 5).': 'Menyapu {s} derajat mengitari lubang ({n} putaran) sebelum mencapai r = 0,6 rs; galat gerbang {e} derajat (toleransi 5).',
+  'TESSERACT (fiction)': 'TESSERACT (fiksi)',
+  'Time is frozen at 22 rs while you aim. W/S angle d from the radial (closer to the critical 24.62 degrees = more turns around 2 rs), A/D orbit plane, Shift coarse, Enter locks and goes. Find the fictional gate inside the horizon (5 degrees) without crossing the disk.': 'Waktu dibekukan di 22 rs selama membidik. W/S sudut d dari arah radial (makin dekat ke kritis 24,62 derajat = makin banyak putaran di sekitar 2 rs), A/D bidang orbit, Shift kasar, Enter kunci dan berangkat. Temukan gerbang fiksi di dalam horizon (5 derajat) tanpa menembus piringan.',
+  'crosses the disk at r = {r} rs': 'menembus piringan di r = {r} rs',
+  'escapes: no capture': 'lolos: tidak tertangkap',
+  'gate': 'gerbang',
+  'gate missed by {e} degrees ({n} turns)': 'gerbang meleset {e} derajat ({n} putaran)',
+  'gate off the plane {o} degrees': 'gerbang di luar bidang {o} derajat',
+  'plane': 'bidang',
+  'tesseract gate (fiction)': 'gerbang tesseract (fiksi)',
+  'tesseract gate in': 'gerbang tesseract dalam',
   'Disk light': 'Cahaya piringan', 'View': 'Tampilan', 'Cockpit': 'Kokpit', 'Chase': 'Kamera luar', 'Vessel': 'Wahana',
 };
 const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
@@ -928,8 +957,8 @@ function applyStaticLang() {
     [txt('Drag / wheel / pinch'), txt('Orbit and zoom the camera')], ['1 - 4', txt('Camera presets: film, edge-on, top-down, close approach')],
     ['Space', txt('Pause / resume time')], ['Q', txt('Quality preset: Ultra, High, Medium, Low')],
     ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')], ['F', txt('Photo mode: UI hidden, Enter saves PNG, F or Esc exits')],
-    ['V · Esc', txt('Vessel view: GX-01 chase camera / cockpit (Esc exits)')], [txt('Mission'), txt('Start a mission from the panel (`): 9 ways to fall in, two of them skimming the disk')],
-    [txt('In the mission'), txt('Mission keys: W/S A/D R/F thrust, Shift main engine, drag orbits the chase camera around the vessel (double-click resets; in the cockpit drag turns the nose), right-drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, E flare, M relay view and spacetime diagram, Z time, V view, Esc ends')], ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
+    ['V · Esc', txt('Vessel view: GX-01 chase camera / cockpit (Esc exits)')], [txt('Mission'), txt('Start a mission from the panel (`): 10 ways to fall in, two of them skimming the disk, one aiming for the fictional tesseract')],
+    [txt('In the mission'), txt('Mission keys: W/S A/D R/F thrust, Shift main engine, drag orbits the chase camera around the vessel (double-click resets; in the cockpit drag turns the nose), right-drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, E flare, M relay view and spacetime diagram, Z time, V view, Esc ends; tesseract scenario: W/S angle, A/D plane, Enter locks the aim')], ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
   $('#mendAgain').textContent = txt('Fly again'); $('#mendExit').textContent = txt('Exit mission');
   const m = $('#menuLink'); if (m) m.href = `../../index.html?lang=${LANG}`;
@@ -1227,6 +1256,8 @@ function main() {
                 info: 'Angular momentum just above critical: slingshots out again. Nose points along the motion: brake with S before 4 rs to fall in. Braking later leaves a bound orbit that cuts through the disk.' },
     unstable: { name: 'Unstable orbit at 2.4 rs', circ: 2.4, inc: 90, psi0: 90, dv: 0.03, lock: 'level',
                 info: 'Circular orbit inside the ISCO (3 rs): no stable orbit exists here. A tiny nudge starts the plunge; thrust can delay it.' },
+    tesseract: { name: 'Aim for the tesseract (fiction)', aim: true, dv: 0, lock: 'level',
+                info: 'Time is frozen at 22 rs while you aim. W/S angle d from the radial (closer to the critical 24.62 degrees = more turns around 2 rs), A/D orbit plane, Shift coarse, Enter locks and goes. Find the fictional gate inside the horizon (5 degrees) without crossing the disk.' },
   };
   const WARPS = [{ k: 1, name: 'Auto' }, { k: 4, name: 'Auto x4' }, { k: 16, name: 'Auto x16' }, { k: 0.25, name: 'Slow x0.25' }];
   // X: hidung ke pusat / hidung mendatar (pita langit) / searah lintasan, piringan di bawah (G3) / bebas
@@ -1311,6 +1342,8 @@ function main() {
     if (S.skim) {                                                // G3: mulai di 16 rs, 0,05 r di atas bidang piringan, orbit melingkar + turun
       const r0 = 16; MIS.ap.on = true;
       MIS.x = [r0, MIS.ap.h * r0, 0]; MIS.xd = apVel(MIS.x, MIS.ap);
+    } else if (S.aim) {                                          // G5: membidik dari 22 rs (diisi ulang oleh tesApply)
+      const s0 = tesInit({ delta: 1e-2, psi: 0 }); MIS.x = s0.x; MIS.xd = s0.xd;
     } else if (S.circ || S.L) {
       const i = (S.inc || 90) * Math.PI / 180, ps = (S.psi0 || 0) * Math.PI / 180;
       const en = [1, 0, 0], ep = [0, Math.sin(i), Math.cos(i)];
@@ -1324,7 +1357,10 @@ function main() {
       MIS.x = [0, r0, 0]; MIS.xd = [0, ur, 0];
     }
     Object.assign(MIS, { on: true, tau: 0, att: null, lock: S.lock || 'centre', dvUsed: 0, dvMax: S.dv, end: null, tauH: null, hist: [], pred: null, predT: 0, vMax: 0, fade: 0,
-      look: { yaw: 0, pitch: S.skim ? -0.12 : 0 }, gas: null, imps: [], hits: 0, glass: 0, shake: 0, clock: 0, hitAcc: 0, orb: { yaw: 0, pitch: 0 }, T: 0 });
+      look: { yaw: 0, pitch: S.skim ? -0.12 : 0 }, gas: null, imps: [], hits: 0, glass: 0, shake: 0, clock: 0, hitAcc: 0, orb: { yaw: 0, pitch: 0 }, T: 0,
+      tes: S.aim ? { aim: { delta: 1e-2, psi: 0 }, ref: null, locked: false, i: 0, gateDone: false, miss: null, cool: 0, dirty: false } : null });
+    tessStop();
+    if (MIS.tes) tesApply();
     relReset();
     misLockAtt();
     if (S.skim) {                                                // pandang sedikit ke arah lubang hitam (bayangan dan dinding cahaya di depan)
@@ -1333,11 +1369,12 @@ function main() {
     MIS.gas = gasRel();
     SHIP.on = true; state.tween = null;
     $('#mend').hidden = true; $('#dash').hidden = false;
-    misPredict(); toast(txt(S.info), 6);
+    if (!MIS.tes) misPredict();
+    toast(txt(S.info), MIS.tes ? 9 : 6);
     syncUI();
   }
   function stopMission() {
-    MIS.on = false; MIS.end = null; SHIP.on = false; MIS.keys.clear(); aeReset();
+    MIS.on = false; MIS.end = null; SHIP.on = false; MIS.keys.clear(); aeReset(); tessStop();
     $('#mend').hidden = true; $('#dash').hidden = true; syncUI();
   }
   function endMission(kind, extra = {}) {
@@ -1345,8 +1382,16 @@ function main() {
     MIS.end = { kind, tau: MIS.tau, r: Math.hypot(...MIS.x), ...extra };
     const s = (t) => fmtTau(t), E = MIS.end, lines = [];
     const title = { singularity: 'Torn apart by tides near the singularity', disk: 'Destroyed in the accretion disk', escape: 'Escaped: thrown back out',
-      glass: 'Canopy shattered by disk dust' }[kind];
+      glass: 'Canopy shattered by disk dust', tesseract: 'Entered the tesseract (fiction)' }[kind];
     lines.push(txt('Scenario') + ': ' + txt(SCEN[MIS.sc].name));
+    if (MIS.tes) {                                               // G5: bidikan dan hasil gerbang
+      const R = MIS.tes.ref, a = R.a;
+      lines.push(txt('Aim: d = {d} degrees (critical 24.62), L / Lcrit = 1 - {q}, plane {p} degrees').replace('{d}', fmtN(tesD(a.delta), 8))
+        .replace('{q}', a.delta.toExponential(2).replace('.', LANG === 'id' ? ',' : '.')).replace('{p}', fmtN(a.psi, 1)));
+      if (R.gate) lines.push(txt('Swept {s} degrees around the hole ({n} turns) before reaching r = 0.6 rs; gate error {e} degrees (tolerance 5).')
+        .replace('{s}', fmtN(R.gate.sweep, 0)).replace('{n}', fmtN(R.gate.sweep / 360, 2)).replace('{e}', fmtN(R.err, 1)));
+      if (kind === 'tesseract') lines.push(txt('Fiction / speculation: real physics knows no tesseract inside a black hole. Everything up to the gate (fall, horizon, whirl, capture angle) follows Schwarzschild physics.'));
+    }
     lines.push(txt('Proper time on board') + ': ' + s(E.tau));
     if (MIS.tauH !== null) {
       lines.push(txt('Crossed the event horizon at') + ' ' + s(MIS.tauH) + ' · ' + txt('horizon to end') + ': ' + s(E.tau - MIS.tauH));
@@ -1367,7 +1412,7 @@ function main() {
     lines.push(txt('Fastest speed in the local falling frame') + ': ' + fmtN(MIS.vMax, 3) + ' c · ' + txt('delta-v used') + ': ' + fmtN(MIS.dvUsed, 4) + ' c');
     $('#mendTitle').textContent = txt(title);
     $('#mendBody').innerHTML = lines.map((l) => `<p>${l}</p>`).join('');
-    $('#mend').hidden = false;
+    if (kind === 'tesseract') tessStart(); else $('#mend').hidden = false;   // G5: kartu muncul setelah adegan hiperkubus
   }
   const fmtN = (v, d) => (LANG === 'id' ? v.toFixed(d).replace('.', ',') : v.toFixed(d));
   function fmtTau(t) {                                          // waktu wajar (rs/c) -> h:mm:ss,s
@@ -1553,6 +1598,92 @@ function main() {
     REL.zoom += (relZoom(r) - REL.zoom) * (1 - Math.exp(-2 * dt));
     if (!MIS.end && tv - REL.rayTv > REL.zoom / 10) { REL.rays.push({ r, tv }); REL.rayTv = tv; if (REL.rays.length > 120) REL.rays.shift(); }
   }
+  /* G5: sudut masuk tesseract (fiksi). Mulai di 22 rs, 30 derajat di atas bidang piringan, E = 1 (datang dari jauh); waktu beku
+     selama membidik. Bidikan: d = sudut arah gerak dari arah radial ke dalam (pengamat diam setempat) dan psi = arah bidang orbit
+     (0 = ke utara, lewat atas kutub). L = r0 sin d / sqrt(r0 - 1); kritis L = 2 (orbit tak stabil 2 rs, d kritis 24,62 derajat).
+     Kendali lewat delta = 1 - L / Lkrit: W mendekat ke kritis = lebih banyak putaran di 2 rs (tiap faktor 10 sekitar 186 derajat).
+     Setelah Enter (titik tanpa kembali, mesin dikunci) wahana mengikuti lintasan acuan yang sama persis dengan prakiraan: langkah
+     RK4 alami disimpan, posisi di antara langkah = interpolasi Hermite. Alasan: di dekat orbit tak stabil selisih langkah kecil
+     tumbuh cepat, jadi integrasi ulang bisa berbeda jumlah putaran dari prakiraan. Gerbang fiksi di r 0,6 rs arah TES.gate. */
+  const TES = { r0: 22, lat: 30, rg: 0.6, tol: 5, psiG: 25, phiG: 200, gate: null, rh0: null, e1: null, e2: null, stride: 9 };
+  const tesTh = (psi) => { const p = psi * Math.PI / 180; return v3.add(v3.mul(TES.e1, Math.cos(p)), v3.mul(TES.e2, Math.sin(p))); };
+  {
+    const la = TES.lat * Math.PI / 180;
+    TES.rh0 = [Math.cos(la), Math.sin(la), 0]; TES.e1 = [-Math.sin(la), Math.cos(la), 0]; TES.e2 = v3.cross(TES.rh0, TES.e1);
+    const p = TES.phiG * Math.PI / 180; TES.gate = v3.norm(v3.add(v3.mul(TES.rh0, Math.cos(p)), v3.mul(tesTh(TES.psiG), Math.sin(p))));
+  }
+  const tesD = (delta) => Math.asin(Math.min(1, 2 * (1 - delta) * Math.sqrt(TES.r0 - 1) / TES.r0)) * 180 / Math.PI;
+  function tesInit(a) {
+    const r0 = TES.r0, L = 2 * (1 - a.delta), th = tesTh(a.psi), ur = -Math.sqrt(Math.max(1 - (1 - 1 / r0) * (1 + L * L / (r0 * r0)), 0));
+    return { x: v3.mul(TES.rh0, r0), xd: v3.add(v3.mul(TES.rh0, ur), v3.mul(th, L / r0)), L };
+  }
+  // lintasan acuan sampai akhir: P = [tau, T, x(3), xd(3), sapuan sudut di bidang orbit] per langkah
+  function tesRef(a) {
+    const s = tesInit(a), th = tesTh(a.psi), P = [], st = { x: s.x, xd: s.xd, tau: 0, T: 0 };
+    let gate = null, horizon = null, prevR = TES.r0, sweep = 0, prevA = 0;
+    const push = (q) => {
+      const ang = Math.atan2(v3.dot(q.x, th), v3.dot(q.x, TES.rh0)); let d = ang - prevA;
+      if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI;
+      sweep += d; prevA = ang; P.push(q.tau, q.T, q.x[0], q.x[1], q.x[2], q.xd[0], q.xd[1], q.xd[2], sweep);
+      const r = Math.hypot(...q.x);
+      if (!gate && r <= TES.rg && prevR > TES.rg) gate = { tau: q.tau, i: P.length / TES.stride - 1, dir: v3.norm(q.x), sweep: sweep * 180 / Math.PI };
+      prevR = r;
+    };
+    push(st); st.log = push; st.onHorizon = (t) => { horizon = t; };
+    let res = null; for (let k = 0; !res && k < 6000 && st.tau < 1500; k++) res = misAdvance(st, 0.5, 4000);
+    const n = P.length / TES.stride, nrm = v3.norm(v3.cross(TES.rh0, th));
+    const err = gate ? Math.acos(Math.max(-1, Math.min(1, v3.dot(gate.dir, TES.gate)))) * 180 / Math.PI : null;
+    return { a: { ...a }, P: new Float64Array(P), n, end: res ? res.kind : 'escape', rc: res && res.rc, tauEnd: st.tau, horizon, gate, err,
+      hit: err !== null && err <= TES.tol, out: Math.asin(Math.min(1, Math.abs(v3.dot(TES.gate, nrm)))) * 180 / Math.PI, th };
+  }
+  function tesState(R, i) { const P = R.P, o = i * TES.stride; return { tau: P[o], T: P[o + 1], x: [P[o + 2], P[o + 3], P[o + 4]], xd: [P[o + 5], P[o + 6], P[o + 7]] }; }
+  function tesApply() {                                          // bidikan berubah: keadaan awal + lintasan acuan + prakiraan
+    const s = tesInit(MIS.tes.aim); MIS.x = s.x; MIS.xd = s.xd;
+    MIS.tes.ref = tesRef(MIS.tes.aim); MIS.tes.dirty = false; tesPred();
+  }
+  function tesPred() {
+    const R = MIS.tes.ref, pts = [];
+    for (let i = MIS.tes.i, st = Math.max(1, Math.floor((R.n - MIS.tes.i) / 200)); i < R.n; i += st) pts.push([R.P[i * TES.stride], Math.hypot(R.P[i * TES.stride + 2], R.P[i * TES.stride + 3], R.P[i * TES.stride + 4])]);
+    MIS.pred = { kind: R.hit ? 'tesseract' : R.end, dTau: (R.hit ? R.gate.tau : R.tauEnd) - MIS.tau, horizon: R.horizon === null ? null : R.horizon - MIS.tau, pts };
+  }
+  // membidik (waktu beku): W/S sudut d (eksponensial mendekati / menjauhi kritis), A/D bidang, Shift kasar; dihitung ulang paling cepat tiap 0,08 s
+  function tesAim(dt) {
+    const K = MIS.keys, A = MIS.tes.aim, sh = K.has('ShiftLeft') || K.has('ShiftRight'), k = (sh ? 2.5 : 0.3) * dt;
+    const w = (K.has('KeyW') ? 1 : 0) - (K.has('KeyS') ? 1 : 0), a = (K.has('KeyD') ? 1 : 0) - (K.has('KeyA') ? 1 : 0);
+    if (w > 0) A.delta = A.delta > 0 ? (A.delta * Math.exp(-k) < 1e-12 ? -1e-12 : A.delta * Math.exp(-k)) : Math.max(-0.5, A.delta * Math.exp(k));
+    if (w < 0) A.delta = A.delta < 0 ? (A.delta * Math.exp(-k) > -1e-12 ? 1e-12 : A.delta * Math.exp(-k)) : Math.min(1, A.delta * Math.exp(k));
+    if (a) A.psi = ((A.psi + a * (sh ? 60 : 15) * dt) % 360 + 540) % 360 - 180;
+    if (w || a) MIS.tes.dirty = true;
+    MIS.tes.cool -= dt;
+    if (MIS.tes.dirty && MIS.tes.cool <= 0) { tesApply(); MIS.tes.cool = 0.08; }
+  }
+  function tesLaunch() {
+    if (!MIS.tes || MIS.tes.locked || MIS.end) return;
+    if (MIS.tes.dirty) tesApply();
+    MIS.tes.locked = true; MIS.tes.i = 0;
+    toast(txt('Aim locked: past the point of no return, engines locked. The vessel follows the predicted path.'), 4);
+  }
+  // terbang mengikuti lintasan acuan; kembali seperti misFly: null atau { kind }
+  function tesFollow(dtau, onHorizon) {
+    const T5 = MIS.tes, R = T5.ref, gateHit = R.hit && !T5.gateDone && MIS.tau + dtau >= R.gate.tau;
+    const tau = gateHit ? R.gate.tau : MIS.tau + dtau;            // frame yang melewati gerbang dipotong tepat di gerbang
+    while (T5.i + 1 < R.n && R.P[(T5.i + 1) * TES.stride] <= tau) { T5.i++; relLog(tesState(R, T5.i)); }
+    if (R.horizon !== null && MIS.tauH === null && tau >= R.horizon && onHorizon) onHorizon(R.horizon);
+    const set = (q) => { MIS.x = q.x; MIS.xd = q.xd; MIS.T = q.T; MIS.tau = q.tau; };
+    if (R.gate && !T5.gateDone && tau >= R.gate.tau) {
+      T5.gateDone = true;
+      if (R.hit) { T5.i = R.gate.i; set(tesState(R, T5.i)); return { kind: 'tesseract' }; }
+      T5.miss = R.err; toast(txt('Missed the tesseract gate by {e} degrees. The path continues to the singularity.').replace('{e}', fmtN(R.err, 1)), 5);
+    }
+    if (T5.i + 1 >= R.n || tau >= R.tauEnd) { set(tesState(R, R.n - 1)); return { kind: R.end === 'singularity' || R.end === 'disk' ? R.end : 'escape', rc: R.rc }; }
+    const a = tesState(R, T5.i), b = tesState(R, T5.i + 1), h = b.tau - a.tau, s = Math.max(0, Math.min(1, (tau - a.tau) / h));
+    const s2 = s * s, s3 = s2 * s, H = [2 * s3 - 3 * s2 + 1, s3 - 2 * s2 + s, -2 * s3 + 3 * s2, s3 - s2];   // Hermite kubik
+    const dH = [(6 * s2 - 6 * s) / h, 3 * s2 - 4 * s + 1, (-6 * s2 + 6 * s) / h, 3 * s2 - 2 * s];
+    const x = [0, 1, 2].map((j) => H[0] * a.x[j] + H[1] * h * a.xd[j] + H[2] * b.x[j] + H[3] * h * b.xd[j]);
+    const xd = [0, 1, 2].map((j) => dH[0] * a.x[j] + dH[1] * a.xd[j] + dH[2] * b.x[j] + dH[3] * b.xd[j]);
+    set({ x, xd, T: a.T + (b.T - a.T) * s, tau });
+    return null;
+  }
   // segitiga kaca kokpit (material 1) untuk titik tumbukan: titik, normal keluar, luas
   const GLASS = [];
   if (SHIP.data) {
@@ -1586,6 +1717,9 @@ function main() {
     const K = MIS.keys, A = MIS.att, ax = (a, b) => (K.has(a) ? 1 : 0) - (K.has(b) ? 1 : 0);
     const fw = ax('KeyW', 'KeyS'), rt = ax('KeyD', 'KeyA'), up = ax('KeyR', 'KeyF');
     MIS.thr = [fw, rt, up];
+    if (MIS.tes && !MIS.tes.locked) {                            // G5: membidik, waktu beku
+      MIS.thr = [0, 0, 0]; tesAim(dt); if (MIS.lock !== 'free') misLockAtt(); return 0;
+    }
     if (MIS.ap.on) {                                             // G3: autopilot susur: R/F tinggi sasaran, W/S laju turun
       MIS.thr = [fw, 0, up];
       const k = (K.has('ShiftLeft') || K.has('ShiftRight') ? 3 : 1) * dt;
@@ -1600,7 +1734,8 @@ function main() {
     let dTau = 0;
     if (!state.paused) {
       dTau = dt * misWarp() / MIS_T;
-      const res = misFly(dTau, (t) => { MIS.tauH = t; toast(txt('Event horizon crossed: nothing to feel here, but no way back. Every path now leads inward.'), 6); });
+      const onH = (t) => { MIS.tauH = t; toast(txt('Event horizon crossed: nothing to feel here, but no way back. Every path now leads inward.'), 6); };
+      const res = MIS.tes ? tesFollow(dTau, onH) : misFly(dTau, onH);
       const R = rainOf(MIS.x, MIS.xd); MIS.vMax = Math.max(MIS.vMax, Math.hypot(...R.v));
       const last = MIS.hist[MIS.hist.length - 1];
       if (!last || MIS.tau - last[0] > 0.002 * Math.max(1, MIS.tau) || Math.abs(Math.log(R.r / last[1])) > 0.03) MIS.hist.push([MIS.tau, R.r]);
@@ -1615,7 +1750,7 @@ function main() {
       if (MIS.glass >= 100) { endMission('glass'); return dTau; }
     }
     if (MIS.lock !== 'free') misLockAtt();
-    MIS.predT -= dt; if (MIS.predT <= 0) { MIS.predT = 0.4; misPredict(); }
+    MIS.predT -= dt; if (MIS.predT <= 0) { MIS.predT = 0.4; if (MIS.tes) tesPred(); else misPredict(); }
     return dTau;
   }
 
@@ -1719,6 +1854,7 @@ function main() {
   function predText(p) {
     if (!p) return '-';
     if (MIS.ap.on && p.kind === 'disk') return txt('autopilot holds height (without it: disk in') + ' ' + fmtTau(p.dTau) + ')';
+    if (p.kind === 'tesseract') return txt('tesseract gate in') + ' ' + fmtTau(p.dTau);
     if (p.kind === 'singularity') return txt('singularity in') + ' ' + fmtTau(p.dTau);
     if (p.kind === 'disk') return txt('hits the disk in') + ' ' + fmtTau(p.dTau);
     if (p.kind === 'escape') return txt('escapes (no capture)');
@@ -1766,7 +1902,7 @@ function main() {
       g.fillText(D.vStatic === null ? txt('no static observer here') : txt('v vs static') + ' ' + fmtN(D.vStatic, 3) + ' c', ox + 12, 80);
       g.fillText(txt('dr/dtau') + ' ' + fmtN(D.R.ur, 3) + ' c', ox + 12, 104);
       g.fillText('delta-v ' + fmtN(D.dvLeft, 4) + ' / ' + fmtN(MIS.dvMax, 3) + ' c', ox + 12, 134);
-      g.strokeStyle = dim; g.strokeRect(ox + 12, 158, W - 30, 14); g.fillStyle = amber; g.fillRect(ox + 13, 159, (W - 32) * D.dvLeft / MIS.dvMax, 12);
+      g.strokeStyle = dim; g.strokeRect(ox + 12, 158, W - 30, 14); g.fillStyle = amber; g.fillRect(ox + 13, 159, (W - 32) * D.dvLeft / (MIS.dvMax || 1), 12);
       const th = MIS.thr; g.fillStyle = th.some((v) => v) ? amber : dim;
       g.fillText(txt('thrust') + ' ' + ['W', 'S'][th[0] > 0 ? 0 : 1].repeat(Math.abs(th[0])) + ['D', 'A'][th[1] > 0 ? 0 : 1].repeat(Math.abs(th[1])) + ['R', 'F'][th[2] > 0 ? 0 : 1].repeat(Math.abs(th[2])), ox + 12, 182);
       g.fillStyle = MIS.lock !== 'free' ? amber : dim; g.fillText('X: ' + txt(lockName(MIS.lock)).slice(0, 30), ox + 12, 206);
@@ -1886,8 +2022,8 @@ function main() {
         [txt('Sky'), `${txt('ahead')} x${fmtN(D.ahead, 2)} · ${txt('behind')} x${fmtN(D.behind, 2)}`],
         [txt('Tidal 2 m'), `${D.tidal.toExponential(1)} g`], ['delta-v', `${fmtN(D.dvLeft, 4)} c`],
         [txt('Time'), `1 s = ${Math.round(D.warp).toLocaleString(LANG === 'id' ? 'id-ID' : 'en-US')} s (${txt(WARPS[MIS.warp].name)})`],
-        [txt('Disk'), diskRow(D)], [txt('Autopilot'), apRow()],
-        [txt('Canopy'), `${fmtN(MIS.glass, 0)}% ${txt('damage')} · ${MIS.hits} ${txt('hits')}`]];
+        ...(MIS.tes ? [[txt('Aim'), tesAimRow()], [txt('Gate'), tesOutcome(MIS.tes.ref)]]          // G5: baris bidikan menggantikan piringan/autopilot/kaca
+          : [[txt('Disk'), diskRow(D)], [txt('Autopilot'), apRow()], [txt('Canopy'), `${fmtN(MIS.glass, 0)}% ${txt('damage')} · ${MIS.hits} ${txt('hits')}`]])];
       const V = relView(), Mg = relMsg(), F = REL.flares[REL.flares.length - 1];   // G4
       rows.push([txt('Relay sees'), V.S ? `${fmtTau(V.S.tau)} · x${fmtRate(V.S.rate)}` : txt('waiting for the first pulse (light delay)')],
         [txt('From relay'), `${txt('relay clock')} ${fmtTauS(Mg.clock)} · x${fmtRate(Mg.rate)}`]);
@@ -1907,8 +2043,9 @@ function main() {
       g.fillStyle = MIS.on && i === 2 && misData().inside ? 'rgba(255,120,95,0.95)' : 'rgba(215,220,226,0.95)'; g.fillText(b, x0 + 130 * s, y, pw - 138 * s);
     });
     if (MIS.on && !MIS.end) {
-      const chase = SHIP.view === 'chase';
-      const hint = MIS.ap.on ? txt(chase ? 'Autopilot: R/F height · W/S descent · O off · drag = orbit camera · right-drag = look · X attitude · Z time · V view · E flare · M relay · Esc end'
+      const chase = SHIP.view === 'chase', aiming = MIS.tes && !MIS.tes.locked;
+      const hint = aiming ? txt('Aim: W/S angle d (Shift coarse) · A/D orbit plane · Enter lock and go · drag = orbit camera · V view · M relay · Esc end')
+        : MIS.ap.on ? txt(chase ? 'Autopilot: R/F height · W/S descent · O off · drag = orbit camera · right-drag = look · X attitude · Z time · V view · E flare · M relay · Esc end'
           : 'Autopilot: R/F height · W/S descent · O off · drag = look · X attitude · Z time · V view · E flare · M relay · Esc end')
         : txt(chase ? 'W/S A/D R/F thrust (Shift main) · drag = orbit camera · right-drag = nose · X attitude · Z time · V view · E flare · M relay · Esc end'
           : 'W/S A/D R/F thrust (Shift main) · drag = turn nose · X attitude · Z time · V view · E flare · M relay · Esc end');
@@ -1919,7 +2056,77 @@ function main() {
       // G4: jendela relai + diagram ruang-waktu di bawah HUD (M)
       const top = y0 + ph + 10 * s, rh = Math.min(380 * s, h - 44 * s - top), rw = Math.min(340 * s, w - 24 * s);
       if (REL.on && rh > 190 * s) drawRelay(g, x0, h - 44 * s - rh, rw, rh, s);
+      if (MIS.tes) {                                             // G5: peta orbit kanan bawah (besar saat membidik) + penanda gerbang
+        let mw = Math.min((aiming ? 400 : 290) * s, w * (aiming ? 0.42 : 0.32)), right = w - 12 * s;
+        const ui = $('#ui'), ur = ui.getBoundingClientRect();     // panel kontrol terbuka: peta di kiri panel, tidak menimpa jendela relai
+        if (!ui.classList.contains('collapsed') && !ui.classList.contains('hidden') && ur.bottom * s > h - 44 * s - mw) {
+          right = ur.left * s - 12 * s; mw = Math.min(mw, right - (REL.on ? x0 + Math.min(340 * s, w - 24 * s) + 12 * s : x0));
+        }
+        const mh = Math.min(mw * 1.08, h - 100 * s);
+        if (mh > 150 * s && mw > 200 * s) drawTesMap(g, right - mw, h - 44 * s - mh, mw, mh, s);
+        drawGateMark(g, w, h, s);
+      }
     }
+  }
+  /* G5: peta orbit di bidang lintasan, jari-jari logaritmik (sudut tetap benar): r -> ln(1 + r) / ln(25). Lingkaran horizon 1 rs,
+     foton 1,5 rs, orbit tak stabil 2 rs, ISCO 3 rs; piringan = garis potong bidang piringan dengan bidang orbit (merah, rIn..rOut);
+     gerbang = proyeksi arahnya ke bidang (jarak keluar bidang ditulis). */
+  const tesAimRow = () => { const a = MIS.tes.aim; return `d ${fmtN(tesD(a.delta), 7)}° · L/Lkrit 1 ${a.delta >= 0 ? '-' : '+'} ${Math.abs(a.delta).toExponential(1).replace('.', LANG === 'id' ? ',' : '.')} · ${txt('plane')} ${fmtN(a.psi, 1)}°`; };
+  function tesOutcome(R) {
+    if (!R) return '-';
+    if (R.hit) return txt('ON TARGET: gate error {e} degrees').replace('{e}', fmtN(R.err, 1));
+    if (R.gate) return txt('gate missed by {e} degrees ({n} turns)').replace('{e}', fmtN(R.err, 1)).replace('{n}', fmtN(R.gate.sweep / 360, 2));
+    if (R.end === 'disk') return txt('crosses the disk at r = {r} rs').replace('{r}', fmtN(R.rc, 2));
+    return txt('escapes: no capture');
+  }
+  function drawTesMap(g, x, y, w, h, s) {
+    const R = MIS.tes.ref, ex = TES.rh0, ey = R.th, mono = 'ui-monospace, Menlo, Consolas, monospace';
+    const top = 52 * s, cx = x + w / 2, cy = y + top + (h - top) / 2, Rp = Math.min(w, h - top) / 2 - 6 * s, f = (r) => Rp * Math.log(1 + r) / Math.log(25);
+    const P = (v) => { const a = Math.atan2(v3.dot(v, ey), v3.dot(v, ex)), rr = f(Math.hypot(...v)); return [cx + rr * Math.cos(a), cy - rr * Math.sin(a)]; };
+    g.save();
+    g.fillStyle = 'rgba(6,8,11,0.66)'; g.fillRect(x, y, w, h); g.strokeStyle = 'rgba(240,164,90,0.35)'; g.lineWidth = s; g.strokeRect(x, y, w, h);
+    g.textBaseline = 'middle'; g.font = `bold ${11 * s}px ${mono}`; g.fillStyle = 'rgba(240,164,90,0.95)';
+    g.fillText(txt('Orbit map: plane of the path, log radius'), x + 8 * s, y + 11 * s, w - 16 * s);
+    g.font = `${10 * s}px ${mono}`; g.fillStyle = 'rgba(215,220,226,0.95)'; g.fillText(tesAimRow(), x + 8 * s, y + 25 * s, w - 16 * s);
+    g.fillStyle = R.hit ? 'rgba(110,230,255,1)' : 'rgba(255,150,120,0.95)';
+    g.fillText(tesOutcome(R) + ' · ' + txt('gate off the plane {o} degrees').replace('{o}', fmtN(R.out, 1)), x + 8 * s, y + 39 * s, w - 16 * s);
+    for (const [r, c, dash] of [[1, 'rgba(255,100,80,0.95)', 0], [1.5, 'rgba(150,160,170,0.6)', 3], [2, 'rgba(240,164,90,0.8)', 5], [3, 'rgba(150,160,170,0.45)', 2], [22, 'rgba(120,220,170,0.35)', 2]]) {
+      g.strokeStyle = c; g.setLineDash(dash ? [dash * s, dash * s] : []); g.beginPath(); g.arc(cx, cy, f(r), 0, 7); g.stroke();
+    }
+    g.setLineDash([]); g.fillStyle = 'rgba(0,0,0,0.9)'; g.beginPath(); g.arc(cx, cy, f(1), 0, 7); g.fill();
+    const d = CONFIG.disk, u = v3.cross(v3.cross(ex, ey), [0, 1, 0]);      // garis potong bidang piringan
+    g.strokeStyle = 'rgba(255,70,50,0.75)'; g.lineWidth = 5 * s;
+    if (Math.hypot(...u) < 1e-3) { g.globalAlpha = 0.25; g.lineWidth = f(d.rOut) - f(d.rIn); g.beginPath(); g.arc(cx, cy, (f(d.rOut) + f(d.rIn)) / 2, 0, 7); g.stroke(); g.globalAlpha = 1; }
+    else for (const k of [1, -1]) { const un = v3.mul(v3.norm(u), k), a = P(v3.mul(un, d.rIn)), b = P(v3.mul(un, d.rOut)); g.beginPath(); g.moveTo(...a); g.lineTo(...b); g.stroke(); }
+    g.lineWidth = 1.6 * s;                                       // lintasan (jingga di luar horizon, merah di dalam)
+    const st = Math.max(1, Math.floor(R.n / 900));
+    for (const inside of [false, true]) {
+      g.strokeStyle = inside ? 'rgba(255,90,70,0.95)' : 'rgba(240,164,90,0.95)'; g.beginPath(); let pen = false;
+      for (let i = 0; i < R.n; i += st) {
+        const o = i * TES.stride, v = [R.P[o + 2], R.P[o + 3], R.P[o + 4]], inn = Math.hypot(...v) <= 1;
+        if (inn !== inside) { pen = false; continue; }
+        const q = P(v); if (pen) g.lineTo(...q); else { g.moveTo(...q); pen = true; }
+      }
+      g.stroke();
+    }
+    const gp = P(v3.mul(TES.gate, TES.rg)), gs = 6 * s;          // gerbang (fiksi)
+    g.strokeStyle = 'rgba(110,230,255,1)'; g.lineWidth = 1.6 * s; g.beginPath(); g.moveTo(gp[0], gp[1] - gs); g.lineTo(gp[0] + gs, gp[1]); g.lineTo(gp[0], gp[1] + gs); g.lineTo(gp[0] - gs, gp[1]); g.closePath(); g.stroke();
+    if (R.end === 'disk') { const o = (R.n - 1) * TES.stride, q = P([R.P[o + 2], R.P[o + 3], R.P[o + 4]]); g.strokeStyle = 'rgba(255,60,40,1)'; g.beginPath(); g.moveTo(q[0] - gs, q[1] - gs); g.lineTo(q[0] + gs, q[1] + gs); g.moveTo(q[0] + gs, q[1] - gs); g.lineTo(q[0] - gs, q[1] + gs); g.stroke(); }
+    const sp = P(MIS.x); g.fillStyle = 'rgba(255,255,255,1)'; g.beginPath(); g.arc(sp[0], sp[1], 3.5 * s, 0, 7); g.fill();
+    g.font = `${9.5 * s}px ${mono}`; g.fillStyle = 'rgba(110,230,255,1)'; g.fillText(txt('gate'), gp[0] + 8 * s, gp[1]);
+    g.fillStyle = 'rgba(240,164,90,0.9)'; g.fillText('2 rs', cx + f(2) * 0.72, cy + f(2) * 0.72);
+    g.restore();
+  }
+  // penanda gerbang di layar: proyeksi garis lurus dari wahana (pembelokan cahaya diabaikan; gerbang fiksi)
+  function drawGateMark(g, w, h, s) {
+    const b = viewBasis(), th = Math.tan((b.fov || cam.fov) * Math.PI / 360), dv = v3.sub(v3.mul(TES.gate, TES.rg), MIS.x), cf = v3.dot(dv, b.f);
+    if (cf <= 1e-6) return;
+    const px = w / 2 + v3.dot(dv, b.r) / cf / th * h / 2, py = h / 2 - v3.dot(dv, b.u) / cf / th * h / 2, k = 9 * s;
+    if (px < -k || px > w + k || py < -k || py > h + k) return;
+    g.save(); g.strokeStyle = 'rgba(110,230,255,0.9)'; g.lineWidth = 1.4 * s;
+    g.beginPath(); g.moveTo(px, py - k); g.lineTo(px + k, py); g.lineTo(px, py + k); g.lineTo(px - k, py); g.closePath(); g.stroke();
+    g.font = `${10 * s}px ui-monospace, Menlo, Consolas, monospace`; g.fillStyle = 'rgba(110,230,255,0.9)'; g.textBaseline = 'middle';
+    g.fillText(txt('tesseract gate (fiction)'), px + k + 4 * s, py); g.restore();
   }
   /* G4: jendela relai. Atas: jam wahana seperti terlihat relai (warna dan terang ikut faktor frekuensi), pulsa, jam relai.
      Bawah (atau kanan bila lebar): diagram ruang-waktu Eddington-Finkelstein, r mendatar, waktu tv ke atas, skala sama
@@ -1965,6 +2172,59 @@ function main() {
     lines.forEach(([c, t], i) => { g.fillStyle = c; g.fillText(t, x + 8 * s, y + (56 + 13 * i) * s, vw - 14 * s); });
     if (side) drawDiagram(g, x + vw, y, w - vw, h, s, V); else drawDiagram(g, x, y + vh, w, h - vh, s, V);
     g.restore();
+  }
+  /* G5: adegan tesseract (fiksi, desain sendiri: bukan ruangan atau rak dari film). Hiperkubus 4D (16 titik sudut, 32 rusuk)
+     diputar di bidang xw, yw, zw, diproyeksikan perspektif 4D -> 3D -> layar, garis bercahaya (komposit 'lighter'); kisi 26
+     hiperkubus redup di sekitarnya. Kilat putih saat masuk, kartu akhir muncul setelah 10 s. */
+  const TESV = { on: false, t: 0, card: false, cv: $('#tess') };
+  const HC = { v: [], e: [] };
+  for (let i = 0; i < 16; i++) HC.v.push([0, 1, 2, 3].map((b) => (i >> b & 1 ? 1 : -1)));
+  for (let i = 0; i < 16; i++) for (let b = 0; b < 4; b++) { const j = i ^ (1 << b); if (j > i) HC.e.push([i, j]); }
+  function tessStart() { Object.assign(TESV, { on: true, t: 0, card: false }); TESV.cv.hidden = false; }
+  function tessStop() { TESV.on = false; TESV.cv.hidden = true; }
+  function drawTess(dt) {
+    if (!TESV.on) return;
+    TESV.t += dt; const t = TESV.t, cv = TESV.cv;
+    if (t > 10 && !TESV.card) { TESV.card = true; $('#mend').hidden = false; }
+    const dpr = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr), s = dpr;
+    if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+    const g = cv.getContext('2d'), mono = 'ui-monospace, Menlo, Consolas, monospace';
+    g.globalCompositeOperation = 'source-over'; g.shadowBlur = 0;
+    const bg = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, Math.max(w, h) * 0.7);
+    bg.addColorStop(0, '#0d0a14'); bg.addColorStop(1, '#000'); g.fillStyle = bg; g.fillRect(0, 0, w, h);
+    const rot = (p, a, b, ang) => { const c = Math.cos(ang), sn = Math.sin(ang), q = p.slice(); q[a] = p[a] * c - p[b] * sn; q[b] = p[a] * sn + p[b] * c; return q; };
+    const fade = Math.min(1, t / 2.5), F = 0.42 * Math.min(w, h), D = 7 - Math.min(2.2, t * 0.18);
+    const proj = (p4, off, sc) => {
+      let p = rot(rot(rot(p4, 0, 3, 0.31 * t), 1, 3, 0.23 * t), 2, 3, 0.17 * t);
+      const k = 1.6 / (3 - p[3]); let q = [p[0] * k * sc + off[0], p[1] * k * sc + off[1], p[2] * k * sc + off[2]];
+      q = rot(rot(q, 0, 2, 0.09 * t + 0.6), 1, 2, 0.32);
+      const z = D - q[2]; return z > 0.2 ? [w / 2 + F * q[0] / z, h / 2 - F * q[1] / z, p[3], z] : null;
+    };
+    g.globalCompositeOperation = 'lighter'; g.lineCap = 'round';
+    const draw = (off, sc, alpha, glow) => {
+      const P = HC.v.map((v) => proj(v, off, sc));
+      for (const [i, j] of HC.e) {
+        const a = P[i], b = P[j]; if (!a || !b) continue;
+        const wm = (a[2] + b[2]) / 2, warm = wm < 0, al = alpha * fade * Math.min(1, 4 / (a[3] + b[3]));
+        const col = warm ? `255,170,80` : `185,215,255`;
+        if (glow) { g.strokeStyle = `rgba(${col},${0.10 * al})`; g.lineWidth = 7 * s; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke(); }
+        g.strokeStyle = `rgba(${col},${0.85 * al})`; g.lineWidth = (glow ? 1.6 : 1) * s; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+      }
+      if (glow) for (const p of P) if (p) { g.fillStyle = `rgba(255,240,220,${0.9 * alpha * fade})`; g.beginPath(); g.arc(p[0], p[1], 2.2 * s, 0, 7); g.fill(); }
+    };
+    for (let ix = -1; ix <= 1; ix++) for (let iy = -1; iy <= 1; iy++) for (let iz = -1; iz <= 1; iz++)
+      if (ix || iy || iz) draw([ix * 4.2, iy * 4.2, iz * 4.2], 0.55, 0.16, false);
+    draw([0, 0, 0], 1, 1, true); draw([0, 0, 0], 0.45, 0.6, false);
+    g.globalCompositeOperation = 'source-over';
+    if (t < 1.2) { g.fillStyle = `rgba(255,250,240,${1 - t / 1.2})`; g.fillRect(0, 0, w, h); }
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.globalAlpha = Math.min(1, Math.max(0, (t - 1.5) / 1.5));
+    g.font = `bold ${15 * s}px ${mono}`; g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(txt('TESSERACT (fiction)'), w / 2, 40 * s);
+    g.font = `${11 * s}px ${mono}`; g.fillStyle = 'rgba(215,220,226,0.85)';
+    g.fillText(txt('4D hypercube: 16 corners, 32 edges, 24 square faces, 8 cubic cells, turning in the xw, yw and zw planes'), w / 2, 62 * s, w - 32 * s);
+    g.fillStyle = 'rgba(255,150,120,0.9)';
+    g.fillText(txt('Fiction / speculation: real physics knows no tesseract inside a black hole.'), w / 2, h - 40 * s, w - 32 * s);
+    g.fillStyle = 'rgba(150,160,170,0.8)'; g.fillText(txt('Esc ends · the summary follows'), w / 2, h - 22 * s, w - 32 * s);
+    g.globalAlpha = 1; g.textAlign = 'left';
   }
   // layar akhir: jendela relai hidup (waktu relai terus berjalan, jam wahana membeku dan padam)
   const mrel = $('#mendRelay'); let mrelT = 0;
@@ -2112,6 +2372,7 @@ function main() {
       if (c === 'KeyM') { REL.on = !REL.on; syncUI(); toast(txt(REL.on ? 'Relay view and spacetime diagram: on (M)' : 'Relay view and spacetime diagram: off (M)'), 1.5); return; }
       if (c === 'KeyZ') { MIS.warp = (MIS.warp + 1) % WARPS.length; toast(txt('Time: {m}').replace('{m}', txt(WARPS[MIS.warp].name)), 1.5); return; }
       if (c === 'Enter' && MIS.end) { startMission(MIS.sc); return; }
+      if (c === 'Enter' && MIS.tes && !MIS.tes.locked) { tesLaunch(); return; }
       if (/^Digit[1-4]$/.test(c)) return;
     }
     if (c === 'KeyF') { togglePhoto(); return; }
@@ -2215,7 +2476,7 @@ function main() {
       } else if (c.type === 'mission') {
         const box = document.createElement('div'); box.className = 'btns';
         for (const [t, fn] of [['Start mission', () => startMission(MIS.sc)], ['End mission (Esc)', () => { if (MIS.on) { stopMission(); toast(txt('Mission ended'), 2); } }],
-                               ['Autopilot skim (O)', toggleAP]]) {
+                               ['Autopilot skim (O)', toggleAP], ['Lock aim and go (Enter)', tesLaunch]]) {
           const b = document.createElement('button'); b.textContent = txt(t); b.addEventListener('click', () => { fn(); b.blur(); }); box.appendChild(b);
         }
         body.appendChild(box);
@@ -2342,7 +2603,7 @@ function main() {
       drawShip(b, sw, sh, tanHalf);
       if (MIS.on) { state.partsDrawn = drawParts(b, sw, sh, tanHalf); drawImps(b, sw, sh, tanHalf); }
     }
-    drawDash(now); drawRelayCard(now);
+    drawDash(now); drawRelayCard(now); drawTess(dt);
     if (state.readCb && FMT.type === gl.HALF_FLOAT) {                  // uji: statistik buffer HDR scene (nilai tidak valid, maks, rata-rata)
       const cb = state.readCb, px = new Float32Array(sw * sh * 4); state.readCb = null;
       gl.bindFramebuffer(gl.FRAMEBUFFER, T.scene.fb); gl.readPixels(0, 0, sw, sh, gl.RGBA, gl.FLOAT, px);
@@ -2417,7 +2678,8 @@ function main() {
   window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
     SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
     misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, volParams, AE, stepMission,
-    REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye };   // debugging hook
+    REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,
+    TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim };   // debugging hook
   requestAnimationFrame(frame);
 }
 

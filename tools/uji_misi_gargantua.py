@@ -32,6 +32,12 @@ Kelompok 4 (G4, informasi tidak bisa keluar) + kamera luar mengitari wahana:
 - suar keluar dari dalam horizon tetap turun sampai r = 0, suar dari luar tiba di relai, pesan relai tetap sampai ke wahana di dalam horizon,
 - jendela relai dan diagram tergambar (M), E menembak suar, layar akhir memuat pulsa dan jendela relai hidup,
 - seret di kamera luar memutar kamera mengitari wahana tanpa mengubah sikap, seret kanan / kokpit = arah hidung, klik ganda kembali.
+Kelompok 5 (G5, sudut masuk tesseract, fiksi):
+- sudut tangkap kritis 24,62 derajat = asin(2 sqrt(21) / 22), integrator: sedikit di bawah kritis tertangkap, sedikit di atas lolos,
+- zoom-whirl: sapuan sudut bertambah ln(10) / sqrt(1/2) = 186,6 derajat tiap delta 10 kali lebih kecil (eksponen ketidakstabilan orbit 2 rs),
+- bidang orbit menentukan: bidang 90 derajat menembus piringan, bidang gerbang ada bidikan tepat sasaran,
+- membidik: waktu beku, W/S mengubah delta, A/D bidang, Enter mengunci; terbang mengikuti lintasan acuan = prakiraan, berakhir di gerbang
+  (arah dalam toleransi 5 derajat), meleset = lanjut ke singularitas, adegan tesseract lalu kartu akhir, Esc keluar.
 Pakai: python tools/uji_misi_gargantua.py   (butuh: pip install playwright; CHROMIUM=<jalur> opsional, default /opt/pw-browsers/chromium
 bila ada). Tanpa GPU dipakai SwiftShader."""
 import asyncio, os, pathlib, sys
@@ -137,9 +143,9 @@ async def kelompok2(p, exe, pg):
     aDrip = math.pi / 2 * 22 ** 1.5
     cek('dilepas diam: waktu ke singularitas = (pi/2) 22^1,5', abs(drip['tau'] - aDrip) < 0.01, f"{drip['tau']:.4f} vs {aDrip:.4f} rs/c")
     harap = {'polar': 'singularity', 'drip': 'singularity', 'fast': 'singularity', 'slant': 'singularity', 'whirl': 'singularity', 'near': 'escape', 'unstable': 'singularity',
-             'skim': 'disk', 'skimPro': 'disk'}   # G3: susur tanpa autopilot (geodesik murni) = menembus piringan
+             'skim': 'disk', 'skimPro': 'disk', 'tesseract': 'singularity'}   # G5: bidikan awal (bidang 0, delta 1e-2) lewat celah dalam   # G3: susur tanpa autopilot (geodesik murni) = menembus piringan
     salah = {k: v['end'] for k, v in sim.items() if v['end'] != harap.get(k)}
-    cek('9 skenario tanpa dorongan berakhir sesuai rancangan (7 skenario G2 tidak menembus piringan, susur tanpa autopilot menembus)', not salah, str(salah) if salah else ', '.join(f"{k} {v['end']}" for k, v in sim.items()))
+    cek('10 skenario tanpa dorongan berakhir sesuai rancangan (7 skenario G2 dan bidikan awal tesseract tidak menembus piringan, susur tanpa autopilot menembus)', not salah, str(salah) if salah else ', '.join(f"{k} {v['end']}" for k, v in sim.items()))
     cek('zoom-whirl lebih lama dari miring (berputar di 2 rs)', sim['whirl']['tau'] > sim['slant']['tau'] + 20, f"{sim['whirl']['tau']:.1f} vs {sim['slant']['tau']:.1f} rs/c")
 
     # --- kendali terbatas ---
@@ -225,7 +231,8 @@ async def kelompok2(p, exe, pg):
     keys |= set(re.findall(r"(?:label|sec): '((?:[^'\\]|\\.)*)'", src))
     keys |= {'Start mission', 'End mission (Esc)', 'Torn apart by tides near the singularity', 'Destroyed in the accretion disk', 'Escaped: thrown back out',
              'Nose to the centre', 'Nose level: looking along the sky band', 'Free attitude (drag)',
-             'Nose along the track, disk below (drag = look)', 'Canopy shattered by disk dust', 'Autopilot skim (O)'}
+             'Nose along the track, disk below (drag = look)', 'Canopy shattered by disk dust', 'Autopilot skim (O)',
+             'Lock aim and go (Enter)', 'Entered the tesseract (fiction)'}
     keys |= set(re.findall(r"apOff\('((?:[^'\\]|\\.)*)'\)", src)) | set(re.findall(r"text: '((?:[^'\\]|\\.)*)'", src))
     hilang = sorted(k for k in keys if f"'{k}':" not in idb and k not in ('GX-01', 'RGBA16F', 'RGBA8 (fallback)', 'Q', 'Esc'))
     cek('kamus ID lengkap (semua txt(), skenario, label)', not hilang, '; '.join(hilang[:6]) or f'{len(keys)} kunci')
@@ -400,5 +407,58 @@ async def kelompok4(pg):
     await pg.keyboard.press('Escape')
     await pg.evaluate('() => { const G = window.__gargantua; G.CONFIG.renderScale = G.state.scale0; }')
     await pg.set_viewport_size({'width': 320, 'height': 200})
+    await kelompok5(pg)
+
+async def kelompok5(pg):
+    import math
+    a = await pg.evaluate('''() => { const G = window.__gargantua, out = {}; G.state.paused = true; G.startMission('tesseract');
+      const d = G.CONFIG.disk, r1 = d.rOut; d.rOut = d.rIn;            // ambang tangkap tanpa piringan (lintasan lolos bisa menembus piringan saat keluar)
+      out.dk = G.tesD(0); out.cap = G.tesRef({ delta: 1e-3, psi: 25 }).end; out.esc = G.tesRef({ delta: -1e-3, psi: 25 }).end; d.rOut = r1;
+      out.sw = [1e-4, 1e-5, 1e-6].map((d) => G.tesRef({ delta: d, psi: 0 }).gate.sweep);
+      out.p90 = [1e-2, 1e-4, 1e-6].map((d) => G.tesRef({ delta: d, psi: 90 }).end);
+      let best = null; for (let k = 0; k <= 400; k++) { const de = Math.pow(10, -1 - k * 8 / 400), R = G.tesRef({ delta: de, psi: 25 });
+        if (R.hit && (!best || R.err < best.err)) best = { de, err: R.err, sweep: R.gate.sweep, out: R.out }; }
+      out.best = best; return out; }''')
+    dk = math.degrees(math.asin(2 * math.sqrt(21) / 22))
+    cek('sudut tangkap kritis d = asin(2 sqrt(21) / 22) = 24,62 derajat; sedikit di bawah tertangkap, di atas lolos',
+        abs(a['dk'] - dk) < 1e-9 and a['cap'] == 'singularity' and a['esc'] == 'escape', f"{a['dk']:.6f} vs {dk:.6f}, {a['cap']} / {a['esc']}")
+    per = (a['sw'][2] - a['sw'][0]) / 2; th = math.log(10) / math.sqrt(0.5) * 180 / math.pi
+    cek('zoom-whirl: sapuan +ln(10)/sqrt(1/2) rad tiap delta 10x lebih kecil (eksponen orbit tak stabil 2 rs)', abs(per - th) < 2, f"{per:.2f} vs {th:.2f} derajat per dekade")
+    cek('bidang orbit 90 derajat menembus piringan di 3-12 rs', all(e == 'disk' for e in a['p90']), str(a['p90']))
+    b = a['best']
+    cek('bidang 25 derajat: ada bidikan tepat sasaran (gerbang di bidang, galat < 5 derajat)', b is not None and b['out'] < 0.01, f"delta {b['de']:.2e}, galat {b['err']:.2f}, {b['sweep'] / 360:.2f} putaran" if b else 'tidak ada')
+
+    # --- membidik dengan tombol: waktu beku, W/S, A/D, Enter ---
+    await pg.evaluate("() => { const G = window.__gargantua; G.state.paused = false; G.startMission('tesseract'); G.MIS.warp = 2; }")
+    d0 = await pg.evaluate('() => ({ ...window.__gargantua.MIS.tes.aim })')
+    await pg.keyboard.down('KeyW'); await pg.wait_for_timeout(1200); await pg.keyboard.up('KeyW')
+    await pg.keyboard.down('KeyD'); await pg.wait_for_timeout(800); await pg.keyboard.up('KeyD')
+    await pg.wait_for_timeout(300)
+    d1 = await pg.evaluate('() => { const M = window.__gargantua.MIS; return { aim: { ...M.tes.aim }, tau: M.tau, refA: { ...M.tes.ref.a } }; }')
+    cek('membidik: waktu beku, W mendekat ke kritis, D memutar bidang, lintasan acuan ikut', d1['aim']['delta'] < d0['delta'] and d1['aim']['psi'] > d0['psi'] and d1['tau'] == 0
+        and abs(d1['refA']['delta'] - d1['aim']['delta']) < 1e-15, f"delta {d0['delta']:.1e} -> {d1['aim']['delta']:.2e}, bidang {d1['aim']['psi']:.1f}")
+    await pg.evaluate(f"() => {{ const G = window.__gargantua, M = G.MIS; M.tes.aim = {{ delta: {b['de']}, psi: 25 }}; G.tesApply(); }}")
+    await pg.keyboard.press('Enter')
+    await pg.wait_for_function('window.__gargantua.MIS.end !== null', timeout=180000)
+    e = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, R = M.tes.ref, n = Math.hypot(...M.x), dir = M.x.map((v) => v / n);
+      const err = Math.acos(Math.min(1, dir[0] * G.TES.gate[0] + dir[1] * G.TES.gate[1] + dir[2] * G.TES.gate[2])) * 180 / Math.PI;
+      return { kind: M.end.kind, locked: M.tes.locked, r: n, err, tau: M.tau, gtau: R.gate.tau, tauH: M.tauH, h: R.horizon, tess: G.TESV.on, mend: document.getElementById('mend').hidden }; }''')
+    cek('terbang mengikuti prakiraan: berakhir di gerbang (r 0,6, arah dalam 5 derajat), lewat horizon tercatat',
+        e['kind'] == 'tesseract' and e['locked'] and abs(e['r'] - 0.6) < 0.02 and e['err'] < 5 and abs(e['tau'] - e['gtau']) < 1e-9 and e['tauH'] is not None and abs(e['tauH'] - e['h']) < 1e-12,
+        f"r {e['r']:.4f}, galat {e['err']:.2f} derajat, tau {e['tau']:.4f} vs {e['gtau']:.4f}")
+    cek('adegan tesseract tampil sebelum kartu akhir', e['tess'] and e['mend'], str({k: e[k] for k in ('tess', 'mend')}))
+    await pg.evaluate('() => { window.__gargantua.TESV.t = 10.5; }')
+    await pg.wait_for_function('!document.getElementById("mend").hidden', timeout=30000)
+    body = await pg.evaluate('() => document.getElementById("mendBody").textContent')
+    await pg.keyboard.press('Escape')
+    f = await pg.evaluate('() => ({ tess: document.getElementById("tess").hidden, on: window.__gargantua.MIS.on })')
+    cek('kartu akhir tesseract (bidikan, putaran, label fiksi), Esc keluar', 'Fiksi / spekulatif' in body and 'putaran' in body and f['tess'] and not f['on'], body[:80])
+
+    # --- meleset: lanjut ke singularitas, catatan meleset ---
+    m = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS; G.state.paused = true; G.startMission('tesseract'); G.tesLaunch();
+      let res = null; for (let i = 0; !res && i < 200000; i++) res = G.tesFollow(0.37 + (i % 7) * 0.05);
+      return { kind: res && res.kind, miss: M.tes.miss, err: M.tes.ref.err }; }''')
+    cek('bidikan meleset: lanjut ke singularitas, galat tercatat', m['kind'] == 'singularity' and m['miss'] is not None and m['miss'] > 5, str(m))
+    await pg.evaluate('() => window.__gargantua.stopMission()')
 
 asyncio.run(main())

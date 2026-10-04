@@ -45,7 +45,9 @@ Langkah mekanis di dalam tahap High (entri kamus, teks HUD, pembaruan dokumen) b
 | G3b | Selesai 4 Oktober 2026: garis bara (partikel GPU), awan debu, tumbukan kaca kokpit (kilat, pijar, retak menetap), guncangan, kerusakan kaca (100% = akhir misi), label distilisasi di panel dan layar akhir |
 | Masukan pemilik setelah G3 | 4 Oktober 2026: saat misi, seret mouse di kamera luar memutar sikap wahana sehingga yang tampak berputar adalah lingkungan lubang hitam, wahana tidak bisa dilihat dari sudut lain. Perbaikan: di kamera luar seret = kamera mengitari wahana (`MIS.orb`, hanya kamera, sikap dan fisika tidak berubah), klik ganda = kembali ke belakang wahana, seret kanan (atau Ctrl + seret) = arah hidung seperti dulu. Di kokpit seret tetap arah hidung. Kolom nilai HUD digeser sedikit dan dipadatkan agar label "Pasang surut 2 m" dan prakiraan panjang tidak saling tumpuk. Bug kecil G3 ikut diperbaiki: saat misi diulang, satu hasil baca terang dari adegan misi sebelumnya bisa terpakai sebagai ukuran pertama eksposur otomatis (sekarang diabaikan) |
 | G4 | Selesai 4 Oktober 2026 (lihat bagian G4): waktu bersama Painleve-Gullstrand, relai 22 rs, pulsa tiap 1 s waktu wajar, jam wahana terlihat relai (melambat, memerah, membeku), pesan relai ke wahana, suar E, jendela relai dan diagram ruang-waktu (M), layar akhir dengan jendela relai hidup. Belum diuji di GTX 1060 dan M1 |
-| G5-G6 | Belum dimulai; G6 berjalan per kelompok (uji G4 ada di `tools/uji_misi_gargantua.py`) |
+| G5 | Selesai 4 Oktober 2026 (lihat bagian G5): skenario "Bidik tesseract (fiksi)", membidik sudut d dan bidang orbit dengan waktu beku, peta orbit, lintasan acuan yang dipakai saat terbang (prakiraan = hasil), gerbang fiksi di dalam horizon, adegan hiperkubus 4D, kartu akhir. Belum diuji di GTX 1060 dan M1 |
+| G6 | Berjalan per kelompok: uji G1 sampai G5 di `tools/uji_misi_gargantua.py`, kamus ID, CLAUDE.md, `tombol.md` |
+| G7 suara (usulan) | Belum dimulai, menunggu persetujuan pemilik (lihat bagian G7) |
 
 Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
 
@@ -259,6 +261,25 @@ Rencana awal:
 
 ## G5: sudut masuk tesseract (fiksi)
 
+### Hasil G5 (4 Oktober 2026)
+
+| Bagian | Isi |
+| --- | --- |
+| Skenario | "Bidik tesseract (fiksi)" (ke-10). Wahana di 22 rs, 30 derajat di atas bidang piringan, E = 1 (datang dari jauh). Waktu beku selama membidik |
+| Bidikan | d = sudut arah gerak dari arah radial ke dalam (pengamat diam setempat), bidang orbit psi (0 = lewat atas kutub). L = 22 sin d / akar 21. Kritis L = 2 rs c, d kritis = asin(2 akar 21 / 22) = 24,619977 derajat (diuji). Di bawah kritis tertangkap, di atas lolos (diuji) |
+| Tombol | W/S sudut d: mendekat / menjauh dari kritis secara eksponensial (delta = 1 - L/Lkrit dikali faktor tetap per detik; Shift 8 kali lebih cepat). Lewat 1e-12 berpindah ke sisi lolos. A/D bidang orbit (15 derajat/s, Shift 60). Enter kunci dan berangkat. Juga tombol panel "Kunci bidikan dan berangkat" |
+| Zoom-whirl | Tiap delta 10 kali lebih kecil, wahana berputar ln(10) / akar(1/2) = 186,6 derajat lebih banyak di sekitar 2 rs (eksponen ketidakstabilan orbit 2 rs: akar(1/2) per radian). Terukur 186,4 (diuji). Sampai sekitar 4,5 putaran (delta 1e-9); lebih kecil dari itu galat angka mendominasi |
+| Piringan | Bidang orbit menentukan di mana lintasan memotong bidang piringan. Bidang 90 derajat selalu menembus piringan di 3-12 rs (diuji). Perpotongan di dalam 3 rs (celah dalam) aman |
+| Gerbang (fiksi) | Di r 0,6 rs (di dalam horizon) pada arah tertentu: bidang 25 derajat, 200 derajat dari arah awal. Toleransi 5 derajat. Solusi: sapuan 200 + 360 k derajat, misalnya 920 derajat (delta sekitar 6e-5, 2,6 putaran) atau 1.280 derajat (delta sekitar 7e-7, 3,6 putaran) |
+| Peta orbit | Kanan bawah (besar saat membidik, digeser ke kiri panel kontrol bila panel terbuka): bidang lintasan, jari-jari logaritmik ln(1 + r) agar 2 rs dan 22 rs sama-sama terlihat (sudut tetap benar). Lingkaran horizon, foton 1,5, orbit tak stabil 2, ISCO 3, relai 22. Garis merah = potongan piringan (rIn sampai rOut), belah ketupat biru = gerbang, X = titik menabrak piringan. Baris: bidikan, hasil (tepat sasaran / meleset / menabrak / lolos), jarak gerbang dari bidang |
+| Prakiraan = hasil | Setelah Enter (titik tanpa kembali, mesin dikunci) wahana mengikuti lintasan acuan yang sama persis dengan prakiraan: langkah RK4 disimpan, posisi di antara langkah = interpolasi Hermite kubik. Alasan: di dekat orbit tak stabil, selisih langkah integrasi kecil tumbuh cepat, sehingga integrasi ulang bisa berbeda jumlah putaran dari prakiraan (terlihat di uji: di bawah delta 1e-9 hasil jenuh karena galat angka) |
+| Penanda gerbang | Belah ketupat biru di layar 3D: proyeksi garis lurus dari wahana (pembelokan cahaya diabaikan; gerbang fiksi) |
+| Tepat sasaran | Kilat putih, lalu adegan hiperkubus 4D (16 titik sudut, 32 rusuk, 24 sisi persegi, 8 sel kubus) berputar di bidang xw, yw, zw, diproyeksikan 4D ke 3D ke layar, garis bercahaya jingga (bagian dalam) dan biru pucat (luar), kisi 26 hiperkubus redup. Desain sendiri: bukan ruangan atau rak dari film. Label fiksi di layar dan kartu. Kartu akhir setelah 10 s (bidikan, sapuan dan putaran, galat gerbang, semua baris G4) |
+| Meleset | Notifikasi galat, lintasan berlanjut ke singularitas, galat tercatat di kartu akhir |
+| Contoh uji | d = 24,61995916 derajat, L/Lkrit = 1 - 6,9e-7, bidang 25: 1.280 derajat (3,55 putaran), galat gerbang 0,3 derajat, waktu wajar 33 jam, lewat horizon 4 menit 44 detik sebelum gerbang |
+
+Rencana awal:
+
 | Bagian | Isi |
 | --- | --- |
 | Bidik | Sebelum titik tanpa kembali: W A S D atur sudut d dan bidang orbit, Shift kasar, Enter kunci (mengikuti tombol pesawat Copper) |
@@ -269,6 +290,24 @@ Rencana awal:
 | d sedikit di bawah d_krit | Zoom-whirl di sekitar 2 rs, jumlah putaran menentukan azimut masuk horizon |
 | Gerbang | Di dalam horizon pada azimut dan bidang tertentu, toleransi +/- 5 derajat |
 | Tesseract | Hiperkubus 4D berputar, diproyeksikan ke layar, garis bercahaya orisinal. Label: "Fiksi / spekulatif: fisika nyata tidak mengenal tesseract di dalam lubang hitam" |
+
+## G7: suara (usulan, belum dikerjakan)
+
+Saat ini Gargantua belum punya suara sama sekali. Usulan mengikuti cara Copper Corn Station dan Millar's World: semua suara disintesis Web Audio (tanpa berkas audio), tombol U nyala / mati sesuai `docs/app/tombol.md`, pilihan tersimpan di localStorage.
+
+| Suara | Kapan | Catatan |
+| --- | --- | --- |
+| Dengung kabin | Selama misi | Dasar, sangat pelan; naik sedikit saat dorongan |
+| Mesin dan pendorong | W/S A/D R/F, Shift | Desis pendorong kecil, gemuruh mesin utama; autopilot = koreksi pendek berulang |
+| Gemuruh piringan | Dekat piringan | Distilisasi (di ruang hampa tidak ada suara dari luar): kerasnya ikut kerapatan debu x laju gas relatif |
+| Tumbukan kaca | Tiap tumbukan G3 | Ketukan tajam, retak saat kerusakan naik, pecah di 100% |
+| Pulsa dan relai | G4 | Bip pelan tiap pesan relai yang diterima, nadanya dikali faktor frekuensi (makin rendah saat menjauh); suar = desis naik |
+| Horizon dan pasang surut | G2 | Tidak ada apa-apa saat lewat horizon (fisika); nada rendah naik menjelang singularitas |
+| Tesseract | G5 | Lapisan nada harmonis yang berputar pelan mengikuti putaran 4D (fiksi) |
+
+| Effort | Model | Thinking | File | Risiko |
+| --- | --- | --- | --- | --- |
+| Medium | Sonnet 5.5 | medium | `experiences/gargantua/index.html` (blok AUDIO baru, `stepMission`, `spawnImpact`, `fireFlare`, panel, bantuan, kamus ID), `docs/app/tombol.md`, uji kelompok 7 | Rendah (tidak menyentuh shader) |
 
 ## G6: uji dan bahasa
 
@@ -292,7 +331,8 @@ Mengikuti `docs/app/tombol.md`: tidak ada huruf baru.
 | Seret mouse, roda | Kamera luar: seret = kamera mengitari wahana (klik ganda kembali), seret kanan = arah hidung; kokpit: seret = arah hidung; roda = jarak kamera luar |
 | X | Sikap: hidung ke pusat / mendatar / searah lintasan dengan piringan di bawah (G3; seret = arah pandang) / bebas (G2) |
 | O | Autopilot susur nyala / mati (G3; huruf O = "otomatis", seperti jalan otomatis di Copper). Selama autopilot: R/F tinggi, W/S laju turun |
-| Enter | Terbang lagi di layar akhir (G2); kunci bidikan (G5) |
+| Enter | Terbang lagi di layar akhir (G2); kunci bidikan dan berangkat (G5) |
+| W/S, A/D saat membidik (G5) | Sudut d mendekat / menjauh dari kritis, bidang orbit; Shift kasar |
 | E | Tembak suar (G4) |
 | M | Pandangan relai dan diagram ruang-waktu nyala / mati (G4, setara M peta di Copper) |
 | Space | Jeda |
