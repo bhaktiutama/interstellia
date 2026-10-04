@@ -781,6 +781,61 @@ UJI = r"""
     out[`pakaian tanpa lubang: titik tepi terbuka di luar sepatu / manset ${openBad}, pangkal paha keluar dari panggul ${outBad} titik`] = openBad === 0 && outBad === 0;
   }
 
+  // 5u. M6g: kain pakaian di shader: koordinat kain valid, terlihat hanya di tubuh, lipatan makin kuat saat sendi menekuk
+  {
+    const P = M.P, B = M.BODY, PI = Math.PI, from = M.THREE.DataUtils.fromHalfFloat, bu = M.bodyMat.uniforms, d0 = B.detail, HP = 0.92;
+    // atribut: tiap titik pakaian punya (cos, sin) satuan atau 0 di tutup, v = jarak di bawah pinggul / bahu atau tinggi badan, nomor bagian 1..5
+    let bad = 0, rigid = 0; const vr = {};
+    for (const d of [0, 1, 2]) {
+      M.setBodyDetail(d); const g = B.suit.geometry, a = g.attributes.aCloth, p0 = g.userData.skin.p0;
+      if (!a || a.count !== g.attributes.position.count) { bad++; continue; }
+      for (let i = 0; i < a.count; i++) {
+        const c = a.getX(i), sn = a.getY(i), v = a.getZ(i), id = a.getW(i), l = Math.hypot(c, sn), y = p0[3 * i + 1];
+        if (![c, sn, v, id].every(Number.isFinite) || !(l < 1e-6 || Math.abs(l - 1) < 1e-4) || ![1, 2, 3, 4, 5].includes(id)) bad++;
+        const ve = id === 1 ? y : id <= 3 ? HP - y : 1.40 - y; if (Math.abs(v - ve) > 1e-5) bad++;
+        const k = id === 1 ? 'badan' : id <= 3 ? 'kaki' : 'lengan'; vr[k] = vr[k] || [9, -9]; vr[k][0] = Math.min(vr[k][0], v); vr[k][1] = Math.max(vr[k][1], v);
+      }
+      for (const o of B.parts) if (o !== B.suit && o.geometry.attributes.aCloth) rigid++;
+    }
+    M.setBodyDetail(d0);
+    const rng = Object.entries(vr).map(([k, [lo, hi]]) => `${k} ${lo.toFixed(2)}..${hi.toFixed(2)}`).join(', ');
+    out[`koordinat kain (M6g): ${rng} m, nilai salah ${bad}, benda kaku berkoordinat kain ${rigid}, nilai bawaan atribut ${JSON.stringify(M.bodyMat.defaultAttributeValues.aCloth)}`] =
+      bad === 0 && rigid === 0 && vr.kaki[1] > 0.85 && vr.lengan[1] > 0.55 && vr.badan[0] < 0.85 && M.bodyMat.defaultAttributeValues.aCloth.join() === '0,0,0,0';
+    // render menunduk sambil lari: kain nyala vs mati, masker tubuh = beda render tubuh tampil vs tersembunyi
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false;
+    P.view = 0; P.ground = true; P.depth = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.yaw = -PI / 2 + 0.3; P.pitch = -1.15; B.level = 2; M.MOOD.brk = 1;
+    M.BOB.run = 1; M.BOB.amp = 0.055; M.BOB.phase = 0.6; M.updateBody(10);
+    const T = M.POST.hdr, w = T.width, h = T.height, cam = M.camera;
+    const shot = (pre) => { cam.position.set(P.x, P.y, P.z); cam.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); cam.updateMatrixWorld(true); M.U.uCam.value.copy(cam.position);
+      M.updateShadow(); M.updateBody(10); if (pre) pre(); M.renderer.setRenderTarget(T); M.renderer.clear(); M.renderer.render(M.scene, cam); M.renderer.setRenderTarget(null);
+      const b = new Uint16Array(w * h * 4); M.renderer.readRenderTargetPixels(T, 0, 0, w, h, b); return b; };
+    const lum = (b, k) => 0.3 * from(b[k]) + 0.59 * from(b[k + 1]) + 0.11 * from(b[k + 2]);
+    const on = shot(), off = shot(() => { bu.uClothK.value = 0; }); bu.uClothK.value = M.CONFIG.body.cloth.k;
+    const hid = shot(() => { B.group.visible = false; });
+    const mask = []; let outD = 0, nb = 0;
+    for (let k = 0; k < on.length; k += 4) {
+      const body = off[k] !== hid[k] || off[k + 1] !== hid[k + 1] || off[k + 2] !== hid[k + 2];
+      if (body) mask.push(k); else if (on[k] !== off[k] || on[k + 1] !== off[k + 1] || on[k + 2] !== off[k + 2]) outD++;
+      for (let c = 0; c < 3; c++) if (!Number.isFinite(from(on[k + c])) || from(on[k + c]) > 50) nb++;
+    }
+    const rel = (A, Bf, m) => { let s = 0; for (const k of m) s += Math.abs(lum(A, k) - lum(Bf, k)) / Math.max(1e-3, lum(Bf, k)); return m.length ? s / m.length : 0; };
+    const dOn = rel(on, off, mask), fr = mask.filter((k) => Math.abs(lum(on, k) - lum(off, k)) > 0.03 * Math.max(1e-3, lum(off, k))).length / Math.max(1, mask.length);
+    out[`kain terlihat (M6g): tubuh ${(mask.length / (w * h) * 100).toFixed(1)}% layar, piksel tubuh berubah > 3%: ${(fr * 100).toFixed(1)}% (5-60), beda rata-rata ${(dOn * 100).toFixed(2)}% (0,5-15), piksel berubah di luar tubuh ${outD}, tidak valid / menyala ${nb}`] =
+      mask.length > 0.02 * w * h && fr > 0.05 && fr < 0.60 && dOn > 0.005 && dOn < 0.15 && outD === 0 && nb === 0;
+    // lipatan ikut tekuk: semua sendi lurus vs tertekuk penuh (uBend ditimpa setelah kulit), beda kain di tubuh bertambah
+    const bend = (x) => () => { for (const q of bu.uBend.value) q.set(x, x); };
+    const b0 = shot(bend(0)), b1 = shot(bend(1));
+    const off0 = shot(() => { bend(0)(); bu.uClothK.value = 0; }); bu.uClothK.value = M.CONFIG.body.cloth.k;
+    const e0 = rel(b0, off0, mask), e1 = rel(b1, off0, mask);
+    // tekuk dari kulit: berdiri vs lari (lutut terbesar di satu siklus) vs duduk di kokpit (pinggul tertekuk; kaki pilot hampir lurus ke depan)
+    let kr = 0; for (let f = 0; f < 24; f++) { M.BOB.phase = f / 24 * 2 * PI; M.updateBody(10); kr = Math.max(kr, bu.uBend.value[1].y, bu.uBend.value[2].y); }
+    M.BOB.run = 0; M.BOB.amp = 0; M.BOB.phase = 0; M.updateBody(10); const st = bu.uBend.value.map((q) => q.clone());
+    M.boardShip(); M.FLY.view = 1; M.flyCamera(); M.updateBody(1 / 60); const se = bu.uBend.value.map((q) => q.clone()); M.flyReset(); M.FLY.view = 0; M.updateBody(10);
+    out[`lipatan ikut tekuk (M6g): beda kain sendi lurus ${(e0 * 100).toFixed(1)}% -> tertekuk ${(e1 * 100).toFixed(1)}%; tekuk lutut berdiri ${st[1].y.toFixed(2)} / lari maks ${kr.toFixed(2)}, pinggul berdiri ${st[1].x.toFixed(2)} / duduk ${se[1].x.toFixed(2)}`] =
+      e1 > e0 * 1.1 && kr > st[1].y + 0.3 && se[1].x > st[1].x + 0.3 && se.every((q) => q.x >= 0 && q.x <= 1 && q.y >= 0 && q.y <= 1);
+    P.pitch = 0; M.updateBody(10);
+  }
+
   // 5p. M6c: tubuh tidak membayangi dirinya, bayangan KS-07 tetap jatuh di tubuh, garis basah yang ingat, busa garis air di kaki
   {
     const P = M.P, B = M.BODY, Cb = M.CONFIG.body, PI = Math.PI, from = M.THREE.DataUtils.fromHalfFloat, V3 = M.THREE.Vector3;

@@ -189,7 +189,8 @@ const CONFIG = {
     standF: 0.02, footDown: 0.12, reachWalk: 0.23, reachRun: 0.38, liftWalk: 0.10, liftRun: 0.22, airLift: 0.25, airF: 0.10, runDrop: 0.06, neckF: 0.14, neckD: 0.05,   // M6d-2: target pergelangan IK (m), jongkok lari, leher (m)
     armFwd: 0.15, armDown: 0.15, armWalk: 0.4, armRun: 0.8, abduct: 0.12, abductRun: 0.25, abductAir: 0.6, elbow: 0.7, elbowRun: 1.5, elbowDown: 0.3,
     leanRun: 0.10, leanDown: 0.08,   // M6a-2: pose tubuh (rad, m, s)
-    selfR: 0.7, wetWalk: 0.12, wetRun: 0.30, dryRate: 0.01, foam: 1 },
+    selfR: 0.7, wetWalk: 0.12, wetRun: 0.30, dryRate: 0.01, foam: 1,
+    cloth: { k: 1, sheen: 0.12 } },   // M6g: kekuatan tinggi kain (lipatan, jahitan, bantalan; 0 = polos), kilau kain di tepi
   visor: { fogMax: 0.12, exTau: 6, breathRest: 0.25, breathRun: 0.6, dryT: 8, dropRun: 0.06, dropLand: 0.3, glint: 0.35 },   // M6d: embun (alfa), lelah (s), napas (Hz), kering (s), tetes per langkah lari / mendarat, kilau   // M6c: kapsul abaikan bayangan diri (m), cipratan basah jalan / lari (m), kering (m/s), busa garis air
   walk: { stride: 0.72, strideRun: 1.25, drag: 0.35, legs: 0.13, fovRun: 6 },        // R3: panjang langkah (m), waktu tanggap di air (s), jarak kaki dari tengah (m)
   current: { max: 1.6, at: 2500, w: 3500, push: 0.35 },                  // R4: arus air surut ke arah gelombang (m/s, puncak di depan muka, lebar, tarikan ke pemain)
@@ -1788,7 +1789,8 @@ function makeShadow(size) {
    bayangan; di tampilan drone (V) kepala ikut terlihat. Material turunan shipMat (cahaya Gargantua, kabut, garis basah sendiri). */
 const BODY_LEVELS = [['Mati', 0], ['Bayangan', 1], ['Tampil', 2]];
 const bodyU = { ...U, uWater: { value: 0 }, uMatte: { value: 1 }, uGDirL: { value: GDIR },
-  uShMI: { value: new THREE.Matrix4() }, uBodyP: { value: new THREE.Vector3() }, uSelfR: { value: CONFIG.body.selfR }, uWetH: { value: 0 } };
+  uShMI: { value: new THREE.Matrix4() }, uBodyP: { value: new THREE.Vector3() }, uSelfR: { value: CONFIG.body.selfR }, uWetH: { value: 0 },
+  uBend: { value: Array.from({ length: 5 }, () => new THREE.Vector2()) }, uClothK: { value: CONFIG.body.cloth.k }, uSheen: { value: CONFIG.body.cloth.sheen } };
 // M6c: fragment wahana dengan penukar yang gagal keras bila teks sumber berubah (replace diam-diam bisa tidak terjadi)
 const swapGL = (s, a, b) => { if (!s.includes(a)) throw new Error('bodyMat: teks tidak ditemukan: ' + a); return s.replace(a, b); };
 let bodyFS = swapGL(shipMat.fragmentShader, 'void main() {', /* glsl */`uniform mat4 uShMI; uniform vec3 uBodyP; uniform float uSelfR, uWetH;
@@ -1812,11 +1814,88 @@ let bodyFS = swapGL(shipMat.fragmentShader, 'void main() {', /* glsl */`uniform 
     }
     void main() {`);
 bodyFS = swapGL(bodyFS, 'shadowAt(vW + n * 0.1, 0.15)', 'shadowBody(vW + n * 0.1, 0.15)');
+bodyFS = swapGL(bodyFS, '    void main() {', `
+    // M6g: kain pakaian. Tinggi kain (m) dari koordinat kain yang menempel di titik (vCl, pose ikat: tidak berenang saat bergerak) dan tekuk sendi
+    // (vBd.xy = sendi atas / bawah bagian itu, 0 lurus .. 1 tertekuk penuh). px = ukuran piksel di permukaan (m): pola yang lebih rapat dari ~2 piksel memudar.
+    uniform float uClothK, uSheen; varying vec4 vCl; varying vec3 vBd;
+    float clFade(float per, float px) { return 1.0 - smoothstep(0.25 * per, 0.5 * per, px); }
+    float clDl(float x, float per) { return abs(fract(x / per + 0.5) - 0.5) * per; }          // jarak ke kelipatan per terdekat (m)
+    // lipatan tertekan melingkar (periode 4,5 cm): lembah tajam (|sin|), fase dibengkokkan noise (miring, bercabang), putus-sambung keliling;
+    // makin dalam saat tekuk b besar dan di sisi yang tertekan (cmp +1), makin datar di sisi yang teregang (cmp -1)
+    float clFold(float s, float arc, float ang, float win, float b, float cmp, float px) {
+      float ph = s * 139.6 + 1.9 * vn2(vec2(arc * 9.0, s * 4.0)) + 0.9 * sin(ang * 2.0 + s * 20.0);
+      float a = win * (0.3 + 0.7 * b) * (0.7 + 0.3 * cmp) * (0.55 + 0.45 * vn2(vec2(arc * 22.0, s * 6.0 + 3.1)));
+      return 0.0075 * a * (abs(sin(ph)) - 0.64) * clFade(0.045, px);
+    }
+    // alur jahitan selebar ~5 mm dengan bibir sedikit menonjol di kedua sisi; d = jarak ke garis jahitan (m)
+    float clSeam(float d, float px) {
+      return (-0.0011 * (1.0 - smoothstep(0.0006, 0.0028, d)) + 0.0004 * smoothstep(0.0022, 0.0035, d) * (1.0 - smoothstep(0.0035, 0.0065, d))) * clFade(0.014, px);
+    }
+    float clothH(float px, out float on) {
+      on = step(0.5, vBd.z);
+      if (vBd.z < 0.5) return 0.0;                                       // benda kaku (helm, sepatu, sarung tangan, ransel)
+      float id = vBd.z - 1.0, v = vCl.z, csl = length(vCl.xy);
+      vec2 q = csl > 1e-3 ? vCl.xy / csl : vec2(1.0, 0.0);               // q.x +1 = sisi luar (badan: kanan), q.y +1 = belakang, -1 = depan
+      float leg = step(0.5, id) * step(id, 2.5), arm = step(2.5, id), r = id < 0.5 ? 0.165 : leg > 0.5 ? 0.085 : 0.058;
+      // sudut keliling, potongan (lompatan sudut) tepat di jahitan: anggota badan di sisi luar, badan di tengah belakang (di balik ransel)
+      float ang = id < 0.5 ? atan(q.x, -q.y) : atan(-q.y, -q.x), arc = ang * r, ds = (3.14159 - abs(ang)) * r;
+      float cut = smoothstep(0.012, 0.03, ds) * smoothstep(0.6, 0.85, csl);   // pola yang bergantung arc pudar di potongan dan di tutup ujung
+      float h = cut * (0.0003 * (vn2(vec2(arc, v) * 160.0) - 0.5) * clFade(0.012, px) + 0.0012 * (vn2(vec2(arc, v) * 14.0) - 0.5) * clFade(0.07, px));   // butir kain (bercak 6 mm), kerut lembut
+      h += clSeam(ds, px);                                               // jahitan di potongan (luar kaki dan lengan, tengah belakang badan)
+      if (leg > 0.5) {
+        float sk = v - 0.45, fr = smoothstep(0.30, 0.55, -q.y);
+        h += cut * (clFold(sk, arc, ang, 1.0 - smoothstep(0.05, 0.14, abs(sk)), vBd.y, q.y, px)              // lutut: tertekan di belakang
+                  + clFold(v * 0.8 + arc * 0.6, arc, ang, 1.0 - smoothstep(0.02, 0.17, v), vBd.x, -q.y, px)   // pangkal paha: miring, tertekan di depan saat paha terangkat
+                  + clFold(v - 0.86, arc, ang, smoothstep(0.70, 0.78, v), 0.6, 0.0, px)                       // kain menumpuk di atas sepatu
+                  + 0.0010 * sin((arc + v * 0.7) * 70.0 + 2.0 * vn2(vec2(arc * 6.0, v * 6.0))) * smoothstep(0.10, 0.16, v) * (1.0 - smoothstep(0.30, 0.38, v)) * clFade(0.09, px)   // tarikan diagonal paha
+                  + 0.0016 * sin(arc * 55.0 + 3.0 * vn2(vec2(arc * 4.0, v * 3.0))) * smoothstep(0.55, 0.62, v) * (1.0 - smoothstep(0.76, 0.82, v)) * clFade(0.11, px));   // kain longgar betis: kerut memanjang
+        float pk = smoothstep(0.36, 0.385, v) * (1.0 - smoothstep(0.525, 0.55, v)) * fr;                       // bantalan lutut depan
+        float pt = smoothstep(0.11, 0.135, v) * (1.0 - smoothstep(0.285, 0.31, v)) * smoothstep(0.45, 0.7, -q.y);   // bantalan paha depan
+        h += 0.0025 * pk + 0.0012 * pt + 0.5 * pk * clSeam(min(clDl(arc + v, 0.05), clDl(arc - v, 0.05)), px);   // lutut dijahit wajik
+        h += clSeam(abs(ang) * r, px) + clSeam(abs(v - 0.34), px) + clSeam(abs(v - 0.57), px);                // jahitan dalam, cincin atas / bawah lutut
+      } else if (arm > 0.5) {
+        float se = v - 0.30;
+        h += cut * (clFold(se, arc, ang, 1.0 - smoothstep(0.035, 0.10, abs(se)), vBd.y, -q.y, px)            // siku: tertekan di depan
+                  + clFold(v * 0.8 - arc * 0.6, arc, ang, 1.0 - smoothstep(0.01, 0.12, v), vBd.x, -q.x, px)   // ketiak
+                  + clFold(v - 0.56, arc, ang, smoothstep(0.46, 0.52, v), 0.5, 0.0, px)                       // menumpuk di manset
+                  + 0.0008 * sin((arc - v * 0.7) * 80.0 + 2.0 * vn2(vec2(arc * 7.0, v * 7.0))) * smoothstep(0.05, 0.10, v) * (1.0 - smoothstep(0.20, 0.26, v)) * clFade(0.08, px));   // tarikan lengan atas
+        float pa = smoothstep(0.04, 0.06, v) * (1.0 - smoothstep(0.16, 0.18, v)) * smoothstep(0.25, 0.5, q.x);   // bantalan lengan atas luar
+        h += 0.0015 * pa;
+        h += clSeam(abs(ang) * r, px) + clSeam(abs(v - 0.19), px) + clSeam(abs(v - 0.42), px);
+      } else {
+        float sw = v - 1.0;
+        h += cut * (clFold(sw, arc, ang, 1.0 - smoothstep(0.03, 0.10, abs(sw)), vBd.x, -q.y, px)            // pinggang: tertekan di depan saat condong / duduk
+                  + 0.0012 * sin((v + arc * 0.4) * 55.0 + 3.0 * vn2(vec2(arc * 5.0, v * 5.0))) * smoothstep(0.84, 0.90, v) * (1.0 - smoothstep(1.20, 1.28, v)) * clFade(0.11, px));   // kerut perut
+        // panel dada (daerah warna terang M6f-c): sedikit menonjol, tepinya dijahit
+        vec2 bq = abs(vec2(ang * 0.2, v - 1.37)) - vec2(0.16, 0.08); float sb = length(max(bq, 0.0)) + min(max(bq.x, bq.y), 0.0);
+        h += 0.0015 * (1.0 - smoothstep(-0.008, 0.0, sb)) + clSeam(abs(sb), px);
+        h += clSeam(abs(ang) * r, px) * (1.0 - smoothstep(1.27, 1.29, v)) + clSeam(abs(abs(ang) - 1.5708) * r, px)   // tengah depan, sisi
+           + clSeam(abs(v - 0.96), px) + clSeam(abs(v - 1.03), px);                                                     // sambungan pinggang
+      }
+      return h;
+    }
+    void main() {`);
+// M6g: normal kain = bump turunan layar (cara bump map three.js) dari tinggi kain dan posisi relatif kamera (vR: presisi baik jauh dari asal),
+// tanpa tangen. Turunan dihitung di alur seragam (di luar if). Normal hanya diganti bila panjangnya sah (tanpa NaN di M1).
+bodyFS = swapGL(bodyFS, 'if (dot(n, V) < 0.0) n = -n;                                     // sisi dalam sirip dan sayap (DoubleSide)', `if (dot(n, V) < 0.0) n = -n;
+      float clOn, clPx = max(length(dFdx(vR)), length(dFdy(vR)));
+      float clH = clothH(clPx, clOn) * uClothK * (1.0 - smoothstep(3.0, 6.0, dist));
+      { vec3 sx = dFdx(vR), sy = dFdy(vR), r1 = cross(sy, n), r2 = cross(n, sx); float det = dot(sx, r1);
+        vec3 nb = abs(det) * n - sign(det) * (dFdx(clH) * r1 + dFdy(clH) * r2); float nbl = length(nb);
+        if (clOn > 0.5 && abs(det) > 1e-14 && nbl > 1e-14) n = nb / nbl; }
+      float clCav = clOn * clamp(-clH / 0.003, 0.0, 1.0) * 0.3;          // dasar lipatan dan alur jahitan sedikit lebih gelap`);
+// kain: kilau lembut di tepi (sheen), tidak saat basah
+bodyFS = swapGL(bodyFS, '      #ifdef INTERIOR', `      c = c * (1.0 - clCav) + clOn * uSheen * pow(1.0 - nv, 3.0) * (sky + dirL) * (0.4 + 0.6 * alb) * (1.0 - wet);
+      #ifdef INTERIOR`);
+let bodyVS = swapGL(shipMat.vertexShader, 'attribute vec3 color; varying vec3 vC, vN, vR, vW;', 'attribute vec3 color; varying vec3 vC, vN, vR, vW;\n    attribute vec4 aCloth; uniform vec2 uBend[5]; varying vec4 vCl; varying vec3 vBd;');
+bodyVS = swapGL(bodyVS, 'vN = mat3(modelMatrix) * normal;', 'vCl = aCloth; vBd = vec3(uBend[int(clamp(aCloth.w - 1.0, 0.0, 4.0) + 0.5)], aCloth.w);\n      vN = mat3(modelMatrix) * normal;');
 // basah: terendam (dekat muka air) + basah yang diingat sampai uWetH di atas telapak, batasnya bergerigi (noise koordinat lokal, tidak berenang saat berjalan)
 bodyFS = swapGL(bodyFS, 'float wet = 1.0 - smoothstep(0.0, 0.6, vW.y - uWater);', /* glsl */`vec3 lb = vW - uBodyP;
       float wet = max(1.0 - smoothstep(-0.02, 0.10, vW.y - uWater),
                       0.85 * (1.0 - smoothstep(-0.05, 0.05, lb.y - uWetH + 0.07 * (vn2(lb.xz * 9.0 + lb.y * 2.0) - 0.5))));`);
-const bodyMat = new THREE.ShaderMaterial({ uniforms: bodyU, defines: { NW: 1, NM: 1 }, side: THREE.DoubleSide, vertexShader: shipMat.vertexShader, fragmentShader: bodyFS });
+const bodyMat = new THREE.ShaderMaterial({ uniforms: bodyU, defines: { NW: 1, NM: 1 }, side: THREE.DoubleSide, vertexShader: bodyVS, fragmentShader: bodyFS });
+// benda kaku tidak punya aCloth: nilai bawaan atribut 0 (bukan kain) dipasang eksplisit, sebab nilai atribut umum WebGL bisa tersisa dari program lain
+bodyMat.defaultAttributeValues = { ...bodyMat.defaultAttributeValues, aCloth: [0, 0, 0, 0] };
 const smoothstep01 = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
 const BODY = { level: 2, cast: true, wetH: 0, foamK: 0, yaw: null, detail: 2, seat: false, reach: 0, reachT: new THREE.Vector3(), group: new THREE.Group(), parts: [], head: null, torso: null, pelvis: null, suit: null, bones: [], bindInv: [], legs: [], knees: [], ankles: [], arms: [], elbows: [], hands: [], feet: [], tris: 0, t: 0, pose: { dn: 0, mv: 0, run: 0, air: 0 } };
 // M6e: tingkat detail per preset (indeks PRESETS): 0 Hemat <= 450 segitiga, 1 Rendah <= 1.200, 2 Sedang ke atas <= 3.000.
@@ -1895,20 +1974,25 @@ const BODY_DETAIL = [2, 2, 2, 1, 0];
   const AK = [[-0.07, 0.05, 0.20], [-0.02, 0.07, 0.22], [0.04, 0.072], [0.12, 0.064], [0.20, 0.058], [0.26, 0.055], [0.30, 0.054], [0.34, 0.052], [0.40, 0.050], [0.48, 0.048], [0.54, 0.046], [0.57, 0.045]];
   const AS = [[0, 2, 6, 11], [0, 2, 3, 5, 6, 7, 9, 11], AK.map((_, i) => i)];
   const suitGeo = (d) => {
-    const pos = [], col = [], bi = [], bw = [], idx = [];
-    const ring = (cx, y, cz, hw, hd, N, b0, b1, w, c) => { const s = pos.length / 3; for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2, x = cx + Math.cos(a) * hw, z = cz + Math.sin(a) * hd; pos.push(x, y, z); col.push(...(typeof c === 'function' ? c(x, y, z, cz) : c)); bi.push(b0, b1); bw.push(w); } return s; };
+    const pos = [], col = [], bi = [], bw = [], idx = [], cl = [];
+    // M6g: koordinat kain per titik (pose ikat, menempel di kain): aCloth = (cos sudut keliling dengan +1 = sisi luar anggota badan / kanan badan,
+    // sin sudut (+1 = belakang, -1 = depan), v sepanjang bagian dalam m (kaki / lengan: jarak di bawah pinggul / bahu, badan: tinggi y), nomor bagian + 1)
+    // bagian: 0 badan, 1 kaki kiri, 2 kaki kanan, 3 lengan kiri, 4 lengan kanan. Benda kaku tanpa atribut ini (nilai bawaan 0 = bukan kain).
+    let CL = { sd: 1, v0: 0, vs: 1, id: 1 };
+    const ring = (cx, y, cz, hw, hd, N, b0, b1, w, c) => { const s = pos.length / 3; for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2, x = cx + Math.cos(a) * hw, z = cz + Math.sin(a) * hd; pos.push(x, y, z); col.push(...(typeof c === 'function' ? c(x, y, z, cz) : c)); bi.push(b0, b1); bw.push(w); cl.push(CL.sd * Math.cos(a), Math.sin(a), CL.v0 + CL.vs * y, CL.id); } return s; };
     // panel dada dan sambungan pinggang lewat warna kain (tanpa lempeng: dari atas lempeng datar tampak seperti rak)
     const torsoC = (x, y, z, cz) => (z < cz - 0.02 && Math.abs(x) < 0.15 && y > 1.29 && y < 1.45) ? [0.82, 0.81, 0.78] : (y > 0.96 && y < 1.03) ? WH.map((q) => q * 0.9) : WH;
     const strip = (r0, r1, N) => { for (let i = 0; i < N; i++) { const a = r0 + i, b = r0 + (i + 1) % N; idx.push(a, r1 + i, b, b, r1 + i, r1 + (i + 1) % N); } };   // r1 di atas r0: normal keluar
-    const cap = (r, N, y, cz, up, b0, b1, w, cx = 0) => { const c = pos.length / 3; pos.push(cx, y, cz); col.push(...WH); bi.push(b0, b1); bw.push(w); for (let i = 0; i < N; i++) idx.push(c, r + (up ? i : (i + 1) % N), r + (up ? (i + 1) % N : i)); };
+    const cap = (r, N, y, cz, up, b0, b1, w, cx = 0) => { const c = pos.length / 3; pos.push(cx, y, cz); col.push(...WH); bi.push(b0, b1); bw.push(w); cl.push(0, 0, CL.v0 + CL.vs * y, CL.id); for (let i = 0; i < N; i++) idx.push(c, r + (up ? i : (i + 1) % N), r + (up ? (i + 1) % N : i)); };
     const crease = (k, lo, hi, dd) => dd > lo && dd < hi && k % 2 ? WH.map((v) => v * 0.84) : WH;   // lipatan kain di sendi (pita gelap bergantian)
     // badan (panggul -> badan atas)
+    CL = { sd: 1, v0: 0, vs: 1, id: 1 };
     const NT = SEG[d] + (d === 2 ? 2 : 0), tr = TS[d].map((k) => { const [y, zc, hw, hd] = TK[k]; return ring(0, y, zc, hw, hd, NT, 0, 1, 1 - ss(0.95, 1.06, y), torsoC); });
     for (let r = 0; r < tr.length - 1; r++) strip(tr[r], tr[r + 1], NT);
     cap(tr[0], NT, TK[0][0], 0, false, 0, 1, 1); cap(tr[tr.length - 1], NT, TK[11][0], TK[11][1], true, 0, 1, 0);
     // kaki (cincin dari bawah ke atas)
     for (const s of [0, 1]) {
-      const sd = s ? 1 : -1, bh = 2 + 2 * s, bk = 3 + 2 * s, N = SEG[d];
+      const sd = s ? 1 : -1, bh = 2 + 2 * s, bk = 3 + 2 * s, N = SEG[d]; CL = { sd, v0: HP, vs: -1, id: 2 + s };
       const rs = LS[d].slice().reverse().map((k) => { const [dd, r, cx = HX] = LK[k];
         return dd < 0.25 ? ring(sd * cx, HP - dd, -0.04, r, r * 0.96, N, 0, bh, 1 - ss(-0.06, 0.10, dd), crease(k, 0.37, 0.55, dd)) : ring(sd * cx, HP - dd, -0.04, r, r * 0.96, N, bk, bh, ss(0.38, 0.52, dd), crease(k, 0.37, 0.55, dd)); });
       for (let r = 0; r < rs.length - 1; r++) strip(rs[r], rs[r + 1], N);
@@ -1916,14 +2000,14 @@ const BODY_DETAIL = [2, 2, 2, 1, 0];
     }
     // lengan (cincin dari bawah ke atas)
     for (const s of [0, 1]) {
-      const sd = s ? 1 : -1, bs = 6 + 2 * s, be = 7 + 2 * s, N = d === 2 ? 10 : SEG[d];
+      const sd = s ? 1 : -1, bs = 6 + 2 * s, be = 7 + 2 * s, N = d === 2 ? 10 : SEG[d]; CL = { sd, v0: 1.40, vs: -1, id: 4 + s };
       const rs = AS[d].slice().reverse().map((k) => { const [dd, r, cx = 0.24] = AK[k];
         return dd < 0.15 ? ring(sd * cx, 1.40 - dd, 0.10, r, r, N, 1, bs, 1 - ss(-0.05, 0.08, dd), crease(k, 0.23, 0.37, dd)) : ring(sd * cx, 1.40 - dd, 0.10, r, r, N, be, bs, ss(0.24, 0.36, dd), crease(k, 0.23, 0.37, dd)); });
       for (let r = 0; r < rs.length - 1; r++) strip(rs[r], rs[r + 1], N);
       cap(rs[rs.length - 1], N, 1.40 + 0.09, 0.10, true, 1, bs, 1, sd * AK[0][2]);   // tutup atas (bahu)
     }
     const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('aCloth', new THREE.Float32BufferAttribute(cl, 4)); g.setIndex(idx); g.computeVertexNormals();
     g.attributes.position.setUsage(THREE.DynamicDrawUsage); g.attributes.normal.setUsage(THREE.DynamicDrawUsage);
     g.userData.skin = { count: pos.length / 3, bi: new Uint8Array(bi), w: new Float32Array(bw), p0: null, n0: null };
     return g;
@@ -1958,6 +2042,12 @@ function skinBody() {
   const B = BODY, g = B.suit.geometry, S = g.userData.skin;
   B.group.updateMatrixWorld(true); _gI.copy(B.group.matrixWorld).invert();
   for (let i = 0; i < B.bones.length; i++) _kM[i].multiplyMatrices(_gI, B.bones[i].matrixWorld).multiply(B.bindInv[i]);
+  // M6g: tekuk sendi untuk lipatan kain = sudut antara sumbu panjang (y) tulang induk dan anak, dibagi rentangnya, 0..1
+  const bd = bodyU.uBend.value, bn = B.bones, ang = (a, b, k) => { const e = bn[a].matrixWorld.elements, f = bn[b].matrixWorld.elements;
+    const d = (e[4] * f[4] + e[5] * f[5] + e[6] * f[6]) / Math.max(1e-9, Math.hypot(e[4], e[5], e[6]) * Math.hypot(f[4], f[5], f[6]));
+    return Math.min(1, Math.acos(Math.min(1, Math.max(-1, d))) / k); };
+  for (let s = 0; s < 2; s++) { bd[1 + s].set(ang(0, 2 + 2 * s, 1.4), ang(2 + 2 * s, 3 + 2 * s, 1.6)); bd[3 + s].set(ang(1, 6 + 2 * s, 1.6), ang(6 + 2 * s, 7 + 2 * s, 1.8)); }
+  bd[0].set(0.35 * (bd[1].x + bd[2].x), 0);   // pinggang (batang kaku): ikut paha terangkat (duduk, lari)
   const p = g.attributes.position.array, n = g.attributes.normal.array, P0 = S.p0, N0 = S.n0, bi = S.bi, bw = S.w;
   for (let v = 0, k = 0; v < S.count; v++, k += 3) {
     const a = _kM[bi[2 * v]].elements, b = _kM[bi[2 * v + 1]].elements, w = bw[v], u = 1 - w;

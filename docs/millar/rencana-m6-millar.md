@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: M6a sampai M6f selesai (M6e sebagian, lihat bagian M6e di bawah). Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a sampai M6g selesai (M6e sebagian, lihat bagian M6e di bawah). Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -162,6 +162,7 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | M6d-2 | Selesai 4 Oktober 2026 (revisi sudut pandang setelah uji pemilik, lihat bagian di bawah) |
 | M6e | Selesai 4 Oktober 2026, sebagian (tangga dan tersapu ditunda, lihat bagian di bawah) |
 | M6f | Selesai 4 Oktober 2026: pakaian satu mesh berkulit (lihat bagian di bawah) |
+| M6g | Selesai 4 Oktober 2026: shader kain pakaian (lipatan, jahitan, bantalan), menunggu uji pemilik di GPU (lihat bagian di bawah) |
 
 ## Catatan M6a (selesai 4 Oktober 2026)
 
@@ -388,3 +389,39 @@ Penyebab (dilihat dari samping): saat lari dan menunduk, badan atas condong 0,35
 | Panel dada lempeng dihapus, diganti warna kain lebih terang di dada dan pita pinggang | Tidak ada lagi rak datar saat menunduk |
 
 Uji baru: batang tubuh kaku (panggul vs badan atas < 2 mm). Uji Millar 125 pemeriksaan lulus.
+
+## M6g (selesai 4 Oktober 2026): shader kain pakaian (High)
+
+Masukan pemilik: pakaian ingin dibuat mirip kain pakaian astronaut dengan lipatan seperti foto referensi. Yang diambil hanya kesan umum kain (lipatan di sendi, jahitan, bantalan, kain doff); bentuk panel persis, logo, dan papan nama tidak ditiru, foto tidak di-commit.
+
+Semua di shader `bodyMat`, tanpa tekstur dan tanpa segitiga baru (Hemat 432, Rendah 1.012, Sedang ke atas 2.440, tidak berubah).
+
+| Item | Hasil |
+| --- | --- |
+| Koordinat kain | Atribut `aCloth` di mesh pakaian (`suitGeo()`): cos / sin sudut keliling (cos +1 = sisi luar kaki dan lengan, sin -1 = depan), v sepanjang bagian (m), nomor bagian + 1 (1 badan, 2-3 kaki, 4-5 lengan). Dari pose ikat, jadi pola menempel di kain dan tidak berenang saat bergerak. Tanpa kolom titik ganda: sudut dihitung lagi di shader dengan `atan`, lompatan sudutnya diletakkan tepat di garis jahitan (sisi luar anggota badan, tengah belakang badan di balik ransel) |
+| Benda kaku | Tanpa `aCloth`; nilai bawaan atribut 0 dipasang eksplisit di `bodyMat.defaultAttributeValues` (nilai atribut umum WebGL bisa tersisa dari program lain) |
+| Tekuk sendi | `skinBody()` menghitung sudut antara sumbu panjang tulang induk dan anak tiap frame, dibagi rentangnya (pinggul 1,4, lutut 1,6, bahu 1,6, siku 1,8 rad), ke `bodyU.uBend[5]` (pinggang = 0,35 x jumlah tekuk kedua pinggul). Tanpa unggah atribut per frame |
+| Lipatan | Lipatan tertekan melingkar periode 4,5 cm di lutut, siku, pinggang; miring di pangkal paha dan ketiak; menumpuk di atas sepatu dan manset. Lembah tajam, fase dibengkokkan noise, putus-sambung keliling. Kedalaman naik dengan tekuk (0,3 + 0,7 x tekuk) dan lebih dalam di sisi yang tertekan (belakang lutut, depan siku) |
+| Tarikan dan kerut | Tarikan diagonal di paha dan lengan atas, kerut memanjang kain longgar di betis, kerut lembar perut, kerut lembut dan butir kain di seluruh permukaan |
+| Jahitan | Alur 5 mm dengan bibir menonjol: sisi luar dan dalam kaki dan lengan, cincin di atas dan bawah lutut, di lengan atas dan bawah, tengah depan badan, sisi badan, sambungan pinggang, tepi panel dada |
+| Bantalan | Lutut depan (2,5 mm, dijahit wajik 5 cm), paha depan (1,2 mm), lengan atas luar (1,5 mm), panel dada (1,5 mm) |
+| Normal | Bump turunan layar (cara bump map three.js) dari tinggi kain dan `vR` (posisi relatif kamera, presisi baik jauh dari asal dunia). Turunan di alur seragam; normal hanya diganti bila panjangnya sah. Pola yang lebih rapat dari sekitar 2 piksel memudar (ukuran piksel di permukaan), semua pola pudar 3-6 m |
+| Cahaya kain | Dasar lipatan dan alur jahitan sedikit gelap (sampai 30%), kilau lembut di tepi `pow(1 - nv, 3)` (tidak saat basah). Basah, bayangan tubuh, garis air tetap |
+| Parameter | `CONFIG.body.cloth` (`k` kekuatan, 0 = polos; `sheen` kilau tepi), uniform `uClothK` / `uSheen` |
+
+Uji baru (blok 5u):
+
+| Pemeriksaan | Hasil |
+| --- | --- |
+| Koordinat kain 3 tingkat detail | Nilai salah 0 (cos / sin satuan atau 0 di tutup, v sesuai posisi ikat, nomor bagian 1-5); kaki v sampai 0,88 m, lengan 0,57 m; benda kaku tanpa koordinat kain |
+| Kain terlihat (menunduk sambil lari, kain nyala vs mati) | 12,6% piksel tubuh berubah lebih dari 3%, beda rata-rata 1,39%; piksel berubah di luar tubuh 0; tidak valid / menyala 0 |
+| Lipatan ikut tekuk | Beda kain sendi lurus 1,1% -> tertekuk penuh 1,4%; tekuk lutut berdiri 0,26 -> lari maks 1,00; pinggul berdiri 0,33 -> duduk 1,00 |
+| 5 preset menunduk 3 suasana, kokpit (blok 6 dan 5s) | Tanpa nilai tidak valid atau titik menyala |
+| Biaya `updateBody()` | 0,058 ms per frame di sandbox (batas 0,1) |
+
+| Uji Millar | 128 pemeriksaan lulus |
+
+Catatan: kaki pilot di kokpit hampir lurus ke depan (IK 0,82 / 0,28 m), jadi lipatan pilot terutama di pangkal paha dan pinggang, bukan di lutut.
+
+Wajib dicek pemilik di GTX 1060 dan M1: tidak ada titik putih atau kedip di kain (sandbox SwiftShader tidak memperlihatkan NaN), lipatan wajar saat lari dan duduk, kesan kain tidak terlalu kuat atau lemah (atur `CONFIG.body.cloth.k`), FPS Hemat.
+
