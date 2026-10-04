@@ -74,7 +74,7 @@ Acuan (foto 1-2): air terdorong naik di sekitar tulang kering, gelombang haluan 
 2. **Buih menempel di permukaan:** kanal buih riak (`rf`) diperkuat di jejak kaki dan di cincin tumbukan tiap langkah, memudar 2-4 s. Buih itulah yang menyatukan percikan dengan laut.
 3. **Lembar mahkota air (baru):** tiap langkah, satu mahkota tipis berbentuk cincin miring di sekitar kaki (mesh kecil, naik 0,3-0,5 m lalu jatuh dalam sekitar 0,5 s). Shader air (pantulan langit + hamburan, tembus pandang, tepi putih), bukan titik putih.
 4. **Butir semprotan:** jumlah dikurangi, posisi di kaki (0,1-0,2 m di depan, bukan 0,45 m), kecepatan maju hanya sedikit di atas kecepatan pemain (`carry` 1,05-1,15, bukan 1,6-1,75), lebih ke samping dan ke atas. Warna dari pencahayaan air (tidak lebih terang dari buih), sebagian tembus pandang, memanjang searah gerak (titik diregang).
-5. **Pandangan pertama:** percikan tetap terutama terlihat saat menunduk (kaki di bawah bidang pandang). Opsional: kaki dan lengan pemain terlihat saat menunduk (model tubuh `SHD.body` dipakai juga untuk tampilan). Usul ini ditanyakan ke pemilik setelah 1-4.
+5. **Pandangan pertama:** percikan tetap terutama terlihat saat menunduk (kaki di bawah bidang pandang). Kaki dan lengan pemain terlihat saat menunduk: dialihkan ke M6 (`docs/millar/rencana-m6-millar.md`, tubuh orang pertama).
 
 **Uji baru:** butir semprotan tidak terlempar lebih dari 1,2 m di depan kaki saat lari 3 m/s; riak di depan kaki naik (tinggi positif) dan buih di jejak > ambang; mahkota tampil lalu hilang dalam < 0,8 s; render tanpa nilai tidak valid.
 
