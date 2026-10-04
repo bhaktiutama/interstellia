@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: M6a selesai, M6b-M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a dan revisi M6a-2 selesai, M6b-M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -154,6 +154,7 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | Tahap | Status |
 | --- | --- |
 | M6a | Selesai 4 Oktober 2026 (lihat catatan di bawah) |
+| M6a-2 | Selesai 4 Oktober 2026 (revisi setelah uji pemilik, lihat bagian di bawah) |
 | M6b | Belum |
 | M6c | Belum |
 | M6d | Belum |
@@ -172,3 +173,27 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | Uji Millar | 78 pemeriksaan lulus (blok 5m baru) |
 
 Penyimpangan dari rencana: dada digeser jadi 0,40 x 0,50 x 0,28 m (depan 0,11 m di depan mata, atas di y 1,45) agar terlihat mulai menunduk sekitar 55 derajat. Kaki dan lengan baru terlihat di tepi saat berjalan; posisi telapak 0,45 m di depan (selaras `footstep()`) dikerjakan di M6b. Bias bayangan tubuh sementara 0,3 m / 0,4 (lebih besar dari wahana), penyetelan benar di M6c. Uji `bayangan Gargantua` (5l) tipis ambangnya (5-11% lebih gelap per jalan, ambang 7%), sudah ada sebelum M6a; di 5l tubuh dimatikan agar terisolasi.
+
+## Revisi M6a-2 (selesai 4 Oktober 2026): tubuh terbaca sebagai manusia
+
+Uji pemilik atas M6a: dada berupa lempengan datar (45-67% layar), tanpa kaki, perut, dan tangan, hitam keabuan, pose sama untuk semua keadaan. Acuan pose: pandangan orang pertama menunduk (perut, paha, kaki di depan, tangan di sudut) dan lari (tangan ke sisi). Hanya pose dan komposisi yang diacu; gambar tidak disimpan di repo.
+
+| Perubahan | Isi |
+| --- | --- |
+| Proporsi | Badan loft elips 8 sisi (dada di belakang atau tepat di bawah mata, perut dan pinggul mencuat), ransel, sabuk, pinggul z -0,04, kaki di depan saat menunduk, lengan dengan manset dan tangan jingga, sepatu dengan pergelangan (telapak tetap mendatar), anggota badan tertutup di ujung |
+| Warna | Putih suit `[0.74,0.74,0.72]`, kain dalam abu-abu, aksen jingga (sebelumnya putih 0,30: hitam keabuan) |
+| Pose `bodyPose()` | Menunduk (`dn` dari `P.pitch`), langkah (`BOB.phase`, `BOB.amp`), lari (`BOB.run` baru), udara; semua parameter di `CONFIG.body`; peredaman 0,12 s; pinggul turun mengikuti kaki yang paling terulur agar kaki menapak |
+| FOV lari | +6 derajat (`CONFIG.walk.fovRun`), kembali tepat 70 saat diam; `BOB.run` dibulatkan ke 0 di bawah 0,004 |
+
+| Uji | Hasil |
+| --- | --- |
+| Segitiga | 624 (batas 650) |
+| Menunduk 60 derajat | 18,9% piksel beda dari Mati (5-40%), terang rata-rata 0,187 (> 0,12), kedua sepatu dan tangan di bingkai, horizon 0% |
+| Lari | kaki beda z 1,47 m (> 0,8), tangan 0,32 m dari sumbu (> 0,30), salah satu tangan di bingkai |
+| Udara | tangan 0,55 m dari sumbu (> 0,45) |
+| Pose halus | perubahan sendi terbesar 0,316 rad per frame (< 0,35) |
+| FOV | lari 75,9-76,0, diam 70,000 |
+| Uji Millar | 81 pemeriksaan |
+
+Keterbatasan: sepatu terlihat memendek karena sudut pandang dari atas (perspektif), ujung jingga baru jelas saat melangkah; tangan belakang saat lari keluar dari bingkai (wajar, satu tangan terlihat). Anggaran Hemat 600 segitiga belum dipenuhi (624), diselesaikan lewat LOD di M6e. Uji `bayangan Gargantua` (5l) tetap tipis ambangnya dan gagal sesekali, bukan karena tubuh (tubuh dimatikan di blok itu). Dari M6b, ayun gerak, lutut, lompat, dan condong sudah masuk di sini; sisanya: sumber riak ke telapak, yaw badan tertinggal, busa garis air.
+

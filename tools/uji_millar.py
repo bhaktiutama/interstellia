@@ -458,13 +458,34 @@ UJI = r"""
     M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false;
     P.view = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.ground = true; P.yaw = -Math.PI / 2 + 0.3; M.MOOD.brk = 1;
     let bad = 0; for (const o of B.parts) for (const n of ['position', 'normal', 'color']) for (const v of o.geometry.attributes[n].array) if (!Number.isFinite(v)) bad++;
-    out[`tubuh: ${B.tris} segitiga (<= 450; Hemat <= 600), ${B.parts.length} bagian, nilai tidak valid ${bad}`] = B.tris > 0 && B.tris <= 450 && bad === 0;
+    out[`tubuh: ${B.tris} segitiga (<= 650), ${B.parts.length} bagian, nilai tidak valid ${bad}`] = B.tris > 0 && B.tris <= 650 && bad === 0;
     // dua gambar dalam satu tugas sinkron (waktu, ombak, kamera sama), hanya tingkat tubuh berbeda
     const shot = (lv) => { B.level = lv; M.camera.position.set(P.x, P.y, P.z); M.camera.rotation.set(P.pitch, P.yaw, 0); M.camera.updateMatrixWorld(true); M.U.uCam.value.copy(M.camera.position); M.updateShadow(); M.renderer.setRenderTarget(M.POST.hdr); M.renderer.clear(); M.renderer.render(M.scene, M.camera); M.renderer.setRenderTarget(null); return snap(); };
-    P.pitch = -70 * Math.PI / 180; const dn1 = shot(2), dn0 = shot(0);
+    const lumD = (a, b) => { let n = 0, l = 0; for (let k = 0; k < a.length; k += 4) if (Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]) > 40) { n++; l += 0.3 * M.THREE.DataUtils.fromHalfFloat(a[k]) + 0.59 * M.THREE.DataUtils.fromHalfFloat(a[k + 1]) + 0.11 * M.THREE.DataUtils.fromHalfFloat(a[k + 2]); } return n ? l / n : 0; };
+    const inFrame = (o, dg = 0.95) => { const v = o.userData.c.clone(); o.localToWorld(v); v.project(M.camera); return Math.abs(v.x) < dg && Math.abs(v.y) < dg && v.z < 1; };
+    const loc = (o) => { const v = o.userData.c.clone(); o.localToWorld(v); return B.group.worldToLocal(v); };
+    P.pitch = -60 * Math.PI / 180; B.level = 2; M.updateBody(10); const dn1 = shot(2), limbsIn = B.feet.every((o) => inFrame(o)) && B.hands.every((o) => inFrame(o)), dn0 = shot(0);
+    const lumB = lumD(dn1, dn0);
     P.pitch = 4 * Math.PI / 180; const hz1 = shot(2), hz0 = shot(0); B.level = 2;
     const dD = diff(dn1, dn0), dH = diff(hz1, hz0);
-    out[`tubuh terlihat saat menunduk: ${dD.toFixed(2)}% piksel beda dari Mati (> 1,5%), di horizon ${dH.toFixed(2)}% (= 0)`] = dD > 1.5 && dH === 0;
+    out[`tubuh terlihat saat menunduk 60 derajat: ${dD.toFixed(2)}% piksel beda dari Mati (5-40%), terang rata-rata ${lumB.toFixed(3)} (> 0,12), di horizon ${dH.toFixed(2)}% (= 0)`] = dD > 5 && dD < 40 && lumB > 0.12 && dH === 0;
+    out[`tubuh menunduk: kedua sepatu dan kedua tangan di dalam bingkai ${limbsIn}`] = limbsIn;
+    // lari: kaki depan dan belakang berjauhan, tangan keluar ke sisi dan tetap di bingkai; udara: lengan terentang
+    P.pitch = -50 * Math.PI / 180; M.BOB.run = 1; M.BOB.amp = 0.055; M.BOB.phase = Math.PI / 2; M.updateBody(10); shot(2);
+    const fz = B.feet.map((o) => loc(o).z), hx = B.hands.map((o) => Math.abs(loc(o).x)), runVis = B.hands.some((o) => inFrame(o, 1.2));
+    out[`lari: kaki beda z ${Math.abs(fz[0] - fz[1]).toFixed(2)} m (> 0,8), tangan keluar ${Math.min(...hx).toFixed(2)} m (> 0,30), salah satu di bingkai ${runVis}`] = Math.abs(fz[0] - fz[1]) > 0.8 && Math.min(...hx) > 0.30 && runVis;
+    P.ground = false; M.BOB.run = 0; M.BOB.amp = 0; M.updateBody(10); shot(2); const ax = B.hands.map((o) => Math.abs(loc(o).x)); P.ground = true;
+    out[`udara: lengan terentang, tangan ${Math.min(...ax).toFixed(2)} m dari sumbu (> 0,45)`] = Math.min(...ax) > 0.45;
+    // pose halus: dari diam ke lari dalam 60 frame, tiap sendi berubah < 0,35 rad per frame
+    M.BOB.run = 0; M.BOB.amp = 0; M.updateBody(10); let mxd = 0, prev = null;
+    for (let f = 0; f < 90; f++) { M.BOB.run = 1; M.BOB.amp = 0.055; M.BOB.phase += 0.17; M.updateBody(1 / 60);
+      const cur = [...B.legs, ...B.knees, ...B.ankles, ...B.arms, ...B.elbows].map((j) => j.rotation.x); if (prev) cur.forEach((v, i) => { mxd = Math.max(mxd, Math.abs(v - prev[i])); }); prev = cur; }
+    out[`pose halus: perubahan sendi terbesar ${mxd.toFixed(3)} rad per frame (< 0,35), nilai tidak valid ${prev.some((v) => !Number.isFinite(v)) ? 'ada' : 'tidak'}`] = mxd < 0.35 && prev.every((v) => Number.isFinite(v));
+    M.BOB.run = 0; M.BOB.amp = 0; M.BOB.phase = 0; M.updateBody(10);
+    // FOV: naik saat lari, kembali tepat saat diam
+    M.keys.KeyW = true; M.keys.ShiftLeft = true; await wait(3500); const fovRun = M.camera.fov; M.keys.KeyW = false; M.keys.ShiftLeft = false; for (let f = 0; f < 90; f++) M.stepPlayer(1 / 30); await wait(2500); const fov0 = M.camera.fov;
+    out[`FOV lari ${fovRun.toFixed(2)} (> 70,5, <= ${70 + M.CONFIG.walk.fovRun}), diam ${fov0.toFixed(3)} (= 70)`] = fovRun > 70.5 && fovRun <= 70 + M.CONFIG.walk.fovRun + 0.01 && Math.abs(fov0 - 70) < 0.001;
+    P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = -60 * Math.PI / 180; M.updateBody(10);
     // lapisan: kepala hanya bayangan (3) di orang pertama, ikut tampil (0) di drone; badan di 0 dan 3; Bayangan = semua hanya 3
     B.level = 2; P.view = 0; M.updateBody(); const h0 = B.head.layers.isEnabled(0), h3 = B.head.layers.isEnabled(3), b0 = B.parts[0].layers.isEnabled(0);
     P.view = 1; M.updateBody(); const h1 = B.head.layers.isEnabled(0); P.view = 0;

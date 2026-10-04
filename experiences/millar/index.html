@@ -182,7 +182,10 @@ const CONFIG = {
   },
   fft: { lam: 0.9, foamJ: 0.7, foamTau: 2.5 },
   seaState: { far: 0.6, near: 1.5, dFar: 120000, dNear: 4000, tau: 4 },   // pengali tinggi ombak angin: kecil saat gelombang raksasa jauh, besar saat dekat
-  walk: { stride: 0.72, strideRun: 1.25, drag: 0.35, legs: 0.13 },        // R3: panjang langkah (m), waktu tanggap di air (s), jarak kaki dari tengah (m)
+  body: { smooth: 0.12, stand: 0.08, legDown: 0.6, kneeDown: 0.15, legWalk: 0.5, legRun: 0.9, kneeWalk: 0.8, kneeRun: 1.3, legAir: 0.5,
+    armFwd: 0.15, armDown: 0.15, armWalk: 0.4, armRun: 0.8, abduct: 0.12, abductRun: 0.25, abductAir: 0.6, elbow: 0.7, elbowRun: 1.5, elbowDown: 0.3,
+    leanRun: 0.25, leanDown: 0.10 },   // M6a-2: pose tubuh (rad, m, s)
+  walk: { stride: 0.72, strideRun: 1.25, drag: 0.35, legs: 0.13, fovRun: 6 },        // R3: panjang langkah (m), waktu tanggap di air (s), jarak kaki dari tengah (m)
   current: { max: 1.6, at: 2500, w: 3500, push: 0.35 },                  // R4: arus air surut ke arah gelombang (m/s, puncak di depan muka, lebar, tarikan ke pemain)
   sweep: { burst: 0.5, under: 3.4, out: 4.3 },                            // R4: urutan tersapu (s): buih putih, di bawah air, memutih   // R2: kecuraman horizontal (choppy), ambang Jacobian buih, waktu pudar buih (s)
   wave: {               // gelombang raksasa (konsep: sekitar 1.200 m)
@@ -1622,37 +1625,75 @@ const bodyMat = new THREE.ShaderMaterial({
   uniforms: bodyU, defines: { NW: 1, NM: 1 }, side: THREE.DoubleSide, vertexShader: shipMat.vertexShader,
   fragmentShader: shipMat.fragmentShader.replace('shadowAt(vW + n * 0.1, 0.15)', 'shadowAt(vW + n * 0.3, 0.4)'),   // bias lebih besar: tubuh ada di peta bayangannya sendiri
 });
-const BODY = { level: 2, group: new THREE.Group(), parts: [], head: null, legs: [], arms: [], elbows: [], tris: 0 };
+const BODY = { level: 2, group: new THREE.Group(), parts: [], head: null, torso: null, legs: [], knees: [], ankles: [], arms: [], elbows: [], hands: [], feet: [], tris: 0, t: 0, pose: { dn: 0, mv: 0, run: 0, air: 0 } };
 {
-  const WH = [0.30, 0.30, 0.29], OR = [0.45, 0.20, 0.07], GR = [0.14, 0.14, 0.15];
+  // Kamera ada di depan badan: dada di belakang / tepat di bawah mata, hanya perut dan pinggul mencuat; kaki dan tangan di depan (terlihat saat menunduk)
+  const WH = [0.74, 0.74, 0.72], GY = [0.35, 0.35, 0.36], OR = [0.85, 0.35, 0.08], H = 0.95;
   const bx = (w, h, d, x, y, z, color) => ({ geo: new THREE.BoxGeometry(w, h, d).translate(x, y, z), color });
-  const cy = (r0, r1, h, x, y, z, color) => ({ geo: new THREE.CylinderGeometry(r0, r1, h, 6).translate(x, y, z), color });
+  const cy = (r0, r1, h, x, y, z, color, open = true, seg = 8) => ({ geo: new THREE.CylinderGeometry(r0, r1, h, seg, 1, open).translate(x, y, z), color });
   const pv = (x, y, z, parent) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); return g; };
   const mk = (parts, parent) => {
-    const g = window.KESTREL.mergeColored(THREE, parts); BODY.tris += g.attributes.position.count / 3;
-    const o = new THREE.Mesh(g, bodyMat); o.frustumCulled = false; o.layers.set(3); parent.add(o); BODY.parts.push(o); return o;
+    const g = window.KESTREL.mergeColored(THREE, parts); BODY.tris += g.attributes.position.count / 3; g.computeBoundingBox();
+    const o = new THREE.Mesh(g, bodyMat); o.frustumCulled = false; o.layers.set(3); o.userData.c = g.boundingBox.getCenter(new THREE.Vector3());
+    parent.add(o); BODY.parts.push(o); return o;
   };
-  const G = BODY.group;
-  mk([bx(0.40, 0.50, 0.28, 0, 1.20, 0.03, WH), bx(0.42, 0.07, 0.30, 0, 0.97, 0.03, OR), bx(0.34, 0.46, 0.18, 0, 1.22, 0.26, WH)], G);   // dada, sabuk, ransel
-  BODY.head = mk([{ geo: new THREE.SphereGeometry(0.15, 10, 8).translate(0, 1.68, 0), color: WH }], G);
+  // badan: loft elips 8 sisi (cincin: y, pusat z, setengah lebar, setengah tebal)
+  const loft = (rings, color) => {
+    const N = 8, pos = [], idx = [];
+    for (const [y, zc, hw, hd] of rings) for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2; pos.push(Math.cos(a) * hw, y, zc + Math.sin(a) * hd); }
+    for (let r = 0; r < rings.length - 1; r++) for (let i = 0; i < N; i++) { const a = r * N + i, b = r * N + (i + 1) % N; idx.push(a, a + N, b, b, a + N, b + N); }
+    for (const [r, up] of [[0, 0], [rings.length - 1, 1]]) { const c = pos.length / 3; pos.push(0, rings[r][0], rings[r][1]); for (let i = 0; i < N; i++) idx.push(c, r * N + (up ? i : (i + 1) % N), r * N + (up ? (i + 1) % N : i)); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return { geo: g, color };
+  };
+  const G = BODY.group, T = pv(0, H, 0, G); BODY.torso = T;
+  mk([loft([[0.95 - H, 0.0, 0.18, 0.12], [1.15 - H, 0.02, 0.17, 0.11], [1.42 - H, 0.12, 0.21, 0.12]], WH), bx(0.34, 0.46, 0.18, 0, 1.25 - H, 0.34, WH), cy(0.19, 0.19, 0.05, 0, 0.97 - H, 0.0, OR)], T);
+  BODY.head = mk([{ geo: new THREE.SphereGeometry(0.15, 10, 8).translate(0, 1.66 - H, 0.07), color: WH }], T);
   for (const sd of [-1, 1]) {
-    const hip = pv(sd * CONFIG.walk.legs, 0.95, 0.05, G), knee = pv(0, -0.45, 0, hip);
-    mk([cy(0.085, 0.07, 0.45, 0, -0.225, 0, WH)], hip); mk([cy(0.07, 0.06, 0.45, 0, -0.225, 0, WH), bx(0.13, 0.10, 0.30, 0, -0.45, -0.06, GR)], knee);
-    BODY.legs.push(hip);
-    const sh = pv(sd * 0.28, 1.45, 0.05, G), el = pv(0, -0.30, 0, sh); el.rotation.x = 0.6;
-    mk([cy(0.055, 0.05, 0.30, 0, -0.15, 0, WH)], sh); mk([cy(0.05, 0.045, 0.28, 0, -0.14, 0, WH), bx(0.09, 0.14, 0.09, 0, -0.34, 0, GR)], el);
+    const hip = pv(sd * (CONFIG.walk.legs + 0.03), H, -0.04, G), knee = pv(0, -0.45, 0, hip);
+    mk([cy(0.09, 0.07, 0.45, 0, -0.225, 0, WH, false)], hip); mk([cy(0.07, 0.06, 0.47, 0, -0.235, 0, GY, false)], knee);
+    const ank = pv(0, -0.45, 0, knee);   // pergelangan: telapak tetap mendatar saat kaki terayun
+    BODY.feet.push(mk([bx(0.13, 0.10, 0.20, 0, 0, -0.02, WH), bx(0.13, 0.08, 0.11, 0, -0.01, -0.17, OR)], ank));
+    BODY.legs.push(hip); BODY.knees.push(knee); BODY.ankles.push(ank);
+    const sh = pv(sd * 0.24, 1.40 - H, 0.10, T), el = pv(0, -0.30, 0, sh);
+    mk([cy(0.06, 0.05, 0.31, 0, -0.15, 0, WH, false)], sh); mk([cy(0.05, 0.045, 0.28, 0, -0.14, 0, WH, false), cy(0.056, 0.056, 0.05, 0, -0.27, 0, OR)], el);
+    BODY.hands.push(mk([{ geo: new THREE.SphereGeometry(1, 6, 4).scale(0.055, 0.05, 0.08).translate(0, -0.33, -0.02), color: OR }], el));
     BODY.arms.push(sh); BODY.elbows.push(el);
   }
   G.visible = false; scene.add(G);
   SHIP.mesh.traverse((o) => { o.layers.enable(3); });
 }
-function updateBody() {
+// Pose dari keadaan: menunduk (dn), langkah (mv, fase BOB), lari (run), udara (air). Sudut dalam rad; + = maju (-z) untuk paha dan lengan,
+// lutut: negatif = betis ke belakang, siku: positif = lengan bawah ke depan, abduksi (rotation.z) + = ke kanan. Condong maju = rotasi x negatif pada torso.
+const smoothstep01 = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+function bodyPose(dtp) {
+  const B = BODY, Q = B.pose, Cb = CONFIG.body, k = dtp >= 1 ? 1 : 1 - Math.exp(-dtp / Cb.smooth);
+  const tn = P.view === 0 ? smoothstep01(0.30, 1.05, -P.pitch) : 0, tm = Math.min(1, BOB.amp / 0.034) * (P.ground ? 1 : 0);
+  Q.dn += (tn - Q.dn) * k; Q.mv += (tm - Q.mv) * k; Q.run += (BOB.run - Q.run) * k; Q.air += ((P.ground ? 0 : 1) - Q.air) * k;
+  const ph = BOB.phase, r = Q.run, mv = Q.mv, dn = Q.dn, air = Q.air, lean = Cb.leanRun * r + Cb.leanDown * dn;
+  B.torso.rotation.x = -lean; B.torso.position.z = 0.45 * Math.sin(lean);
+  const th = [], kn = [];
+  for (let i = 0; i < 2; i++) {
+    const sd = i === 0 ? -1 : 1, s = i === 0 ? 1 : -1, sw = s * Math.sin(ph) * mv;
+    const swing = sw * (Cb.legWalk + (Cb.legRun - Cb.legWalk) * r);
+    const flex = Math.max(0, -sw) * (Cb.kneeWalk + (Cb.kneeRun - Cb.kneeWalk) * r);
+    th[i] = Cb.stand + Cb.legDown * dn + swing + air * Cb.legAir;
+    kn[i] = -(Cb.kneeDown * dn + flex + air * Cb.legAir * 1.4 + Cb.stand * 0.3);
+    const asw = -sw * (Cb.armWalk + (Cb.armRun - Cb.armWalk) * r);
+    B.arms[i].rotation.set(Cb.armFwd + Cb.armDown * dn + asw + air * 0.3, 0, sd * (Cb.abduct + Cb.abductRun * r + Cb.abductAir * air));
+    B.elbows[i].rotation.x = Cb.elbow + (Cb.elbowRun - Cb.elbow) * r + Cb.elbowDown * dn;
+  }
+  // pinggul turun sebesar kaki yang paling terulur kehilangan tinggi (kaki tertekuk tetap menapak, tidak melayang)
+  const drop = Math.max(0, Math.min(0.9 - 0.45 * (Math.cos(th[0]) + Math.cos(th[0] + kn[0])), 0.9 - 0.45 * (Math.cos(th[1]) + Math.cos(th[1] + kn[1])))) * (1 - air);
+  B.torso.position.y = 0.95 - drop;
+  for (let i = 0; i < 2; i++) { B.legs[i].position.y = 0.95 - drop; B.legs[i].rotation.x = th[i]; B.knees[i].rotation.x = kn[i]; B.ankles[i].rotation.x = Math.max(-0.6, Math.min(0.9, -(th[i] + kn[i]) * 0.85)); }
+}
+function updateBody(dtp) {
   const B = BODY, show = B.level > 0 && !FLY.on && !CINE.on && !SWEEP.on;
   B.group.visible = show; if (!show) return;
+  const now = performance.now(); if (dtp === undefined) dtp = Math.min(0.1, (now - B.t) / 1000); B.t = now;
   const bed = seabed(P.x, P.z);
   B.group.position.set(P.x, P.view === 0 ? Math.max(bed, P.y - CONFIG.eye) : bed, P.z); B.group.rotation.y = P.yaw;
-  const sw = Math.min(1, BOB.amp / 0.034) * Math.sin(BOB.phase);
-  B.legs[0].rotation.x = 0.45 * sw; B.legs[1].rotation.x = -0.45 * sw; B.arms[0].rotation.x = -0.35 * sw; B.arms[1].rotation.x = 0.35 * sw;
+  bodyPose(dtp);
   const main = B.level === 2;
   for (const o of B.parts) { o.layers.set(3); if (main && (o !== B.head || P.view > 0)) o.layers.enable(0); }
   bodyU.uWater.value = waterHere(STATE.visT);
@@ -1705,7 +1746,7 @@ const STATE = { started: false, simT: 0, visT: 0 };
 const P = { x: 0, z: 0, y: 0, vy: 0, vx: 0, vz: 0, ground: true, yaw: -Math.PI / 2 + 18 * DEG, pitch: 4 * DEG, view: 0, speed: 0, depth: 0 };
 // Gerak kepala (R3, pola BOB Copper Corn Station): langkah, ayun, hentakan mendarat; B = Mati / Halus / Normal
 const BOB_LEVELS = [['Mati', 0], ['Halus', 0.5], ['Normal', 1]];
-const BOB = { level: 2, phase: 0, side: 0, amp: 0, y: 0, vy: 0, steps: 0, dy: 0, dx: 0, roll: 0 };
+const BOB = { level: 2, run: 0, phase: 0, side: 0, amp: 0, y: 0, vy: 0, steps: 0, dy: 0, dx: 0, roll: 0 };
 const keys = {};
 const CLK = { planet: 0, swept: 0, white: 0, msgT: 0 };
 const SWEEP = { on: false, t: 0, rx: 0, ry: 0, rz: 0, wx: 0, wy: 0, wz: 0, under: 0 };
@@ -1927,6 +1968,7 @@ function headBob(dt, speed, run, depth) {
         spawnSplash(P.x + rx * L * sd + fx * 0.45, y, P.z + rz * L * sd + fz * 0.45, 4, P.vx, P.vz, 0.55 + 0.25 * speed, 1.6, 1.75, 0.12); }
     }
   }
+  BOB.run += ((run && speed > 0.08 && P.ground ? 1 : 0) - BOB.run) * Math.min(1, dt * 6); if (BOB.run < 0.004) BOB.run = 0;
   const target = speed > 0.08 && P.ground ? (run ? 0.055 : 0.034) : 0;
   BOB.amp += (target - BOB.amp) * Math.min(1, dt * 5);
   BOB.vy += (-90 * BOB.y - 11 * BOB.vy) * dt; BOB.y += BOB.vy * dt;          // pegas hentakan mendarat
@@ -2879,6 +2921,13 @@ function frame(now) {
   SKYU.uTime.value = STATE.visT; GU_.uTime.value = STATE.visT * 1.5;   // waktu piringan (satuan rs/c), sekitar 30 s per putaran di tepi dalam
 
   const onFoot = P.view === 0 && !FLY.on, AM = updateAudio(dt, dist);
+  { // FOV naik sedikit saat lari (M6a-2); diam tepat 70, tidak berubah di mode foto
+    const f = 70 + (onFoot && !PHOTO.on ? CONFIG.walk.fovRun * BOB.run : 0);
+    if (Math.abs(camera.fov - f) > 0.01) {
+      camera.fov = f; camera.updateProjectionMatrix(); const h = renderer.domElement.height || 1;
+      U.uPix.value = 2 * Math.tan(camera.fov * DEG / 2) / h; splMat.uniforms.uScale.value = h / (2 * Math.tan(camera.fov * DEG / 2));
+    }
+  }
   // Getaran tanah (R5): gemuruh gelombang raksasa terasa di kaki, ikut tingkat gerak kepala (B)
   const shk = onFoot && !SWEEP.on ? AM.shake * BOB_LEVELS[BOB.level][1] : 0, tv = now / 1000;
   const shY = shk * (Math.sin(tv * 81.7) + 0.6 * Math.sin(tv * 107.3 + 1.3)), shX = shk * 0.5 * Math.sin(tv * 94.2 + 0.7);
@@ -2918,7 +2967,7 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
   SWEEP, currentAt, SPRAY, US, ZS, M_COMP,
   AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
-  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob, BODY, BODY_LEVELS, bodyMat, cycleBody, updateBody,
+  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob, BODY, BODY_LEVELS, bodyMat, cycleBody, updateBody, bodyPose,
   FLY, boardShip, flyLand, updateFly, flyReset, placeShip,
   MIS, missionSites, startMission, stopMission, restartMission, finishMission, updateMission, missionAction, toggleRadar, radarFix, setMode, setLevel, fmtMS,
   SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip, CK, COCKPIT, cockpitUpdate,
