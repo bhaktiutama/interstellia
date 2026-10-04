@@ -163,7 +163,7 @@ UJI = r"""
   {
     const face = M.US.filter((u) => u >= -800 && u <= 300), gaps = face.slice(1).map((u, i) => u - face[i]);
     const zs = M.ZS.map(Math.abs).sort((a, b) => a - b), dz = zs[1] - zs[0];
-    out[`muka gelombang: ${M.US.length} sampel profil, ${face.length} di muka (jarak ${Math.min(...gaps)}-${Math.max(...gaps)} m), baris ${dz.toFixed(1)} m dekat pemain`] = face.length >= 50 && Math.max(...gaps) <= 26 && dz <= 6.5;
+    out[`muka gelombang: ${M.US.length} sampel profil, ${face.length} di muka (jarak ${Math.min(...gaps).toFixed(1)}-${Math.max(...gaps).toFixed(1)} m), baris ${dz.toFixed(1)} m dekat pemain`] = face.length >= 50 && Math.max(...gaps) <= 26 && dz <= 6.5;
     const P = M.P; P.x = 0; P.z = 0; P.vx = 0; P.vz = 0; P.view = 0;
     M.U.uWX.value += 30000 - M.frontX(0); const cFar = M.currentAt(0, 0);
     M.U.uWX.value += M.CONFIG.current.at - M.frontX(0); const cNear = M.currentAt(0, 0);
@@ -191,7 +191,7 @@ UJI = r"""
     const uw = M.audioMix(2000, 1, 0, 0, 0.5, 1), dry = M.audioMix(2000, 1, 0, 0, 0, 0), wd = M.audioMix(40000, 1, 0, 1.5, 0.5, 0);
     const cur = M.audioMix(2500, 1, M.CONFIG.current.max, 0, 0.5, 0), vals = [...mx, uw, dry, wd, cur, M.audioMix(0, 1.5, 0, 0, 0, 0), M.audioMix(-3000, 1.5, 0, 0, 0, 0)];
     const valid = vals.every((m) => Object.values(m).every(Number.isFinite));
-    out[`bawah air: lowpass ${uw.lp} Hz (di atas ${dry.lp} Hz); kecipak jalan ${wd.wade.toFixed(2)}, diam ${dry.wade}; arus ${cur.current.toFixed(2)}; semua nilai valid ${valid}`] = uw.lp <= 400 && dry.lp >= 20000 && wd.wade > 0.2 && dry.wade === 0 && cur.current > 0.3 && valid;
+    out[`bawah air: lowpass ${uw.lp} Hz (di atas ${dry.lp} Hz); kecipak jalan ${wd.wade.toFixed(2)}, diam ${dry.wade}; arus ${cur.current.toFixed(2)}; semua nilai valid ${valid}`] = uw.lp <= 400 && dry.lp >= 20000 && wd.wade > 0.1 && wd.wade <= 0.18 && mx[0].wind <= 0.14 && dry.wade === 0 && cur.current > 0.3 && valid;
     const P = M.P; P.view = 0; P.depth = 0.5; const n0 = A.sfx; M.footstep(1, true); M.sfxImpact(); const n1 = A.sfx;
     out[`efek suara: langkah dua kaki + hantaman = ${n1 - n0} bunyi`] = n1 - n0 === 3;
     M.U.uWX.value += 1500 - M.frontX(0); await wait(1200);
@@ -436,11 +436,14 @@ UJI = r"""
     M.MOOD.brk = 1; const sy = M.seabed(M.SHIP.x, M.SHIP.z), h = M.SHIP.y + 0.3 - sy, G = M.THREE.Vector3;
     const gd = new V3(Math.cos(22 * Math.PI / 180) * Math.cos(28 * Math.PI / 180), Math.sin(22 * Math.PI / 180), -Math.cos(22 * Math.PI / 180) * Math.sin(28 * Math.PI / 180));
     const sx = M.SHIP.x - gd.x * h / gd.y, sz = M.SHIP.z - gd.z * h / gd.y;
-    P.x = sx + 9; P.z = sz + 9; P.y = M.seabed(P.x, P.z) + M.CONFIG.eye; P.yaw = Math.atan2(-(sx - P.x), -(sz - P.z)); P.pitch = -Math.atan2(1.7, Math.hypot(sx - P.x, sz - P.z));
+    const gh = Math.hypot(gd.x, gd.z); P.x = sx - gd.x / gh * 4; P.z = sz - gd.z / gh * 4; P.y = M.seabed(P.x, P.z) + M.CONFIG.eye;   // 4 m dari bayangan, sudut curam (sudut landai: pantulan langit menutupi dasar)
+    P.yaw = Math.atan2(-(sx - P.x), -(sz - P.z)); P.pitch = -Math.atan2(1.7, Math.hypot(sx - P.x, sz - P.z));
     const lumC = () => { const T = M.POST.hdr, w = T.width, hh = T.height, n = 24, b = new Uint16Array(n * n * 4); M.renderer.readRenderTargetPixels(T, (w - n) >> 1, (hh - n) >> 1, n, n, b);
       let l = 0; for (let k = 0; k < b.length; k += 4) l += 0.3 * M.THREE.DataUtils.fromHalfFloat(b[k]) + 0.59 * M.THREE.DataUtils.fromHalfFloat(b[k + 1]) + 0.11 * M.THREE.DataUtils.fromHalfFloat(b[k + 2]); return l / (n * n); };
-    await wait(1200); const l1 = lumC(), k1 = M.U.uShK.value;
-    M.makeShadow(0); await wait(900); const l0 = lumC();
+    // kedua render di frame yang sama (dulu dua frame berbeda: buih dan ombak yang bergerak membuat hasil acak);
+    // tunggu sampai kamera benar-benar di posisi pemain (frame SwiftShader bisa lebih dari 1 s)
+    for (let w = 0; w < 60 && Math.hypot(M.camera.position.x - P.x, M.camera.position.z - P.z) > 0.3; w++) await wait(250); await wait(600); const rd = () => { M.updateShadow(); M.renderer.setRenderTarget(M.POST.hdr); M.renderer.clear(); M.renderer.render(M.scene, M.camera); return lumC(); };
+    const l1 = rd(), k1 = M.U.uShK.value; M.makeShadow(0); const l0 = rd();
     M.makeShadow(M.SHD_SIZE[M.PRESET.idx]); await wait(300);
     out[`bayangan Gargantua: terang di bayangan KS-07 ${l1.toFixed(4)} vs tanpa bayangan ${l0.toFixed(4)} (${(100 * (1 - l1 / l0)).toFixed(0)}% lebih gelap, kuat ${k1.toFixed(2)}), peta ${M.SHD.size} px`] = M.SHD.size > 0 && k1 > 0 && l1 < l0 * 0.93;
     // gosong bergradasi di perut: hidung memutih pudar > tengah abu-abu > belakang jelaga
@@ -506,6 +509,89 @@ UJI = r"""
     const n = M.LAB.length, lv = B.level; M.cycleBody(); const lv1 = B.level, sv = localStorage.getItem('millar.body'); B.level = lv; M.cycleBody(); M.cycleBody(); M.cycleBody();
     out[`panel Tubuh: baris ke-${n} dari ${n}, siklus ${lv} -> ${lv1}, tersimpan ${sv}, gerak kepala tetap indeks 4`] = M.LAB[n - 1][1]().includes('Tubuh') && M.LAB[4][1]().includes('Gerak kepala') && lv1 === (lv + 1) % 3 && sv === String(lv1) && B.level === lv;
     P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -Math.PI / 2 + 0.3;
+  }
+
+  // 5m. M5d: plasma masuk atmosfer mengikuti bentuk wahana (bukan bola); perut yang menghadap aliran paling terang
+  {
+    const C = M.CINE, hdr = (n) => { const T = M.POST.hdr, w = T.width, h = T.height, b = new Uint16Array(n * n * 4); M.renderer.readRenderTargetPixels(T, (w - n) >> 1, (h - n) >> 1, n, n, b);
+      let l = 0, nb = 0; for (let k = 0; k < b.length; k += 4) { const r = M.THREE.DataUtils.fromHalfFloat(b[k]), g = M.THREE.DataUtils.fromHalfFloat(b[k + 1]), bl = M.THREE.DataUtils.fromHalfFloat(b[k + 2]); if (!Number.isFinite(r + g + bl)) nb++; else l += 0.3 * r + 0.59 * g + 0.11 * bl; } return { l: l / (n * n), nb }; };
+    let spheres = 0; M.ORB.plasma.traverse((o) => { if (o.geometry && o.geometry.type === 'SphereGeometry') spheres++; });
+    M.CINE.enabled = true; M.CINE.played = false; M.STATE.started = false; M.setMode('jelajah'); M.startWithCine(); C.t = 17; await wait(900);
+    const shot = (el) => { M.cineStep(0); M.orbShipCam(0.03, Math.PI * 0.55, el, 0); M.renderOrbit(performance.now()); return hdr(20); };
+    const below = shot(-0.9), above = shot(0.9), full = (() => { const T = M.POST.hdr, b = new Uint16Array(T.width * T.height * 4); M.renderer.readRenderTargetPixels(T, 0, 0, T.width, T.height, b); let nb = 0; for (const x of b) if (!Number.isFinite(M.THREE.DataUtils.fromHalfFloat(x))) nb++; return nb; })();
+    M.cineStop(); M.CINE.enabled = false; M.STATE.started = true;
+    out[`plasma masuk atmosfer: bola di grup plasma ${spheres}, terang dilihat dari bawah (perut) ${below.l.toFixed(3)} vs dari atas ${above.l.toFixed(3)}, tidak valid ${below.nb + above.nb + full}`] =
+      spheres === 0 && below.l > above.l * 1.3 && below.nb + above.nb + full === 0 && M.ORB_U.uFlowL.value.y < -0.3;
+  }
+
+  // 5n. M5a-2: laut dari ketinggian tidak berulang tiap petak FFT (korelasi pada geser 37 m turun), tanpa nilai tidak valid
+  {
+    const P = M.P; M.applyPreset(1); await wait(1500); M.flyReset(); P.view = 1; P.x = 300; P.z = -200; P.yaw = 0; P.pitch = -Math.PI / 2 + 0.002; M.MOOD.brk = 0;
+    const corr = async (k) => {
+      M.U.uMacroK.value = k; M.CONFIG.views[1].h = 120; P.y = 120;                       // 120 m: seluruh layar di luar laut dekat
+      for (let w = 0; w < 80 && Math.abs(M.camera.position.y - 120) > 2; w++) await wait(250); await wait(1200);
+      const T = M.POST.hdr, w = T.width, h = T.height, b = new Uint16Array(w * h * 4); M.renderer.readRenderTargetPixels(T, 0, 0, w, h, b);
+      const L0i = new Float32Array(w * h); let nb = 0; for (let i = 0; i < w * h; i++) { const r = M.THREE.DataUtils.fromHalfFloat(b[i * 4]), g = M.THREE.DataUtils.fromHalfFloat(b[i * 4 + 1]); if (!Number.isFinite(r + g)) { nb++; continue; } L0i[i] = 0.4 * r + 0.6 * g; }
+      // high-pass: kurangi rata-rata lokal 13 x 13 px (gradasi pantulan langit tidak ikut dihitung sebagai pola)
+      const I = new Float64Array((w + 1) * (h + 1)); for (let y = 0; y < h; y++) { let rs = 0; for (let x = 0; x < w; x++) { rs += L0i[y * w + x]; I[(y + 1) * (w + 1) + x + 1] = I[y * (w + 1) + x + 1] + rs; } }
+      const L = new Float32Array(w * h), R = 6; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const x0 = Math.max(0, x - R), x1 = Math.min(w, x + R + 1), y0 = Math.max(0, y - R), y1 = Math.min(h, y + R + 1);
+        const sm = I[y1 * (w + 1) + x1] - I[y0 * (w + 1) + x1] - I[y1 * (w + 1) + x0] + I[y0 * (w + 1) + x0]; L[y * w + x] = L0i[y * w + x] - sm / ((x1 - x0) * (y1 - y0)); }
+      const hgt = M.camera.position.y - M.drawdown(M.camera.position.x - M.frontX(M.camera.position.z)), mpp = 2 * hgt * Math.tan(M.camera.fov * Math.PI / 360) / h;
+      const L0 = M.OCEAN.casc[0] ? M.OCEAN.casc[0].L : 37, dx = Math.round(L0 / mpp);
+      let sa = 0, sb = 0, saa = 0, sbb = 0, sab = 0, n = 0;
+      for (let y = Math.round(h * 0.2); y < h * 0.8; y++) for (let x = Math.round(w * 0.1); x + dx < w * 0.9; x++) { const a = L[y * w + x], c = L[y * w + x + dx]; sa += a; sb += c; saa += a * a; sbb += c * c; sab += a * c; n++; }
+      const cv = sab / n - (sa / n) * (sb / n), va = saa / n - (sa / n) ** 2, vb = sbb / n - (sb / n) ** 2;
+      return { r: cv / Math.sqrt(Math.max(va * vb, 1e-20)), nb, dx, hgt };
+    };
+    const off = await corr(0), on = await corr(1);
+    M.CONFIG.views[1].h = 60; P.view = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0;
+    out[`laut dari ${off.hgt.toFixed(0)} m: korelasi pada geser satu petak FFT (${on.dx} px) ${off.r.toFixed(3)} -> ${on.r.toFixed(3)} dengan variasi makro, tidak valid ${off.nb + on.nb}`] =
+      on.r < off.r * 0.7 && on.nb === 0 && off.nb === 0 && M.U.uMacroK.value === 1;
+  }
+
+  // 5o. M5c: percikan lari menyatu dengan laut: semburan tidak terlempar jauh ke depan kaki, tonjolan haluan di depan tulang
+  //     kering dan cekung di belakang, buih jejak, mahkota air tampil lalu hilang, render tanpa nilai tidak valid
+  {
+    const P = M.P, S = M.SPL, R = M.RIP, from = M.THREE.DataUtils.fromHalfFloat;
+    for (let k = 0; k < 200; k++) M.stepSplash(0.05);
+    P.view = 0; P.x = 0; P.z = 0; P.depth = 0.5; P.yaw = 0; P.vx = 0; P.vz = -3; P.ground = true;
+    M.footstep(1.2, true); let fRel = 0, t = 0, nb = 0;
+    for (let k = 0; k < 50; k++) { M.stepSplash(1 / 60); t += 1 / 60; for (let i = 0; i < S.max; i++) if (S.life[i] > 0) fRel = Math.max(fRel, -(S.pos[i * 3 + 2] + 0.15 + 3 * t)); }
+    const up = M.CROWN.slots.filter((q) => q.t < 1).length; let tc = 0;
+    for (let k = 0; k < 120 && M.CROWN.slots.some((q) => q.t < 1); k++) { M.stepCrown(1 / 60); tc += 1 / 60; }
+    // tonjolan dan cekung: kaki tetap di tempat, kaki terus mendorong air selama 0,25 s
+    for (let i = 0; i < 90; i++) M.updateRipple(1 / 60);
+    const ph = M.BOB.phase; for (let k = 0; k < 15; k++) { M.BOB.phase = ph; M.headBob(1 / 60, 3, true, 0.5); M.updateRipple(1 / 60); }
+    const N = R.N, b = new Uint16Array(N * N * 4); M.renderer.readRenderTargetPixels(R.rt[R.i], 0, 0, N, N, b);
+    const at = (x, z, c) => { const i = Math.round((x - R.ox) / R.dx + N / 2 - 0.5), j = Math.round((z - R.oz) / R.dx + N / 2 - 0.5); return from(b[(j * N + i) * 4 + c]); };
+    const lx = M.CONFIG.walk.legs, hF = at(lx, -0.14, 0), hB = at(lx, 0.12, 0), fB = at(lx, 0.12, 2);
+    // render dengan mahkota tampil
+    P.vz = 0; P.pitch = -1.0; M.footstep(1.2, true); for (let k = 0; k < 10; k++) M.stepCrown(1 / 60);
+    M.renderer.setRenderTarget(M.POST.hdr); M.renderer.clear(); M.renderer.render(M.scene, M.camera);
+    { const T = M.POST.hdr, bb = new Uint16Array(T.width * T.height * 4); M.renderer.readRenderTargetPixels(T, 0, 0, T.width, T.height, bb); for (const x of bb) if (!Number.isFinite(from(x))) nb++; }
+    P.pitch = 0;
+    out[`percikan menyatu (M5c): semburan paling jauh ${fRel.toFixed(2)} m di depan kaki (lari 3 m/s), tonjolan depan ${(hF * 1000).toFixed(1)} mm / cekung belakang ${(hB * 1000).toFixed(1)} mm, buih jejak ${fB.toFixed(2)}, mahkota ${up} tampil lalu hilang ${tc.toFixed(2)} s, tidak valid ${nb}`] =
+      fRel < 1.2 && hF > 0 && hB < hF && fB > 0.05 && up === 2 && tc < 0.8 && nb === 0;
+  }
+
+  // 5p. M5e: penampang gelombang raksasa = tembok tebal: profil JS = GLSL (50 titik di GPU), muka atas hampir tegak,
+  //     lebar badan pada setengah tinggi 0,8-2,5 km, punggung turun ke sekitar 20% dalam 1,5-2,5 km
+  {
+    const T3 = M.THREE, n = 50, u0 = -1500, u1 = 3500, uAt = (i) => u0 + (u1 - u0) * i / (n - 1);
+    const rt = new T3.WebGLRenderTarget(n, 1, { type: T3.FloatType, depthBuffer: false });
+    const mat = new T3.ShaderMaterial({ defines: { NW: 1, NM: 1 }, vertexShader: 'void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: M.COMMON + `void main() { float u = ${u0.toFixed(1)} + ${(u1 - u0).toFixed(1)} * (gl_FragCoord.x - 0.5) / ${(n - 1).toFixed(1)}; gl_FragColor = vec4(waveG(u), 0.0, 0.0, 1.0); }` });
+    const sc = new T3.Scene(), q = new T3.Mesh(new T3.PlaneGeometry(2, 2), mat); q.frustumCulled = false; sc.add(q);
+    M.renderer.setRenderTarget(rt); M.renderer.render(sc, new T3.OrthographicCamera(-1, 1, 1, -1, 0, 1));
+    const px = new Float32Array(n * 4); M.renderer.readRenderTargetPixels(rt, 0, 0, n, 1, px); M.renderer.setRenderTarget(null); rt.dispose(); mat.dispose();
+    let dMax = 0; for (let i = 0; i < n; i++) dMax = Math.max(dMax, Math.abs(px[i * 4] - M.waveG(uAt(i))) * M.CONFIG.wave.H);
+    // muka atas: kemiringan rata-rata antara 1/3 dan 0,9 tinggi, di bagian gelombang terendah (0,82 H)
+    const G = M.waveG; let ua = 0, ub = 0; for (let u = -2000; u < 0; u += 0.1) { if (!ua && G(u) >= 1 / 3) ua = u; if (!ub && G(u) >= 0.9) ub = u; }
+    const slope = Math.atan(M.CONFIG.wave.H * 0.82 * (0.9 - 1 / 3) / (ub - ua)) * 180 / Math.PI;
+    let wa = null, wb = 0; for (let u = -2000; u < 8000; u += 1) if (G(u) >= 0.5) { if (wa === null) wa = u; wb = u; }
+    let u20 = 0; for (let u = 0; u < 8000; u += 5) if (G(u) <= 0.22) { u20 = u; break; }
+    out[`gelombang tembok (M5e): profil JS = GLSL selisih ${dMax.toFixed(3)} m (${n} titik), muka atas ${slope.toFixed(1)} derajat, lebar setengah tinggi ${((wb - wa) / 1000).toFixed(2)} km, punggung 22% di ${(u20 / 1000).toFixed(2)} km`] =
+      dMax < 0.5 && slope > 75 && wb - wa > 800 && wb - wa < 2500 && u20 > 1500 && u20 < 2500;
   }
 
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua

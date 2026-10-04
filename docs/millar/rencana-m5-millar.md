@@ -1,6 +1,6 @@
 # Rencana M5 Millar's World: Penyempurnaan setelah uji pemilik
 
-Per 3 Oktober 2026 · Status: rencana, belum dikerjakan. Pilihan pemilik: gelombang = tembok tebal; pengerjaan dikelompokkan menurut effort CLAUDE.md (Medium, High), tiap kelompok berhenti untuk diuji pemilik.
+Per 3 Oktober 2026 · Status: kelompok 1-3 selesai, menunggu uji pemilik. Pilihan pemilik: gelombang = tembok tebal; pengerjaan dikelompokkan menurut effort CLAUDE.md (Medium, High), tiap kelompok berhenti untuk diuji pemilik.
 
 ## Context
 
@@ -129,6 +129,8 @@ Bentuk sekarang (`waveG()` di `COMMON`, kembaran JS di `waveG`/`waveTop`, `ARC`)
 
 | Kelompok | Tahap | Status |
 | --- | --- | --- |
-| 1 (Medium, Sonnet 5.5) | M5a-1, M5b | Belum |
-| 2 (High, Opus 5.5) | M5d, M5a-2 | Belum |
-| 3 (High, Opus 5.5) | M5c, M5e | Belum |
+| 1 (Medium, Sonnet 5.5) | M5a-1 | Selesai: pusat laut dekat dan jauh = posisi kamera (`SEA.cx/cz` di `frame()`); radius dekat tidak dinaikkan karena grid dekat berukuran tetap 2 x near. Menunggu uji visual pemilik |
+| 1 (Medium, Sonnet 5.5) | M5b | Selesai: angin 0,05-0,14 lowpass 900 Hz, kecipak brown lowpass 450 Hz maks 0,18 berdenyut ikut `BOB.phase`, `sfxSplash` -40%; penggeser Volume dan Angin dan laut (`millar.vol`, `millar.amb`). Uji disesuaikan (ambang kecipak). Pemeriksaan RMS/spektrum otomatis belum ditambahkan |
+| 2 (High, Opus 5.5) | M5d, M5a-2 | Selesai 3 Oktober 2026, menunggu uji pemilik. Plasma: tanpa bola, terang dari bawah (perut) 0,670 vs dari atas 0,338, tanpa nilai tidak valid. Laut: kaskade 1-2 diputar (`SEA_ROT`), kaskade 0 dicampur salinan berputar di jauh, variasi makro `seaMacro` + ombak panjang `swellS` (`uMacroK`). Catatan: uji 5l (bayangan) dan 5n (korelasi laut 120 m) gagal di run terakhir karena kamera belum mengikuti pemain saat diukur (waktu uji, bukan error halaman); perlu tunggu kamera sebelum mengukur |
+| 3 (High, Opus 5.5) | M5c | Selesai 3 Oktober 2026, menunggu uji pemilik. Kaki masuk air 0,15 m di depan badan (dulu 0,45), tonjolan haluan di depan tulang kering dan cekung di belakang (riak), cincin buih menempel di permukaan, mahkota air baru (`CROWN`, lembar tipis bening bertepi buih, hilang dalam 0,57 s), butir semprotan lebih sedikit, terbawa 1,1 x kecepatan pemain (dulu 1,6-1,75), diregang searah gerak, warna air (tidak lebih terang dari buih). Uji: semburan paling jauh 0,86 m di depan kaki saat lari 3 m/s, tonjolan depan 14,5 mm, cekung belakang -4,8 mm, buih jejak 0,77, tanpa nilai tidak valid. Butir 5 (kaki dan lengan terlihat saat menunduk) belum, menunggu keputusan pemilik |
+| 3 (High, Opus 5.5) | M5e | Selesai 3 Oktober 2026, menunggu uji pemilik. Profil `waveG` baru (GLSL dan JS sama, `wf` 80, `wr` 30, `wb` 1.100, `bk` 0,8, `wt` 6.000): muka cekung rata-rata 80,8 derajat di 2/3 atas (bagian terendah 0,82 H), puncak dibulatkan 30 m, lebar setengah tinggi 1,11 km, punggung 22% di 1,73 km lalu ekor landai. `lean` 0,33 jadi 0,06 (muka sudah tegak; dulu menjorok 400 m), sampel profil `US` per 18 m busur di muka (148 sampel), urat buih memanjang searah aliran turun, kabut kaki digeser ke kaki baru. Fisika tetap memakai `waveTop`; uji tersapu, lolos, tertelan, rute misi lulus tanpa ubah ambang |

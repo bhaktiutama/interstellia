@@ -197,3 +197,9 @@ Uji pemilik atas M6a: dada berupa lempengan datar (45-67% layar), tanpa kaki, pe
 
 Keterbatasan: sepatu terlihat memendek karena sudut pandang dari atas (perspektif), ujung jingga baru jelas saat melangkah; tangan belakang saat lari keluar dari bingkai (wajar, satu tangan terlihat). Anggaran Hemat 600 segitiga belum dipenuhi (624), diselesaikan lewat LOD di M6e. Uji `bayangan Gargantua` (5l) tetap tipis ambangnya dan gagal sesekali, bukan karena tubuh (tubuh dimatikan di blok itu). Dari M6b, ayun gerak, lutut, lompat, dan condong sudah masuk di sini; sisanya: sumber riak ke telapak, yaw badan tertinggal, busa garis air.
 
+## Gabungan dengan main (4 Oktober 2026)
+
+Cabang M6 digabung dengan `main` (kepala `9dabedb`) yang sudah memuat M5 kelompok 1-3 (pusat laut = kamera, suara langkah diseret, plasma mengikuti wahana, pola laut dari ketinggian, percikan lari dengan mahkota air tiap langkah, gelombang tembok). Konflik hanya di `CLAUDE.md` dan satu baris kamus `I18N.en`, keduanya diselesaikan dengan mempertahankan kedua sisi. Uji Millar gabungan: 87 pemeriksaan lulus.
+
+Catatan untuk M6b: `footstep()` baru (M5c) menaruh percikan, riak, dan mahkota air 0,15 m di depan titik tengah (`P + kanan * CONFIG.walk.legs * sd + maju * 0,15`), bukan 0,45 m. Telapak `BODY.feet` saat menunduk ada di sekitar 0,3-0,5 m di depan. Penyelarasan M6b harus menyatukan keduanya: satu fungsi `bodyFootAt(side)` sebagai sumber bagi `footstep()`, `headBob()`, dan telapak yang terlihat.
+
