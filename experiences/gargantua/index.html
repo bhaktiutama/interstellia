@@ -74,6 +74,8 @@
   #help table { border-collapse: collapse; width: 100%; }
   #help td { padding: 4px 8px; vertical-align: top; border-top: 1px solid var(--panel-border); color: var(--text); }
   #help td:first-child { color: var(--accent); white-space: nowrap; }
+  #dash { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  #dash[hidden] { display: none; }
   @media (max-width: 640px) {
     #ui { top: 12px; right: 12px; left: 12px; width: auto; max-height: 60vh; }
     #hint { display: none; }
@@ -90,7 +92,9 @@
 <div id="hint" class="overlay-text">drag: orbit &middot; wheel/pinch: zoom &middot; 1-4: presets &middot; H: hide UI &middot; ?: help</div>
 <div id="toast" class="overlay-text"></div>
 <div id="help" hidden><div class="card"><div class="hh"><span id="helpTitle">Help</span><button type="button" id="helpClose">Close (?)</button></div><table id="helpRows"></table></div></div>
+<canvas id="dash" hidden></canvas>
 <pre id="err" hidden></pre>
+<script src="assets/gx01.data.js"></script>
 
 <script>
 'use strict';
@@ -443,6 +447,47 @@ void main() {
   o = vec4(c, 1.0);
 }`;
 
+/* G1b: raster wahana GX-01. Wahana 27,5 m jauh lebih kecil dari rs (2,954e11 m), jadi pembelokan cahaya di skala wahana
+   diabaikan: digambar raster biasa dalam meter, di atas hasil ray tracing, sebelum bloom. Cahaya utama dari piringan.
+   Pencahayaan di ruang pandang. Tidak ada pow() dengan basis negatif (NaN di M1). */
+const SHIP_VS = `#version 300 es
+in vec3 aPos; in vec3 aNrm; in vec3 aCol; in float aMat; in vec2 aUV;
+uniform mat4 uMV, uProj; uniform mat3 uRot; uniform float uScale;
+out vec3 vN, vCol, vV; out float vMat; out vec2 vUV;
+void main() {
+  vec4 v = uMV * vec4(aPos * uScale, 1.0);
+  vV = v.xyz; vN = uRot * aNrm; vCol = aCol; vMat = aMat; vUV = aUV;
+  gl_Position = uProj * v;
+}`;
+const SHIP_FS = `#version 300 es
+precision highp float;
+in vec3 vN, vCol, vV; in float vMat; in vec2 vUV;
+out vec4 o;
+uniform vec3 uL, uLCol, uAmb;
+uniform float uEnc, uCockpit, uDecal;
+uniform sampler2D uTex;
+void main() {
+  if (uDecal > 0.5 && texture(uTex, vUV).a < 0.5) discard;          // stensil GX-01
+  bool glass = vMat > 0.5;
+  if (glass && uCockpit > 0.5) discard;                              // dari kokpit: kaca bening, sekat tetap
+  float nl = length(vN);
+  vec3 n = nl > 1e-4 ? vN / nl : vec3(0.0, 0.0, 1.0);
+  vec3 V = length(vV) > 1e-4 ? normalize(-vV) : vec3(0.0, 0.0, 1.0);
+  vec3 c;
+  if (!gl_FrontFacing) {
+    c = vCol * vec3(0.05, 0.045, 0.04) + vCol * uLCol * 0.02;        // sisi dalam lambung (kabin redup)
+  } else if (glass) {
+    float fr = 0.04 + 0.96 * pow(clamp(1.0 - dot(n, V), 0.0, 1.0), 5.0);
+    float sp = pow(max(dot(reflect(-V, n), uL), 0.0), 40.0);
+    c = vec3(0.006, 0.008, 0.011) + uLCol * (0.6 * sp + 0.12 * fr);
+  } else {
+    float ndl = max(dot(n, uL), 0.0);
+    float sp = pow(max(dot(reflect(-V, n), uL), 0.0), 24.0) * ndl;
+    c = vCol * (uLCol * ndl + uAmb) + uLCol * 0.12 * sp;
+  }
+  o = vec4(c * uEnc, 1.0);
+}`;
+
 /* =====================================================================
    GL SETUP
    ===================================================================== */
@@ -482,9 +527,16 @@ const ID = {
   'Film': 'Sinematik', 'Edge-on': 'Dari samping', 'Top-down': 'Dari atas', 'Close approach': 'Mendekat', 'Reset': 'Atur ulang', 'Screenshot': 'Tangkap layar',
   'FPS': 'FPS', 'Resolution': 'Resolusi', 'Max steps': 'Langkah maks', 'Distance': 'Jarak', 'Buffer': 'Buffer',
   'Language': 'Bahasa', '< MENU': '< MENU',
+  'Space pause · Q quality · P screen effects · F photo · V vessel · R reset · H hide UI · ` panel · ? help': 'Space jeda · Q kualitas · P efek layar · F foto · V wahana · R atur ulang · H sembunyikan UI · ` panel · ? bantuan',
   'WebGL2 is not available in this browser or on this GPU.\n\nThis simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). Check that hardware acceleration is enabled in your browser settings.':
     'WebGL2 tidak tersedia di browser atau GPU ini.\n\nSimulasi ini butuh WebGL2 (Chrome, Edge, Firefox, Safari 15+). Pastikan akselerasi hardware aktif di pengaturan browser.',
   'WebGL context lost. Reload the page to restart.': 'Konteks WebGL hilang. Muat ulang halaman untuk memulai lagi.',
+  'GX-01 vessel': 'Wahana GX-01', 'Vessel GX-01: chase camera (V cockpit, Esc exit)': 'Wahana GX-01: kamera luar (V kokpit, Esc keluar)',
+  'Vessel GX-01: cockpit (V chase camera, Esc exit)': 'Wahana GX-01: kokpit (V kamera luar, Esc keluar)', 'Vessel GX-01: off': 'Wahana GX-01: mati',
+  'Vessel GX-01 model is missing (assets/gx01.data.js)': 'Model wahana GX-01 tidak ada (assets/gx01.data.js)',
+  'Vessel view: GX-01 chase camera / cockpit (Esc exits)': 'Tampilan wahana: kamera luar GX-01 / kokpit (Esc keluar)',
+  'Distance to centre': 'Jarak ke pusat', 'Holding position (fall: stage G2)': 'Menahan posisi (jatuh: tahap G2)',
+  'Disk light': 'Cahaya piringan', 'View': 'Tampilan', 'Cockpit': 'Kokpit', 'Chase': 'Kamera luar', 'Vessel': 'Wahana',
 };
 const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
 function applyStaticLang() {
@@ -496,7 +548,7 @@ function applyStaticLang() {
     [txt('Drag / wheel / pinch'), txt('Orbit and zoom the camera')], ['1 - 4', txt('Camera presets: film, edge-on, top-down, close approach')],
     ['Space', txt('Pause / resume time')], ['Q', txt('Quality preset: Ultra, High, Medium, Low')],
     ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')], ['F', txt('Photo mode: UI hidden, Enter saves PNG, F or Esc exits')],
-    ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
+    ['V · Esc', txt('Vessel view: GX-01 chase camera / cockpit (Esc exits)')], ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
   const m = $('#menuLink'); if (m) m.href = `../../index.html?lang=${LANG}`;
 }
@@ -535,9 +587,9 @@ function main() {
     return s;
   }
   const vsObj = compile(gl.VERTEX_SHADER, VS, 'vertex');
-  function program(fsSrc, name) {
+  function program(fsSrc, name, vsSrc) {
     const p = gl.createProgram();
-    gl.attachShader(p, vsObj);
+    gl.attachShader(p, vsSrc ? compile(gl.VERTEX_SHADER, vsSrc, name + ' vertex') : vsObj);
     gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsSrc, name));
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(`[${name}] link error\n\n${gl.getProgramInfoLog(p)}`);
@@ -591,7 +643,7 @@ function main() {
   let T = null;   // all render targets
   function buildTargets(sw, sh) {
     if (T && T.sw === sw && T.sh === sh) return;
-    if (T) { freeTarget(T.scene); T.bloom.forEach((l) => { freeTarget(l.a); freeTarget(l.b); }); freeTarget(T.sA); freeTarget(T.sB); }
+    if (T) { freeTarget(T.scene); T.bloom.forEach((l) => { freeTarget(l.a); freeTarget(l.b); }); freeTarget(T.sA); freeTarget(T.sB); gl.deleteRenderbuffer(T.depth); gl.deleteFramebuffer(T.shipFb); }
     const bloom = [];
     for (let i = 1; i <= 4; i++) {
       const w = Math.max(1, Math.ceil(sw / 2 ** i)), h = Math.max(1, Math.ceil(sh / 2 ** i));
@@ -599,6 +651,13 @@ function main() {
     }
     const s1 = bloom[1].a;
     T = { sw, sh, scene: makeTarget(sw, sh), bloom, sA: makeTarget(s1.w, s1.h), sB: makeTarget(s1.w, s1.h) };
+    // G1b: framebuffer pass wahana = warna scene + depth sendiri
+    T.depth = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, T.depth);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, sw, sh);
+    T.shipFb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, T.shipFb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, T.scene.tex, 0);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, T.depth);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
   function pass(prog, target, setup) {
@@ -645,6 +704,120 @@ function main() {
     const rl = Math.hypot(...r) || 1; r = r.map((v) => v / rl);
     const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
     return { pos, f, r, u };
+  }
+
+  /* =====================================================================
+     G1: WAHANA GX-01 (model dari KESTREL.buildV3, diolah tools/siapkan_wahana_gx.mjs)
+     Kerangka model: +x kanan, +y atas, -z depan, meter. Di G1 wahana menahan posisi di titik orbit kamera (dist, yaw, pitch)
+     menghadap pusat; jatuh menyusul di G2. Kamera: 'chase' (luar, belakang-atas) atau 'cockpit' (mata pilot).
+     ===================================================================== */
+  const SHIP = { on: false, view: 'chase', ready: false, data: window.__GX01 || null,
+    chase: [0, 7.5, 40], aim: [0, 0, -6], near: { chase: 0.5, cockpit: 0.04 } };
+  const SHIP_P = program(SHIP_FS, 'ship', SHIP_VS);
+  if (SHIP.data) {
+    const D = SHIP.data, raw = (b) => Uint8Array.from(atob(b), (ch) => ch.charCodeAt(0));
+    const pos = raw(D.pos), nrm = raw(D.nrm), col = raw(D.col), mat = raw(D.mat);
+    const loc = (n) => gl.getAttribLocation(SHIP_P.p, n);
+    const buf = (data) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); return b; };
+    const attr = (name, data, size, type, norm) => { const l = loc(name); if (l < 0) return; buf(data); gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, size, type, norm, 0, 0); };
+    SHIP.vao = gl.createVertexArray(); gl.bindVertexArray(SHIP.vao);
+    attr('aPos', pos, 3, gl.SHORT, false); attr('aNrm', nrm, 3, gl.BYTE, true); attr('aCol', col, 3, gl.UNSIGNED_BYTE, true); attr('aMat', mat, 1, gl.UNSIGNED_BYTE, false);
+    if (loc('aUV') >= 0) gl.vertexAttrib2f(loc('aUV'), 0, 0);
+    // stensil GX-01 di kedua sisi lengan: quad bertekstur kanvas (huruf terbaca dari luar)
+    const P = [], N = [], UV = [];
+    for (const d of D.decals) {
+      const [cx, cy, cz] = d.c, x = cx + d.nx * 0.012, uz = d.nx < 0 ? 1 : -1, hw = d.w / 2, hh = d.h / 2;
+      const q = [[-hw, -hh, 0, 1], [hw, -hh, 1, 1], [hw, hh, 1, 0], [-hw, -hh, 0, 1], [hw, hh, 1, 0], [-hw, hh, 0, 0]];
+      for (const [a, b, u, v] of q) { P.push(x, cy + b, cz + a * uz); N.push(d.nx, 0, 0); UV.push(u, v); }
+    }
+    SHIP.decalN = P.length / 3;
+    SHIP.decalVao = gl.createVertexArray(); gl.bindVertexArray(SHIP.decalVao);
+    attr('aPos', new Float32Array(P), 3, gl.FLOAT, false); attr('aNrm', new Float32Array(N), 3, gl.FLOAT, false); attr('aUV', new Float32Array(UV), 2, gl.FLOAT, false);
+    if (loc('aCol') >= 0) gl.vertexAttrib3f(loc('aCol'), 0.13, 0.12, 0.11);
+    if (loc('aMat') >= 0) gl.vertexAttrib1f(loc('aMat'), 0);
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 128;
+    const g2 = cv.getContext('2d'); g2.fillStyle = '#fff'; g2.font = 'bold 104px ui-monospace, Menlo, Consolas, monospace';
+    g2.textAlign = 'center'; g2.textBaseline = 'middle'; g2.fillText(D.name, 256, 68);
+    SHIP.decalTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, SHIP.decalTex);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv);
+    gl.generateMipmap(gl.TEXTURE_2D); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.bindVertexArray(vao);
+    SHIP.ready = true;
+  }
+  const v3 = { add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+    mul: (a, k) => [a[0] * k, a[1] * k, a[2] * k], dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+    cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+    norm: (a) => { const l = Math.hypot(...a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; } };
+  // model -> dunia (sumbu dunia, meter, titik 0 di wahana): x -> kanan, y -> atas, z -> belakang (-depan)
+  const shipToWorld = (S, p) => v3.add(v3.add(v3.mul(S.r, p[0]), v3.mul(S.u, p[1])), v3.mul(S.f, -p[2]));
+  // basis kamera untuk ray tracer (posisi dalam rs) dan untuk raster wahana (mata dalam meter relatif wahana)
+  function viewBasis() {
+    const S = cameraBasis();
+    if (!SHIP.on || !SHIP.ready) return { ...S, eye: null };
+    if (SHIP.view === 'cockpit') return { pos: S.pos, f: S.f, r: S.r, u: S.u, eye: shipToWorld(S, SHIP.data.eye), ship: S };
+    const eye = shipToWorld(S, SHIP.chase), f = v3.norm(v3.sub(shipToWorld(S, SHIP.aim), eye));
+    const r = v3.norm(v3.cross(f, S.u)), u = v3.cross(r, f);
+    return { pos: S.pos, f, r, u, eye, ship: S };
+  }
+  function setShip(on = !SHIP.on, view) {
+    if (on && !SHIP.ready) { toast(txt('Vessel GX-01 model is missing (assets/gx01.data.js)'), 3); return; }
+    SHIP.on = on; if (view) SHIP.view = view;
+    $('#dash').hidden = !(SHIP.on && SHIP.view === 'cockpit');
+    toast(txt(!SHIP.on ? 'Vessel GX-01: off' : SHIP.view === 'cockpit' ? 'Vessel GX-01: cockpit (V chase camera, Esc exit)' : 'Vessel GX-01: chase camera (V cockpit, Esc exit)'), 2.5);
+  }
+  function cycleShipView() { if (!SHIP.on) setShip(true, 'chase'); else setShip(true, SHIP.view === 'chase' ? 'cockpit' : 'chase'); }
+  // cahaya utama: titik piringan terdekat di bawah/atas wahana (warna jingga hangat), redup menjauh
+  function diskLight(pos) {
+    const d = CONFIG.disk, rxz = Math.hypot(pos[0], pos[2]);
+    const dir = rxz > 1e-3 ? [pos[0] / rxz, 0, pos[2] / rxz] : [1, 0, 0];
+    const rd = Math.min(Math.max(rxz, d.rIn * 1.4), d.rOut * 0.7), pt = v3.mul(dir, rd);
+    const to = v3.sub(pt, pos), dist = Math.hypot(...to), k = d.brightness * Math.min(1.6, Math.max(0.35, 9 / Math.max(dist, 1e-3)));
+    return { L: v3.norm(to), col: [1.0 * 2.2 * k, 0.62 * 2.2 * k, 0.32 * 2.2 * k] };
+  }
+  function drawShip(B, sw, sh, tanHalf) {
+    const S = B.ship, cockpit = SHIP.view === 'cockpit';
+    // ruang pandang: baris = cr, cu, -cf; model -> dunia: kolom = S.r, S.u, -S.f
+    const VR = [B.r, B.u, v3.mul(B.f, -1)], MC = [S.r, S.u, v3.mul(S.f, -1)];
+    const rot = []; for (let c = 0; c < 3; c++) for (let rr = 0; rr < 3; rr++) rot.push(v3.dot(VR[rr], MC[c]));   // mat3 kolom-mayor
+    const t = VR.map((row) => -v3.dot(row, B.eye));
+    const mv = [rot[0], rot[1], rot[2], 0, rot[3], rot[4], rot[5], 0, rot[6], rot[7], rot[8], 0, t[0], t[1], t[2], 1];
+    const n = SHIP.near[SHIP.view], fa = 4000, fy = 1 / tanHalf, asp = sw / sh;
+    const proj = [fy / asp, 0, 0, 0, 0, fy, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0];
+    const li = diskLight(S.pos), Lv = VR.map((row) => v3.dot(row, li.L));
+    gl.bindFramebuffer(gl.FRAMEBUFFER, T.shipFb); gl.viewport(0, 0, sw, sh);
+    gl.enable(gl.DEPTH_TEST); gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.useProgram(SHIP_P.p);
+    gl.uniformMatrix4fv(SHIP_P.u('uMV'), false, mv); gl.uniformMatrix4fv(SHIP_P.u('uProj'), false, proj);
+    gl.uniformMatrix3fv(SHIP_P.u('uRot'), false, rot);
+    gl.uniform3fv(SHIP_P.u('uL'), Lv); gl.uniform3fv(SHIP_P.u('uLCol'), li.col); gl.uniform3f(SHIP_P.u('uAmb'), 0.03, 0.026, 0.024);
+    gl.uniform1f(SHIP_P.u('uEnc'), FMT.enc); gl.uniform1f(SHIP_P.u('uCockpit'), cockpit ? 1 : 0);
+    tex(SHIP_P, 'uTex', SHIP.decalTex, 0);                                // unit 0 jangan menunjuk tekstur scene (feedback loop)
+    gl.uniform1f(SHIP_P.u('uScale'), SHIP.data.scale); gl.uniform1f(SHIP_P.u('uDecal'), 0);
+    gl.bindVertexArray(SHIP.vao); gl.drawArrays(gl.TRIANGLES, 0, SHIP.data.n);
+    gl.uniform1f(SHIP_P.u('uScale'), 1); gl.uniform1f(SHIP_P.u('uDecal'), 1);
+    gl.bindVertexArray(SHIP.decalVao); gl.drawArrays(gl.TRIANGLES, 0, SHIP.decalN);
+    gl.bindVertexArray(vao); gl.disable(gl.DEPTH_TEST);
+  }
+  // dasbor kokpit (kanvas 2D di atas render): pita bawah dengan data; angka jatuh menyusul di G2
+  const dash = $('#dash'); let dashT = 0;
+  function drawDash(now) {
+    if (dash.hidden || now - dashT < 100) return; dashT = now;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
+    if (dash.width !== w || dash.height !== h) { dash.width = w; dash.height = h; }
+    const g = dash.getContext('2d'), s = dpr, bh = Math.min(150 * s, h * 0.24);
+    g.clearRect(0, 0, w, h);
+    const gr = g.createLinearGradient(0, h - bh * 1.5, 0, h); gr.addColorStop(0, 'rgba(6,7,9,0)'); gr.addColorStop(0.35, 'rgba(6,7,9,0.88)'); gr.addColorStop(1, 'rgba(4,5,6,0.97)');
+    g.fillStyle = gr; g.fillRect(0, h - bh * 1.5, w, bh * 1.5);
+    const rs = Math.hypot(...cameraBasis().pos), km = rs * 2.954e8;
+    const rows = [['GX-01', 'AMBANG'], [txt('Distance to centre'), `${rs.toFixed(2)} rs · ${km.toExponential(3)} km`],
+      [txt('View'), txt('Cockpit')], ['', txt('Holding position (fall: stage G2)')]];
+    g.font = `${12 * s}px ui-monospace, Menlo, Consolas, monospace`; g.textBaseline = 'middle';
+    rows.forEach(([a, b], i) => {
+      const y = h - bh + (i + 0.6) * bh / 4.6;
+      g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(a, 24 * s, y);
+      g.fillStyle = 'rgba(207,211,218,0.92)'; g.fillText(b, 190 * s, y);
+    });
+    g.strokeStyle = 'rgba(240,164,90,0.35)'; g.lineWidth = s; g.strokeRect(16 * s, h - bh + 6 * s, Math.min(560 * s, w - 32 * s), bh - 16 * s);
   }
 
   /* =====================================================================
@@ -703,6 +876,8 @@ function main() {
     if (c === 'KeyF') { togglePhoto(); return; }
     if (state.photo && (c === 'Enter' || c === 'NumpadEnter')) { state.shot = true; toast(txt('Photo saved'), 1.5); return; }
     if (state.photo && c === 'Escape') { togglePhoto(false); return; }
+    if (c === 'Escape' && SHIP.on) { setShip(false); return; }
+    if (c === 'KeyV') { cycleShipView(); return; }
     if (c === 'Space') { e.preventDefault(); state.paused = !state.paused; syncUI(); toast(txt(state.paused ? 'Paused' : 'Running'), 1.2); }
     else if (c === 'KeyH') { $('#ui').classList.toggle('hidden'); $('#caption').classList.toggle('hidden'); $('#hint').classList.toggle('hidden'); }
     else if (c === 'Backquote') { $('#ui').classList.remove('hidden'); $('#ui').classList.toggle('collapsed'); }
@@ -783,7 +958,8 @@ function main() {
         const defs = [['1', 'Film', () => setPreset('film')], ['2', 'Edge-on', () => setPreset('edge')],
                       ['3', 'Top-down', () => setPreset('top')], ['4', 'Close approach', () => setPreset('close')],
                       ['R', 'Reset', resetCamera], ['F', 'Photo mode', () => togglePhoto(true)],
-                      ['', 'Screenshot', () => { state.shot = true; }], ['', 'Fullscreen', toggleFullscreen]];
+                      ['', 'Screenshot', () => { state.shot = true; }], ['', 'Fullscreen', toggleFullscreen],
+                      ['V', 'GX-01 vessel', cycleShipView]];
         for (const [k, t, fn] of defs) {
           const b = document.createElement('button'); b.innerHTML = `${k ? `<kbd>${k}</kbd>` : ''}${txt(t)}`;
           b.addEventListener('click', () => { fn(); b.blur(); }); box.appendChild(b);
@@ -795,7 +971,7 @@ function main() {
     ro.innerHTML = `${txt('FPS')}<b id="rFps">-</b>${txt('Resolution')}<b id="rRes">-</b>${txt('Max steps')}<b id="rSteps">-</b>${txt('Distance')}<b id="rDist">-</b>${txt('Buffer')}<b id="rFmt">-</b>`;
     body.appendChild(ro);
     const keys = document.createElement('div'); keys.className = 'keys';
-    keys.textContent = txt('Space pause · Q quality · P screen effects · F photo · R reset · H hide UI · ` panel · ? help');
+    keys.textContent = txt('Space pause · Q quality · P screen effects · F photo · V vessel · R reset · H hide UI · ` panel · ? help');
     body.appendChild(keys);
     const lr = document.createElement('div'); lr.className = 'sec'; lr.textContent = txt('Language'); body.appendChild(lr);
     const lb = document.createElement('div'); lb.className = 'btns';
@@ -863,7 +1039,7 @@ function main() {
     const sh = Math.max(8, Math.round(canvas.height * CONFIG.renderScale));
     buildTargets(sw, sh);
 
-    const b = cameraBasis();
+    const b = viewBasis();
     const q = Q();
     const tanHalf = Math.tan(cam.fov * Math.PI / 360);
     const enc = FMT.enc, dec = 1 / FMT.enc;
@@ -895,6 +1071,10 @@ function main() {
       gl.uniform1f(p.u('uStars'), CONFIG.sky.stars);
       gl.uniform1f(p.u('uEnc'), enc);
     });
+
+    // 1b) G1: wahana GX-01 di atas hasil ray tracing, sebelum bloom
+    if (SHIP.on && SHIP.ready) drawShip(b, sw, sh, tanHalf);
+    drawDash(now);
 
     // 2) bright pass -> bloom level 0
     const L = T.bloom;
@@ -957,7 +1137,8 @@ function main() {
     requestAnimationFrame(frame);
   }
 
-  window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp };   // debugging hook
+  window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
+    SHIP, setShip, cycleShipView, viewBasis };   // debugging hook
   requestAnimationFrame(frame);
 }
 

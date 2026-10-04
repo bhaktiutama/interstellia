@@ -14,7 +14,7 @@ Per 30 September 2026. Patokan: Copper Corn Station. Fungsi yang sama memakai to
 | U | Suara nyala / mati | ya | ya (dulu M) | - (tanpa suara) |
 | N | Cuaca / suasana | cuaca | suasana | - |
 | Z | Kecepatan waktu | ya | ya | - |
-| V | Tampilan / kamera luar | kamera luar | jalan kaki, drone, tinggi | - |
+| V | Tampilan / kamera luar | kamera luar | jalan kaki, drone, tinggi | wahana GX-01: kamera luar / kokpit (misi G1; Esc keluar) |
 | F | Mode foto (UI disembunyikan, Enter simpan PNG, F atau Esc keluar) | ya | ya (baru) | ya (dulu layar penuh) |
 | R | Kembali ke titik awal / atur ulang | ya | ya | atur ulang kamera |
 | H | Sembunyikan HUD | ya | ya | ya |

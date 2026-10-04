@@ -21,7 +21,7 @@ Kolom Thinking = saran tingkat effort/thinking Claude Code (`/effort low`, `medi
 
 | Kelompok | Tahap | Isi | Effort | Model | Thinking | Alasan | Risiko |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | G1a | Alat olah `tools/siapkan_wahana_gx.py`, aset `gx01.data.js`, stensil GX-01 | Medium | Sonnet 5.5 | medium | Alat seperti `siapkan_motor.py`, geometri sudah ada di `KESTREL.buildV3()` | Rendah |
+| 1 | G1a | Alat olah `tools/siapkan_wahana_gx.mjs`, aset `gx01.data.js`, stensil GX-01 | Medium | Sonnet 5.5 | medium | Alat seperti `siapkan_motor.py`, geometri sudah ada di `KESTREL.buildV3()` | Rendah |
 | 1 | G1b | Raster GX-01 di Gargantua (program WebGL2 + depth, sebelum bloom), kokpit, kamera luar | Medium | Sonnet 5.5 | medium | Program raster kecil terpisah dari ray tracer; tidak menyentuh `SCENE_FS` | Rendah |
 | 2 | G2 | Kamera jatuh di shader (`vel0`, aturan tertelan, aberasi, frekuensi), jalur kutub, HUD | High | Opus 5.5 | xhigh | Relativitas halus di dalam horizon, mudah NaN di M1 (`sqrt`, pembagian dekat r = 0), harus identik saat `uFall = 0` | Sedang |
 | 3 | G3a | Piringan tebal volumetrik dekat kamera, jalur susur piringan | High | Opus 5.5 | high | Shader GLSL kustom, biaya GPU terbesar, harus menyatu dengan piringan tipis lama | Tinggi (FPS GTX 1060 dan M1) |
@@ -37,7 +37,9 @@ Langkah mekanis di dalam tahap High (entri kamus, teks HUD, pembaruan dokumen) b
 
 | Tahap | Status |
 | --- | --- |
-| G1-G6 | Belum dimulai (rencana revisi 2) |
+| G1a | Selesai 4 Oktober 2026: `tools/siapkan_wahana_gx.mjs` (Node, bukan Python: tidak perlu browser) membuat `experiences/gargantua/assets/gx01.data.js` dari `KESTREL.buildV3()`: 5.184 segitiga (dari 6.092; kaki pendarat dibuang di bawah y = -2,45 m), 102 verteks kaca kokpit, 264 KB. Stensil GX-01 = quad bertekstur kanvas di halaman |
+| G1b | Selesai 4 Oktober 2026: V = wahana GX-01 (kamera luar 40 m di belakang, 7,5 m di atas), V lagi = kokpit (mata 0, 1,25, -7,2 m; kaca tidak digambar dari dalam, sekat tetap; dasbor kanvas), Esc keluar, tombol panel. Wahana menahan posisi di titik orbit kamera menghadap pusat; disinari dari titik piringan terdekat. Uji `tools/uji_misi_gargantua.py` 13/13 lulus (SwiftShader). Belum diuji di GTX 1060 dan M1. Catatan: tangkap layar dan mode foto tidak memuat dasbor kokpit (lapisan HTML) |
+| G2-G6 | Belum dimulai; G6 berjalan per kelompok |
 
 Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
 
@@ -110,7 +112,7 @@ Lintasan wahana di CPU: geodesik timelike Schwarzschild, RK4 pada (r, dr/dtau, p
 | Bagian | Isi |
 | --- | --- |
 | Sumber | Blokout v3, yang sudah dipindah ke modul bersama sebagai `KESTREL.buildV3(THREE)` di `shared/kestrel.js` (geometri blokout + pintu, tapak, lampu). Kaki pendarat dilipat (tidak digambar saat terbang). Stensil diganti "GX-01". `buildV3` tidak diubah (pertahankan yang ada) |
-| Alat olah | `tools/siapkan_wahana_gx.py` (baru): di Chromium headless muat three.js + `shared/kestrel.js`, panggil `buildV3`, gabungkan geometri jadi satu array posisi, normal, warna, simpan base64 ke `experiences/gargantua/assets/gx01.data.js`. Sama seperti cara `tools/siapkan_motor.py`: Gargantua tetap tanpa three.js dan jalan dari file:// |
+| Alat olah | `tools/siapkan_wahana_gx.mjs` (baru, Node): muat three.js + `shared/kestrel.js` di Node (vm), panggil `buildV3`, gabungkan geometri jadi satu array posisi, normal, warna, simpan base64 ke `experiences/gargantua/assets/gx01.data.js`. Sama seperti cara `tools/siapkan_motor.py`: Gargantua tetap tanpa three.js dan jalan dari file:// |
 | Render | Program raster kecil + depth di Gargantua, digambar ke `T.scene` sebelum bloom. Disinari dari arah piringan (warna jingga, kuat dari bawah saat terbang rendah), sisi lain ambient redup. Pembelokan cahaya di skala 27,5 m nol (rs = 2,954e11 m), jadi raster biasa tetap benar |
 | Kokpit | Mata di kokpit kaca bersekat tengah depan. Bingkai sekat kaca dari geometri kokpit model itu sendiri (dilihat dari dalam), instrumen di kanvas 2D |
 | Kamera luar | Kamera kejar di belakang-atas wahana, seperti komposisi foto 1 (wahana kecil di tengah, piringan di bawah) |
