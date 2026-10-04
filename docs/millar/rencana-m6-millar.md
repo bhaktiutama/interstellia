@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: rencana, belum dikerjakan. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a selesai, M6b-M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -153,8 +153,22 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 
 | Tahap | Status |
 | --- | --- |
-| M6a | Belum |
+| M6a | Selesai 4 Oktober 2026 (lihat catatan di bawah) |
 | M6b | Belum |
 | M6c | Belum |
 | M6d | Belum |
 | M6e | Belum |
+
+## Catatan M6a (selesai 4 Oktober 2026)
+
+| Hal | Hasil |
+| --- | --- |
+| Segitiga | 416 (anggaran 450), 10 mesh, satu material, nilai tidak valid 0 |
+| Tubuh terlihat | menunduk 70 derajat: 44-67% piksel berbeda dari Mati; horizon: 0% |
+| Lapisan | kepala di layer 3 saja (orang pertama), layer 0 + 3 di drone; badan 0 + 3; mode Bayangan layer 3 saja |
+| Tersembunyi | saat terbang, sinematik, tersapu, dan Mati |
+| Kaki | telapak di dasar laut (0,000 m), ikut lompat (1,200 m dari 1,2 m); `uWater` tubuh = `waterHere()` |
+| Panel | baris Tubuh di akhir `LAB`, gerak kepala tetap indeks 4, tersimpan di `millar.body` |
+| Uji Millar | 78 pemeriksaan lulus (blok 5m baru) |
+
+Penyimpangan dari rencana: dada digeser jadi 0,40 x 0,50 x 0,28 m (depan 0,11 m di depan mata, atas di y 1,45) agar terlihat mulai menunduk sekitar 55 derajat. Kaki dan lengan baru terlihat di tepi saat berjalan; posisi telapak 0,45 m di depan (selaras `footstep()`) dikerjakan di M6b. Bias bayangan tubuh sementara 0,3 m / 0,4 (lebih besar dari wahana), penyetelan benar di M6c. Uji `bayangan Gargantua` (5l) tipis ambangnya (5-11% lebih gelap per jalan, ambang 7%), sudah ada sebelum M6a; di 5l tubuh dimatikan agar terisolasi.

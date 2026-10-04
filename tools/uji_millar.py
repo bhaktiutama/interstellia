@@ -432,6 +432,7 @@ UJI = r"""
     out[`belok kiri (A): arah +${((FL.yaw - y0w) * 180 / Math.PI).toFixed(0)} derajat, miring ${(FL.roll * 180 / Math.PI).toFixed(1)} derajat, ujung sayap kiri ${(L.y - R.y).toFixed(2)} m dari kanan`] = FL.yaw > y0w + 0.3 && FL.roll > 0.05 && L.y < R.y - 0.3;
     M.flyReset();
     // bayangan: kamera menatap bayangan KS-07 di dasar laut; terang turun dibanding bayangan dimatikan
+    M.BODY.level = 0;   // bayangan KS-07 diuji tanpa bayangan tubuh pemain (diuji di 5m)
     M.MOOD.brk = 1; const sy = M.seabed(M.SHIP.x, M.SHIP.z), h = M.SHIP.y + 0.3 - sy, G = M.THREE.Vector3;
     const gd = new V3(Math.cos(22 * Math.PI / 180) * Math.cos(28 * Math.PI / 180), Math.sin(22 * Math.PI / 180), -Math.cos(22 * Math.PI / 180) * Math.sin(28 * Math.PI / 180));
     const sx = M.SHIP.x - gd.x * h / gd.y, sz = M.SHIP.z - gd.z * h / gd.y;
@@ -447,6 +448,42 @@ UJI = r"""
     for (let i = 0; i < pa.length; i += 3) { if (na[i + 1] > -0.95 || Math.abs(pa[i]) > 0.7) continue; const z = pa[i + 2], key = z < -4.8 ? 'nose' : z > -2.4 && z < -0.4 ? 'mid' : z > 0.6 && z < 2.4 ? 'rear' : null; if (!key) continue; acc[key][0] += (ca[i] + ca[i + 1] + ca[i + 2]) / 3; acc[key][1]++; }
     const lm = (k) => acc[k][0] / Math.max(1, acc[k][1]);
     out[`gosong perut bergradasi: hidung (putih pudar) ${lm('nose').toFixed(3)}, tengah (abu-abu) ${lm('mid').toFixed(3)}, hilir (jelaga) ${lm('rear').toFixed(3)}`] = lm('nose') > 0.3 && lm('nose') > lm('mid') && lm('mid') > lm('rear') && lm('rear') < 0.1;
+    M.BODY.level = 2; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -Math.PI / 2 + 0.3;
+  }
+
+  // 5m. M6a: tubuh astronaut orang pertama (low poly): anggaran, terlihat saat menunduk, tidak di horizon, lapisan kepala, mode tersembunyi
+  {
+    const P = M.P, B = M.BODY, snap = () => { const T = M.POST.hdr, w = T.width, h = T.height, b = new Uint16Array(w * h * 4); M.renderer.readRenderTargetPixels(T, 0, 0, w, h, b); return b; };
+    const diff = (a, b) => { let n = 0; for (let k = 0; k < a.length; k += 4) if (Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]) > 40) n++; return 100 * n / (a.length / 4); };
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false;
+    P.view = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.ground = true; P.yaw = -Math.PI / 2 + 0.3; M.MOOD.brk = 1;
+    let bad = 0; for (const o of B.parts) for (const n of ['position', 'normal', 'color']) for (const v of o.geometry.attributes[n].array) if (!Number.isFinite(v)) bad++;
+    out[`tubuh: ${B.tris} segitiga (<= 450; Hemat <= 600), ${B.parts.length} bagian, nilai tidak valid ${bad}`] = B.tris > 0 && B.tris <= 450 && bad === 0;
+    // dua gambar dalam satu tugas sinkron (waktu, ombak, kamera sama), hanya tingkat tubuh berbeda
+    const shot = (lv) => { B.level = lv; M.camera.position.set(P.x, P.y, P.z); M.camera.rotation.set(P.pitch, P.yaw, 0); M.camera.updateMatrixWorld(true); M.U.uCam.value.copy(M.camera.position); M.updateShadow(); M.renderer.setRenderTarget(M.POST.hdr); M.renderer.clear(); M.renderer.render(M.scene, M.camera); M.renderer.setRenderTarget(null); return snap(); };
+    P.pitch = -70 * Math.PI / 180; const dn1 = shot(2), dn0 = shot(0);
+    P.pitch = 4 * Math.PI / 180; const hz1 = shot(2), hz0 = shot(0); B.level = 2;
+    const dD = diff(dn1, dn0), dH = diff(hz1, hz0);
+    out[`tubuh terlihat saat menunduk: ${dD.toFixed(2)}% piksel beda dari Mati (> 1,5%), di horizon ${dH.toFixed(2)}% (= 0)`] = dD > 1.5 && dH === 0;
+    // lapisan: kepala hanya bayangan (3) di orang pertama, ikut tampil (0) di drone; badan di 0 dan 3; Bayangan = semua hanya 3
+    B.level = 2; P.view = 0; M.updateBody(); const h0 = B.head.layers.isEnabled(0), h3 = B.head.layers.isEnabled(3), b0 = B.parts[0].layers.isEnabled(0);
+    P.view = 1; M.updateBody(); const h1 = B.head.layers.isEnabled(0); P.view = 0;
+    B.level = 1; M.updateBody(); const s0 = B.parts[0].layers.isEnabled(0), s3 = B.parts[0].layers.isEnabled(3);
+    out[`tubuh lapisan: kepala orang pertama 0=${h0} 3=${h3}, drone 0=${h1}, badan 0=${b0}, mode Bayangan 0=${s0} 3=${s3}`] = !h0 && h3 && h1 && b0 && !s0 && s3;
+    // tersembunyi saat terbang, sinematik, tersapu, dan Mati
+    B.level = 2; M.updateBody(); const vis = B.group.visible;
+    M.FLY.on = true; M.updateBody(); const vf = B.group.visible; M.FLY.on = false;
+    M.CINE.on = true; M.updateBody(); const vc = B.group.visible; M.CINE.on = false;
+    M.SWEEP.on = true; M.updateBody(); const vs = B.group.visible; M.SWEEP.on = false;
+    B.level = 0; M.updateBody(); const vm = B.group.visible; B.level = 2; M.updateBody();
+    out[`tubuh tampil ${vis}, tersembunyi saat terbang ${!vf}, sinematik ${!vc}, tersapu ${!vs}, Mati ${!vm}`] = vis && !vf && !vc && !vs && !vm;
+    // kaki di dasar laut dan ikut lompat; garis basah mengikuti muka air
+    P.x = 5; P.z = 5; P.y = M.seabed(5, 5) + M.CONFIG.eye; M.updateBody(); const fy0 = B.group.position.y - M.seabed(5, 5);
+    P.y += 1.2; M.updateBody(); const fy1 = B.group.position.y - M.seabed(5, 5); P.y -= 1.2; M.updateBody();
+    out[`tubuh: telapak di dasar laut ${fy0.toFixed(3)} m, ikut lompat ${fy1.toFixed(3)} m, uWater ${M.bodyMat.uniforms.uWater.value.toFixed(2)} = muka air ${M.waterHere(M.STATE.visT).toFixed(2)}`] = Math.abs(fy0) < 0.01 && Math.abs(fy1 - 1.2) < 0.01 && Math.abs(M.bodyMat.uniforms.uWater.value - M.waterHere(M.STATE.visT)) < 0.01;
+    // panel: baris Tubuh di akhir, gerak kepala tetap indeks 4, siklus tersimpan
+    const n = M.LAB.length, lv = B.level; M.cycleBody(); const lv1 = B.level, sv = localStorage.getItem('millar.body'); B.level = lv; M.cycleBody(); M.cycleBody(); M.cycleBody();
+    out[`panel Tubuh: baris ke-${n} dari ${n}, siklus ${lv} -> ${lv1}, tersimpan ${sv}, gerak kepala tetap indeks 4`] = M.LAB[n - 1][1]().includes('Tubuh') && M.LAB[4][1]().includes('Gerak kepala') && lv1 === (lv + 1) % 3 && sv === String(lv1) && B.level === lv;
     P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -Math.PI / 2 + 0.3;
   }
 

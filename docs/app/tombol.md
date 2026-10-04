@@ -55,6 +55,12 @@ Sinematik (Millar M4): Spasi, Enter, Esc, atau klik = lewati. Pandangan orbit ti
 | Gargantua | P tangkap layar | Enter di mode foto, atau tombol "Tangkap layar" di panel; P = efek layar |
 | Gargantua | tidak ada | Q kualitas, ` panel, ? / F1 bantuan |
 
+## Perubahan 4 Oktober 2026
+
+| Experience | Sebelum | Sesudah |
+| --- | --- | --- |
+| Millar | tidak ada | Tubuh astronaut (Mati / Bayangan / Tampil) hanya di panel kontrol `, tanpa tombol (M6a) |
+
 ## Aturan untuk experience baru
 
 - Pakai tabel tombol umum di atas. Fungsi baru yang khusus experience: pilih tombol yang tidak ada di kedua tabel, atau letakkan di panel kontrol.
