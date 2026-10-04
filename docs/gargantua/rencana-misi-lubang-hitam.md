@@ -43,7 +43,9 @@ Langkah mekanis di dalam tahap High (entri kamus, teks HUD, pembaruan dokumen) b
 | G3a | Selesai 4 Oktober 2026 (lihat bagian G3): jalur susur piringan dengan autopilot (2 skenario baru, melawan dan searah arus gas), lempeng piringan tebal volumetrik di sekitar kamera (derau 3D, menyambung dengan piringan tipis), disk berputar menurut waktu wajar wahana selama misi, eksposur otomatis misi. Belum diuji di GTX 1060 dan M1 |
 | G3 perbaikan beban GPU | 4 Oktober 2026, laporan pemilik: setelah G3 Ultra hanya 10 FPS, pandangan susah digerakkan, juga di luar misi. Sebab: kode lempeng tebal ikut terkompilasi di shader utama walau tidak dipakai (register dan cabang tambahan di loop sinar). Perbaikan: shader dipisah jadi dua varian (`VOL 0` = kode G2 persis, `VOL 1` hanya saat dekat piringan), satu panggilan `shadeDisk()` per langkah, sampel dan radius lempeng diturunkan, `textureLod`. Terukur di SwiftShader (bukan GPU nyata): tampilan biasa Sedang 2.173 ms menjadi 1.214 ms per frame (G2: 1.198), Ultra 4.906 menjadi 2.822 (G2: 2.639); susur di 6 rs Sedang 1.459 menjadi 966 ms. Belum diukur di GTX 1060 dan M1 |
 | G3b | Selesai 4 Oktober 2026: garis bara (partikel GPU), awan debu, tumbukan kaca kokpit (kilat, pijar, retak menetap), guncangan, kerusakan kaca (100% = akhir misi), label distilisasi di panel dan layar akhir |
-| G4-G6 | Belum dimulai; G6 berjalan per kelompok (uji G3 ada di `tools/uji_misi_gargantua.py`) |
+| Masukan pemilik setelah G3 | 4 Oktober 2026: saat misi, seret mouse di kamera luar memutar sikap wahana sehingga yang tampak berputar adalah lingkungan lubang hitam, wahana tidak bisa dilihat dari sudut lain. Perbaikan: di kamera luar seret = kamera mengitari wahana (`MIS.orb`, hanya kamera, sikap dan fisika tidak berubah), klik ganda = kembali ke belakang wahana, seret kanan (atau Ctrl + seret) = arah hidung seperti dulu. Di kokpit seret tetap arah hidung. Kolom nilai HUD digeser sedikit dan dipadatkan agar label "Pasang surut 2 m" dan prakiraan panjang tidak saling tumpuk. Bug kecil G3 ikut diperbaiki: saat misi diulang, satu hasil baca terang dari adegan misi sebelumnya bisa terpakai sebagai ukuran pertama eksposur otomatis (sekarang diabaikan) |
+| G4 | Selesai 4 Oktober 2026 (lihat bagian G4): waktu bersama Painleve-Gullstrand, relai 22 rs, pulsa tiap 1 s waktu wajar, jam wahana terlihat relai (melambat, memerah, membeku), pesan relai ke wahana, suar E, jendela relai dan diagram ruang-waktu (M), layar akhir dengan jendela relai hidup. Belum diuji di GTX 1060 dan M1 |
+| G5-G6 | Belum dimulai; G6 berjalan per kelompok (uji G4 ada di `tools/uji_misi_gargantua.py`) |
 
 Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
 
@@ -215,6 +217,37 @@ Piringan sekarang setipis kertas, jadi dari dekat tidak bisa tampak seperti foto
 
 ## G4: informasi tidak bisa keluar
 
+### Hasil G4 (4 Oktober 2026)
+
+| Bagian | Isi |
+| --- | --- |
+| Waktu bersama | Waktu Painleve-Gullstrand T (waktu wajar pengamat yang jatuh dari diam di tak hingga), reguler di horizon. Untuk wahana dT/dtau = gamma wahana terhadap kerangka rain, diintegrasikan bersama lintasan (`MIS.T`). Jatuh lurus E = 1: T = waktu wajar persis (diuji) |
+| Sinar radial | Keluar: T - Gout(r) tetap, Gout = r + 2 akar r + 2 ln abs(akar r - 1), dr/dT = 1 - 1/akar r (di dalam horizon negatif: cahaya "keluar" pun turun). Masuk: T + Hin(r) tetap, Hin = r - 2 akar r + 2 ln(akar r + 1). Diuji terhadap integrasi numerik (galat < 1e-6 rs/c) |
+| Relai | Orbit melingkar 22 rs, jam relai = T x akar(1 - 1,5/22) = T x 0,9653. Tanpa model 3D (titik di diagram) |
+| Pulsa | 1 per detik waktu wajar. HUD dan jendela: terkirim, tiba, di jalan, tak akan tiba (dikirim dari dalam horizon). Jatuh lurus: 67.779 terkirim, 657 dari dalam horizon |
+| Pandangan relai | Jam wahana seperti terlihat relai (balikan waktu tiba di log lintasan yang rapat dekat horizon), warna dan terang ikut faktor frekuensi (biru > 1, memerah, padam), "cahaya ini berangkat dari r = ...". Di awal jatuh lurus laju = (akar r - 1) / (akar r x 0,9653) (Doppler + dilatasi relai, diuji) |
+| Membeku | Relai melihat jam berhenti tepat di waktu lewat horizon (jatuh lurus 68,1261 rs/c = 18 jam 38 menit 43 detik, diuji < 1e-6). Menjelang akhir laju jam terlihat turun faktor e tiap 2 rs/c waktu bersama (gravitasi permukaan 1/(2 rs), diuji): frekuensi faktor e tiap 31,7 menit jam relai, terang tiap 15,9 menit |
+| Setelah misi | Layar akhir memuat jendela relai hidup: waktu relai terus berjalan 3 rs/c per detik nyata, jadi jam wahana tampak melambat, memerah, lalu padam |
+| Arah sebaliknya | Pesan relai tetap sampai ke wahana di dalam horizon (jam relai terlihat dari wahana terus naik sampai singularitas, berhingga). Jatuh lurus: pesan terakhir yang diterima dikirim pada jam relai 13:55:19 |
+| Suar (E) | Ditembakkan lurus menjauhi pusat (radial di kerangka rain) pada c. Dari luar horizon naik dan tiba di relai; dari dalam horizon r tetap turun sampai 0 (diuji). Garis biru muda di diagram, baris HUD "Suar" |
+| Diagram ruang-waktu (M) | Koordinat Eddington-Finkelstein masuk: r mendatar, waktu ke atas, skala sama (sinar masuk 45 derajat). Kerucut cahaya (biru di luar, merah di dalam horizon: kedua kaki ke kiri), horizon putus-putus, singularitas zigzag, relai hijau, garis dunia wahana, sinar pulsa (jingga sampai relai, merah jatuh ke r = 0), titik yang sedang terlihat relai. Zoom mengikuti r wahana (3 sampai 24,5 rs) |
+| Tombol | E suar, M jendela relai (juga di panel). Seret di kamera luar = kamera mengitari wahana (masukan pemilik) |
+
+Tunda sinyal radial dari wahana ke relai 22 rs (waktu bersama T; jam relai x 0,9653):
+
+| r kirim | Tunda | |
+| --- | --- | --- |
+| 16 rs | 7,8 rs/c | 2,1 jam |
+| 6 rs | 22,4 rs/c | 6,1 jam |
+| 3 rs | 28,2 rs/c | 7,7 jam |
+| 1,5 rs | 33,0 rs/c | 9,0 jam |
+| 1,01 rs | 41,6 rs/c | 11,4 jam |
+| 1,0001 rs | 50,8 rs/c | 13,9 jam |
+| 1 + 1e-8 rs | 69,2 rs/c | 18,9 jam |
+| 1 rs atau kurang | tidak pernah | |
+
+Rencana awal:
+
 | Bagian | Isi |
 | --- | --- |
 | Relai | Satelit relai orbit melingkar di 22 rs (desain orisinal sederhana) |
@@ -256,11 +289,12 @@ Mengikuti `docs/app/tombol.md`: tidak ada huruf baru.
 | V | Kokpit / kamera luar |
 | Z | Kecepatan waktu (Otomatis, x4, x16, Lambat x0,25) |
 | W/S, A/D, R/F, Shift | Dorong maju-mundur, kiri-kanan, naik-turun; Shift = mesin utama (G2, mengikuti tombol pesawat Copper) |
-| Seret mouse, roda | Arah hidung; jarak kamera luar |
+| Seret mouse, roda | Kamera luar: seret = kamera mengitari wahana (klik ganda kembali), seret kanan = arah hidung; kokpit: seret = arah hidung; roda = jarak kamera luar |
 | X | Sikap: hidung ke pusat / mendatar / searah lintasan dengan piringan di bawah (G3; seret = arah pandang) / bebas (G2) |
 | O | Autopilot susur nyala / mati (G3; huruf O = "otomatis", seperti jalan otomatis di Copper). Selama autopilot: R/F tinggi, W/S laju turun |
 | Enter | Terbang lagi di layar akhir (G2); kunci bidikan (G5) |
 | E | Tembak suar (G4) |
+| M | Pandangan relai dan diagram ruang-waktu nyala / mati (G4, setara M peta di Copper) |
 | Space | Jeda |
 | Esc | Akhiri misi |
 
@@ -272,6 +306,7 @@ Selama misi F dan R dipakai untuk dorongan (seperti pesawat Copper), jadi mode f
 - Partikel, tumbukan kaca, dan kepadatan piringan distilisasi demi tampilan; piringan akresi nyata jauh lebih tipis dan wahana tidak akan selamat.
 - Tesseract dan gerbang murni fiksi. Jatuh, horizon, pulsa, kecepatan relatif, dan sudut tangkap mengikuti fisika.
 - Animasi piringan tidak memperhitungkan waktu tunda cahaya.
+- Sinyal ke dan dari relai dihitung sepanjang arah radial (relai dianggap tepat di atas wahana). Beda sudut hanya menambah tunda yang berhingga, tidak mengubah kesimpulan: dari dalam horizon tidak ada sinyal yang keluar.
 - Biaya GPU terbesar: lapisan volumetrik dekat kamera (G3). Perlu diukur di GTX 1060 dan M1; bila berat, jumlah sampel (`vol` di `CONFIG.presets`) dan radius daerah (`volParams()`) diturunkan.
 - Autopilot susur fiksi: menahan wahana di atas piringan butuh dorongan terus-menerus (0,19 c untuk satu jalur). Laju partikel, tumbukan, dan kerusakan kaca dihitung per detik nyata (bukan waktu wajar), jadi Z (waktu lebih cepat) mengurangi tumbukan.
 - Nama Ranger dan desain kendaraan film tidak dipakai.

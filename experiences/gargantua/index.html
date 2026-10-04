@@ -83,6 +83,7 @@
     border-radius: 10px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
   #mend .hh { color: var(--accent); letter-spacing: .12em; text-transform: uppercase; font-size: 11px; margin-bottom: 8px; }
   #mend p { margin: 6px 0; color: var(--text); font-size: 11.5px; line-height: 1.5; }
+  #mendRelay { display: block; width: 100%; height: 230px; margin: 8px 0; border-radius: 6px; }
   @media (max-width: 640px) {
     #ui { top: 12px; right: 12px; left: 12px; width: auto; max-height: 60vh; }
     #hint { display: none; }
@@ -100,7 +101,7 @@
 <div id="toast" class="overlay-text"></div>
 <div id="help" hidden><div class="card"><div class="hh"><span id="helpTitle">Help</span><button type="button" id="helpClose">Close (?)</button></div><table id="helpRows"></table></div></div>
 <canvas id="dash" hidden></canvas>
-<div id="mend" hidden><div class="card"><div class="hh"><span id="mendTitle"></span></div><div id="mendBody"></div>
+<div id="mend" hidden><div class="card"><div class="hh"><span id="mendTitle"></span></div><div id="mendBody"></div><canvas id="mendRelay"></canvas>
   <div class="btns"><button type="button" id="mendAgain">Fly again</button><button type="button" id="mendExit">Exit mission</button></div></div></div>
 <pre id="err" hidden></pre>
 <script src="assets/gx01.data.js"></script>
@@ -773,7 +774,6 @@ const ID = {
   'WebGL2 is not available in this browser or on this GPU.\n\nThis simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). Check that hardware acceleration is enabled in your browser settings.':
     'WebGL2 tidak tersedia di browser atau GPU ini.\n\nSimulasi ini butuh WebGL2 (Chrome, Edge, Firefox, Safari 15+). Pastikan akselerasi hardware aktif di pengaturan browser.',
   'WebGL context lost. Reload the page to restart.': 'Konteks WebGL hilang. Muat ulang halaman untuk memulai lagi.',
-  'A distant observer never sees the crossing: the image freezes and reddens at the horizon (stage G4).': 'Pengamat jauh tidak pernah melihat wahana melewati horizon: gambarnya membeku dan memerah di horizon (tahap G4).',
   'Already moving inward at 0.86 c at 22 rs: strong aberration squeezes the sky forward.': 'Sudah melaju ke dalam 0,86 c di 22 rs: aberasi kuat memampatkan langit ke depan.',
   'Angular momentum 0.8 of critical: swings round and crosses the disk plane at about 2 rs, inside the inner edge.': 'Momentum sudut 0,8 dari kritis: berayun lalu memotong bidang piringan di sekitar 2 rs, di dalam tepi dalam piringan.',
   'Angular momentum a hair below critical: circles the unstable orbit at 2 rs a few times, then plunges.': 'Momentum sudut sedikit di bawah kritis: mengitari orbit tak stabil di 2 rs beberapa kali, lalu menukik.',
@@ -824,7 +824,6 @@ const ID = {
   'Time': 'Waktu',
   'Time: {m}': 'Waktu: {m}',
   'Unstable orbit at 2.4 rs': 'Orbit tak stabil di 2,4 rs',
-  'W/S A/D R/F thrust (Shift main engine) · drag = turn nose · X attitude · Z time · V view · Esc end': 'W/S A/D R/F dorong (Shift mesin utama) · seret = arah hidung · X sikap · Z waktu · V tampilan · Esc akhiri',
   'Whirl at 2 rs (zoom-whirl)': 'Berputar di 2 rs (zoom-whirl)',
   'ahead': 'depan',
   'behind': 'belakang',
@@ -843,7 +842,7 @@ const ID = {
   'v local fall frame': 'v kerangka jatuh',
   'v vs static': 'v thd diam',
   'vs static': 'thd pengamat diam',
-  'Mission keys: W/S A/D R/F thrust, Shift main engine, drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, Z time, V view, Esc ends': 'Tombol misi: W/S A/D R/F dorong, Shift mesin utama, seret memutar hidung, X sikap (pusat, mendatar, lintasan, bebas), O autopilot susur, Z waktu, V tampilan, Esc mengakhiri',
+  'Mission keys: W/S A/D R/F thrust, Shift main engine, drag orbits the chase camera around the vessel (double-click resets; in the cockpit drag turns the nose), right-drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, E flare, M relay view and spacetime diagram, Z time, V view, Esc ends': 'Tombol misi: W/S A/D R/F dorong, Shift mesin utama, seret memutar kamera luar mengitari wahana (klik ganda = kembali; di kokpit seret memutar hidung), seret kanan memutar hidung, X sikap (pusat, mendatar, lintasan, bebas), O autopilot susur, E suar, M pandangan relai dan diagram ruang-waktu, Z waktu, V tampilan, Esc mengakhiri',
   'Start a mission from the panel (`): 9 ways to fall in, two of them skimming the disk': 'Mulai misi dari panel (`): 9 cara jatuh, dua di antaranya menyusur piringan',
   'Mission': 'Misi', 'In the mission': 'Dalam misi',
   'GX-01 vessel': 'Wahana GX-01', 'Vessel GX-01: chase camera (V cockpit, Esc exit)': 'Wahana GX-01: kamera luar (V kokpit, Esc keluar)',
@@ -877,9 +876,46 @@ const ID = {
   'damage': 'rusak',
   'hits': 'tumbukan',
   'canopy': 'kaca',
-  'Autopilot: R/F height · W/S descent rate · O off · drag = look · X attitude · Z time · V view · Esc end': 'Autopilot: R/F tinggi · W/S laju turun · O mati · seret = arah pandang · X sikap · Z waktu · V tampilan · Esc akhiri',
   'Autopilot skim (O)': 'Autopilot susur (O)',
   'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT). The thick disk layer near the vessel is also exaggerated.': 'Partikel piringan dan tumbukan kaca distilisasi demi tampilan: butir debu nyata 1 mikrogram pada 0,8 c membawa 6,0e7 J (sekitar 14 kg TNT). Lempeng piringan tebal di dekat wahana juga dilebih-lebihkan.',
+  'Flare fired straight outward at the speed of light. Inside the horizon even this light moves inward (dr/dT = 1 - 1/sqrt r < 0)': 'Suar ditembakkan lurus menjauhi pusat dengan laju cahaya. Di dalam horizon cahaya ini pun bergerak ke dalam (dr/dT = 1 - 1/akar r < 0)',
+  'Flare fired straight outward at the speed of light: it climbs out and will reach the relay': 'Suar ditembakkan lurus menjauhi pusat dengan laju cahaya: naik keluar dan akan tiba di relai',
+  'Relay view and spacetime diagram: on (M)': 'Pandangan relai dan diagram ruang-waktu: nyala (M)',
+  'Relay view and spacetime diagram: off (M)': 'Pandangan relai dan diagram ruang-waktu: mati (M)',
+  'Relay view and spacetime diagram (M)': 'Pandangan relai dan diagram ruang-waktu (M)',
+  'Relay sees': 'Relai melihat',
+  'From relay': 'Dari relai',
+  'relay clock': 'jam relai',
+  'Flare': 'Suar',
+  'waiting for the first pulse (light delay)': 'menunggu pulsa pertama (tunda cahaya)',
+  'Autopilot: R/F height · W/S descent · O off · drag = orbit camera · right-drag = look · X attitude · Z time · V view · E flare · M relay · Esc end': 'Autopilot: R/F tinggi · W/S laju turun · O mati · seret = putar kamera · seret kanan = arah pandang · X sikap · Z waktu · V tampilan · E suar · M relai · Esc akhiri',
+  'Autopilot: R/F height · W/S descent · O off · drag = look · X attitude · Z time · V view · E flare · M relay · Esc end': 'Autopilot: R/F tinggi · W/S laju turun · O mati · seret = arah pandang · X sikap · Z waktu · V tampilan · E suar · M relai · Esc akhiri',
+  'W/S A/D R/F thrust (Shift main) · drag = orbit camera · right-drag = nose · X attitude · Z time · V view · E flare · M relay · Esc end': 'W/S A/D R/F dorong (Shift utama) · seret = putar kamera · seret kanan = hidung · X sikap · Z waktu · V tampilan · E suar · M relai · Esc akhiri',
+  'W/S A/D R/F thrust (Shift main) · drag = turn nose · X attitude · Z time · V view · E flare · M relay · Esc end': 'W/S A/D R/F dorong (Shift utama) · seret = arah hidung · X sikap · Z waktu · V tampilan · E suar · M relai · Esc akhiri',
+  'fired inside the horizon: reached r = 0': 'ditembakkan di dalam horizon: sampai r = 0',
+  'falling inward': 'turun ke dalam',
+  'reached the relay': 'tiba di relai',
+  'climbing out': 'naik keluar',
+  'Relay at 22 rs: what it sees of GX-01': 'Relai di 22 rs: yang terlihat dari GX-01',
+  'last signal received: nothing more will come': 'sinyal terakhir sudah tiba: tidak ada lagi yang datang',
+  'frozen at the horizon: redder and dimmer forever': 'membeku di horizon: makin merah dan redup selamanya',
+  'the image slows down toward the horizon crossing': 'gambar melambat menjelang saat lewat horizon',
+  'this light left the vessel at r = {r} rs': 'cahaya ini berangkat dari wahana di r = {r} rs',
+  'clock rate = frequency': 'laju jam = frekuensi',
+  'pulses': 'pulsa',
+  'arrived': 'tiba',
+  'on the way': 'di jalan',
+  'never': 'tak akan tiba',
+  'the relay keeps waiting': 'relai terus menunggu',
+  'Spacetime: r across, time up': 'Ruang-waktu: r mendatar, waktu ke atas',
+  'horizon': 'horizon',
+  'relay': 'relai',
+  'relay 22 rs': 'relai 22 rs',
+  'The relay never sees the crossing: the image of the GX-01 clock slows, reddens and freezes just before {t}. Asymptotically the light reddens by a factor e every 32 minutes of relay time and dims by e every 16 minutes.': 'Relai tidak pernah melihat wahana lewat horizon: gambar jam GX-01 melambat, memerah, dan membeku tepat sebelum {t}. Menjelang akhir cahayanya memerah dengan faktor e tiap 32 menit waktu relai dan meredup dengan faktor e tiap 16 menit.',
+  'Pulses (one per second of proper time): {n} sent, {h} of them from inside the horizon. Those never leave, not even toward the relay.': 'Pulsa (satu tiap detik waktu wajar): {n} terkirim, {h} di antaranya dari dalam horizon. Pulsa itu tidak pernah keluar, juga tidak menuju relai.',
+  'Relay messages still reached the vessel inside the horizon: the last one received was sent at relay clock {c}.': 'Pesan relai tetap sampai ke wahana di dalam horizon: pesan terakhir yang diterima dikirim pada jam relai {c}.',
+  'A flare fired outward inside the horizon still fell to r = 0.': 'Suar yang ditembakkan keluar dari dalam horizon tetap jatuh ke r = 0.',
+  'Outside the horizon every pulse reaches the relay eventually: {n} pulses, the last one at relay clock {c}.': 'Di luar horizon setiap pulsa akhirnya tiba di relai: {n} pulsa, yang terakhir pada jam relai {c}.',
   'Disk light': 'Cahaya piringan', 'View': 'Tampilan', 'Cockpit': 'Kokpit', 'Chase': 'Kamera luar', 'Vessel': 'Wahana',
 };
 const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
@@ -893,7 +929,7 @@ function applyStaticLang() {
     ['Space', txt('Pause / resume time')], ['Q', txt('Quality preset: Ultra, High, Medium, Low')],
     ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')], ['F', txt('Photo mode: UI hidden, Enter saves PNG, F or Esc exits')],
     ['V · Esc', txt('Vessel view: GX-01 chase camera / cockpit (Esc exits)')], [txt('Mission'), txt('Start a mission from the panel (`): 9 ways to fall in, two of them skimming the disk')],
-    [txt('In the mission'), txt('Mission keys: W/S A/D R/F thrust, Shift main engine, drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, Z time, V view, Esc ends')], ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
+    [txt('In the mission'), txt('Mission keys: W/S A/D R/F thrust, Shift main engine, drag orbits the chase camera around the vessel (double-click resets; in the cockpit drag turns the nose), right-drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, E flare, M relay view and spacetime diagram, Z time, V view, Esc ends')], ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
   $('#mendAgain').textContent = txt('Fly again'); $('#mendExit').textContent = txt('Exit mission');
   const m = $('#menuLink'); if (m) m.href = `../../index.html?lang=${LANG}`;
@@ -1065,7 +1101,7 @@ function main() {
   const PART_P = program(PART_FS, 'particles', PART_VS), IMP_P = program(IMP_FS, 'impacts', IMP_VS);
   P.dust = program(DUST_FS, 'dust'); P.lum = program(LUM_FS, 'lum');
   // G3a: target 16 x 9 RGBA8 + PBO untuk eksposur otomatis misi
-  const AE = { k: 1, kt: 1, fence: null, t: 0, L: null, tgt: null, pbo: gl.createBuffer() };
+  const AE = { k: 1, kt: 1, fence: null, t: 0, L: null, skip: false, tgt: null, pbo: gl.createBuffer() };
   {
     const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 16, 9, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -1075,15 +1111,21 @@ function main() {
     AE.tgt = { tex: tx, fb, w: 16, h: 9 };
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, AE.pbo); gl.bufferData(gl.PIXEL_PACK_BUFFER, 16 * 9 * 4, gl.STREAM_READ); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
   }
+  // baca tertunda dari misi sebelumnya tetap diselesaikan tetapi hasilnya diabaikan (dulu ukuran pertama misi baru bisa berasal
+  // dari adegan lama; fence tidak dihapus agar buffer baca tidak ditulis ulang sebelum dibaca)
+  function aeReset() { AE.skip = !!AE.fence; AE.k = AE.kt = 1; AE.L = null; }
   function autoExposure(dt) {
     if (!MIS.on) { AE.k = AE.kt = 1; return; }
     if (AE.fence) {                                              // hasil baca sebelumnya siap?
       if (gl.getSyncParameter(AE.fence, gl.SYNC_STATUS) === gl.SIGNALED) {
         gl.deleteSync(AE.fence); AE.fence = null;
         const px = new Uint8Array(16 * 9 * 4); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, AE.pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, px); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-        const v = []; for (let i = 0; i < px.length; i += 4) { const a = Math.min(px[i], 254) / 255; v.push(a / (1 - a)); }
-        v.sort((a, b) => b - a);                                 // rata-rata 30% sel paling terang (langit gelap tidak menarik ke bawah)
-        AE.L = v.slice(0, 43).reduce((a, b) => a + b, 0) / 43; AE.kt = Math.max(0.12, Math.min(1, 0.7 / Math.max(AE.L, 1e-3)));
+        if (AE.skip) AE.skip = false;
+        else {
+          const v = []; for (let i = 0; i < px.length; i += 4) { const a = Math.min(px[i], 254) / 255; v.push(a / (1 - a)); }
+          v.sort((a, b) => b - a);                               // rata-rata 30% sel paling terang (langit gelap tidak menarik ke bawah)
+          AE.L = v.slice(0, 43).reduce((a, b) => a + b, 0) / 43; AE.kt = Math.max(0.12, Math.min(1, 0.7 / Math.max(AE.L, 1e-3)));
+        }
       } else if ((AE.t -= dt) < -1) { gl.deleteSync(AE.fence); AE.fence = null; AE.t = 0; }   // tidak kunjung siap: ulang
     } else if ((AE.t -= dt) <= 0) {                              // ukur lagi tiap 0,2 s
       AE.t = 0.2;
@@ -1193,7 +1235,8 @@ function main() {
   // relatif lintasan (sikap 'track'), gas = gas piringan relatif wahana, imps = tumbukan kaca, glass = kerusakan kaca (%)
   const MIS = { on: false, sc: 'skim', x: [0, 22, 0], xd: [0, 0, 0], tau: 0, att: null, lock: 'centre', warp: 0, chase: 40,
     dvUsed: 0, dvMax: 0.03, end: null, tauH: null, hist: [], pred: null, predT: 0, vMax: 0, thr: [0, 0, 0], keys: new Set(), fade: 0,
-    ap: { on: false, dir: -1, h: 0.05, vin: 0.1 }, look: { yaw: 0, pitch: 0 }, gas: null, imps: [], hits: 0, glass: 0, shake: 0, clock: 0, hitAcc: 0 };
+    ap: { on: false, dir: -1, h: 0.05, vin: 0.1 }, look: { yaw: 0, pitch: 0 }, gas: null, imps: [], hits: 0, glass: 0, shake: 0, clock: 0, hitAcc: 0,
+    orb: { yaw: 0, pitch: 0 }, T: 0 };   // orb = putaran kamera luar mengitari wahana (seret); T = waktu Painleve-Gullstrand (G4)
 
   function misAcc(x, xd) {
     const r2 = v3.dot(x, x), r = Math.sqrt(r2), Lv = v3.cross(x, xd), L2 = v3.dot(Lv, Lv);
@@ -1264,7 +1307,7 @@ function main() {
     if (!SHIP.ready) { toast(txt('Vessel GX-01 model is missing (assets/gx01.data.js)'), 3); return; }
     const S = SCEN[id]; MIS.sc = id;
     MIS.ap = { on: false, dir: S.skim || -1, h: 0.05, vin: 0.1 };
-    AE.k = AE.kt = 1; AE.L = null;                               // G3a: eksposur mulai dari normal tiap misi
+    aeReset();                                                   // G3a: eksposur mulai dari normal tiap misi
     if (S.skim) {                                                // G3: mulai di 16 rs, 0,05 r di atas bidang piringan, orbit melingkar + turun
       const r0 = 16; MIS.ap.on = true;
       MIS.x = [r0, MIS.ap.h * r0, 0]; MIS.xd = apVel(MIS.x, MIS.ap);
@@ -1281,7 +1324,8 @@ function main() {
       MIS.x = [0, r0, 0]; MIS.xd = [0, ur, 0];
     }
     Object.assign(MIS, { on: true, tau: 0, att: null, lock: S.lock || 'centre', dvUsed: 0, dvMax: S.dv, end: null, tauH: null, hist: [], pred: null, predT: 0, vMax: 0, fade: 0,
-      look: { yaw: 0, pitch: S.skim ? -0.12 : 0 }, gas: null, imps: [], hits: 0, glass: 0, shake: 0, clock: 0, hitAcc: 0 });
+      look: { yaw: 0, pitch: S.skim ? -0.12 : 0 }, gas: null, imps: [], hits: 0, glass: 0, shake: 0, clock: 0, hitAcc: 0, orb: { yaw: 0, pitch: 0 }, T: 0 });
+    relReset();
     misLockAtt();
     if (S.skim) {                                                // pandang sedikit ke arah lubang hitam (bayangan dan dinding cahaya di depan)
       MIS.look.yaw = 0.62 * (Math.sign(v3.dot(v3.mul(v3.norm(MIS.x), -1), MIS.att.r)) || 1); misLockAtt();
@@ -1293,7 +1337,7 @@ function main() {
     syncUI();
   }
   function stopMission() {
-    MIS.on = false; MIS.end = null; SHIP.on = false; MIS.keys.clear(); AE.k = AE.kt = 1;
+    MIS.on = false; MIS.end = null; SHIP.on = false; MIS.keys.clear(); aeReset();
     $('#mend').hidden = true; $('#dash').hidden = true; syncUI();
   }
   function endMission(kind, extra = {}) {
@@ -1306,7 +1350,15 @@ function main() {
     lines.push(txt('Proper time on board') + ': ' + s(E.tau));
     if (MIS.tauH !== null) {
       lines.push(txt('Crossed the event horizon at') + ' ' + s(MIS.tauH) + ' · ' + txt('horizon to end') + ': ' + s(E.tau - MIS.tauH));
-      lines.push(txt('A distant observer never sees the crossing: the image freezes and reddens at the horizon (stage G4).'));
+      // G4: relai tidak pernah melihat wahana lewat horizon; pulsa dari dalam tidak pernah keluar; pesan relai tetap masuk
+      const V = relView();
+      lines.push(txt('The relay never sees the crossing: the image of the GX-01 clock slows, reddens and freezes just before {t}. Asymptotically the light reddens by a factor e every 32 minutes of relay time and dims by e every 16 minutes.').replace('{t}', s(MIS.tauH)));
+      lines.push(txt('Pulses (one per second of proper time): {n} sent, {h} of them from inside the horizon. Those never leave, not even toward the relay.').replace('{n}', fmtInt(V.sent)).replace('{h}', fmtInt(V.never)));
+      lines.push(txt('Relay messages still reached the vessel inside the horizon: the last one received was sent at relay clock {c}.').replace('{c}', fmtTauS(relMsg().clock)));
+      if (REL.flares.some((f) => f.r <= 1)) lines.push(txt('A flare fired outward inside the horizon still fell to r = 0.'));
+    } else if (E.r > 1) {
+      lines.push(txt('Outside the horizon every pulse reaches the relay eventually: {n} pulses, the last one at relay clock {c}.')
+        .replace('{n}', fmtInt(Math.floor(E.tau * MIS_T))).replace('{c}', fmtTauS(relArrive(MIS.T, E.r) * REL.k)));
     }
     if (kind === 'singularity') lines.push(txt('Tidal stretch on a 2 m body reached 1 g only 0.3 s before the end (r = 0.006 rs).'));
     if (kind === 'disk') lines.push(txt('Crossed the disk plane at r = {r} rs, inside the disk (gas at about 0.5 c relative).').replace('{r}', fmtN(E.rc, 2)));
@@ -1331,7 +1383,9 @@ function main() {
     const d = CONFIG.disk; let left = dtau, n = 0;
     while (left > 0 && n++ < maxSub) {
       const h = Math.min(left, misH(st.x, st.xd)), y0 = st.x[1], r0 = Math.hypot(...st.x);
+      const g0 = st.T !== undefined ? rainOf(st.x, st.xd).g : 0;
       [st.x, st.xd] = rk4(st.x, st.xd, h); st.tau += h; left -= h;
+      if (st.T !== undefined) { st.T += 0.5 * (g0 + rainOf(st.x, st.xd).g) * h; if (st.log) st.log(st); }   // G4: dT/dtau = gamma thd kerangka rain
       const r = Math.hypot(...st.x);
       if (r0 >= 1 && r < 1 && st.onHorizon) st.onHorizon(st.tau - h * (1 - r) / Math.max(r0 - r, 1e-12));   // waktu lewat horizon (interpolasi)
       if (y0 * st.x[1] < 0) {
@@ -1396,8 +1450,8 @@ function main() {
         apOff('Inside the ISCO: no stable orbit here, the gas plunges too. Autopilot released, falling in');
       const h = MIS.ap.on ? Math.min(left, 0.05 * Math.pow(r, 1.5)) : left;
       if (MIS.ap.on) misAutopilot(h);
-      const st = { x: MIS.x, xd: MIS.xd, tau: MIS.tau, onHorizon };
-      res = misAdvance(st, h); MIS.x = st.x; MIS.xd = st.xd; MIS.tau = st.tau; left -= h;
+      const st = { x: MIS.x, xd: MIS.xd, tau: MIS.tau, T: MIS.T, onHorizon, log: relLog };
+      res = misAdvance(st, h); MIS.x = st.x; MIS.xd = st.xd; MIS.tau = st.tau; MIS.T = st.T; left -= h;
     }
     return res;
   }
@@ -1423,6 +1477,81 @@ function main() {
     const Rs = rainOf(x, xd), Rg = rainOf(x, g.xd), uu = v3.dot(Rs.U, Rg.U);
     const Up = v3.add(Rg.U, v3.mul(Rs.U, uu / (Rs.g + 1) - Rg.g)), v = v3.mul(Up, 1 / (Rs.g * Rg.g - uu)), sp = Math.hypot(...v);
     return { v: sp, dir: sp > 1e-9 ? v3.mul(v, 1 / sp) : [0, 0, -1], dens: g.dens, H: g.H, y: x[1] };
+  }
+  /* G4: informasi tidak bisa keluar. Waktu bersama = waktu Painleve-Gullstrand T (waktu wajar pengamat rain); dT/dtau wahana =
+     gamma wahana thd kerangka rain = rainOf().g, reguler di horizon (diintegrasikan di misAdvance). Sinar radial (rs = 1):
+       keluar: T - Gout(r) tetap, Gout = r + 2 sqrt r + 2 ln|sqrt r - 1|  (dr/dT = 1 - 1/sqrt r, di dalam horizon < 0)
+       masuk:  T + Hin(r) tetap,  Hin = r - 2 sqrt r + 2 ln(sqrt r + 1)    (dr/dT = -(1 + 1/sqrt r))
+     Diagram ruang-waktu memakai waktu Eddington-Finkelstein masuk tv = T + Hin(r) - r (sinar masuk = garis 45 derajat,
+     sinar keluar tv = r + 2 ln|r - 1| + C). Relai: orbit melingkar REL.r = 22 rs, jam relai = T k, k = sqrt(1 - 1,5 / 22).
+     Sinyal dihitung sepanjang arah radial (relai dianggap tepat di atas wahana; beda sudut hanya menambah tunda tetap).
+     Wahana mengirim pulsa tiap 1 s waktu wajar. Log (tau, T, r, waktu tiba di relai) rapat di dekat horizon; jam yang terlihat
+     relai = balikan waktu tiba (bisection di dalam satu potongan log), laju = 1 / (k dTtiba/dtau). */
+  const Gout = (r) => { const s = Math.sqrt(r); return r + 2 * s + 2 * Math.log(Math.abs(s - 1)); };
+  const Hin = (r) => { const s = Math.sqrt(r); return r - 2 * s + 2 * Math.log(s + 1); };
+  const REL = { r: 22, k: Math.sqrt(1 - 1.5 / 22), on: true, ff: 3, log: [], Tx: 0, flares: [], rays: [], rayTv: -1e9, zoom: 24, drawn: 0 };
+  const relArrive = (T, r) => (r <= 1 ? Infinity : r < REL.r ? T - Gout(r) + Gout(REL.r) : T + Hin(r) - Hin(REL.r));
+  const relZoom = (r) => Math.max(3, Math.min(REL.r + 2.5, 1.6 * r + 1.5));
+  function relLog(st) {                                          // ekor log selalu keadaan terkini
+    const L = REL.log, r = Math.hypot(...st.x), cur = [st.tau, st.T, r, relArrive(st.T, r)], q = L[L.length - 2];
+    if (q && st.tau - q[0] < 0.05 && Math.abs(r - q[2]) < 0.02 * Math.max(r, 0.02) && (r > 1) === (q[2] > 1)
+        && Math.abs(Math.log(Math.abs(r - 1) / Math.abs(q[2] - 1))) < 0.02) L[L.length - 1] = cur;
+    else L.push(cur);
+  }
+  function relReset() {
+    const r = Math.hypot(...MIS.x);
+    Object.assign(REL, { log: [[0, 0, r, relArrive(0, r)]], Tx: 0, flares: [], rays: [], rayTv: -1e9, zoom: relZoom(r) });
+  }
+  // jam wahana yang terlihat relai pada waktu bersama TR: { tau, r, T, rate (faktor frekuensi = laju jam terlihat), done }
+  function relSeen(TR) {
+    const L = REL.log, n = L.length;
+    if (!n || !(L[0][3] <= TR)) return null;
+    if (L[n - 1][3] <= TR) { const q = L[n - 1]; return { tau: q[0], r: q[2], T: q[1], rate: MIS.end ? 0 : 1, done: !!MIS.end }; }
+    let lo = 0, hi = n - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (L[m][3] <= TR) lo = m; else hi = m; }
+    const a = L[lo], b = L[hi], at = (s) => relArrive(a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s);
+    let s0 = 0, s1 = 1;
+    for (let it = 0; it < 60; it++) { const s = 0.5 * (s0 + s1); if (at(s) <= TR) s0 = s; else s1 = s; }
+    const dt = Math.max(b[0] - a[0], 1e-12), r = a[2] + (b[2] - a[2]) * s0, g = (b[1] - a[1]) / dt, rd = (b[2] - a[2]) / dt, sq = Math.sqrt(r);
+    const dA = r < REL.r || (r <= REL.r && rd < 0) ? g - rd * sq / (sq - 1) : g + rd * sq / (sq + 1);   // tepat di r relai: ikut arah gerak
+    return { tau: a[0] + (b[0] - a[0]) * s0, r, T: a[1] + (b[1] - a[1]) * s0, rate: 1 / (Math.max(dA, 1e-300) * REL.k), done: false };
+  }
+  function relMsg() {                                            // jam relai yang terlihat wahana sekarang (sinyal masuk) dan lajunya
+    const R = rainOf(MIS.x, MIS.xd), r = R.r, sq = Math.sqrt(r), inner = r <= REL.r;
+    const TRe = inner ? MIS.T + Hin(r) - Hin(REL.r) : MIS.T - Gout(r) + Gout(REL.r);
+    return { clock: TRe * REL.k, rate: (inner ? R.g + R.ur * sq / (sq + 1) : R.g - R.ur * sq / (sq - 1)) * REL.k };
+  }
+  function relView() {                                           // ringkasan pulsa (1 per detik waktu wajar)
+    const TR = MIS.T + REL.Tx, S = relSeen(TR), sent = Math.floor(MIS.tau * MIS_T);
+    const never = MIS.tauH !== null ? sent - Math.floor(MIS.tauH * MIS_T) : 0, recv = S ? Math.min(sent - never, Math.floor(S.tau * MIS_T)) : 0;
+    return { TR, S, sent, never, recv, way: Math.max(0, sent - never - recv) };
+  }
+  // E: suar ditembakkan lurus menjauhi pusat (radial di kerangka rain) pada c
+  function fireFlare() {
+    if (!MIS.on || MIS.end) return;
+    const r = Math.hypot(...MIS.x);
+    REL.flares.push({ tau: MIS.tau, T: MIS.T, r, C: MIS.T - Gout(r), tv: MIS.T + Hin(r) - r, arr: relArrive(MIS.T, r) });
+    if (REL.flares.length > 4) REL.flares.shift();
+    toast(txt(r <= 1 ? 'Flare fired straight outward at the speed of light. Inside the horizon even this light moves inward (dr/dT = 1 - 1/sqrt r < 0)'
+      : 'Flare fired straight outward at the speed of light: it climbs out and will reach the relay'), 5);
+  }
+  function flareAt(f, T) {                                       // r suar pada waktu T: Gout(r) = T - C (di dalam horizon r turun ke 0 pada T = C)
+    const y = T - f.C;
+    if (f.r <= 1) {
+      if (y >= 0) return { r: 0, hit: true };
+      let a = 0, b = 1; for (let i = 0; i < 60; i++) { const m = 0.5 * (a + b); if (Gout(m) > y) a = m; else b = m; }   // Gout menurun di (0, 1)
+      return { r: 0.5 * (a + b), hit: false };
+    }
+    let a = 1, b = Math.max(2, f.r); while (Gout(b) < y) b *= 2;
+    for (let i = 0; i < 60; i++) { const m = 0.5 * (a + b); if (Gout(m) < y) a = m; else b = m; }
+    return { r: 0.5 * (a + b), hit: false };
+  }
+  function relStep(dt) {                                         // tiap frame: waktu relai setelah misi, zoom diagram, sinar pulsa diagram
+    if (!MIS.on) return;
+    if (MIS.end && !state.paused) REL.Tx += dt * REL.ff;          // relai terus menunggu (3 rs/c per detik nyata)
+    const r = Math.hypot(...MIS.x), tv = MIS.T + Hin(r) - r;
+    REL.zoom += (relZoom(r) - REL.zoom) * (1 - Math.exp(-2 * dt));
+    if (!MIS.end && tv - REL.rayTv > REL.zoom / 10) { REL.rays.push({ r, tv }); REL.rayTv = tv; if (REL.rays.length > 120) REL.rays.shift(); }
   }
   // segitiga kaca kokpit (material 1) untuk titik tumbukan: titik, normal keluar, luas
   const GLASS = [];
@@ -1497,6 +1626,14 @@ function main() {
     if (!(Math.abs(p[1]) < 6 * VOL_H * rxz && rxz > d.rIn * 0.7 && rxz < d.rOut * 1.25)) return null;
     return { R: Math.max(0.6, Math.min(2.0, 0.3 * rxz)) };
   }
+  // mata kamera luar misi (model, meter): posisi dasar (0, 0,19 d, d) diputar mengitari titik bidik oleh seret (MIS.orb);
+  // orb 0 = posisi lama persis. Ray tracer tetap berpusat di wahana (jarak puluhan meter tidak berarti terhadap rs)
+  const chaseE0 = () => Math.atan2(MIS.chase * 0.19, MIS.chase - SHIP.aim[2]);
+  function chaseEye() {
+    const a = SHIP.aim, v = v3.sub([0, MIS.chase * 0.19, MIS.chase], a), d = Math.hypot(...v);
+    const e = Math.max(-1.45, Math.min(1.45, chaseE0() + MIS.orb.pitch)), y = MIS.orb.yaw;
+    return v3.add(a, [d * Math.cos(e) * Math.sin(y), d * Math.sin(e), d * Math.cos(e) * Math.cos(y)]);
+  }
   function viewBasis() {
     let S, obs = null;
     if (MIS.on) {
@@ -1511,7 +1648,7 @@ function main() {
     let B;
     if (SHIP.view === 'cockpit') B = { pos: S.pos, f: S.f, r: S.r, u: S.u, eye: shipToWorld(S, SHIP.data.eye), ship: S, obs, fov };
     else {
-      const ch = MIS.on ? [0, MIS.chase * 0.19, MIS.chase] : SHIP.chase;
+      const ch = MIS.on ? chaseEye() : SHIP.chase;
       const eye = shipToWorld(S, ch), f = v3.norm(v3.sub(shipToWorld(S, SHIP.aim), eye));
       const r = v3.norm(v3.cross(f, S.u)), u = v3.cross(r, f);
       B = { pos: S.pos, f, r, u, eye, ship: S, obs, fov };
@@ -1681,7 +1818,7 @@ function main() {
     gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
     gl.useProgram(PART_P.p);
     gl.uniformMatrix4fv(PART_P.u('uMV'), false, mv); gl.uniformMatrix4fv(PART_P.u('uProj'), false, proj);
-    gl.uniform3fv(PART_P.u('uFlow'), toModel(G.dir)); gl.uniform3fv(PART_P.u('uEye'), cockpit ? SHIP.data.eye : [0, MIS.chase * 0.19, MIS.chase]);
+    gl.uniform3fv(PART_P.u('uFlow'), toModel(G.dir)); gl.uniform3fv(PART_P.u('uEye'), cockpit ? SHIP.data.eye : chaseEye());
     gl.uniform2f(PART_P.u('uRes'), sw, sh); gl.uniform1f(PART_P.u('uSpeed'), speed); gl.uniform1f(PART_P.u('uLen'), Math.min(60, Math.max(3, speed * 0.06)));
     gl.uniform1f(PART_P.u('uTime'), MIS.clock); gl.uniform1f(PART_P.u('uBox'), 300); gl.uniform1f(PART_P.u('uDens'), Math.min(1, G.dens * 1.4));
     gl.uniform1f(PART_P.u('uNearR'), cockpit ? 3.2 : 1.5); gl.uniform1f(PART_P.u('uPx'), Math.max(0.6, Math.min(2, sh / 450)));
@@ -1751,6 +1888,10 @@ function main() {
         [txt('Time'), `1 s = ${Math.round(D.warp).toLocaleString(LANG === 'id' ? 'id-ID' : 'en-US')} s (${txt(WARPS[MIS.warp].name)})`],
         [txt('Disk'), diskRow(D)], [txt('Autopilot'), apRow()],
         [txt('Canopy'), `${fmtN(MIS.glass, 0)}% ${txt('damage')} · ${MIS.hits} ${txt('hits')}`]];
+      const V = relView(), Mg = relMsg(), F = REL.flares[REL.flares.length - 1];   // G4
+      rows.push([txt('Relay sees'), V.S ? `${fmtTau(V.S.tau)} · x${fmtRate(V.S.rate)}` : txt('waiting for the first pulse (light delay)')],
+        [txt('From relay'), `${txt('relay clock')} ${fmtTauS(Mg.clock)} · x${fmtRate(Mg.rate)}`]);
+      if (F) rows.push([txt('Flare'), flareRow(F, V.TR)]);
     } else {
       const rs = Math.hypot(...cameraBasis().pos);
       rows = [['GX-01', 'AMBANG'], [txt('Distance to centre'), `${fmtN(rs, 2)} rs · ${(rs * RS_KM).toExponential(3)} km`],
@@ -1762,16 +1903,126 @@ function main() {
     g.font = `${12 * s}px ui-monospace, Menlo, Consolas, monospace`; g.textBaseline = 'middle';
     rows.forEach(([a, b], i) => {
       const y = y0 + 7 * s + (i + 0.5) * lh;
-      g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(a, x0 + 10 * s, y);
-      g.fillStyle = MIS.on && i === 2 && misData().inside ? 'rgba(255,120,95,0.95)' : 'rgba(215,220,226,0.95)'; g.fillText(b, x0 + 118 * s, y);
+      g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(a, x0 + 10 * s, y, 116 * s);
+      g.fillStyle = MIS.on && i === 2 && misData().inside ? 'rgba(255,120,95,0.95)' : 'rgba(215,220,226,0.95)'; g.fillText(b, x0 + 130 * s, y, pw - 138 * s);
     });
     if (MIS.on && !MIS.end) {
-      const hint = MIS.ap.on ? txt('Autopilot: R/F height · W/S descent rate · O off · drag = look · X attitude · Z time · V view · Esc end')
-        : txt('W/S A/D R/F thrust (Shift main engine) · drag = turn nose · X attitude · Z time · V view · Esc end');
+      const chase = SHIP.view === 'chase';
+      const hint = MIS.ap.on ? txt(chase ? 'Autopilot: R/F height · W/S descent · O off · drag = orbit camera · right-drag = look · X attitude · Z time · V view · E flare · M relay · Esc end'
+          : 'Autopilot: R/F height · W/S descent · O off · drag = look · X attitude · Z time · V view · E flare · M relay · Esc end')
+        : txt(chase ? 'W/S A/D R/F thrust (Shift main) · drag = orbit camera · right-drag = nose · X attitude · Z time · V view · E flare · M relay · Esc end'
+          : 'W/S A/D R/F thrust (Shift main) · drag = turn nose · X attitude · Z time · V view · E flare · M relay · Esc end');
       g.font = `${11 * s}px ui-monospace, Menlo, Consolas, monospace`; g.textAlign = 'center';
-      g.fillStyle = 'rgba(6,8,11,0.45)'; const tw = g.measureText(hint).width + 20 * s; g.fillRect((w - tw) / 2, h - 34 * s, tw, 20 * s);
-      g.fillStyle = 'rgba(215,220,226,0.85)'; g.fillText(hint, w / 2, h - 24 * s); g.textAlign = 'left';
+      const tw = Math.min(g.measureText(hint).width + 20 * s, w - 16 * s);
+      g.fillStyle = 'rgba(6,8,11,0.45)'; g.fillRect((w - tw) / 2, h - 34 * s, tw, 20 * s);
+      g.fillStyle = 'rgba(215,220,226,0.85)'; g.fillText(hint, w / 2, h - 24 * s, tw - 12 * s); g.textAlign = 'left';
+      // G4: jendela relai + diagram ruang-waktu di bawah HUD (M)
+      const top = y0 + ph + 10 * s, rh = Math.min(380 * s, h - 44 * s - top), rw = Math.min(340 * s, w - 24 * s);
+      if (REL.on && rh > 190 * s) drawRelay(g, x0, h - 44 * s - rh, rw, rh, s);
     }
+  }
+  /* G4: jendela relai. Atas: jam wahana seperti terlihat relai (warna dan terang ikut faktor frekuensi), pulsa, jam relai.
+     Bawah (atau kanan bila lebar): diagram ruang-waktu Eddington-Finkelstein, r mendatar, waktu tv ke atas, skala sama
+     (sinar masuk 45 derajat). Kerucut cahaya: kaki masuk (-1, 1), kaki keluar (r - 1, r + 1); di dalam horizon keduanya ke kiri. */
+  const fmtRate = (v) => (v >= 0.01 ? fmtN(v, 3) : v > 0 ? v.toExponential(1).replace('.', LANG === 'id' ? ',' : '.') : '0');
+  const fmtTauS = (t) => (t < 0 ? '-' : '') + fmtTau(Math.abs(t));
+  const fmtInt = (n) => n.toLocaleString(LANG === 'id' ? 'id-ID' : 'en-US');
+  const REL_COL = [[0, [50, 0, 0]], [0.1, [150, 22, 12]], [0.3, [255, 80, 50]], [0.6, [255, 170, 90]], [1, [255, 246, 232]], [1.6, [185, 210, 255]]];
+  function relColor(f, k) {                                      // faktor frekuensi -> warna (biru bila > 1, memerah lalu padam), x terang k
+    let i = 0; while (i < REL_COL.length - 2 && f > REL_COL[i + 1][0]) i++;
+    const [f0, c0] = REL_COL[i], [f1, c1] = REL_COL[i + 1], t = Math.max(0, Math.min(1, (f - f0) / (f1 - f0)));
+    return `rgb(${c0.map((c, j) => Math.round((c + (c1[j] - c) * t) * k)).join(',')})`;
+  }
+  function flareRow(F, TR) {
+    const p = flareAt(F, TR);
+    if (F.r <= 1) return p.hit ? txt('fired inside the horizon: reached r = 0') : `r ${fmtN(p.r, 3)} rs · ${txt('falling inward')} (dr/dT ${fmtN(1 - 1 / Math.sqrt(p.r), 2)})`;
+    return TR >= F.arr ? txt('reached the relay') : `r ${fmtN(p.r, 2)} rs · ${txt('climbing out')}`;
+  }
+  function drawRelay(g, x, y, w, h, s) {
+    REL.drawn++;
+    const V = relView(), S = V.S, side = w > 1.5 * h, vw = side ? w * 0.46 : w, vh = side ? h : Math.min(112 * s, h * 0.42);
+    const amber = 'rgba(240,164,90,0.95)', pale = 'rgba(215,220,226,0.95)', dim = 'rgba(140,150,160,0.85)', mono = 'ui-monospace, Menlo, Consolas, monospace';
+    g.save();
+    g.fillStyle = 'rgba(6,8,11,0.62)'; g.fillRect(x, y, w, h); g.strokeStyle = 'rgba(240,164,90,0.35)'; g.lineWidth = s; g.strokeRect(x, y, w, h);
+    g.textBaseline = 'middle'; g.textAlign = 'left';
+    g.font = `bold ${11 * s}px ${mono}`; g.fillStyle = amber; g.fillText(txt('Relay at 22 rs: what it sees of GX-01'), x + 8 * s, y + 11 * s, vw - 16 * s);
+    const f = S ? S.rate : 0, bright = Math.min(1, f * f), cx = x + 20 * s, cy = y + 34 * s;
+    if (S && bright > 1e-4) {                                    // titik cahaya wahana
+      const gr = g.createRadialGradient(cx, cy, 0, cx, cy, 12 * s); gr.addColorStop(0, relColor(f, Math.max(bright, 0.03))); gr.addColorStop(1, 'rgba(0,0,0,0)');
+      g.fillStyle = gr; g.beginPath(); g.arc(cx, cy, 12 * s, 0, 7); g.fill();
+    }
+    g.strokeStyle = dim; g.lineWidth = s; g.beginPath(); g.arc(cx, cy, 12 * s, 0, 7); g.stroke();
+    g.font = `bold ${17 * s}px ${mono}`; g.fillStyle = S ? relColor(f, Math.max(bright, 0.4)) : dim;
+    g.fillText(S ? fmtTau(S.tau) : '--:--', x + 40 * s, cy, vw - 48 * s);
+    const st = !S ? txt('waiting for the first pulse (light delay)') : S.done ? txt('last signal received: nothing more will come')
+      : MIS.tauH !== null && f < 2e-3 ? txt('frozen at the horizon: redder and dimmer forever')
+      : MIS.tauH !== null ? txt('the image slows down toward the horizon crossing')
+      : txt('this light left the vessel at r = {r} rs').replace('{r}', fmtN(S.r, 2));
+    const lines = [[pale, S ? `${txt('clock rate = frequency')} x${fmtRate(f)}` : ''], [S && MIS.tauH !== null ? 'rgba(255,120,95,0.95)' : dim, st],
+      [pale, `${txt('pulses')} ${fmtInt(V.sent)} · ${txt('arrived')} ${fmtInt(V.recv)} · ${txt('on the way')} ${fmtInt(V.way)} · ${txt('never')} ${fmtInt(V.never)}`],
+      [dim, `${txt('relay clock')} ${fmtTauS(V.TR * REL.k)}${MIS.end ? ' · ' + txt('the relay keeps waiting') : ''}`]];
+    g.font = `${10 * s}px ${mono}`;
+    lines.forEach(([c, t], i) => { g.fillStyle = c; g.fillText(t, x + 8 * s, y + (56 + 13 * i) * s, vw - 14 * s); });
+    if (side) drawDiagram(g, x + vw, y, w - vw, h, s, V); else drawDiagram(g, x, y + vh, w, h - vh, s, V);
+    g.restore();
+  }
+  // layar akhir: jendela relai hidup (waktu relai terus berjalan, jam wahana membeku dan padam)
+  const mrel = $('#mendRelay'); let mrelT = 0;
+  function drawRelayCard(now) {
+    if (!MIS.on || !MIS.end || $('#mend').hidden || now - mrelT < 100) return; mrelT = now;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2), cw = Math.max(1, Math.round(mrel.clientWidth * dpr)), ch = Math.max(1, Math.round(mrel.clientHeight * dpr));
+    if (mrel.width !== cw || mrel.height !== ch) { mrel.width = cw; mrel.height = ch; }
+    const g = mrel.getContext('2d'); g.clearRect(0, 0, cw, ch); drawRelay(g, 0, 0, cw, ch, dpr);
+  }
+  function drawDiagram(g, x0, y0, w, h, s, V) {
+    const mono = 'ui-monospace, Menlo, Consolas, monospace', r0 = Math.hypot(...MIS.x), tvNow = MIS.T + Hin(r0) - r0, Rm = REL.zoom;
+    const pad = 8 * s, ox = x0 + pad, oy = y0 + 18 * s, W = w - 2 * pad, H = h - 18 * s - 16 * s, sc = W / Rm;
+    const X = (r) => ox + r * sc, Y = (tv) => oy + H * 0.42 - (tv - tvNow) * sc, tvOf = (T, r) => T + Hin(r) - r;
+    g.font = `${10 * s}px ${mono}`; g.textBaseline = 'middle'; g.fillStyle = 'rgba(240,164,90,0.95)';
+    g.fillText(txt('Spacetime: r across, time up'), ox, y0 + 9 * s, W);
+    g.save(); g.beginPath(); g.rect(ox, oy, W, H); g.clip();
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(ox, oy, W, H);
+    g.fillStyle = 'rgba(120,20,15,0.22)'; g.fillRect(ox, oy, X(1) - ox, H);                // di dalam horizon
+    const L = 10 * s;                                            // kerucut cahaya (grid tetap di layar)
+    for (let i = 0; i < 6; i++) for (const fy of [0.16, 0.5, 0.84]) {
+      const r = Rm * (i + 0.5) / 6, px = X(r), py = oy + H * fy, n = Math.hypot(r - 1, r + 1), inside = r < 1;
+      const ax = px - L * 0.7071, ay = py - L * 0.7071, bx = px + L * (r - 1) / n, by = py - L * (r + 1) / n;
+      g.fillStyle = inside ? 'rgba(255,90,70,0.18)' : 'rgba(150,200,255,0.13)'; g.beginPath(); g.moveTo(px, py); g.lineTo(ax, ay); g.lineTo(bx, by); g.closePath(); g.fill();
+      g.strokeStyle = inside ? 'rgba(255,110,90,0.55)' : 'rgba(150,200,255,0.45)'; g.lineWidth = s; g.beginPath(); g.moveTo(ax, ay); g.lineTo(px, py); g.lineTo(bx, by); g.stroke();
+    }
+    g.lineWidth = 1.2 * s; g.strokeStyle = 'rgba(255,100,80,0.95)'; g.setLineDash([5 * s, 4 * s]);
+    g.beginPath(); g.moveTo(X(1), oy); g.lineTo(X(1), oy + H); g.stroke(); g.setLineDash([]);
+    g.strokeStyle = 'rgba(255,100,80,0.8)'; g.beginPath();      // singularitas r = 0 (garis zigzag)
+    for (let k = 0, yy = oy; yy <= oy + H; k++, yy += 5 * s) (k ? g.lineTo(ox + (k % 2) * 3 * s, yy) : g.moveTo(ox, yy)); g.stroke();
+    if (REL.r < Rm) { g.strokeStyle = 'rgba(120,220,170,0.85)'; g.beginPath(); g.moveTo(X(REL.r), oy); g.lineTo(X(REL.r), oy + H); g.stroke(); }
+    const ray = (re, tve, col) => {                               // sinar radial keluar: tv = r + 2 ln|r - 1| + C
+      if (re > Rm || Math.abs(re - 1) < 1e-9) return;
+      const C = tve - re - 2 * Math.log(Math.abs(re - 1)), rEnd = Rm * 1.05;
+      g.strokeStyle = col; g.beginPath();
+      for (let k = 0; k <= 48; k++) {
+        const r = re > 1 ? 1 + (re - 1) * Math.pow((rEnd - 1) / (re - 1), k / 48) : re * (1 - k / 48), yy = Y(C + r + 2 * Math.log(Math.abs(r - 1)));
+        if (k) g.lineTo(X(r), yy); else g.moveTo(X(r), yy);
+        if (yy < oy - 40 * s) break;
+      }
+      g.stroke();
+    };
+    g.lineWidth = s;
+    for (const q of REL.rays) ray(q.r, q.tv, q.r <= 1 ? 'rgba(255,90,70,0.75)' : 'rgba(240,164,90,0.5)');
+    g.lineWidth = 1.6 * s; for (const f of REL.flares) ray(f.r, f.tv, 'rgba(110,230,255,0.95)');
+    const Lg = REL.log, step = Math.max(1, Math.floor(Lg.length / 600));                       // garis dunia wahana
+    g.strokeStyle = 'rgba(225,230,236,0.95)'; g.lineWidth = 1.8 * s; g.beginPath();
+    for (let i = 0; i < Lg.length; i += step) { const q = Lg[i], px = X(q[2]), py = Y(tvOf(q[1], q[2])); if (i) g.lineTo(px, py); else g.moveTo(px, py); }
+    { const q = Lg[Lg.length - 1]; g.lineTo(X(q[2]), Y(tvOf(q[1], q[2]))); } g.stroke();
+    if (V.S && !V.S.done) {                                      // titik yang sedang terlihat relai
+      g.fillStyle = relColor(V.S.rate, Math.max(Math.min(1, V.S.rate * V.S.rate), 0.5)); g.beginPath(); g.arc(X(V.S.r), Y(tvOf(V.S.T, V.S.r)), 3.5 * s, 0, 7); g.fill();
+    }
+    g.fillStyle = 'rgba(240,164,90,1)'; g.beginPath(); g.arc(X(r0), Y(tvNow), 4 * s, 0, 7); g.fill();
+    g.restore();
+    g.font = `${9.5 * s}px ${mono}`; g.textBaseline = 'middle'; const yb = oy + H + 8 * s;
+    g.fillStyle = 'rgba(255,120,95,0.95)'; g.fillText('r=0', ox, yb); g.fillText(txt('horizon'), Math.min(X(1) + 3 * s, ox + W * 0.3), oy + 8 * s);
+    g.fillStyle = 'rgba(120,220,170,0.95)'; g.textAlign = 'right';
+    g.fillText(REL.r < Rm ? txt('relay') : txt('relay 22 rs') + ' >', ox + W, yb); g.textAlign = 'left';
+    g.fillStyle = 'rgba(140,150,160,0.9)'; g.fillText(`${fmtN(Rm, 1)} rs`, ox + W * 0.42, yb);
   }
 
   /* =====================================================================
@@ -1781,7 +2032,7 @@ function main() {
   let pinchStart = null;
   canvas.addEventListener('pointerdown', (e) => {
     canvas.setPointerCapture(e.pointerId);
-    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, alt: e.button === 2 || e.ctrlKey });   // alt = seret kanan / Ctrl
     canvas.classList.add('dragging');
     state.tween = null;
     if (pointers.size === 2) { const [a, b] = [...pointers.values()]; pinchStart = { d: Math.hypot(a.x - b.x, a.y - b.y), dist: cam.dist }; }
@@ -1791,7 +2042,11 @@ function main() {
     if (!p) return;
     const dx = e.clientX - p.x, dy = e.clientY - p.y;
     p.x = e.clientX; p.y = e.clientY;
-    if (pointers.size === 1 && MIS.on && MIS.att && MIS.lock === 'track') {   // G3: sikap lintasan: geser = arah pandang relatif lintasan
+    if (pointers.size === 1 && MIS.on && SHIP.view === 'chase' && !p.alt) {   // kamera luar misi: seret = kamera mengitari wahana
+      const e0 = chaseE0(), O = MIS.orb;
+      O.yaw = Math.atan2(Math.sin(O.yaw - dx * 0.005), Math.cos(O.yaw - dx * 0.005));
+      O.pitch = Math.max(-1.45 - e0, Math.min(1.45 - e0, O.pitch + dy * 0.005));
+    } else if (pointers.size === 1 && MIS.on && MIS.att && MIS.lock === 'track') {   // G3: sikap lintasan: geser = arah pandang relatif lintasan
       const L = MIS.look; L.yaw = Math.atan2(Math.sin(L.yaw + dx * 0.003), Math.cos(L.yaw + dx * 0.003));
       L.pitch = Math.max(-1.45, Math.min(1.45, L.pitch - dy * 0.003)); misLockAtt();
     } else if (pointers.size === 1 && MIS.on && MIS.att) {         // G2: geser = arah hidung wahana (mematikan kunci ke pusat)
@@ -1811,6 +2066,8 @@ function main() {
       cam.dist = clampDist(pinchStart.dist * pinchStart.d / Math.max(d, 1));
     }
   });
+  canvas.addEventListener('contextmenu', (e) => { if (MIS.on) e.preventDefault(); });          // seret kanan = arah hidung
+  canvas.addEventListener('dblclick', () => { if (MIS.on) MIS.orb = { yaw: 0, pitch: 0 }; });  // kamera luar kembali ke belakang wahana
   const endPointer = (e) => { pointers.delete(e.pointerId); if (pointers.size < 2) pinchStart = null; if (!pointers.size) canvas.classList.remove('dragging'); };
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
@@ -1851,6 +2108,8 @@ function main() {
       if (c === 'Escape') { if (MIS.end) $('#mend').hidden = true; stopMission(); toast(txt('Mission ended'), 2); return; }
       if (c === 'KeyX') { MIS.lock = LOCKS[(LOCKS.indexOf(MIS.lock) + 1) % LOCKS.length]; toast(txt(lockName(MIS.lock)), 2); syncUI(); return; }
       if (c === 'KeyO') { toggleAP(); return; }
+      if (c === 'KeyE') { fireFlare(); return; }
+      if (c === 'KeyM') { REL.on = !REL.on; syncUI(); toast(txt(REL.on ? 'Relay view and spacetime diagram: on (M)' : 'Relay view and spacetime diagram: off (M)'), 1.5); return; }
       if (c === 'KeyZ') { MIS.warp = (MIS.warp + 1) % WARPS.length; toast(txt('Time: {m}').replace('{m}', txt(WARPS[MIS.warp].name)), 1.5); return; }
       if (c === 'Enter' && MIS.end) { startMission(MIS.sc); return; }
       if (/^Digit[1-4]$/.test(c)) return;
@@ -1907,6 +2166,7 @@ function main() {
     { type: 'select', label: 'Scenario', options: Object.keys(SCEN), names: (k) => SCEN[k].name, get: () => MIS.sc, set: (v) => { MIS.sc = v; } },
     { type: 'select', label: 'Attitude (X)', options: LOCKS, names: lockName, get: () => MIS.lock, set: (v) => { MIS.lock = v; } },
     { type: 'mission' },
+    { type: 'check', label: 'Relay view and spacetime diagram (M)', get: () => REL.on, set: (v) => { REL.on = v; } },
     { type: 'note', text: 'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT). The thick disk layer near the vessel is also exaggerated.' },
   ];
   const syncers = [];
@@ -2037,6 +2297,7 @@ function main() {
     buildTargets(sw, sh);
 
     state.simTime += stepMission(dt) * CONFIG.disk.speed;
+    relStep(dt);                                                     // G4: waktu relai, zoom dan sinar diagram
     const b = viewBasis();
     const vol = b.obs ? volParams(b.pos) : null;
     const q = Q();
@@ -2081,7 +2342,7 @@ function main() {
       drawShip(b, sw, sh, tanHalf);
       if (MIS.on) { state.partsDrawn = drawParts(b, sw, sh, tanHalf); drawImps(b, sw, sh, tanHalf); }
     }
-    drawDash(now);
+    drawDash(now); drawRelayCard(now);
     if (state.readCb && FMT.type === gl.HALF_FLOAT) {                  // uji: statistik buffer HDR scene (nilai tidak valid, maks, rata-rata)
       const cb = state.readCb, px = new Float32Array(sw * sh * 4); state.readCb = null;
       gl.bindFramebuffer(gl.FRAMEBUFFER, T.scene.fb); gl.readPixels(0, 0, sw, sh, gl.RGBA, gl.FLOAT, px);
@@ -2155,7 +2416,8 @@ function main() {
 
   window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
     SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
-    misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, volParams, AE, stepMission };   // debugging hook
+    misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, volParams, AE, stepMission,
+    REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye };   // debugging hook
   requestAnimationFrame(frame);
 }
 
