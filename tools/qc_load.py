@@ -16,6 +16,8 @@ async def main():
         await pg.goto(page_url)
         if 'cooper-station' in rel:                                   # Copper Corn Station punya penanda siap
             await pg.wait_for_function('window.__stationReady === true', timeout=120000)
+        elif 'millar' in rel:                                         # Millar's World: siap setelah frame pertama
+            await pg.wait_for_function('window.__millarReady === true', timeout=60000)
         await pg.wait_for_timeout(5000)
         print('halaman:', rel)
         print('error:', errs[:10] or 'tidak ada')

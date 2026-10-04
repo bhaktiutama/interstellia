@@ -1,48 +1,64 @@
-# Rencana Misi Gargantua: Kestrel KS-07 masuk lubang hitam
+# Rencana Misi Gargantua: wahana GX-01 masuk lubang hitam
 
-Per 29 September 2026 · Bhakti
+Per 4 Oktober 2026 · Bhakti · Revisi 2 (wahana baru, terbang rendah di atas piringan, partikel menabrak kaca)
 
 ## Ringkasan
 
-- **Masuk langsung (G1):** shuttle Kestrel KS-07 jatuh bebas dari 22 rs lewat kutub (tidak menembus piringan) sampai singularitas. Kamera di shader diganti menjadi kamera yang ikut jatuh, jadi pandangan dari dalam horizon juga benar. HUD menunjukkan jarak, waktu wajar, laju, pergeseran merah, dan gaya pasang surut.
-- **Informasi tidak bisa keluar (G3):** kapal mengirim pulsa ke relay yang mengorbit di luar. Relay melihat jam kapal melambat, memerah, lalu membeku di horizon; pulsa yang dikirim setelah horizon tidak pernah tiba. Diagram ruang-waktu memperlihatkan kerucut cahaya yang miring ke dalam.
-- **Sudut masuk tesseract (G4):** sebelum titik tanpa kembali, pemain mengatur sudut datang dan bidang orbit. Terlalu lebar = terlempar keluar, terlalu sempit = langsung ke singularitas, memotong piringan = hancur, tepat di bawah sudut kritis = berputar-putar di 2 rs lalu masuk ke gerbang tesseract. Tesseract diberi label fiksi.
+- **Wahana baru GX-01 (usulan nama "Ambang"):** bukan KS-07. Model diambil dari blokout v3 (`docs/app/kestrel/blokout-ks07-v3.html`, panjang sekitar 27,5 m) yang kini tidak dipakai Millar maupun Copper (keduanya memakai v5). Stensil "KS-07" diganti "GX-01". Kode dan nama boleh diganti pemilik.
+- **Masuk langsung, gaya foto 1:** wahana terbang rendah di atas permukaan piringan akresi. Piringan tampak seperti dataran bergolak di bawah, dinding cahaya (piringan sisi jauh yang dibelokkan) menjulang di samping, bayangan hitam di depan. Setelah lewat ISCO (3 rs) wahana menukik ke horizon.
+- **Partikel menabrak kaca, gaya foto 2:** gas dan debu piringan melesat ke arah kamera sebagai garis bara jingga dan awan abu, sebagian menghantam kaca kokpit (kilat tumbukan, bekas pijar yang memudar). Bagian ini distilisasi: di dunia nyata satu butir debu 1 mikrogram pada 0,707 c membawa energi setara 8,9 kg TNT.
+- Dua syarat lain tetap: informasi tidak bisa keluar dari horizon (G4) dan sudut masuk tesseract (G5, fiksi).
 
-Urutan kerja: G1, G2 (kokpit dan model Kestrel), G3, G4, G5 (uji dan bahasa). Tiap tahap bisa diuji sendiri.
+Urutan kerja: G1 wahana GX-01, G2 kamera jatuh dan jalur kutub, G3 terbang rendah dan partikel, G4 informasi, G5 tesseract, G6 uji dan bahasa.
 
-Keputusan pemilik di sesi ini: pesawat Kestrel KS-07 (bukan Ranger, sesuai `docs/app/penamaan.md`), kamera kokpit + kamera luar, tesseract berupa hiperkubus 4D abstrak berlabel fiksi (tidak meniru ruang rak buku atau kamar dari film).
+Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
+
+## Keputusan pemilik
+
+| Item | Keputusan |
+| --- | --- |
+| Wahana | Wahana baru khusus Gargantua, bukan KS-07 (KS-07 dipakai di Millar's World, terlalu kecil). Model 3D dari blokout v3 |
+| Kamera | Kokpit + kamera luar |
+| Masuk lubang hitam | Seperti foto 1: menyusur dekat permukaan piringan |
+| Partikel | Seperti foto 2: partikel piringan menabrak kaca wahana |
+| Tesseract | Hiperkubus 4D abstrak, berlabel fiksi |
 
 ## Kondisi sekarang
 
 | Item | Isi | Lokasi (cari nama) |
 | --- | --- | --- |
-| Render | Ray tracing di fragment shader, satuan rs = 1, M = 0,5. Bentuk lintasan foton dari persamaan Binet (u'' + u = 3 M u^2) dalam koordinat Kartesius datar, integrator Verlet, langkah sebanding r | `SCENE_FS`, `accel()`, loop di `main()` shader |
-| Kamera | Pengamat diam di jarak 6-60 rs, arah awal sinar `vel = dir` | `cameraBasis()`, `CAM_PRESETS` |
-| Piringan | Bidang y = 0, rIn 3 rs, rOut 12 rs, Doppler dan redshift gravitasi opsional, mode film | `shadeDisk()`, `CONFIG.disk`, `CONFIG.physics` |
-| Putaran | Hanya perkiraan dipol gravitomagnetik berlabel, bukan Kerr | `accel()` (uSpin) |
-| Bahasa | Sumber English, kamus Indonesia `ID`, fungsi `txt()` | `ID`, `txt()`, `applyStaticLang()` |
+| Render | Ray tracing di fragment shader, satuan rs = 1, M = 0,5. Bentuk lintasan foton dari persamaan Binet dalam koordinat Kartesius datar, integrator Verlet, langkah sebanding r | `SCENE_FS`, `accel()` |
+| Kamera | Pengamat diam di 6-60 rs, arah awal sinar `vel = dir` | `cameraBasis()`, `CAM_PRESETS` |
+| Piringan | Bidang tipis y = 0 (tanpa tebal), rIn 3 rs, rOut 12 rs, tekstur 2D fbm, Doppler dan redshift opsional, mode film | `shadeDisk()`, `diskDensity()` |
 | Tanpa three.js | WebGL2 murni, satu segitiga layar penuh, bloom dan streak | `P`, `pass()`, `frame()` |
+| Model v3 | three.js, daftar geometri `parts` (loft poligon berwarna per sisi), decal kanvas, kaki pendarat | `docs/app/kestrel/blokout-ks07-v3.html` |
+| Tombol | Standar `docs/app/tombol.md`: Gargantua memakai Space, Q, P, F, R, H, `, ?, 1-4, Esc | |
 
 ## Angka dasar
 
-Asumsi massa Gargantua 1e8 massa Matahari (mengikuti buku Kip Thorne, The Science of Interstellar, 2014). Semua angka di bawah dihitung dengan konstanta G = 6,674e-11, c = 2,998e8 m/s, massa Matahari 1,989e30 kg. Kapal dianggap jatuh dari diam di jauh tak hingga (E = 1, "rain frame").
+Asumsi massa Gargantua 1e8 massa Matahari (mengikuti buku Kip Thorne, The Science of Interstellar, 2014). Konstanta G = 6,674e-11, c = 2,998e8 m/s, massa Matahari 1,989e30 kg.
 
 | Item | Nilai | Rumus |
 | --- | --- | --- |
 | Radius Schwarzschild rs | 2,954e8 km (1,97 AU) | 2GM/c^2 |
 | Satuan waktu rs/c | 985,3 s | |
-| Jatuh 22 rs ke horizon | 67.123 s = 18,65 jam waktu wajar | (2/3)(r0^1,5 - 1) rs/c |
-| Horizon ke singularitas | 656,8 s = 10,9 menit | (2/3) rs/c |
-| Waktu wajar maksimum di dalam horizon | 1.547,7 s = 25,8 menit | (pi/2) rs/c, jatuh bebas dari diam tepat di horizon |
+| Jatuh radial 22 rs ke horizon (dari diam di tak hingga) | 67.123 s = 18,65 jam waktu wajar | (2/3)(r0^1,5 - 1) rs/c |
+| Horizon ke singularitas | 656,8 s (10,9 menit) | (2/3) rs/c |
+| Waktu wajar maksimum di dalam horizon | 1.547,7 s (25,8 menit) | (pi/2) rs/c |
 | Pasang surut tubuh 2 m di horizon | 2,1e-7 g | 2GML/r^3 |
-| Pasang surut mencapai 1 g (awal spagetifikasi) | r = 0,00594 rs (1,756e6 km), 0,30 s sebelum singularitas | |
-| Laju jatuh lokal di 22 rs | 0,213 c | sqrt(rs/r), relatif pengamat diam |
-| Laju jatuh lokal di 3 rs | 0,577 c | |
-| Percepatan untuk melayang diam di 22 rs | 321,7 m/s^2 = 32,8 g | GM / (r^2 sqrt(1 - rs/r)). Tidak dipakai: Kestrel datang dari jauh, tidak melayang |
-| Langit di belakang saat melewati horizon | frekuensi x 0,5 (memerah) | 1 / (1 + beta), beta = 1 |
-| Sudut tangkap kritis d_krit (dari arah radial masuk) | 24,62 derajat di 22 rs; 36,87 di 10 rs; 48,19 di 6 rs | sin d = 2 rs / (r0 gamma v), gamma v = sqrt(rs/r0) / sqrt(1 - rs/r0); L_krit = 2 rs (4M) |
+| Pasang surut 1 g (awal spagetifikasi) | r = 0,00594 rs, 0,30 s sebelum singularitas | |
+| Sudut tangkap kritis di 22 rs | 24,62 derajat (36,87 di 10 rs; 48,19 di 6 rs) | sin d = 2 rs / (r0 gamma v) |
+| Langit di belakang saat lewat horizon | frekuensi x 0,5 | 1 / (1 + beta), beta = 1 |
 
-Waktu jatuh asli 18,65 jam, jadi misi memakai percepatan waktu (tombol T). HUD selalu menampilkan waktu wajar asli.
+Kecepatan gas piringan terhadap wahana yang jatuh lurus di dekatnya (keduanya diukur pengamat diam setempat, arah saling tegak lurus):
+
+| r | Gas piringan (orbit melingkar) | Wahana jatuh | Relatif | Lorentz gamma |
+| --- | --- | --- | --- | --- |
+| 12 rs | 0,213 c | 0,289 c | 0,354 c | 1,069 |
+| 6 rs | 0,316 c | 0,408 c | 0,500 c | 1,155 |
+| 3 rs (ISCO) | 0,500 c | 0,577 c | 0,707 c | 1,414 |
+
+Rumus: gas sqrt(M/(r - 2M)), wahana sqrt(rs/r), gamma relatif = gamma1 x gamma2. Angka ini menentukan arah dan laju garis partikel di G3.
 
 ## Inti fisika render
 
@@ -51,89 +67,124 @@ Satu perubahan kunci di shader: arah awal jejak sinar untuk kamera yang ikut jat
 | Item | Sekarang | Mode misi |
 | --- | --- | --- |
 | Arah awal jejak mundur | `vel = dir` | `vel = dir + beta * r_hat`, beta = sqrt(rs/r) |
-| Kamera di dalam horizon | Tidak mungkin (sinar langsung dianggap tertelan) | Boleh: semua jejak mundur bergerak ke r lebih besar (cahaya yang diterima datang dari luar) |
+| Kamera di dalam horizon | Tidak mungkin | Boleh: semua jejak mundur bergerak ke r lebih besar |
 | Aturan tertelan | `r < RS` | `r < RS && dot(pos, vel) < 0` |
-| Frekuensi teramati | Pengamat diam | eps_obs = E / (1 - beta cos a), a = sudut arah rambat foton dari r_hat |
+| Frekuensi teramati | Pengamat diam | eps_obs = E / (1 - beta cos a) |
 
-Asal rumus: di koordinat Painleve-Gullstrand, momentum foton yang dilihat pengamat jatuh adalah p^r = eps (cos a - beta), p^phi = eps sin a / r. Jadi dr/dphi = r (cos a - beta) / sin a. Bentuk orbit (r, phi) sama di koordinat Schwarzschild, jadi integrator Binet yang ada tetap dipakai, hanya arah awalnya yang berubah. Di luar horizon hasil ini sama persis dengan transformasi aberasi ke kerangka diam; di dalam horizon (beta > 1) tetap berlaku.
+Asal rumus: di koordinat Painleve-Gullstrand p^r = eps (cos a - beta), jadi dr/dphi = r (cos a - beta) / sin a. Bentuk orbit (r, phi) sama dengan koordinat Schwarzschild, jadi integrator Binet tetap dipakai. Untuk lintasan bermomentum sudut, kecepatan wahana relatif rain frame dari (beta^2 - 1) w^2 + 2 E beta w + E^2 - 1 - L^2/r^2 = 0 (reguler di horizon), lalu aberasi biasa.
 
-Untuk lintasan dengan momentum sudut (G4): kecepatan kapal relatif rain frame dihitung dari persamaan kuadrat (beta^2 - 1) w^2 + 2 E beta w + E^2 - 1 - L^2/r^2 = 0 (reguler di horizon), u^T = E + beta w, lalu arah kamera ditransformasi dengan aberasi biasa sebelum rumus di atas.
+Pertahankan yang ada: uniform baru `uFall` (0 = perilaku lama persis), `uBeta`, basis kamera wahana. Preset 1-4 dan tampilan lama tidak berubah saat misi mati.
 
-Pertahankan yang ada: uniform baru `uFall` (0 = perilaku lama persis, termasuk aturan tertelan), `uBeta`, dan basis kamera kapal. Preset 1-4, panel, dan tampilan lama tidak berubah saat misi mati.
+Lintasan wahana di CPU: geodesik timelike Schwarzschild, RK4 pada (r, dr/dtau, phi), d2r/dtau2 = -M/r^2 + L^2/r^3 - 3 M L^2/r^4.
 
-Lintasan kapal dihitung di CPU: geodesik timelike Schwarzschild, RK4 pada (r, dr/dtau, phi) dengan d2r/dtau2 = -M/r^2 + L^2/r^3 - 3 M L^2/r^4 dan dphi/dtau = L/r^2. Waktu PG ikut diintegrasikan untuk menjalankan animasi piringan.
-
-## G1: masuk langsung
+## G1: wahana GX-01
 
 | Bagian | Isi |
 | --- | --- |
-| Masuk misi | Tombol Misi di panel + tombol M. Kamera bertransisi ke posisi Kestrel di 22 rs di atas kutub |
-| Lintasan | Jatuh radial sepanjang sumbu putar piringan (tidak menembus piringan). Pilihan kedua: jalur miring yang aman (lihat G4) |
-| Kamera | Kamera jatuh di shader (rumus di atas). Pandangan yang diharapkan: bayangan hitam membesar sampai memenuhi separuh langit, piringan terlihat dari atas sebagai cincin, langit bintang di belakang menyempit dan memerah. Saat melewati horizon tidak ada tanda visual tiba-tiba |
-| HUD | r (rs dan km), waktu wajar sejak lepas, sisa waktu wajar ke singularitas, laju lokal (c), faktor pergeseran langit depan dan belakang, pasang surut tubuh 2 m (g), status (di luar / horizon / di dalam) |
-| Waktu | T mengganti percepatan waktu (misal x100, x1.000, x10.000); di dekat horizon dan di dalam turun otomatis agar 10,9 menit terakhir terasa |
-| Akhir | Di r = 0,006 rs (pasang surut 1 g, 0,30 s sebelum singularitas): layar gelap bertahap dan ringkasan misi (waktu wajar total, waktu menurut relay = tak hingga) |
+| Sumber | Blokout v3 (`parts`, loft poligon berwarna per sisi, decal kanvas). Kaki pendarat dilipat (tidak digambar saat terbang). Stensil diganti "GX-01" |
+| Alat olah | `tools/siapkan_wahana_gx.py` (baru): buka blokout di Chromium headless, gabungkan semua geometri jadi satu array posisi, normal, warna (half float / int8), simpan base64 ke `experiences/gargantua/assets/gx01.data.js`. Sama seperti cara `tools/siapkan_motor.py`: Gargantua tetap tanpa three.js dan jalan dari file:// |
+| Render | Program raster kecil + depth di Gargantua, digambar ke `T.scene` sebelum bloom. Disinari dari arah piringan (warna jingga, kuat dari bawah saat terbang rendah), sisi lain ambient redup. Pembelokan cahaya di skala 27,5 m nol (rs = 2,954e11 m), jadi raster biasa tetap benar |
+| Kokpit | Mata di kokpit kaca bersekat tengah depan. Bingkai sekat kaca dari geometri kokpit model itu sendiri (dilihat dari dalam), instrumen di kanvas 2D |
+| Kamera luar | Kamera kejar di belakang-atas wahana, seperti komposisi foto 1 (wahana kecil di tengah, piringan di bawah) |
+| Nama | GX-01 "Ambang" (ambang = batas, horizon). Usulan, bisa diganti |
+| Dokumen | `docs/app/penamaan.md` ditambah baris GX-01 |
 
-## G2: Kestrel KS-07
-
-| Bagian | Isi |
-| --- | --- |
-| Kokpit | Bingkai jendela dan panel instrumen digambar di kanvas 2D di atas render (bukan meniru kokpit film). Instrumen memakai angka HUD G1 |
-| Kamera luar (V) | Model badan Kestrel (badan pengangkat superellipse 24 m, sirip miring ganda, 3 mesin) dipindah dari generator `SHUTTLE` di `experiences/cooper-station/index.html` sekitar baris 9058. Tanpa three.js: array posisi, normal, warna dibuat langsung |
-| Render | Program raster kecil dengan depth, digambar ke `T.scene` sebelum bloom, disinari dari arah piringan, bagian gelap diberi ambient redup |
-| Akurasi | Kapal 24 m jauh lebih kecil dari rs (2,954e11 m), jadi pembelokan cahaya di skala kapal dapat diabaikan; menggambar kapal tanpa lensa gravitasi tetap benar |
-| Biaya | Ribuan segitiga, satu draw call |
-
-## G3: informasi tidak bisa keluar
+## G2: kamera jatuh dan jalur kutub
 
 | Bagian | Isi |
 | --- | --- |
-| Relay | Satelit relai orbit melingkar di 22 rs (orbit stabil, di luar ISCO 3 rs). Desain orisinal sederhana, bukan pesawat induk film |
-| Pulsa | Kapal mengirim pulsa tiap 1 s waktu wajar (dipercepat bersama waktu). Waktu tiba di relay: t_tiba = u_kirim + r*(r_relay), u = t - r*, r* = r + rs ln abs(r/rs - 1). u_kirim menuju tak hingga saat r menuju rs |
-| Pandangan relay | Jendela kecil: gambar kapal dan jam kapal seperti dilihat relay. Jam melambat, warna memerah, kecerahan turun, lalu membeku di waktu wajar saat horizon. Pulsa setelah horizon: penghitung "belum tiba" terus naik |
-| Diagram ruang-waktu | Kanvas 2D, koordinat Eddington-Finkelstein masuk (v, r): kerucut cahaya makin miring ke dalam, di horizon sisi luar kerucut tegak, di dalam seluruh kerucut menuju r kecil. Garis dunia kapal dan tiap pulsa digambar |
-| Uji suar | Di dalam horizon tombol untuk menembak suar "keluar" dengan laju c di kerangka kapal. HUD menunjukkan r suar tetap turun (p^r = eps (cos a - beta) < 0 karena beta > 1) |
-| Arah sebaliknya | Pesan dari relay ke kapal tetap masuk walau kapal di dalam horizon (informasi bisa masuk, tidak bisa keluar) |
+| Masuk misi | Tombol "Misi" di panel kontrol (`). Tidak memakai tombol huruf baru: semua huruf sudah terpakai di `docs/app/tombol.md` |
+| Jalur kutub (langsung) | Jatuh radial lewat sumbu, tidak menyentuh piringan. Jalur paling sederhana untuk syarat "masuk langsung" |
+| Kamera | Kamera jatuh di shader (rumus di atas): bayangan hitam membesar, langit belakang menyempit dan memerah, tidak ada tanda visual tiba-tiba saat lewat horizon |
+| HUD | r (rs dan km), waktu wajar, sisa waktu ke singularitas, laju lokal, faktor pergeseran langit, pasang surut, status (luar / horizon / dalam) |
+| Waktu | Z = kecepatan waktu (tombol umum). Melambat otomatis dekat horizon |
+| Akhir | r = 0,006 rs: layar gelap bertahap, ringkasan misi |
 
-## G4: sudut masuk tesseract
+## G3: terbang rendah di atas piringan dan partikel (foto 1 dan 2)
+
+### Jalur "susur piringan" (jalur utama misi)
+
+| Fase | Isi |
+| --- | --- |
+| 1. Turun ke piringan | Dari 22 rs, wahana turun ke ketinggian rendah di atas permukaan piringan di sekitar 12 rs |
+| 2. Menyusur | Terbang di atas piringan dari 12 rs ke 3 rs, ketinggian beberapa kali tebal piringan. Kamera kejar seperti foto 1: piringan memenuhi separuh bawah layar sebagai dataran bergolak, dinding cahaya menjulang di sisi (piringan sisi jauh di atas dan bawah bayangan, sudah dihasilkan ray tracer), bayangan hitam di depan |
+| 3. Menukik | Di dalam ISCO gas ikut jatuh; wahana menukik ke horizon. Partikel menipis, gelap, garis bara seperti foto 2 |
+| 4. Horizon dan dalam | Sama dengan G2 |
+
+### Piringan tebal di dekat kamera
+
+Piringan sekarang setipis kertas, jadi dari dekat tidak bisa tampak seperti foto 1. Tambahan:
 
 | Bagian | Isi |
 | --- | --- |
-| Bidik | Sebelum titik tanpa kembali, pemain mengatur sudut d (dari arah radial masuk) dan orientasi bidang orbit. WASD halus, Shift kasar, Enter kunci |
-| Prediksi | Peta orbit 2D dengan lintasan hasil integrasi CPU, piringan 3-12 rs, horizon, lingkaran foton 1,5 rs, orbit tak stabil 2 rs, gerbang |
-| Hasil d > d_krit | Terlempar kembali ke luar (tidak tertangkap) |
-| Hasil d jauh di bawah d_krit | Langsung ke singularitas (misi G1) |
-| Hasil bidang memotong piringan | Bila lintasan menembus bidang y = 0 di 3-12 rs: kapal hancur |
-| Hasil d sedikit di bawah d_krit | Zoom-whirl: kapal berputar beberapa kali di sekitar r = 2 rs lalu jatuh. Jumlah putaran (naik secara logaritmik saat d mendekati d_krit) menentukan azimut masuk horizon |
-| Gerbang tesseract (fiksi) | Di dalam horizon, pada azimut dan bidang tertentu, toleransi +/- 5 derajat. Masuk gerbang = berhasil |
-| Tesseract | Hiperkubus 4D (objek matematika) berputar di 4D, diproyeksikan 4D ke 3D ke layar, garis bercahaya orisinal. Label tetap: "Fiksi / spekulatif: fisika nyata tidak mengenal tesseract di dalam lubang hitam" |
+| Lapisan volumetrik | Hanya di sekitar kamera (misal radius 1,5 rs): sinar melangkah di dalam lempeng tebal H(r) = 0,03 r, kepadatan dari fbm 3D yang memanjang searah orbit (garis seret seperti foto 1), cahaya dari suhu `shadeDisk()` yang sudah ada. Di luar radius itu tetap piringan tipis lama, jadi biaya terbatas |
+| Gerak | Pola ikut rotasi Kepler (`diskDensity()`), ditambah kabur gerak searah kecepatan relatif (0,35 sampai 0,71 c, tabel angka dasar) |
+| Silau | Permukaan piringan di bawah wahana sangat terang; eksposur misi diatur otomatis agar seperti foto 1 (putih di dinding cahaya, jingga di dataran) |
+| Biaya | Langkah volumetrik hanya untuk piksel yang sinarnya masuk lempeng dekat kamera; jumlah langkah dibatasi per preset kualitas |
 
-## G5: uji dan bahasa
+### Partikel dan kaca
 
 | Bagian | Isi |
 | --- | --- |
-| `tools/uji_misi_gargantua.py` (baru) | Lewat `window.__gargantua`: waktu jatuh 22 rs ke horizon dan horizon ke singularitas vs rumus, d_krit 24,62 derajat vs hasil integrator (tertangkap / lolos di d_krit +/- 0,1 derajat), faktor langit belakang 0,5 di horizon, tanpa NaN saat kamera di r 0,5 dan 0,01 rs, `uFall = 0` hasil render sama dengan sebelum perubahan |
-| Bahasa | Semua teks baru sumber English dengan entri kamus `ID` (aturan Gargantua), dipakai lewat `txt()` |
-| Cek muat | `python tools/qc_load.py experiences/gargantua/index.html` tanpa error |
-| CLAUDE.md | Tabel struktur repo ditambah alat uji baru |
+| Garis bara | Partikel GPU (titik instance) di kotak di sekitar wahana, dipindah ulang saat keluar kotak. Digambar sebagai garis memanjang searah kecepatan relatif, jadi tampak memancar dari satu titik hilang di depan seperti foto 2. Warna bara jingga-putih, panjang ikut laju |
+| Awan debu | Lapisan kabut abu-kebiruan bergerak cepat di sekitar titik hilang (fbm 2D di layar), gelap seperti foto 2 |
+| Tumbukan kaca | Hanya di kamera kokpit. Partikel yang lintasannya memotong bidang kaca: kilat putih singkat, lalu bekas pijar jingga yang mendingin dan memudar beberapa detik, retak halus bertambah pelan. Di kanvas overlay atau tekstur kaca kecil |
+| Guncangan | Kamera bergetar kecil saat banyak tumbukan; HUD "kerusakan kaca" naik (distilisasi) |
+| Kepadatan | Banyak saat menyusur (fase 2), memuncak dekat ISCO, menipis saat menukik, hampir nol di dalam horizon |
+| Preset | Jumlah partikel turun di Rendah; tumbukan kaca tetap ada |
+| Label | Panel menulis bahwa fisika partikel distilisasi (debu 1 mikrogram pada 0,707 c = 3,7e7 J, sekitar 8,9 kg TNT; wahana nyata tidak akan selamat) |
 
-## Tombol baru
+## G4: informasi tidak bisa keluar
+
+| Bagian | Isi |
+| --- | --- |
+| Relai | Satelit relai orbit melingkar di 22 rs (desain orisinal sederhana) |
+| Pulsa | Wahana mengirim pulsa tiap 1 s waktu wajar. Tiba di relai: t_tiba = u_kirim + r*(r_relai), u = t - r*, r* = r + rs ln abs(r/rs - 1); u_kirim menuju tak hingga saat r menuju rs |
+| Pandangan relai | Jendela kecil: jam wahana melambat, memerah, membeku di horizon. Penghitung "pulsa belum tiba" terus naik setelah horizon |
+| Diagram ruang-waktu | Kanvas 2D, Eddington-Finkelstein masuk: kerucut cahaya makin miring, garis dunia wahana, pulsa |
+| Uji suar | E di dalam horizon: suar ditembak "keluar" pada c, HUD menunjukkan r suar tetap turun (p^r = eps (cos a - beta) < 0) |
+| Arah sebaliknya | Pesan relai ke wahana tetap masuk |
+
+## G5: sudut masuk tesseract (fiksi)
+
+| Bagian | Isi |
+| --- | --- |
+| Bidik | Sebelum titik tanpa kembali: W A S D atur sudut d dan bidang orbit, Shift kasar, Enter kunci (mengikuti tombol pesawat Copper) |
+| Prediksi | Peta orbit 2D: lintasan, piringan 3-12 rs, horizon, lingkaran foton 1,5 rs, orbit tak stabil 2 rs, gerbang |
+| d > d_krit | Terlempar keluar |
+| d jauh di bawah d_krit | Langsung ke singularitas |
+| Menembus piringan | Jalur susur di atas piringan diperbolehkan; menembus bidang piringan di 3-12 rs = wahana hancur |
+| d sedikit di bawah d_krit | Zoom-whirl di sekitar 2 rs, jumlah putaran menentukan azimut masuk horizon |
+| Gerbang | Di dalam horizon pada azimut dan bidang tertentu, toleransi +/- 5 derajat |
+| Tesseract | Hiperkubus 4D berputar, diproyeksikan ke layar, garis bercahaya orisinal. Label: "Fiksi / spekulatif: fisika nyata tidak mengenal tesseract di dalam lubang hitam" |
+
+## G6: uji dan bahasa
+
+| Bagian | Isi |
+| --- | --- |
+| `tools/uji_misi_gargantua.py` (baru) | Waktu jatuh vs rumus, d_krit 24,62 derajat vs integrator, faktor langit 0,5 di horizon, kecepatan relatif 0,707 c di 3 rs, model GX-01 termuat, tanpa nilai tidak valid di r 0,5 dan 0,01 rs dan di dalam lempeng piringan, `uFall = 0` render sama dengan sebelum |
+| Bahasa | Teks baru sumber English, entri kamus `ID`, lewat `txt()` |
+| Cek muat | `python tools/qc_load.py experiences/gargantua/index.html` |
+| Dokumen | CLAUDE.md (alat uji, aset), `docs/app/tombol.md` (tombol misi Gargantua), `docs/app/penamaan.md` (GX-01) |
+
+## Tombol misi
+
+Mengikuti `docs/app/tombol.md`: tidak ada huruf baru.
 
 | Tombol | Fungsi |
 | --- | --- |
-| M | Mulai / keluar misi |
+| Panel ` | Mulai misi, pilih jalur (susur piringan / kutub) |
 | V | Kokpit / kamera luar |
-| T | Percepatan waktu |
-| W A S D, Shift, Enter | Bidik sudut (G4), kunci |
+| Z | Kecepatan waktu |
+| W A S D, Shift, Enter | Bidik sudut (G5), kunci |
+| E | Tembak suar (G4) |
 | Esc | Keluar misi |
-
-Tidak bentrok dengan tombol lama: Space, H, F, P, R, 1-4.
 
 ## Batasan dan catatan
 
-- Render dan lintasan memakai Schwarzschild (tanpa putaran). Gargantua di buku berputar hampir maksimum (Kerr); putaran di kode sekarang hanya perkiraan berlabel. Kerr penuh bisa menjadi tahap lanjutan, bukan bagian rencana ini.
-- Kestrel datang dengan E = 1 (dari jauh). Anggaran bahan bakar untuk koreksi sudut tidak realistis dan disederhanakan.
-- Tesseract dan gerbang murni fiksi. Bagian jatuh, horizon, pulsa, dan sudut tangkap mengikuti fisika.
+- Render dan lintasan memakai Schwarzschild. Gargantua di buku berputar hampir maksimum (Kerr); Kerr penuh bisa jadi tahap lanjutan.
+- Partikel, tumbukan kaca, dan kepadatan piringan distilisasi demi tampilan; piringan akresi nyata jauh lebih tipis dan wahana tidak akan selamat.
+- Tesseract dan gerbang murni fiksi. Jatuh, horizon, pulsa, kecepatan relatif, dan sudut tangkap mengikuti fisika.
 - Animasi piringan tidak memperhitungkan waktu tunda cahaya.
-- Biaya GPU: tambahan beberapa operasi per piksel di shader, raster Kestrel ribuan segitiga. Jejak dari dalam horizon butuh sekitar 140 langkah (perkiraan: langkah sebanding r dari 0,01 sampai 50 rs), masih di bawah 200 langkah preset Sedang. Perlu diukur di GTX 1060 dan M1.
+- Biaya GPU terbesar: lapisan volumetrik dekat kamera (G3). Perlu diukur di GTX 1060 dan M1; bila berat, jumlah langkah dan radius lapisan diturunkan per preset.
 - Nama Ranger dan desain kendaraan film tidak dipakai.

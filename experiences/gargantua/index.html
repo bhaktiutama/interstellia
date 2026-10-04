@@ -62,6 +62,18 @@
     border-radius: 8px; padding: 16px; white-space: pre-wrap; font-size: 12px; z-index: 10; }
   #err[hidden] { display: none; }
 
+  body.photo #ui, body.photo .overlay-text:not(#toast), body.photo #menuLink { opacity: 0; pointer-events: none; }
+  #toast { left: 50%; top: 30%; transform: translateX(-50%); font-size: 12px; color: #dfe3ea; background: rgba(10,11,15,0.7); padding: 8px 14px;
+    border-radius: 8px; opacity: 0; }
+  #toast.on { opacity: 1; }
+  #help { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(5,6,9,0.45); z-index: 30; }
+  #help[hidden] { display: none; }
+  #help .card { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 14px 16px; background: var(--panel-bg);
+    border: 1px solid var(--panel-border); border-radius: 10px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+  #help .hh { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; letter-spacing: .14em; text-transform: uppercase; font-size: 10px; }
+  #help table { border-collapse: collapse; width: 100%; }
+  #help td { padding: 4px 8px; vertical-align: top; border-top: 1px solid var(--panel-border); color: var(--text); }
+  #help td:first-child { color: var(--accent); white-space: nowrap; }
   @media (max-width: 640px) {
     #ui { top: 12px; right: 12px; left: 12px; width: auto; max-height: 60vh; }
     #hint { display: none; }
@@ -75,7 +87,9 @@
   <div class="body" id="uiBody"></div>
 </div>
 <div id="caption" class="overlay-text">Gargantua Black Hole · Schwarzschild ray-traced approximation</div>
-<div id="hint" class="overlay-text">drag: orbit &middot; wheel/pinch: zoom &middot; 1-4: presets &middot; H: hide UI</div>
+<div id="hint" class="overlay-text">drag: orbit &middot; wheel/pinch: zoom &middot; 1-4: presets &middot; H: hide UI &middot; ?: help</div>
+<div id="toast" class="overlay-text"></div>
+<div id="help" hidden><div class="card"><div class="hh"><span id="helpTitle">Help</span><button type="button" id="helpClose">Close (?)</button></div><table id="helpRows"></table></div></div>
 <pre id="err" hidden></pre>
 
 <script>
@@ -446,7 +460,18 @@ let LANG = 'en';
 }
 const ID = {
   'Gargantua Black Hole · Schwarzschild ray-traced approximation': 'Gargantua Black Hole · pendekatan ray tracing Schwarzschild',
-  'drag: orbit · wheel/pinch: zoom · 1-4: presets · H: hide UI': 'seret: putar · roda/cubit: zoom · 1-4: sudut pandang · H: sembunyikan UI',
+  'drag: orbit · wheel/pinch: zoom · 1-4: presets · H: hide UI · ?: help': 'seret: putar · roda/cubit: zoom · 1-4: sudut pandang · H: sembunyikan UI · ?: bantuan',
+  'Photo mode': 'Mode foto', 'Fullscreen': 'Layar penuh', 'Help': 'Bantuan', 'Close (?)': 'Tutup (?)', 'Photo saved': 'Foto disimpan',
+  'Photo mode: Enter saves PNG, F or Esc exits': 'Mode foto: Enter simpan PNG, F atau Esc keluar',
+  'Quality: {q}': 'Kualitas: {q}', 'Screen effects: {m}': 'Efek layar: {m}', 'Off': 'Mati', 'Paused': 'Dijeda', 'Running': 'Berjalan',
+  'Drag / wheel / pinch': 'Seret / roda / cubit', 'Orbit and zoom the camera': 'Putar dan zoom kamera',
+  'Camera presets: film, edge-on, top-down, close approach': 'Sudut pandang: sinematik, dari samping, dari atas, mendekat',
+  'Pause / resume time': 'Jeda / lanjutkan waktu', 'Quality preset: Ultra, High, Medium, Low': 'Kualitas grafik: Ultra, Tinggi, Sedang, Rendah',
+  'Screen effects: high, medium, off (bloom, streak, grain, vignette)': 'Efek layar: tinggi, sedang, mati (bloom, garis anamorfik, butiran, vinyet)',
+  'Photo mode: UI hidden, Enter saves PNG, F or Esc exits': 'Mode foto: UI disembunyikan, Enter simpan PNG, F atau Esc keluar',
+  'Reset camera · hide UI': 'Atur ulang kamera · sembunyikan UI', 'Open / collapse the control panel': 'Buka / lipat panel kontrol',
+  'Show / close this help': 'Tampilkan / tutup bantuan ini', '? (or F1)': '? (atau F1)', '` (backtick)': '` (backtick)',
+  'Space pause · Q quality · P screen effects · F photo · R reset · H hide UI · ` panel · ? help': 'Space jeda · Q kualitas · P efek layar · F foto · R atur ulang · H sembunyikan UI · ` panel · ? bantuan',
   'Quality': 'Kualitas', 'Preset': 'Preset', 'Low': 'Rendah', 'Medium': 'Sedang', 'High': 'Tinggi', 'Ultra': 'Ultra',
   'Adaptive resolution': 'Resolusi adaptif', 'Accretion disk': 'Piringan akresi', 'Inner radius (rs)': 'Radius dalam (rs)',
   'Outer radius (rs)': 'Radius luar (rs)', 'Brightness': 'Kecerahan', 'Turbulence': 'Turbulensi', 'Rotation speed': 'Kecepatan putar',
@@ -456,7 +481,6 @@ const ID = {
   'Camera': 'Kamera', 'FOV (deg)': 'Sudut pandang (derajat)', 'Auto-orbit': 'Putar otomatis', 'Pause time (Space)': 'Hentikan waktu (Space)',
   'Film': 'Sinematik', 'Edge-on': 'Dari samping', 'Top-down': 'Dari atas', 'Close approach': 'Mendekat', 'Reset': 'Atur ulang', 'Screenshot': 'Tangkap layar',
   'FPS': 'FPS', 'Resolution': 'Resolusi', 'Max steps': 'Langkah maks', 'Distance': 'Jarak', 'Buffer': 'Buffer',
-  'Space pause · H hide UI · F fullscreen · P screenshot · R reset': 'Space jeda · H sembunyikan UI · F layar penuh · P tangkap layar · R atur ulang',
   'Language': 'Bahasa', '< MENU': '< MENU',
   'WebGL2 is not available in this browser or on this GPU.\n\nThis simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). Check that hardware acceleration is enabled in your browser settings.':
     'WebGL2 tidak tersedia di browser atau GPU ini.\n\nSimulasi ini butuh WebGL2 (Chrome, Edge, Firefox, Safari 15+). Pastikan akselerasi hardware aktif di pengaturan browser.',
@@ -466,7 +490,14 @@ const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
 function applyStaticLang() {
   document.documentElement.lang = LANG;
   $('#caption').textContent = txt('Gargantua Black Hole · Schwarzschild ray-traced approximation');
-  $('#hint').textContent = txt('drag: orbit · wheel/pinch: zoom · 1-4: presets · H: hide UI');
+  $('#hint').textContent = txt('drag: orbit · wheel/pinch: zoom · 1-4: presets · H: hide UI · ?: help');
+  $('#helpTitle').textContent = txt('Help'); $('#helpClose').textContent = txt('Close (?)');
+  $('#helpRows').innerHTML = [
+    [txt('Drag / wheel / pinch'), txt('Orbit and zoom the camera')], ['1 - 4', txt('Camera presets: film, edge-on, top-down, close approach')],
+    ['Space', txt('Pause / resume time')], ['Q', txt('Quality preset: Ultra, High, Medium, Low')],
+    ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')], ['F', txt('Photo mode: UI hidden, Enter saves PNG, F or Esc exits')],
+    ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
+  ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
   const m = $('#menuLink'); if (m) m.href = `../../index.html?lang=${LANG}`;
 }
 applyStaticLang();
@@ -588,7 +619,7 @@ function main() {
      ===================================================================== */
   const cam = CONFIG.camera;
   const state = { paused: false, simTime: 0, last: performance.now(), frame: 0,
-    fps: 0, fpsFrames: 0, fpsTime: 0, lowTime: 0, highTime: 0, tween: null, shot: false };
+    fps: 0, fpsFrames: 0, fpsTime: 0, lowTime: 0, highTime: 0, tween: null, shot: false, photo: false, postMode: 0 };
 
   const CAM_PRESETS = {
     film:  { dist: 22, pitch: 5,   fov: 55, yawDelta: 0 },
@@ -648,18 +679,40 @@ function main() {
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); state.tween = null; cam.dist = clampDist(cam.dist * Math.exp(e.deltaY * 0.001)); }, { passive: false });
   const clampDist = (d) => Math.max(cam.minDist, Math.min(cam.maxDist, d));
 
+  /* Tombol standar aplikasi (patokan Copper Corn Station, docs/app/tombol.md): Q kualitas, P efek layar, F mode foto (Enter simpan),
+     R atur ulang, H sembunyikan UI, ` panel, ? atau F1 bantuan, angka = sudut pandang. Khusus Gargantua: Space jeda. */
+  const POST_MODES = [{ name: 'High', bloom: 1, streak: 1, grain: 1, vig: 1 }, { name: 'Medium', bloom: 0.5, streak: 0, grain: 0, vig: 1 },
+                      { name: 'Off', bloom: 0, streak: 0, grain: 0, vig: 0 }];
+  let toastT = 0;
+  function toast(msg, sec = 2) { const el = $('#toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), sec * 1000); }
+  function cycleQuality() {
+    const order = ['ultra', 'high', 'medium', 'low'], q = order[(order.indexOf(CONFIG.quality) + 1) % order.length];
+    applyQuality(q); syncUI(); toast(txt('Quality: {q}').replace('{q}', txt(q[0].toUpperCase() + q.slice(1))));
+  }
+  function cyclePost() { state.postMode = (state.postMode + 1) % POST_MODES.length; toast(txt('Screen effects: {m}').replace('{m}', txt(POST_MODES[state.postMode].name))); }
+  function togglePhoto(on = !state.photo) { state.photo = on; document.body.classList.toggle('photo', on); if (on) toast(txt('Photo mode: Enter saves PNG, F or Esc exits'), 3); }
+  function toggleFullscreen() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => {}); }
+  function toggleHelp(on = $('#help').hidden) { $('#help').hidden = !on; }
+  $('#helpClose').addEventListener('click', () => toggleHelp(false));
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.tagName === 'SELECT') return;
-    const k = e.key.toLowerCase();
-    if (k === ' ') { e.preventDefault(); state.paused = !state.paused; syncUI(); }
-    else if (k === 'h') { $('#ui').classList.toggle('hidden'); $('#caption').classList.toggle('hidden'); $('#hint').classList.toggle('hidden'); }
-    else if (k === 'f') { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => {}); }
-    else if (k === 'p') state.shot = true;
-    else if (k === 'r') resetCamera();
-    else if (k === '1') setPreset('film');
-    else if (k === '2') setPreset('edge');
-    else if (k === '3') setPreset('top');
-    else if (k === '4') setPreset('close');
+    const c = e.code;
+    if (!$('#help').hidden && (c === 'Escape' || c === 'Slash' || c === 'F1')) { e.preventDefault(); toggleHelp(false); return; }
+    if (c === 'Slash' || c === 'F1') { e.preventDefault(); toggleHelp(true); return; }
+    if (e.repeat) return;
+    if (c === 'KeyF') { togglePhoto(); return; }
+    if (state.photo && (c === 'Enter' || c === 'NumpadEnter')) { state.shot = true; toast(txt('Photo saved'), 1.5); return; }
+    if (state.photo && c === 'Escape') { togglePhoto(false); return; }
+    if (c === 'Space') { e.preventDefault(); state.paused = !state.paused; syncUI(); toast(txt(state.paused ? 'Paused' : 'Running'), 1.2); }
+    else if (c === 'KeyH') { $('#ui').classList.toggle('hidden'); $('#caption').classList.toggle('hidden'); $('#hint').classList.toggle('hidden'); }
+    else if (c === 'Backquote') { $('#ui').classList.remove('hidden'); $('#ui').classList.toggle('collapsed'); }
+    else if (c === 'KeyQ') cycleQuality();
+    else if (c === 'KeyP') cyclePost();
+    else if (c === 'KeyR') resetCamera();
+    else if (c === 'Digit1') setPreset('film');
+    else if (c === 'Digit2') setPreset('edge');
+    else if (c === 'Digit3') setPreset('top');
+    else if (c === 'Digit4') setPreset('close');
   });
 
   /* =====================================================================
@@ -729,9 +782,10 @@ function main() {
         const box = document.createElement('div'); box.className = 'btns';
         const defs = [['1', 'Film', () => setPreset('film')], ['2', 'Edge-on', () => setPreset('edge')],
                       ['3', 'Top-down', () => setPreset('top')], ['4', 'Close approach', () => setPreset('close')],
-                      ['R', 'Reset', resetCamera], ['P', 'Screenshot', () => { state.shot = true; }]];
+                      ['R', 'Reset', resetCamera], ['F', 'Photo mode', () => togglePhoto(true)],
+                      ['', 'Screenshot', () => { state.shot = true; }], ['', 'Fullscreen', toggleFullscreen]];
         for (const [k, t, fn] of defs) {
-          const b = document.createElement('button'); b.innerHTML = `<kbd>${k}</kbd>${txt(t)}`;
+          const b = document.createElement('button'); b.innerHTML = `${k ? `<kbd>${k}</kbd>` : ''}${txt(t)}`;
           b.addEventListener('click', () => { fn(); b.blur(); }); box.appendChild(b);
         }
         body.appendChild(box);
@@ -741,7 +795,7 @@ function main() {
     ro.innerHTML = `${txt('FPS')}<b id="rFps">-</b>${txt('Resolution')}<b id="rRes">-</b>${txt('Max steps')}<b id="rSteps">-</b>${txt('Distance')}<b id="rDist">-</b>${txt('Buffer')}<b id="rFmt">-</b>`;
     body.appendChild(ro);
     const keys = document.createElement('div'); keys.className = 'keys';
-    keys.textContent = txt('Space pause · H hide UI · F fullscreen · P screenshot · R reset');
+    keys.textContent = txt('Space pause · Q quality · P screen effects · F photo · R reset · H hide UI · ` panel · ? help');
     body.appendChild(keys);
     const lr = document.createElement('div'); lr.className = 'sec'; lr.textContent = txt('Language'); body.appendChild(lr);
     const lb = document.createElement('div'); lb.className = 'btns';
@@ -860,7 +914,8 @@ function main() {
       blur(L[i]);
     }
     // 4) anamorphic streak from bloom level 1
-    if (CONFIG.post.streak > 0) {
+    const PM = POST_MODES[state.postMode];
+    if (CONFIG.post.streak * PM.streak > 0) {
       const strides = [1, 4, 14];
       let src = L[1].a, dst = T.sA;
       for (let i = 0; i < strides.length; i++) {
@@ -877,9 +932,9 @@ function main() {
       tex(p, 'uB2', L[2].a.tex, 3); tex(p, 'uB3', L[3].a.tex, 4);
       tex(p, 'uStreak', T.streakOut.tex, 5);
       const po = CONFIG.post;
-      gl.uniform1f(p.u('uExposure'), po.exposure); gl.uniform1f(p.u('uBloom'), po.bloom);
-      gl.uniform1f(p.u('uStreakAmt'), po.streak); gl.uniform1f(p.u('uGrain'), po.grain);
-      gl.uniform1f(p.u('uVig'), po.vignette); gl.uniform1f(p.u('uDec'), dec);
+      gl.uniform1f(p.u('uExposure'), po.exposure); gl.uniform1f(p.u('uBloom'), po.bloom * PM.bloom);
+      gl.uniform1f(p.u('uStreakAmt'), po.streak * PM.streak); gl.uniform1f(p.u('uGrain'), po.grain * PM.grain);
+      gl.uniform1f(p.u('uVig'), po.vignette * PM.vig); gl.uniform1f(p.u('uDec'), dec);
       gl.uniform2f(p.u('uRes'), canvas.width, canvas.height);
       gl.uniform1ui(p.u('uFrame'), state.paused ? 0 : state.frame);
     });
@@ -902,7 +957,7 @@ function main() {
     requestAnimationFrame(frame);
   }
 
-  window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name };   // debugging hook
+  window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp };   // debugging hook
   requestAnimationFrame(frame);
 }
 

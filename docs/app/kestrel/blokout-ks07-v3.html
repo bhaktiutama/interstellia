@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Blokout KS-07 v3</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #b9bec2; font: 12px/1.4 system-ui, sans-serif; color: #222; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #info { position: fixed; left: 12px; top: 10px; background: rgba(255,255,255,0.7); padding: 6px 10px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div id="info">Blokout konsep shuttle KS-07 v3 hibrida (simetris, desain orisinal). Seret = putar, roda = zoom. 1-5 = sudut pandang.</div>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
+</script>
+<script type="module">
+/* Blokout konsep KS-07 v3 (hibrida dua referensi, simetris): blok belakang bersegi berat dengan 2 x 2 nosel, badan tengah
+   dengan dek bersirip, kokpit kaca bersekat di tengah depan, dua lengan depan (garpu) berkabin jendela dengan rangka silang
+   dan batang probe, pelat dek putih di antara garpu, pendorong cakram di sisi blok belakang, pelat sayap rendah, rangka mesin
+   terbuka di perut. Warna abu-krem lapuk dengan garis karat. Tidak menjiplak referensi. v2b disimpan di blokout-ks07-v2b.html. */
+import * as THREE from 'three';
+
+// ---------- alat geometri: loft poligon (profil sama jumlah titik) dengan warna per sisi ----------
+function oct(w, h, cy = 0, cx = 0, chT = 0.5, chB = 0.3) {   // segi delapan: sudut atas dipotong chT, bawah chB
+  const a = w / 2, b = h / 2;
+  return [[cx - a + chB, cy - b], [cx + a - chB, cy - b], [cx + a, cy - b + chB], [cx + a, cy + b - chT],
+          [cx + a - chT, cy + b], [cx - a + chT, cy + b], [cx - a, cy + b - chT], [cx - a, cy - b + chB]];
+}
+// sisi segi delapan: 0 bawah, 1 bawah-kanan, 2 kanan, 3 atas-kanan, 4 atas, 5 atas-kiri, 6 kiri, 7 bawah-kiri
+function loft(rings, colorFn, caps = true) {
+  const pos = [], col = [];
+  const push = (p, c) => { pos.push(...p); col.push(...c); };
+  const n = rings[0].pts.length;
+  for (let r = 0; r < rings.length - 1; r++) {
+    const A = rings[r], B = rings[r + 1];
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, c = colorFn(i, r, A.z, B.z);
+      const a0 = [A.pts[i][0], A.pts[i][1], A.z], a1 = [A.pts[j][0], A.pts[j][1], A.z], b0 = [B.pts[i][0], B.pts[i][1], B.z], b1 = [B.pts[j][0], B.pts[j][1], B.z];
+      push(a0, c); push(b0, c); push(a1, c); push(a1, c); push(b0, c); push(b1, c);
+    }
+  }
+  if (caps) for (const [R, flip] of [[rings[0], true], [rings[rings.length - 1], false]]) {
+    const c = colorFn(-1, -1, R.z, R.z);
+    const cx = R.pts.reduce((s, p) => s + p[0], 0) / n, cy = R.pts.reduce((s, p) => s + p[1], 0) / n;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n, p0 = [cx, cy, R.z], p1 = [R.pts[i][0], R.pts[i][1], R.z], p2 = [R.pts[j][0], R.pts[j][1], R.z];
+      if (flip) { push(p0, c); push(p1, c); push(p2, c); } else { push(p0, c); push(p2, c); push(p1, c); }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.computeVertexNormals();
+  return g;
+}
+// warna: dasar abu terang dengan beda nada per panel (kesan lapisan panel dan pelapukan)
+const WHITE = [0.78, 0.79, 0.78], GREY = [0.55, 0.57, 0.58], DARK = [0.16, 0.17, 0.18], BELLY = [0.12, 0.12, 0.13],
+      ORANGE = [0.85, 0.36, 0.08], METAL = [0.42, 0.44, 0.46], GLASS = [0.07, 0.09, 0.11], GOLD = [0.72, 0.55, 0.2];
+const tone = (c, k) => c.map((v) => Math.min(1, v * k));
+const hash = (a, b) => { const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return s - Math.floor(s); };
+const hullColor = (i, r) => i === 0 || i === 1 || i === 7 ? BELLY : tone(WHITE, 0.93 + 0.1 * hash(i, r));
+
+function box(w, h, d, x, y, z, c) { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return paint(g, c); }
+function cyl(r0, r1, len, x, y, z, c, axis = 'y', seg = 16, open = false) {
+  const g = new THREE.CylinderGeometry(r1, r0, len, seg, 1, open);
+  if (axis === 'z') g.rotateX(Math.PI / 2); if (axis === 'x') g.rotateZ(-Math.PI / 2);
+  g.translate(x, y, z); return paint(g, c);
+}
+function paint(g, c) { g = g.index ? g.toNonIndexed() : g; const n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set(c, i * 3); g.setAttribute('color', new THREE.BufferAttribute(a, 3)); if (!g.attributes.normal) g.computeVertexNormals(); return g; }
+function tilt(g, ax, ang, px, py, pz) { g.translate(-px, -py, -pz); if (ax === 'x') g.rotateX(ang); else if (ax === 'y') g.rotateY(ang); else g.rotateZ(ang); g.translate(px, py, pz); return g; }
+
+const parts = [];
+const SYM = [-1, 1];
+// palet v3: abu-krem lapuk (sketsa spidol), pelat putih dan aksen jingga, rangka mesin gelap di bawah
+const BEIGE = [0.62, 0.59, 0.54], BEIGE2 = [0.5, 0.48, 0.45], PALE = [0.78, 0.77, 0.74], RUST = [0.5, 0.33, 0.19], FRAME = [0.2, 0.2, 0.21];
+const weather = (base, i, r, seed) => (i === 0 || i === 1 || i === 7 ? FRAME : tone(base, 0.88 + 0.16 * hash(i + seed, r)));
+const seamRing = (pts, z, c = tone(BEIGE, 0.62)) => loft([{ z, pts: pts.map(([x, y]) => [x * 1.01 + (x > 0 ? 0.02 : -0.02), y * 1.01]) }, { z: z + 0.1, pts: pts.map(([x, y]) => [x * 1.01 + (x > 0 ? 0.02 : -0.02), y * 1.01]) }], () => c, false);
+// garis karat tegak (bekas aliran air dan panas)
+const rust = (x, y0, y1, z, w = 0.12) => box(0.02, y1 - y0, w, x, (y0 + y1) / 2, z, RUST);
+
+// ---------- 1. blok belakang bersegi (sketsa): prisma bersudut potong besar, pusat mesin ----------
+{
+  const P = (w, h) => oct(w, h, 0.3, 0, 1.4, 1.05);
+  parts.push(loft([{ z: 4.6, pts: P(5.4, 3.5) }, { z: 5.8, pts: P(6.8, 4.4) }, { z: 11.0, pts: P(6.8, 4.4) }, { z: 12.3, pts: P(5.6, 3.5) }],
+    (i, r) => (i < 0 ? tone(BEIGE2, 0.85) : weather(BEIGE2, i, r, 11))));
+  for (const z of [7.6, 9.4]) parts.push(seamRing(P(6.8, 4.4), z));
+  for (const sx of SYM) { parts.push(rust(sx * 3.42, -0.6, 1.3, 6.4), rust(sx * 3.42, -1.0, 0.8, 10.3, 0.08)); }
+  // muka belakang: 2 x 2 nosel dalam ceruk gelap
+  parts.push(box(4.2, 2.6, 0.12, 0, 0.3, 12.32, FRAME));
+  for (const sx of SYM) for (const dy of [-0.55, 0.75]) parts.push(cyl(0.45, 0.62, 0.9, sx * 1.1, 0.3 + dy, 12.8, METAL, 'z', 20, true), cyl(0.45, 0.45, 0.1, sx * 1.1, 0.3 + dy, 12.36, DARK, 'z', 20));
+}
+// ---------- 2. badan tengah (tulang punggung awak) dengan dek bersirip di atas ----------
+{
+  const P = (w, h, cy) => oct(w, h, cy, 0, 0.6, 0.4);
+  parts.push(loft([{ z: -5.8, pts: P(3.8, 2.7, 0.55) }, { z: 5.2, pts: P(3.8, 2.7, 0.55) }], (i, r) => (i < 0 ? BEIGE2 : weather(PALE, i, r, 3))));
+  for (const z of [-3.4, 0.4, 3.0]) parts.push(seamRing(P(3.8, 2.7, 0.55), z));
+  for (let k = 0; k < 12; k++) parts.push(box(2.4, 0.12, 0.26, 0, 1.97, -2.9 + k * 0.52, k % 3 ? tone(BEIGE, 0.95) : BEIGE2));   // sirip dek (sketsa)
+  for (const sx of SYM) for (let k = 0; k < 6; k++) parts.push(box(0.35, 0.14, 0.34, sx * 1.55, 1.75, -4.8 + k * 0.5, DARK));   // deret ventilasi
+}
+// ---------- 3. kokpit di tengah depan (kaca bersekat banyak) ----------
+{
+  const rings = [
+    { z: -5.8, pts: oct(3.8, 2.7, 0.55, 0, 0.6, 0.4) },
+    { z: -7.4, pts: oct(3.4, 2.5, 0.65, 0, 0.9, 0.4) },
+    { z: -9.0, pts: oct(2.8, 1.5, 0.25, 0, 0.55, 0.35) },
+    { z: -9.8, pts: oct(1.9, 0.6, 0.0, 0, 0.2, 0.15) },
+  ];
+  parts.push(loft(rings, (i, r) => {
+    if (i < 0) return PALE;
+    if (r === 1 && (i === 3 || i === 4 || i === 5)) return GLASS;
+    if (r === 0 && (i === 3 || i === 5)) return GLASS;
+    return i === 0 || i === 1 || i === 7 ? FRAME : weather(PALE, i, r, 17);
+  }));
+  for (const x of [-0.55, 0.55]) parts.push(tilt(box(0.07, 0.07, 1.9, x, 1.62, -8.2, PALE), 'x', -0.55, x, 1.9, -7.4));   // sekat kaca
+  parts.push(box(2.6, 0.07, 0.07, 0, 1.92, -7.4, PALE));
+}
+// ---------- 4. dua lengan depan (garpu): kabin berjendela di ujung, rangka silang di sisi, batang probe ----------
+const PRONG_X = 3.7;
+for (const sx of SYM) {
+  const x = sx * PRONG_X, P = (w, h, cy) => oct(w, h, cy, x, 0.5, 0.35);
+  parts.push(loft([{ z: 4.8, pts: P(2.2, 2.3, 0.2) }, { z: -10.8, pts: P(2.2, 2.3, 0.2) }, { z: -11.4, pts: P(2.5, 2.8, 0.35) }, { z: -13.6, pts: P(2.5, 2.8, 0.35) }, { z: -14.2, pts: P(2.0, 2.1, 0.25) }],
+    (i, r) => (i < 0 ? tone(BEIGE, 0.9) : r >= 2 ? weather(PALE, i, r, 30 + sx) : weather(BEIGE, i, r, 40 + sx))));
+  for (const z of [-6.4, -2.2, 1.6]) parts.push(seamRing(P(2.2, 2.3, 0.2), z));
+  parts.push(box(1.5, 0.9, 0.08, x, 0.75, -14.25, GLASS), box(0.08, 0.9, 0.1, x, 0.75, -14.27, PALE));      // jendela kabin depan
+  for (const dx of [-0.35, 0.35]) parts.push(cyl(0.07, 0.07, 3.0, x + dx, -0.55, -15.7, DARK, 'z', 8), cyl(0.12, 0.12, 0.4, x + dx, -0.55, -14.3, METAL, 'z', 8));   // batang probe kembar (sketsa)
+  // rangka silang di sisi luar (sketsa)
+  const ox = x + sx * 1.12;
+  for (let k = 0; k < 4; k++) {
+    const zc = -9.6 + k * 1.8;
+    parts.push(box(0.06, 1.2, 0.08, ox, 0.3, zc - 0.85, FRAME), box(0.06, 0.08, 1.7, ox, 0.9, zc, FRAME), box(0.06, 0.08, 1.7, ox, -0.3, zc, FRAME));
+    for (const s of [-1, 1]) parts.push(tilt(box(0.05, 0.07, 2.0, ox, 0.3, zc, FRAME), 'x', s * 0.61, ox, 0.3, zc));
+  }
+  // baki mesin terbuka di bawah lengan (seperti rangka di foto kedua)
+  parts.push(box(1.8, 0.5, 13.0, x, -1.2, -4.2, FRAME));
+  for (let k = 0; k < 9; k++) parts.push(cyl(0.22, 0.22, 1.2, x, -1.35, -9.5 + k * 1.35, METAL, 'x', 10));
+  parts.push(rust(ox, -0.9, 0.2, -1.2), rust(ox, -0.9, 0.6, 2.6, 0.08));
+}
+// penghubung lengan ke badan tengah + dek angkut di antara ujung garpu
+for (const sx of SYM) parts.push(box(1.6, 1.8, 7.0, sx * 2.35, 0.3, 1.2, tone(BEIGE, 0.95)), box(1.4, 0.9, 5.0, sx * 2.35, -0.9, -8.2, FRAME));
+parts.push(box(5.2, 0.25, 3.6, 0, -1.05, -12.0, PALE), box(5.2, 0.5, 0.2, 0, -1.2, -13.8, FRAME));        // pelat dek putih di antara garpu (foto kedua)
+for (let k = 0; k < 5; k++) parts.push(box(5.0, 0.06, 0.08, 0, -0.9, -13.4 + k * 0.8, DARK));
+// ---------- 5. pendorong cakram di sisi blok belakang (sketsa) + sirip kecil bergaris ----------
+for (const sx of SYM) {
+  const x = sx * 3.75;
+  parts.push(cyl(1.15, 1.15, 0.7, x, 0.4, 6.9, tone(BEIGE2, 0.95), 'x', 24), cyl(0.75, 0.75, 0.76, x, 0.4, 6.9, FRAME, 'x', 24), cyl(0.3, 0.3, 0.8, x, 0.4, 6.9, METAL, 'x', 12));
+  const t = new THREE.TorusGeometry(1.15, 0.1, 6, 24); t.rotateY(Math.PI / 2); t.translate(x + sx * 0.36, 0.4, 6.9); parts.push(paint(t, DARK));
+  parts.push(box(0.14, 1.9, 0.7, x - sx * 0.1, 2.3, 6.9, PALE));
+  for (let k = 0; k < 5; k++) parts.push(box(0.16, 0.06, 0.5, x - sx * 0.1, 1.65 + k * 0.28, 6.9, DARK));
+}
+// ---------- 6. pelat sayap rendah bersudut di sisi blok belakang (foto kedua) ----------
+for (const sx of SYM) {
+  const sh = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(2.1, 1.2), new THREE.Vector2(2.1, 4.2), new THREE.Vector2(0, 5.6)]);
+  const w = new THREE.ExtrudeGeometry(sh, { depth: 0.2, bevelEnabled: false }); w.rotateX(Math.PI / 2);
+  if (sx < 0) w.scale(-1, 1, 1);
+  w.translate(sx * 3.35, -1.15, 5.8); parts.push(paint(w, tone(PALE, 0.95)));
+  parts.push(box(0.06, 0.1, 3.0, sx * 5.4, -1.2, 8.6, ORANGE));
+}
+// ---------- 7. rangka mesin di perut badan tengah dan blok belakang ----------
+parts.push(box(3.0, 0.6, 9.5, 0, -1.2, 0.0, FRAME), box(4.6, 0.5, 5.6, 0, -2.05, 8.4, FRAME));
+for (let k = 0; k < 7; k++) parts.push(cyl(0.25, 0.25, 2.6, 0, -1.4, -4 + k * 1.3, METAL, 'x', 10));
+// ---------- 8. antena, lampu, RCS ----------
+for (const sx of SYM) {
+  parts.push(cyl(0.04, 0.04, 1.6, sx * 1.2, 2.9, 10.2, METAL), box(0.3, 0.3, 0.3, sx * 2.6, 2.55, 11.6, DARK), box(0.3, 0.3, 0.3, sx * 4.6, 1.3, -13.0, DARK));
+  parts.push(box(0.5, 0.18, 0.18, sx * PRONG_X, -0.2, -14.3, [1, 0.95, 0.8]));
+}
+// ---------- 9. kaki pendarat: dua di bawah lengan, dua di bawah blok belakang ----------
+const PAD_Y = -4.2;
+for (const [x, z, top] of [[-PRONG_X, -8.2, -1.45], [PRONG_X, -8.2, -1.45], [-2.3, 9.2, -2.3], [2.3, 9.2, -2.3]]) {
+  parts.push(cyl(0.24, 0.24, top - (PAD_Y + 0.9), x, (top + PAD_Y + 0.9) / 2, z, [0.78, 0.8, 0.82]), cyl(0.3, 0.3, 0.2, x, top - 0.2, z, ORANGE));
+  parts.push(cyl(0.85, 0.95, 0.16, x, PAD_Y + 0.08, z, DARK, 'y', 8), cyl(0.12, 0.12, 0.9, x, PAD_Y + 0.5, z, METAL));
+  parts.push(tilt(cyl(0.08, 0.08, 1.8, x, top - 0.8, z + 0.7, METAL), 'x', 0.55, x, top - 0.8, z + 0.7));
+}
+// ---------- 10. registrasi dan tanda (kanvas) ----------
+function decal(text, w, h, x, y, z, rotY) {
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 128; const c = cv.getContext('2d');
+  c.fillStyle = '#1b1c1e'; c.font = 'bold 88px monospace'; c.textBaseline = 'middle'; c.fillText(text, 12, 68);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, roughness: 0.8 }));
+  m.position.set(x, y, z); m.rotation.y = rotY; return m;
+}
+
+// ---------- pemandangan ----------
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio)); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xb9bec2); scene.fog = new THREE.Fog(0xb9bec2, 80, 220);
+scene.add(new THREE.HemisphereLight(0xe8ecef, 0x5a6064, 1.6));
+const sun = new THREE.DirectionalLight(0xfff4e8, 1.6); sun.position.set(-18, 30, -14); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 90 }); sun.shadow.radius = 4; scene.add(sun);
+const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.62, metalness: 0.05, side: THREE.DoubleSide, flatShading: true });
+const ship = new THREE.Group();
+for (const g of parts) { const m = new THREE.Mesh(g, mat); m.castShadow = m.receiveShadow = true; ship.add(m); }
+ship.add(decal('KS-07', 2.4, 0.6, -4.83, 0.55, -3.6, -Math.PI / 2), decal('KS-07', 2.4, 0.6, 4.83, 0.55, -3.6, Math.PI / 2));
+scene.add(ship);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x7d8589, roughness: 0.95 }));
+ground.rotation.x = -Math.PI / 2; ground.position.y = PAD_Y; ground.receiveShadow = true; scene.add(ground);
+// manusia 1,8 m untuk skala
+{
+  const h = new THREE.Group(), m = new THREE.MeshStandardMaterial({ color: 0xd66a1c, roughness: 0.8 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.24, 1.05, 4, 10), m); body.position.y = 0.78; h.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 14, 10), new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.3 })); head.position.y = 1.62; h.add(head);
+  h.traverse((o) => { o.castShadow = true; }); h.position.set(-6.0, PAD_Y, -3.0); scene.add(h);
+}
+const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 1000);
+const VIEWS = {
+  1: { p: [-24, 5, -22], t: [0, -1, 0], fov: 35 },    // 3/4 depan kiri
+  2: { p: [-60, -1, 0.5], t: [0, -0.5, 0.5], fov: 24 }, // samping kiri
+  3: { p: [0.01, 70, 0.5], t: [0, 0, 0.5], fov: 24 },  // atas
+  4: { p: [0, -0.3, -62], t: [0, -0.8, 0], fov: 17 },  // depan
+  5: { p: [22, 7, 26], t: [0, -0.5, 1], fov: 35 },     // 3/4 belakang kanan
+};
+let yaw = 0, pitch = 0, dist = 1, tgt = new THREE.Vector3();
+function setView(k) { const v = VIEWS[k]; camera.fov = v.fov; tgt.set(...v.t); const d = new THREE.Vector3(...v.p).sub(tgt); dist = d.length(); yaw = Math.atan2(d.x, d.z); pitch = Math.asin(d.y / dist); resize(); }
+function place() { camera.position.set(tgt.x + dist * Math.cos(pitch) * Math.sin(yaw), tgt.y + dist * Math.sin(pitch), tgt.z + dist * Math.cos(pitch) * Math.cos(yaw)); camera.up.set(0, 1, 0); if (Math.abs(Math.sin(pitch)) > 0.999) camera.up.set(0, 0, -1); camera.lookAt(tgt); }
+function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize);
+let drag = null;
+renderer.domElement.addEventListener('pointerdown', (e) => { drag = [e.clientX, e.clientY]; });
+addEventListener('pointerup', () => { drag = null; });
+addEventListener('pointermove', (e) => { if (!drag) return; yaw -= (e.clientX - drag[0]) * 0.006; pitch = Math.max(-1.5, Math.min(1.5, pitch + (e.clientY - drag[1]) * 0.006)); drag = [e.clientX, e.clientY]; });
+addEventListener('wheel', (e) => { dist *= Math.exp(e.deltaY * 0.001); });
+addEventListener('keydown', (e) => { if (VIEWS[e.key]) setView(e.key); });
+setView(new URLSearchParams(location.search).get('view') || 1);
+function loop() { place(); renderer.render(scene, camera); requestAnimationFrame(loop); }
+loop();
+window.__ks = { setView, ship, parts };
+</script>
+</body>
+</html>
