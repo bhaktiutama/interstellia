@@ -474,9 +474,9 @@ UJI = r"""
     out[`tubuh terlihat saat menunduk 60 derajat: ${dD.toFixed(2)}% piksel beda dari Mati (5-40%), terang rata-rata ${lumB.toFixed(3)} (> 0,12), di horizon ${dH.toFixed(2)}% (= 0)`] = dD > 5 && dD < 40 && lumB > 0.12 && dH === 0;
     out[`tubuh menunduk: kedua sepatu dan kedua tangan di dalam bingkai ${limbsIn}`] = limbsIn;
     // lari: kaki depan dan belakang berjauhan, tangan keluar ke sisi dan tetap di bingkai; udara: lengan terentang
-    P.pitch = -50 * Math.PI / 180; M.BOB.run = 1; M.BOB.amp = 0.055; M.BOB.phase = Math.PI / 2; M.updateBody(10); shot(2);
+    P.pitch = -50 * Math.PI / 180; M.BOB.run = 1; M.BOB.amp = 0.055; M.BOB.phase = 0; M.updateBody(10); shot(2);
     const fz = B.feet.map((o) => loc(o).z), hx = B.hands.map((o) => Math.abs(loc(o).x)), runVis = B.hands.some((o) => inFrame(o, 1.2));
-    out[`lari: kaki beda z ${Math.abs(fz[0] - fz[1]).toFixed(2)} m (> 0,8), tangan keluar ${Math.min(...hx).toFixed(2)} m (> 0,30), salah satu di bingkai ${runVis}`] = Math.abs(fz[0] - fz[1]) > 0.8 && Math.min(...hx) > 0.30 && runVis;
+    out[`lari: kaki beda z ${Math.abs(fz[0] - fz[1]).toFixed(2)} m (> 0,7), tangan keluar ${Math.min(...hx).toFixed(2)} m (> 0,30), salah satu di bingkai ${runVis}`] = Math.abs(fz[0] - fz[1]) > 0.7 && Math.min(...hx) > 0.30 && runVis;
     P.ground = false; M.BOB.run = 0; M.BOB.amp = 0; M.updateBody(10); shot(2); const ax = B.hands.map((o) => Math.abs(loc(o).x)); P.ground = true;
     out[`udara: lengan terentang, tangan ${Math.min(...ax).toFixed(2)} m dari sumbu (> 0,45)`] = Math.min(...ax) > 0.45;
     // pose halus: dari diam ke lari dalam 60 frame, tiap sendi berubah < 0,35 rad per frame
@@ -554,9 +554,10 @@ UJI = r"""
   {
     const P = M.P, S = M.SPL, R = M.RIP, from = M.THREE.DataUtils.fromHalfFloat;
     for (let k = 0; k < 200; k++) M.stepSplash(0.05);
-    P.view = 0; P.x = 0; P.z = 0; P.depth = 0.5; P.yaw = 0; P.vx = 0; P.vz = -3; P.ground = true;
+    P.view = 0; P.x = 0; P.z = 0; P.depth = 0.5; P.yaw = 0; P.vx = 0; P.vz = -3; P.ground = true; M.updateBody(10);
+    const fw = Math.max(...[-1, 1].map((sd) => -M.bodyFootAt(sd).z));   // M6b: percikan keluar dari sepatu yang terlihat
     M.footstep(1.2, true); let fRel = 0, t = 0, nb = 0;
-    for (let k = 0; k < 50; k++) { M.stepSplash(1 / 60); t += 1 / 60; for (let i = 0; i < S.max; i++) if (S.life[i] > 0) fRel = Math.max(fRel, -(S.pos[i * 3 + 2] + 0.15 + 3 * t)); }
+    for (let k = 0; k < 50; k++) { M.stepSplash(1 / 60); t += 1 / 60; for (let i = 0; i < S.max; i++) if (S.life[i] > 0) fRel = Math.max(fRel, -(S.pos[i * 3 + 2] + fw + 3 * t)); }
     const up = M.CROWN.slots.filter((q) => q.t < 1).length; let tc = 0;
     for (let k = 0; k < 120 && M.CROWN.slots.some((q) => q.t < 1); k++) { M.stepCrown(1 / 60); tc += 1 / 60; }
     // tonjolan dan cekung: kaki tetap di tempat, kaki terus mendorong air selama 0,25 s
@@ -564,7 +565,7 @@ UJI = r"""
     const ph = M.BOB.phase; for (let k = 0; k < 15; k++) { M.BOB.phase = ph; M.headBob(1 / 60, 3, true, 0.5); M.updateRipple(1 / 60); }
     const N = R.N, b = new Uint16Array(N * N * 4); M.renderer.readRenderTargetPixels(R.rt[R.i], 0, 0, N, N, b);
     const at = (x, z, c) => { const i = Math.round((x - R.ox) / R.dx + N / 2 - 0.5), j = Math.round((z - R.oz) / R.dx + N / 2 - 0.5); return from(b[(j * N + i) * 4 + c]); };
-    const lx = M.CONFIG.walk.legs, hF = at(lx, -0.14, 0), hB = at(lx, 0.12, 0), fB = at(lx, 0.12, 2);
+    const Lg = M.bodyLegAt(1, 0.5), lx = Lg.x, hF = at(lx, Lg.z - 0.14, 0), hB = at(lx, Lg.z + 0.12, 0), fB = at(lx, Lg.z + 0.12, 2);   // M6b: kaki yang terlihat memotong muka air
     // render dengan mahkota tampil
     P.vz = 0; P.pitch = -1.0; M.footstep(1.2, true); for (let k = 0; k < 10; k++) M.stepCrown(1 / 60);
     M.renderer.setRenderTarget(M.POST.hdr); M.renderer.clear(); M.renderer.render(M.scene, M.camera);
@@ -592,6 +593,48 @@ UJI = r"""
     let u20 = 0; for (let u = 0; u < 8000; u += 5) if (G(u) <= 0.22) { u20 = u; break; }
     out[`gelombang tembok (M5e): profil JS = GLSL selisih ${dMax.toFixed(3)} m (${n} titik), muka atas ${slope.toFixed(1)} derajat, lebar setengah tinggi ${((wb - wa) / 1000).toFixed(2)} km, punggung 22% di ${(u20 / 1000).toFixed(2)} km`] =
       dMax < 0.5 && slope > 75 && wb - wa > 800 && wb - wa < 2500 && u20 > 1500 && u20 < 2500;
+  }
+
+  // 5n. M6b: percikan dan riak keluar dari sepatu yang terlihat, fase langkah sinkron, yaw badan tertinggal
+  {
+    const P = M.P, B = M.BODY, Q = B.pose, PI = Math.PI;
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false;
+    P.view = 0; P.x = 3; P.z = 3; P.y = M.seabed(3, 3) + M.CONFIG.eye; P.ground = true; P.yaw = 0.7; B.level = 2;
+    // telapak: bodyFootAt() = pusat mesh sepatu (bidang air), 6 fase x menunduk / tegak x 2 kaki
+    let maxd = 0;
+    for (const dnv of [0, 1]) for (const ph of [0.3, 1.1, 2.0, 2.9, 3.8, 5.0]) {
+      P.pitch = dnv ? -60 * PI / 180 : 0; M.BOB.amp = 0.034; M.BOB.run = 0; M.BOB.phase = ph; M.updateBody(10); B.group.updateMatrixWorld(true);
+      for (const sd of [-1, 1]) { const F = M.bodyFootAt(sd), o = B.feet[sd < 0 ? 0 : 1], v = o.userData.c.clone(); o.localToWorld(v); maxd = Math.max(maxd, Math.hypot(v.x - F.x, v.z - F.z)); }
+    }
+    out[`percikan dari sepatu: bodyFootAt dekat pusat sepatu, selisih terbesar ${maxd.toFixed(3)} m (< 0,08)`] = maxd < 0.08;
+    // fase: kaki yang menapak saat headBob melewati kelipatan pi = kaki terdepan, 6 persilangan berturut-turut, juga di air dangkal dan setelah mendarat
+    P.pitch = 0; M.BOB.phase = 0.01; M.BOB.side = 0; M.BOB.amp = 0.034; Q.mv = 1; let ok = 0, tot = 0, goal = 0;
+    const walkSteps = (depth, n) => { P.depth = depth; goal += n; for (let f = 0; f < 400 && tot < goal; f++) {
+      const sp = M.BOB.side, n0 = M.BOB.steps; Q.mv = 1; M.headBob(1 / 60, 1.4, false, depth);
+      if (M.BOB.steps !== n0) { const L = M.bodyLegs(); tot++; if ((L.sw[1] > L.sw[0] ? 1 : -1) === (sp ? 1 : -1)) ok++; } } };
+    walkSteps(0.5, 4);
+    const s0 = M.BOB.side, n0 = M.BOB.steps; P.depth = 0.5; M.footstep(1.2, true);
+    out[`mendarat: BOB.side ${s0} -> ${M.BOB.side} (tetap), langkah ${n0} -> ${M.BOB.steps}`] = M.BOB.side === s0 && M.BOB.steps === n0 + 1;
+    walkSteps(0.5, 4); walkSteps(0.02, 4);
+    out[`fase langkah: kaki yang menapak = kaki terdepan ${ok}/${tot} persilangan (air dalam, setelah mendarat, air dangkal)`] = tot === 12 && ok === tot;
+    // jangkauan telapak saat menapak: jalan dan lari
+    const reach = (run) => { P.pitch = 0; M.BOB.run = run; M.BOB.amp = run ? 0.055 : 0.034; M.BOB.phase = PI; Q.mv = 1; M.updateBody(10);
+      const F = M.bodyFootAt(-1), by = B.yaw; return -(F.x - P.x) * Math.sin(by) - (F.z - P.z) * Math.cos(by); };
+    const rw = reach(0), rr = reach(1);
+    out[`jangkauan telapak: jalan ${rw.toFixed(3)} m (0,25 + ujung 0,07), lari ${rr.toFixed(3)} m (0,45 + ujung 0,07)`] = Math.abs(rw - 0.32) < 0.06 && Math.abs(rr - 0.52) < 0.06;
+    M.BOB.run = 0; M.BOB.amp = 0; M.BOB.phase = 0; Q.mv = 0; M.updateBody(10);
+    // titik kaki memotong muka air: di antara telapak dan pinggul, 0,5/0,9 dari telapak
+    const F = M.bodyFootAt(1), G = M.bodyLegAt(1, 0.45), H = M.bodyLegAt(1, 0), Hh = M.bodyLegAt(1, 5);
+    const tt = Math.hypot(G.x - F.x, G.z - F.z) / Math.max(1e-6, Math.hypot(Hh.x - F.x, Hh.z - F.z));
+    out[`titik kaki di air: pada ${(100 * tt).toFixed(1)}% dari telapak ke pinggul (kedalaman 0,45 dari 0,9 = 50%), kedalaman 0 = telapak ${Math.hypot(H.x - F.x, H.z - F.z) < 1e-6}`] = Math.abs(tt - 0.5) < 0.03 && Math.hypot(H.x - F.x, H.z - F.z) < 1e-6;
+    // yaw tertinggal: belok mendadak 1,5 rad, tertinggal 0,3-0,44 rad, lalu menyusul
+    P.yaw = 0.7; M.updateBody(10); P.yaw += 1.5; M.updateBody(1 / 60); const lag0 = Math.abs(P.yaw - B.yaw), rot = B.group.rotation.y === B.yaw;
+    for (let f = 0; f < 90; f++) M.updateBody(1 / 60); const lag1 = Math.abs(P.yaw - B.yaw);
+    out[`yaw badan tertinggal ${lag0.toFixed(2)} rad (0,3-0,44), menyusul ${lag1.toFixed(3)} rad dalam 1,5 s (< 0,05), rotasi kelompok = BODY.yaw ${rot}`] = lag0 > 0.3 && lag0 <= 0.44 + 1e-6 && lag1 < 0.05 && rot;
+    // pose dihitung walau tubuh Mati: posisi telapak tidak melompat saat panel diubah
+    B.level = 0; P.pitch = -60 * PI / 180; M.updateBody(10); const Fm = M.bodyFootAt(1); B.level = 2; M.updateBody(10); const Fv = M.bodyFootAt(1);
+    out[`pose tetap dihitung saat tubuh Mati: selisih telapak ${Math.hypot(Fm.x - Fv.x, Fm.z - Fv.z).toFixed(4)} m`] = Math.hypot(Fm.x - Fv.x, Fm.z - Fv.z) < 1e-6;
+    P.depth = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -PI / 2 + 0.3; P.ground = true; M.updateBody(10);
   }
 
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua

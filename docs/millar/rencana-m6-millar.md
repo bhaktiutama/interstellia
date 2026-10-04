@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: M6a dan revisi M6a-2 selesai, M6b-M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a, M6a-2, dan M6b selesai, M6c-M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -155,7 +155,7 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | --- | --- |
 | M6a | Selesai 4 Oktober 2026 (lihat catatan di bawah) |
 | M6a-2 | Selesai 4 Oktober 2026 (revisi setelah uji pemilik, lihat bagian di bawah) |
-| M6b | Belum |
+| M6b | Selesai 4 Oktober 2026 (lihat bagian di bawah) |
 | M6c | Belum |
 | M6d | Belum |
 | M6e | Belum |
@@ -202,4 +202,26 @@ Keterbatasan: sepatu terlihat memendek karena sudut pandang dari atas (perspekti
 Cabang M6 digabung dengan `main` (kepala `9dabedb`) yang sudah memuat M5 kelompok 1-3 (pusat laut = kamera, suara langkah diseret, plasma mengikuti wahana, pola laut dari ketinggian, percikan lari dengan mahkota air tiap langkah, gelombang tembok). Konflik hanya di `CLAUDE.md` dan satu baris kamus `I18N.en`, keduanya diselesaikan dengan mempertahankan kedua sisi. Uji Millar gabungan: 87 pemeriksaan lulus.
 
 Catatan untuk M6b: `footstep()` baru (M5c) menaruh percikan, riak, dan mahkota air 0,15 m di depan titik tengah (`P + kanan * CONFIG.walk.legs * sd + maju * 0,15`), bukan 0,45 m. Telapak `BODY.feet` saat menunduk ada di sekitar 0,3-0,5 m di depan. Penyelarasan M6b harus menyatukan keduanya: satu fungsi `bodyFootAt(side)` sebagai sumber bagi `footstep()`, `headBob()`, dan telapak yang terlihat.
+
+## M6b (selesai 4 Oktober 2026): percikan keluar dari sepatu yang terlihat
+
+| Perubahan | Isi |
+| --- | --- |
+| Satu sumber posisi kaki | `bodyLegs()` (sudut paha, lutut, turun pinggul dari `BODY.pose`, `BOB`, `CONFIG.body`), `bodyFootAt(sd)` (pusat sepatu di dunia), `bodyLegAt(sd, depth)` (titik kaki memotong muka air); dipakai `bodyPose()`, `footstep()`, dan `headBob()` (tonjolan haluan, cekung belakang, semburan tulang kering) |
+| Fase sinkron | Ayun kaki `sd * cos(BOB.phase)`: kaki yang menapak saat fase melewati kelipatan pi = kaki terdepan. Mendarat tidak lagi membalik `BOB.side`; air dangkal (< 0,05 m) tetap membalik agar irama tidak bergeser |
+| Jangkauan telapak | `CONFIG.body.reachWalk` 0,25 m dan `reachRun` 0,45 m (sudut paha dari `asin(reach / 0,9)`); sebelumnya 0,5 m saat jalan |
+| Yaw badan | `BODY.yaw` mengejar `P.yaw` dengan konstanta 0,25 s, tertinggal paling banyak 0,44 rad (25 derajat) |
+| Pose tetap dihitung | `updateBody()` menghitung pose sebelum cabang visible, jadi percikan tidak bergantung pada pilihan panel Tubuh |
+
+| Uji (blok 5n) | Hasil |
+| --- | --- |
+| Pusat sepatu vs `bodyFootAt` (6 fase x tegak / menunduk x 2 kaki) | selisih terbesar 0,002 m (< 0,08) |
+| Fase langkah | 12 dari 12 persilangan: kaki yang menapak = kaki terdepan (air dalam, setelah mendarat, air dangkal) |
+| Mendarat | `BOB.side` tetap, langkah +1 |
+| Jangkauan | jalan 0,350 m, lari 0,551 m (reach + ujung sepatu 0,07 m) |
+| Titik kaki di air | tepat 50,0% dari telapak ke pinggul pada kedalaman 0,45 m |
+| Yaw tertinggal | 0,44 rad lalu 0,001 rad setelah 1,5 s |
+| Uji Millar | 94 pemeriksaan lulus (uji M5c disesuaikan: titik tonjolan dan semburan memakai kaki yang terlihat) |
+
+Dampak yang diterima: saat menunduk (`dn` 1) sepatu terlihat sekitar 0,5 m di depan dan percikan keluar di sana; saat menatap lurus sekitar 0,3 m (reach 0,25 m + ujung sepatu). Busa garis air tidak dibuat terpisah (cincin buih M5c sudah ada); dipertimbangkan ulang di M6c bila masih kurang.
 
