@@ -61,18 +61,18 @@ Kumpulan experience 3D bertema perjalanan antarbintang, dipanggil dari menu utam
 
 Tiap task di rencana (`docs/<id>/`) diberi label effort di awal rencana. Label menentukan seberapa dalam analisis dan model mana yang dipakai. Saran model di bawah adalah rekomendasi awal (belum diukur di proyek ini); naikkan satu tingkat bila hasil pertama salah, turunkan bila sering berlebihan.
 
-| Effort | Dipakai bila | Contoh Three.js umum | Contoh di proyek ini | Saran model |
-| --- | --- | --- | --- | --- |
-| Low | Tugas jelas, lokal, mudah diverifikasi secara visual | Ganti warna material atau tekstur, atur FOV kamera, tambah lampu, ganti nama atau ekstrak fungsi, ubah UI/HUD, tambah handler resize, tulis boilerplate (scene, renderer, loop) | Tambah entri `I18N.en`, ubah teks HUD atau label panel, atur `CONFIG.fov`, ubah warna bangunan, tambah entri `EXPERIENCES` | Haiku 4.5 (paling hemat); Sonnet 5.5 bila menyentuh banyak file |
-| Medium | Menyentuh beberapa bagian kode atau butuh sedikit desain | Fitur baru (kontrol first-person, tabrakan kapsul sederhana, sprite atau partikel), muat glTF dengan animation mixer, post-processing, refactor ke modul, bayangan dasar atau kabut | Fasilitas atau distrik baru, perabot kota baru, preset grafis, suara baru, panel dan tombol baru, memindahkan kode ke `shared/`, skrip `tools/uji_*.py` baru | Sonnet 5.5 (default harian) |
-| High | Kebenaran bergantung pada penalaran halus, atau desain sulit diubah nanti | Arsitektur keseluruhan (ECS vs scene-graph, loop langkah tetap), integrasi fisika (Rapier/cannon-es), shader GLSL kustom, kerangka acuan berputar, instancing atau LOD untuk scene besar, kebocoran memori dan profiling performa GPU, bug sulit (jitter, z-fighting, tunneling, drift numerik) | Fisika kerangka berputar (Coriolis, bola, motor, jatuh dari dek), shader cahaya `LIGHT_GLSL`, peta bayangan koordinat silinder terbuka (`shUnroll`), pemilihan bayangan `SHP`, LOD pohon dan impostor, NaN di Apple M1, optimasi draw call dan waktu muat | Opus 5.5; Fable 5.1 hanya untuk bug yang tetap gagal setelah dua percobaan Opus |
+| Effort | Dipakai bila | Contoh Three.js umum | Contoh di proyek ini | Saran model | Saran thinking |
+| --- | --- | --- | --- | --- | --- |
+| Low | Tugas jelas, lokal, mudah diverifikasi secara visual | Ganti warna material atau tekstur, atur FOV kamera, tambah lampu, ganti nama atau ekstrak fungsi, ubah UI/HUD, tambah handler resize, tulis boilerplate (scene, renderer, loop) | Tambah entri `I18N.en`, ubah teks HUD atau label panel, atur `CONFIG.fov`, ubah warna bangunan, tambah entri `EXPERIENCES` | Haiku 4.5 (paling hemat); Sonnet 5.5 bila menyentuh banyak file | low |
+| Medium | Menyentuh beberapa bagian kode atau butuh sedikit desain | Fitur baru (kontrol first-person, tabrakan kapsul sederhana, sprite atau partikel), muat glTF dengan animation mixer, post-processing, refactor ke modul, bayangan dasar atau kabut | Fasilitas atau distrik baru, perabot kota baru, preset grafis, suara baru, panel dan tombol baru, memindahkan kode ke `shared/`, skrip `tools/uji_*.py` baru | Sonnet 5.5 (default harian) | medium |
+| High | Kebenaran bergantung pada penalaran halus, atau desain sulit diubah nanti | Arsitektur keseluruhan (ECS vs scene-graph, loop langkah tetap), integrasi fisika (Rapier/cannon-es), shader GLSL kustom, kerangka acuan berputar, instancing atau LOD untuk scene besar, kebocoran memori dan profiling performa GPU, bug sulit (jitter, z-fighting, tunneling, drift numerik) | Fisika kerangka berputar (Coriolis, bola, motor, jatuh dari dek), shader cahaya `LIGHT_GLSL`, peta bayangan koordinat silinder terbuka (`shUnroll`), pemilihan bayangan `SHP`, LOD pohon dan impostor, NaN di Apple M1, optimasi draw call dan waktu muat | Opus 5.5; Fable 5.1 hanya untuk bug yang tetap gagal setelah dua percobaan Opus | high; xhigh untuk shader yang rawan NaN di M1, relativitas, atau kerangka berputar |
 
 Aturan pemakaian:
 
 - Pecah task High menjadi langkah kecil: bagian desain dan penalaran dikerjakan model High, bagian mekanis (ganti nama, teks UI, entri kamus) diserahkan ke Low.
 - Task yang menyentuh `LIGHT_GLSL`, `shUnroll`, kerangka berputar (scene.rotation.z), atau `groundH` / `TER` otomatis High, sebab salah kecil baru terlihat di GPU lain (GTX 1060 dan M1) dan sandbox SwiftShader tidak menampakkannya.
 - Rencana (plan) disusun oleh model satu tingkat di atas effort task terberat di dalamnya; eksekusi per langkah memakai model sesuai label langkah.
-- Label effort ditulis di tabel rencana tahap (kolom `Effort`), bersama perkiraan file dan fungsi yang disentuh.
+- Label effort ditulis di tabel rencana tahap (kolom `Effort`, `Model`, `Thinking`), bersama perkiraan file dan fungsi yang disentuh. Thinking = tingkat effort Claude Code (`/effort low`, `medium`, `high`, `xhigh`); rekomendasi awal, naikkan satu tingkat bila hasil pertama salah.
 
 # Experience: Copper Corn Station
 

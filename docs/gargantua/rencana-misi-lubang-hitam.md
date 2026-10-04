@@ -11,6 +11,34 @@ Per 4 Oktober 2026 · Bhakti · Revisi 2 (wahana baru, terbang rendah di atas pi
 
 Urutan kerja: G1 wahana GX-01, G2 kamera jatuh dan jalur kutub, G3 terbang rendah dan partikel, G4 informasi, G5 tesseract, G6 uji dan bahasa.
 
+Cara menjalankan di sesi baru: "jalankan kelompok 1 dari `docs/gargantua/rencana-misi-lubang-hitam.md`" (lalu kelompok 2, dan seterusnya). Tiap kelompok berhenti untuk diuji pemilik. Perbarui bagian Status tiap tahap selesai.
+
+## Kelompok menurut effort, model, dan thinking (aturan CLAUDE.md "Pengelompokan task berdasarkan effort")
+
+Label mengikuti tabel effort di CLAUDE.md: shader GLSL kustom, relativitas, dan bug sulit = High (Opus 5.5); fitur yang menyentuh beberapa bagian kode, partikel, alat olah, dan skrip uji = Medium (Sonnet 5.5); teks UI, entri kamus `ID`, dan dokumen = Low (Haiku 4.5). Tugas terberat High, jadi rencana ini disusun Opus 5.5 (tidak ada tingkat di atasnya selain Fable 5.1 untuk bug yang gagal dua kali).
+
+Kolom Thinking = saran tingkat effort/thinking Claude Code (`/effort low`, `medium`, `high`, `xhigh`). Ini rekomendasi awal, belum diukur di proyek ini: naikkan satu tingkat bila hasil pertama salah.
+
+| Kelompok | Tahap | Isi | Effort | Model | Thinking | Alasan | Risiko |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | G1a | Alat olah `tools/siapkan_wahana_gx.py`, aset `gx01.data.js`, stensil GX-01 | Medium | Sonnet 5.5 | medium | Alat seperti `siapkan_motor.py`, geometri sudah ada di `KESTREL.buildV3()` | Rendah |
+| 1 | G1b | Raster GX-01 di Gargantua (program WebGL2 + depth, sebelum bloom), kokpit, kamera luar | Medium | Sonnet 5.5 | medium | Program raster kecil terpisah dari ray tracer; tidak menyentuh `SCENE_FS` | Rendah |
+| 2 | G2 | Kamera jatuh di shader (`vel0`, aturan tertelan, aberasi, frekuensi), jalur kutub, HUD | High | Opus 5.5 | xhigh | Relativitas halus di dalam horizon, mudah NaN di M1 (`sqrt`, pembagian dekat r = 0), harus identik saat `uFall = 0` | Sedang |
+| 3 | G3a | Piringan tebal volumetrik dekat kamera, jalur susur piringan | High | Opus 5.5 | high | Shader GLSL kustom, biaya GPU terbesar, harus menyatu dengan piringan tipis lama | Tinggi (FPS GTX 1060 dan M1) |
+| 3 | G3b | Partikel garis bara, awan debu, tumbukan kaca, guncangan | Medium | Sonnet 5.5 | medium | Partikel dan overlay; kecepatan relatif sudah dihitung di rencana | Rendah |
+| 4 | G4 | Pulsa ke relai, pandangan relai, diagram ruang-waktu, uji suar | High | Opus 5.5 | high | Koordinat tortoise menuju tak hingga di horizon, sinkron waktu wahana dan relai. Gambar diagram kanvas sendiri boleh Medium | Sedang |
+| 5 | G5 | Bidik sudut, prediksi geodesik CPU, zoom-whirl, gerbang, hiperkubus | High | Opus 5.5 | high | Integrasi geodesik dekat orbit tak stabil 2 rs sangat peka (drift numerik). Hiperkubus sendiri Medium | Sedang |
+| tiap kelompok | G6 | `tools/uji_misi_gargantua.py` (bagian per tahap) | Medium | Sonnet 5.5 | medium | Skrip uji baru = Medium di CLAUDE.md | Rendah |
+| tiap kelompok | G6 | Entri kamus `ID`, teks panel dan bantuan, CLAUDE.md, `tombol.md`, `penamaan.md`, Status di dokumen ini | Low | Haiku 4.5 | low | Mekanis | Rendah |
+
+Langkah mekanis di dalam tahap High (entri kamus, teks HUD, pembaruan dokumen) berlabel Low dan boleh diserahkan ke Haiku 4.5, sesuai aturan "pecah task High menjadi langkah kecil".
+
+## Status
+
+| Tahap | Status |
+| --- | --- |
+| G1-G6 | Belum dimulai (rencana revisi 2) |
+
 Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
 
 ## Keputusan pemilik
@@ -81,8 +109,8 @@ Lintasan wahana di CPU: geodesik timelike Schwarzschild, RK4 pada (r, dr/dtau, p
 
 | Bagian | Isi |
 | --- | --- |
-| Sumber | Blokout v3 (`parts`, loft poligon berwarna per sisi, decal kanvas). Kaki pendarat dilipat (tidak digambar saat terbang). Stensil diganti "GX-01" |
-| Alat olah | `tools/siapkan_wahana_gx.py` (baru): buka blokout di Chromium headless, gabungkan semua geometri jadi satu array posisi, normal, warna (half float / int8), simpan base64 ke `experiences/gargantua/assets/gx01.data.js`. Sama seperti cara `tools/siapkan_motor.py`: Gargantua tetap tanpa three.js dan jalan dari file:// |
+| Sumber | Blokout v3, yang sudah dipindah ke modul bersama sebagai `KESTREL.buildV3(THREE)` di `shared/kestrel.js` (geometri blokout + pintu, tapak, lampu). Kaki pendarat dilipat (tidak digambar saat terbang). Stensil diganti "GX-01". `buildV3` tidak diubah (pertahankan yang ada) |
+| Alat olah | `tools/siapkan_wahana_gx.py` (baru): di Chromium headless muat three.js + `shared/kestrel.js`, panggil `buildV3`, gabungkan geometri jadi satu array posisi, normal, warna, simpan base64 ke `experiences/gargantua/assets/gx01.data.js`. Sama seperti cara `tools/siapkan_motor.py`: Gargantua tetap tanpa three.js dan jalan dari file:// |
 | Render | Program raster kecil + depth di Gargantua, digambar ke `T.scene` sebelum bloom. Disinari dari arah piringan (warna jingga, kuat dari bawah saat terbang rendah), sisi lain ambient redup. Pembelokan cahaya di skala 27,5 m nol (rs = 2,954e11 m), jadi raster biasa tetap benar |
 | Kokpit | Mata di kokpit kaca bersekat tengah depan. Bingkai sekat kaca dari geometri kokpit model itu sendiri (dilihat dari dalam), instrumen di kanvas 2D |
 | Kamera luar | Kamera kejar di belakang-atas wahana, seperti komposisi foto 1 (wahana kecil di tengah, piringan di bawah) |
