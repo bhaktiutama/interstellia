@@ -692,6 +692,47 @@ UJI = r"""
     place(0, 0); P.pitch = 0; P.yaw = -PI / 2 + 0.3; M.updateBody(10);
   }
 
+  // 5q. M6d: visor helm: tengah layar tidak tersentuh, bingkai di sudut, mati saat terbang / sinematik / foto / drone, embun napas, tetes air, kilau, napas, panel
+  {
+    const P = M.P, V = M.VISOR, u = M.M_COMP.uniforms, PI = Math.PI;
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false; M.PHOTO.on = false;
+    P.view = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.ground = true; P.yaw = -PI / 2 + 0.3; P.pitch = -0.3; M.MOOD.brk = 1;
+    M.BOB.run = 0; M.BOB.amp = 0; V.ex = 0; V.wet = 0; V.fog = 0; M.BODY.level = 2;
+    const L = M.POST.ldr, w = L.width, h = L.height;
+    const rnd = () => { M.camera.position.set(P.x, P.y, P.z); M.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); M.camera.updateMatrixWorld(true); M.U.uCam.value.copy(M.camera.position);
+      M.updateShadow(); M.renderer.setRenderTarget(M.POST.hdr); M.renderer.clear(); M.renderer.render(M.scene, M.camera); M.updateVisor(0); M.postRender(0);
+      const b = new Uint8Array(w * h * 4); M.renderer.readRenderTargetPixels(L, 0, 0, w, h, b); M.renderer.setRenderTarget(null); return b; };
+    const frac = (a, b, x0, x1, y0, y1) => { let n = 0, m = 0; for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const k = (y * w + x) * 4; m++; if (Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]) > 6) n++; } return 100 * n / Math.max(1, m); };
+    V.level = 2; const a2 = rnd(); V.level = 0; const a0 = rnd(); V.level = 2;
+    const cen = frac(a2, a0, w >> 2, (3 * w) >> 2, h >> 2, (3 * h) >> 2), cw = Math.round(w * 0.08), ch = Math.round(h * 0.08);
+    const cor = (frac(a2, a0, 0, cw, 0, ch) + frac(a2, a0, w - cw, w, 0, ch) + frac(a2, a0, 0, cw, h - ch, h) + frac(a2, a0, w - cw, w, h - ch, h)) / 4;
+    out[`visor Penuh: tengah layar ${cen.toFixed(2)}% piksel beda dari Mati (< 0,5%), sudut ${cor.toFixed(1)}% (> 20%)`] = cen < 0.5 && cor > 20;
+    const offs = []; const off = (fn, undo) => { fn(); M.updateVisor(0); offs.push(u.uVis.value); undo(); };
+    off(() => { M.FLY.on = true; }, () => { M.FLY.on = false; }); off(() => { M.CINE.on = true; }, () => { M.CINE.on = false; });
+    off(() => { M.PHOTO.on = true; }, () => { M.PHOTO.on = false; }); off(() => { P.view = 1; }, () => { P.view = 0; });
+    M.updateVisor(0); const onV = u.uVis.value;
+    out[`visor aktif berjalan kaki (uVis ${onV}), mati saat terbang / sinematik / foto / drone: ${offs.join(' / ')}`] = onV === 1 && offs.every((x) => x === 0);
+    // embun napas: lari 20 s, lalu diam 30 s
+    let fmx = 0; M.BOB.run = 1; M.BOB.amp = 0.055; for (let f = 0; f < 600; f++) { M.updateVisor(1 / 30); fmx = Math.max(fmx, V.fog); }
+    M.BOB.run = 0; M.BOB.amp = 0; for (let f = 0; f < 900; f++) M.updateVisor(1 / 30); const f0 = V.fog;
+    out[`embun napas: lari maksimum ${fmx.toFixed(3)} (0,04-0,12), diam 30 s ${f0.toFixed(4)} (< 0,005)`] = fmx > 0.04 && fmx <= 0.12 + 1e-9 && f0 < 0.005;
+    // tetes air: mendarat di air, kering, tersapu, terlihat
+    V.wet = 0; P.depth = 0.5; M.footstep(1.2, true); const wl = V.wet; for (let f = 0; f < 270; f++) M.updateVisor(1 / 30); const wd = V.wet;
+    M.SWEEP.on = true; M.updateVisor(1 / 30); const ws = V.wet; M.SWEEP.on = false; for (let f = 0; f < 270; f++) M.updateVisor(1 / 30); const ws9 = V.wet; P.depth = 0;
+    V.wet = 1; V.seed = 5; V.ex = 0; const b1 = rnd(); V.wet = 0; const b0 = rnd(); const wa = frac(b1, b0, 0, w, 0, h);
+    out[`tetes air: mendarat ${wl.toFixed(2)} (>= 0,25), 9 s ${wd.toFixed(2)}, tersapu ${ws.toFixed(2)} lalu 9 s ${ws9.toFixed(2)}, render basah ${wa.toFixed(1)}% piksel beda (> 1%)`] = wl >= 0.25 && wd === 0 && ws === 1 && ws9 === 0 && wa > 1;
+    // kilau Gargantua di tepi atas
+    const G = M.GDIR; P.yaw = Math.atan2(-G.x, -G.z); P.pitch = Math.asin(G.y);
+    M.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); M.camera.updateMatrixWorld(true); M.updateVisor(0); const g1 = V.glint;
+    P.yaw += PI; M.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); M.camera.updateMatrixWorld(true); M.updateVisor(0); const g0 = V.glint;
+    out[`kilau visor: menghadap Gargantua ${g1.toFixed(2)} (> 0,2), membelakangi ${g0.toFixed(2)} (= 0)`] = g1 > 0.2 && g0 === 0;
+    const A = M.AUDIO; out[`napas dan dengung suit: AudioContext ${!!A.ctx}, simpul napas ${!!A.brG}, suit ${!!A.suitG}`] = !A.ctx || (!!A.brG && !!A.suitG);
+    // panel: Visor sebelum Tubuh, Tubuh terakhir, gerak kepala indeks 4, siklus tersimpan
+    const n = M.LAB.length, lv = V.level; M.cycleVisor(); const lv1 = V.level, sv = localStorage.getItem('millar.visor'); M.cycleVisor(); M.cycleVisor();
+    out[`panel Visor: baris ke-${n - 1} (sebelum Tubuh ke-${n}), siklus ${lv} -> ${lv1}, tersimpan ${sv}`] = M.LAB[n - 2][1]().includes('Visor') && M.LAB[n - 1][1]().includes('Tubuh') && M.LAB[4][1]().includes('Gerak kepala') && lv1 === (lv + 1) % 3 && sv === String(lv1) && V.level === lv;
+    V.level = 1; V.wet = 0; V.ex = 0; localStorage.removeItem('millar.visor'); P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -PI / 2 + 0.3; M.updateVisor(0);
+  }
+
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua
   //    (dulu: dengan MSAA, kedalaman air diekstrapolasi negatif di segitiga kecil cakrawala -> nilai meledak)
   const r = M.renderer, from = M.THREE.DataUtils.fromHalfFloat;

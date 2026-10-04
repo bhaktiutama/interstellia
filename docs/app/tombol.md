@@ -60,6 +60,7 @@ Sinematik (Millar M4): Spasi, Enter, Esc, atau klik = lewati. Pandangan orbit ti
 | Experience | Sebelum | Sesudah |
 | --- | --- | --- |
 | Millar | tidak ada | Tubuh astronaut (Mati / Bayangan / Tampil) hanya di panel kontrol `, tanpa tombol (M6a) |
+| Millar | tidak ada | Visor helm (Mati / Tipis / Penuh) hanya di panel kontrol `, tanpa tombol (M6d) |
 
 ## Aturan untuk experience baru
 

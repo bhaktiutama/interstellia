@@ -188,7 +188,8 @@ const CONFIG = {
   body: { smooth: 0.12, stand: 0.08, legDown: 0.6, kneeDown: 0.15, reachWalk: 0.25, reachRun: 0.45, yawLag: 0.25, yawMax: 0.44, kneeWalk: 0.8, kneeRun: 1.3, legAir: 0.5,
     armFwd: 0.15, armDown: 0.15, armWalk: 0.4, armRun: 0.8, abduct: 0.12, abductRun: 0.25, abductAir: 0.6, elbow: 0.7, elbowRun: 1.5, elbowDown: 0.3,
     leanRun: 0.25, leanDown: 0.10,   // M6a-2: pose tubuh (rad, m, s)
-    selfR: 0.7, wetWalk: 0.12, wetRun: 0.30, dryRate: 0.01, foam: 1 },   // M6c: kapsul abaikan bayangan diri (m), cipratan basah jalan / lari (m), kering (m/s), busa garis air
+    selfR: 0.7, wetWalk: 0.12, wetRun: 0.30, dryRate: 0.01, foam: 1 },
+  visor: { fogMax: 0.12, exTau: 6, breathRest: 0.25, breathRun: 0.6, dryT: 8, dropRun: 0.06, dropLand: 0.3, glint: 0.35 },   // M6d: embun (alfa), lelah (s), napas (Hz), kering (s), tetes per langkah lari / mendarat, kilau   // M6c: kapsul abaikan bayangan diri (m), cipratan basah jalan / lari (m), kering (m/s), busa garis air
   walk: { stride: 0.72, strideRun: 1.25, drag: 0.35, legs: 0.13, fovRun: 6 },        // R3: panjang langkah (m), waktu tanggap di air (s), jarak kaki dari tengah (m)
   current: { max: 1.6, at: 2500, w: 3500, push: 0.35 },                  // R4: arus air surut ke arah gelombang (m/s, puncak di depan muka, lebar, tarikan ke pemain)
   sweep: { burst: 0.5, under: 3.4, out: 4.3 },                            // R4: urutan tersapu (s): buih putih, di bawah air, memutih   // R2: kecuraman horizontal (choppy), ambang Jacobian buih, waktu pudar buih (s)
@@ -301,7 +302,7 @@ const I18N = { en: {
   'Suasana: otomatis, mendung, senja': 'Mood: auto, overcast, dusk', 'Kualitas grafik: Ultra, Tinggi, Sedang, Rendah, Hemat': 'Graphics quality: Ultra, High, Medium, Low, Saver',
   'Efek layar: tinggi, sedang, mati (bloom, butiran, vinyet)': 'Screen effects: high, medium, off (bloom, grain, vignette)', 'Suara nyala / mati': 'Sound on / off',
   'Mode foto: UI disembunyikan, Enter simpan PNG, F atau Esc keluar': 'Photo mode: UI hidden, Enter saves PNG, F or Esc exits',
-  'Kembali ke titik awal · sembunyikan HUD': 'Back to start point · hide HUD', 'Panel kontrol (gerak kepala, tubuh)': 'Control panel (head bob, body)',
+  'Kembali ke titik awal · sembunyikan HUD': 'Back to start point · hide HUD', 'Panel kontrol (gerak kepala, tubuh, visor)': 'Control panel (head bob, body, visor)',
   'Tampilkan / tutup bantuan ini': 'Show / close this help', '? (atau F1)': '? (or F1)', '` (backtick)': '` (backtick)', 'Mouse': 'Mouse',
   'Suasana': 'Mood', 'Otomatis': 'Auto', 'Mendung': 'Overcast', 'Senja': 'Dusk',
   'Ultra': 'Ultra', 'Tinggi': 'High', 'Sedang': 'Medium', 'Rendah': 'Low', 'Hemat': 'Saver', ' (otomatis)': ' (auto)',
@@ -309,7 +310,7 @@ const I18N = { en: {
   'Gelombang': 'Wave', 'Tiba dalam': 'Arrives in', 'sudah lewat': 'passed', 'di luar': 'outside', 'Goyangan planet': 'Planet wobble',
   'Tampilan': 'View', 'Kecepatan waktu': 'Time speed', 'Jalan kaki': 'On foot', 'Drone 60 m': 'Drone 60 m', 'Tinggi 1,5 km': 'High 1.5 km',
   'Grafik': 'Graphics', 'GPU (langit / laut / scene / post)': 'GPU (sky / sea / scene / post)', 'Ombak angin': 'Wind waves', 'Arus': 'Current', 'ke arah gelombang': 'toward the wave',
-  'Gerak kepala: {m}': 'Head bob: {m}', 'Tubuh: {m}': 'Body: {m}', 'Bayangan': 'Shadow only', 'Tampil': 'Visible', 'Mati': 'Off', 'Suara: {m}': 'Sound: {m}', 'Nyala': 'On', 'Suara': 'Sound', 'Volume': 'Volume', 'Angin dan laut': 'Wind and sea', 'Halus': 'Subtle', 'Normal': 'Normal',
+  'Gerak kepala: {m}': 'Head bob: {m}', 'Tubuh: {m}': 'Body: {m}', 'Visor: {m}': 'Visor: {m}', 'Tipis': 'Thin', 'Penuh': 'Full', 'Bayangan': 'Shadow only', 'Tampil': 'Visible', 'Mati': 'Off', 'Suara: {m}': 'Sound: {m}', 'Nyala': 'On', 'Suara': 'Sound', 'Volume': 'Volume', 'Angin dan laut': 'Wind and sea', 'Halus': 'Subtle', 'Normal': 'Normal',
   'tahun': 'y', 'hari': 'd', 'jam': 'h', 'mnt': 'min', 'dtk': 's',
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
   'Gelombang dipanggil: {d} km': 'Wave summoned: {d} km',
@@ -1461,11 +1462,27 @@ const M_UP = pmat(`uniform sampler2D tSrc, tCur; uniform vec2 uPx; varying vec2 
     for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) s += texture2D(tSrc, vUv + vec2(x, y) * uPx).rgb * (x == 0 ? 2.0 : 1.0) * (y == 0 ? 2.0 : 1.0);
     gl_FragColor = vec4(texture2D(tCur, vUv).rgb + s / 16.0, 1.0); }`, { tSrc: { value: null }, tCur: { value: null }, uPx: { value: new THREE.Vector2() } });
 const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform float uExp, uBloomK, uUnder, uTime; varying vec2 vUv;
+  uniform float uVis, uAsp, uFog, uWet, uSeed; uniform vec2 uGlint;   // M6d visor: tingkat (0 mati), aspek, embun, basah, pola tetes, kilau (kuat, x layar)
   vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
   float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
   void main() {
-    vec3 c = texture2D(tHdr, vUv).rgb; if (any(isnan(c))) c = vec3(0.0);
+    vec2 uv = vUv; float dSh = 1.0, dSp = 0.0;
+    if (uVis > 0.0 && uWet > 0.01) {                                  // M6d: tetes air di visor: lensa kecil membalik gambar, jarang di tengah
+      vec2 g = vec2(vUv.x * uAsp, vUv.y) * 9.0 + vec2(uSeed * 0.731, uSeed * 0.377), cl = floor(g);
+      float h = h12(cl), dens = 0.35 + 0.65 * smoothstep(0.15, 0.5, length(vUv - 0.5));
+      if (h < uWet * 0.55 * dens) {
+        vec2 ctr = 0.5 + (vec2(h12(cl + 7.1), h12(cl + 3.9)) - 0.5) * 0.5, d = fract(g) - ctr;
+        float rad = (0.10 + 0.14 * h12(cl + 11.3)) * (0.6 + 0.4 * uWet), dl = length(d);
+        if (dl < rad) {
+          uv -= d / 9.0 * vec2(1.0 / uAsp, 1.0) * 1.6;
+          dSh = 1.0 - 0.35 * smoothstep(rad * 0.65, rad, dl);
+          vec2 sp = d - vec2(-0.3, 0.3) * rad; dSp = smoothstep(rad * 0.3, 0.0, length(sp)) * 0.8;
+        }
+      }
+    }
+    vec3 c = texture2D(tHdr, uv).rgb; if (any(isnan(c))) c = vec3(0.0);
     c = clamp(c, 0.0, 64.0) + texture2D(tBloom, vUv).rgb * uBloomK;   // jepit juga Inf
+    c = c * dSh + dSp;
     if (uUnder > 0.0) {                                               // R4: di dalam gelombang: hijau-abu gelap, terang ke atas, gelembung naik
       float l = dot(c, vec3(0.3, 0.5, 0.2));
       vec3 uw = vec3(0.025, 0.07, 0.075) * (0.5 + 0.8 * l) + vec3(0.06, 0.13, 0.13) * smoothstep(0.2, 1.0, vUv.y);
@@ -1485,8 +1502,22 @@ const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform float uExp, uBloomK
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = mix(vec3(l), c, 0.82) * vec3(0.97, 1.0, 1.03);              // grading: agak pudar, dingin
     c = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));                      // ke ruang tampilan (sRGB didekati gamma 2,2)
+    if (uVis > 0.0) {                                                 // M6d: embun napas, bingkai helm, kilau Gargantua di tepi atas
+      float lv = dot(c, vec3(0.299, 0.587, 0.114));
+      vec2 fq = (vUv - vec2(0.5, -0.15)) * vec2(uAsp * 0.6, 1.0);
+      float fm = smoothstep(0.55, 0.0, length(fq)) * (0.8 + 0.2 * sin(vUv.x * 23.0 + uTime * 0.3) * sin(vUv.y * 17.0 - uTime * 0.2));
+      c = mix(c, vec3(0.80, 0.82, 0.84) * (0.6 + 0.4 * lv), uFog * fm);
+      float full = step(0.75, uVis); vec2 p = (vUv - 0.5) * 2.0; p.x *= uAsp / 1.7778; p.y *= 1.0 + 0.1 * full;   // Tipis: hanya sudut gelap
+      float e = pow(pow(abs(p.x), 4.0) + pow(abs(p.y), 4.0), 0.25), e0 = mix(1.02, 0.93, full), de = e - e0;
+      c = mix(c, vec3(0.025, 0.027, 0.03), smoothstep(0.0, 0.08, de) * mix(0.85, 0.97, full));
+      c += vec3(0.08) * full * exp(-de * de / 0.00015);               // garis tepi dalam helm (Penuh)
+      float gx = (vUv.x - 0.5) * 2.0 - uGlint.y, ge = de + 0.03;
+      c += vec3(1.0, 0.9, 0.75) * uGlint.x * exp(-gx * gx / 0.08) * exp(-ge * ge / 0.0009) * step(0.0, p.y);
+      c = clamp(c, 0.0, 1.0);
+    }
     gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));        // alpha = luma untuk FXAA
-  }`, { tHdr: { value: null }, tBloom: { value: null }, uExp: { value: CONFIG.exposure }, uBloomK: { value: 0.08 }, uUnder: { value: 0 }, uTime: { value: 0 } });
+  }`, { tHdr: { value: null }, tBloom: { value: null }, uExp: { value: CONFIG.exposure }, uBloomK: { value: 0.08 }, uUnder: { value: 0 }, uTime: { value: 0 },
+  uVis: { value: 0 }, uAsp: { value: 1.7778 }, uFog: { value: 0 }, uWet: { value: 0 }, uSeed: { value: 0 }, uGlint: { value: new THREE.Vector2() } });
 const M_FINAL = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; uniform float uTime, uGrain, uVig; varying vec2 vUv;
   float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
   vec3 fxaa() {
@@ -1904,6 +1935,26 @@ function updateShadow() {
   renderer.setRenderTarget(SHD.rt); renderer.clear(); renderer.render(scene, C);
   scene.overrideMaterial = null;
 }
+/* ---------------- Helm dan visor (M6d) ----------------
+   Efek layar di pass komposit M_COMP: tetes air (membiaskan gambar), embun napas di bawah, bingkai helm, kilau Gargantua di tepi atas.
+   Aktif hanya berjalan kaki orang pertama (bukan terbang, sinematik, foto, drone). Napas: lelah (ex) dari lari, fase napas sama untuk embun dan suara. */
+const VISOR_LEVELS = [['Mati', 0], ['Tipis', 0.5], ['Penuh', 1]];
+const VISOR = { level: 1, on: false, ex: 0, br: 0, fog: 0, wet: 0, seed: 0, glint: 0, gx: 0 };
+const _vF = new THREE.Vector3(), _vG = new THREE.Vector3();
+function visorSplash(k) { if (VISOR.wet < 0.02) VISOR.seed = Math.floor(Math.random() * 997); VISOR.wet = Math.min(1, VISOR.wet + k); }
+function updateVisor(dt) {
+  const V = VISOR, Cv = CONFIG.visor, mv = Math.min(1, BOB.amp / 0.034) * (P.ground ? 1 : 0);
+  V.on = V.level > 0 && P.view === 0 && !FLY.on && !CINE.on && !PHOTO.on;
+  V.ex += (Math.max(BOB.run, 0.3 * mv) - V.ex) * (1 - Math.exp(-dt / Cv.exTau)); if (V.ex < 1e-3) V.ex = 0;
+  V.br = (V.br + dt * (Cv.breathRest + (Cv.breathRun - Cv.breathRest) * V.ex)) % 1;
+  V.fog = Cv.fogMax * V.ex * (0.55 + 0.45 * Math.max(0, Math.sin(2 * Math.PI * V.br)));   // hembusan menebalkan embun; diam lama = 0
+  if (SWEEP.on) V.wet = 1; else V.wet = Math.max(0, V.wet - dt / Cv.dryT);
+  camera.getWorldDirection(_vF); _vG.copy(GDIR).project(camera);
+  V.glint = Cv.glint * smoothstep01(0.55, 0.95, _vF.dot(GDIR)) * (0.3 + 0.7 * MOOD.brk); V.gx = Math.max(-0.8, Math.min(0.8, Number.isFinite(_vG.x) ? _vG.x : 0));
+  const u = M_COMP.uniforms;
+  u.uVis.value = V.on ? VISOR_LEVELS[V.level][1] : 0; u.uAsp.value = POST.w / Math.max(1, POST.h);
+  u.uFog.value = V.fog; u.uWet.value = V.wet; u.uSeed.value = V.seed; u.uGlint.value.set(V.glint, V.gx);
+}
 // Kaki pendarat menahan pemain (lingkaran tapak + 0,3 m); bagian rendah (blok belakang, bawahnya di bawah kepala) = kotak
 function shipPush() {
   if (FLY.on) return;
@@ -1984,6 +2035,10 @@ function cycleBody() {
   BODY.level = (BODY.level + 1) % BODY_LEVELS.length; try { localStorage.setItem('millar.body', String(BODY.level)); } catch (e) { /* abaikan */ }
   toast(t('Tubuh: {m}', { m: t(BODY_LEVELS[BODY.level][0]) }), 2); syncLab();
 }
+function cycleVisor() {
+  VISOR.level = (VISOR.level + 1) % VISOR_LEVELS.length; try { localStorage.setItem('millar.visor', String(VISOR.level)); } catch (e) { /* abaikan */ }
+  toast(t('Visor: {m}', { m: t(VISOR_LEVELS[VISOR.level][0]) }), 2); syncLab();
+}
 function cycleSpeed() { P.speed = (P.speed + 1) % CONFIG.speeds.length; syncLab(); }
 function cycleView() { P.view = (P.view + 1) % CONFIG.views.length; if (P.view === 0) P.y = seabed(P.x, P.z) + CONFIG.eye; syncLab(); }
 function summonWave() { if (MIS.on) { toast(t('Tidak tersedia di mode Misi'), 2); return; } U.uWX.value += P.x + W.summon - frontX(P.z); toast(t('Gelombang dipanggil: {d} km', { d: fmtN(W.summon / 1000) }), 2.5); }
@@ -2016,6 +2071,7 @@ const LAB = [
   ['G', () => t('Panggil gelombang'), summonWave],
   ['F', () => t('Mode foto'), () => togglePhoto(true)],
   ['R', () => t('Kembali ke titik awal'), resetPlayer],
+  ['', () => t('Visor: {m}', { m: t(VISOR_LEVELS[VISOR.level][0]) }), cycleVisor],
   ['', () => t('Tubuh: {m}', { m: t(BODY_LEVELS[BODY.level][0]) }), cycleBody],
 ];
 LAB.forEach(([k, , fn]) => {
@@ -2040,7 +2096,7 @@ function buildHelp() {
     ['Z', t('Kecepatan waktu 1x, 5x, 20x, 60x')], ['N', t('Suasana: otomatis, mendung, senja')],
     ['Q', t('Kualitas grafik: Ultra, Tinggi, Sedang, Rendah, Hemat')], ['P', t('Efek layar: tinggi, sedang, mati (bloom, butiran, vinyet)')],
     ['U', t('Suara nyala / mati')], ['F', t('Mode foto: UI disembunyikan, Enter simpan PNG, F atau Esc keluar')],
-    ['R · H', t('Kembali ke titik awal · sembunyikan HUD')], [t('` (backtick)'), t('Panel kontrol (gerak kepala, tubuh)')],
+    ['R · H', t('Kembali ke titik awal · sembunyikan HUD')], [t('` (backtick)'), t('Panel kontrol (gerak kepala, tubuh, visor)')],
     [t('? (atau F1)'), t('Tampilkan / tutup bantuan ini')],
   ];
   document.getElementById('helpRows').innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
@@ -2050,6 +2106,7 @@ document.getElementById('labClose').addEventListener('click', () => toggleLab(fa
 document.getElementById('helpClose').addEventListener('click', () => toggleHelp(false));
 try { const b = +localStorage.getItem('millar.bob'); if (localStorage.getItem('millar.bob') !== null && BOB_LEVELS[b]) BOB.level = b; } catch (e) { /* abaikan */ }
 try { const b = +localStorage.getItem('millar.body'); if (localStorage.getItem('millar.body') !== null && BODY_LEVELS[b]) BODY.level = b; } catch (e) { /* abaikan */ }
+try { const b = +localStorage.getItem('millar.visor'); if (localStorage.getItem('millar.visor') !== null && VISOR_LEVELS[b]) VISOR.level = b; } catch (e) { /* abaikan */ }
 // isi panel dan bantuan dibuat di translateDom() (setelah AUDIO ada)
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT') return;
@@ -2152,6 +2209,9 @@ function footstep(power, both) {
     spawnSplash(x, y, z, Math.round((25 + 45 * power) * dk * SPL.max / 2500), P.vx, P.vz, (0.5 + 0.3 * dk) * power, 1.0, 1.1, 0.16);
     sfxSplash(power * Math.min(1, P.depth / 0.3 + 0.3), sd * 0.35);
   }
+  // M6d: cipratan sampai ke visor: mendarat di air dalam, kadang saat lari
+  if (both && P.depth > 0.3) visorSplash(CONFIG.visor.dropLand);
+  else if (!both && BOB.run > 0.5 && P.depth > 0.2 && Math.random() < 0.5) visorSplash(CONFIG.visor.dropRun * power);
   if (!both) BOB.side = 1 - BOB.side;   // mendarat tidak membalik: paritas BOB.side = paritas fase (kaki yang terayun)
   BOB.steps++;
 }
@@ -2282,6 +2342,11 @@ function startAudio() {
     [, A.roarG, A.roarP] = chain(loop(A.white), filt('bandpass', 1100, 0.45), gain(), c.createStereoPanner());
     const sub = c.createGain(); sub.gain.value = 0.12; sub.connect(A.rumG);
     for (const f of [27, 38.5]) { const o = c.createOscillator(); o.frequency.value = f; o.connect(sub); o.start(); }   // dengung sub di dalam gemuruh (pelan)
+    // M6d: napas dan dengung suit di dalam helm: langsung ke master (tidak diredam lowpass bawah air)
+    dst = A.master;
+    [A.brF, A.brG] = chain(loop(A.pink), filt('bandpass', 900, 0.8), gain());
+    A.suitG = gain(); const suitF = filt('lowpass', 300, 0.7); suitF.connect(A.suitG); A.suitG.connect(A.master);
+    for (const f of [92, 184]) { const o = c.createOscillator(); o.type = 'triangle'; o.frequency.value = f; o.connect(suitF); o.start(); }
   } catch (e) { AUDIO.ok = false; AUDIO.ctx = null; }
 }
 function setSound(on) {
@@ -2344,6 +2409,11 @@ function updateAudio(dt, dist) {
   A.tBurst -= dt;
   if (A.tBurst <= 0 && !SWEEP.on) { A.tBurst = (0.4 + Math.random()) / M.lap; burst(2200 + 3000 * Math.random(), 2.5, (0.015 + 0.03 * Math.random()) * U.uChopK.value, 0.05 + 0.08 * Math.random(), Math.random() * 1.6 - 0.8); }
   if (SWEEP.under > 0.5 && Math.random() < dt * 9) sfxBubble();
+  // M6d: napas (fase sama dengan embun visor): hembusan lebih keras dan rendah, tarikan lebih pelan dan tinggi; dengung suit tetap
+  if (A.brG) {
+    const V = VISOR, sn = Math.sin(2 * Math.PI * V.br), k = V.on ? (0.35 + 0.65 * V.ex) : 0;
+    set(A.brG.gain, (sn > 0 ? 0.05 * sn : 0.025 * -sn) * k, 0.05); set(A.brF.frequency, sn > 0 ? 700 : 1400, 0.1); set(A.suitG.gain, V.on ? 0.012 : 0, 0.3);
+  }
   return M;
 }
 
@@ -3242,7 +3312,7 @@ function frame(now) {
   if (FLY.on) flyCamera();
   if (CINE.on) cineStep(dt);                           // M4: kamera sinematik menimpa kamera biasa
   M_COMP.uniforms.uUnder.value = SWEEP.under; M_COMP.uniforms.uTime.value = STATE.visT;
-  camera.updateMatrixWorld();
+  camera.updateMatrixWorld(); updateVisor(dt);
   U.uT.value = STATE.visT; U.uCam.value.copy(camera.position);
   // M5a-1: pusat laut = kamera (uji buang dan pudar di shader memakai jarak ke kamera); riak tetap di pemain
   SEA.cx = camera.position.x; SEA.cz = camera.position.z;
@@ -3274,7 +3344,7 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, CROWN, spawnCrown, stepCrown, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
   SWEEP, currentAt, SPRAY, US, ZS, ARC, M_COMP, waveG, waveHz, COMMON,
   AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
-  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob, BODY, BODY_LEVELS, bodyMat, cycleBody, updateBody, updateMood, setMood, makeRipple, bodyPose, bodyLegs, bodyFootAt, bodyLegAt,
+  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob, BODY, BODY_LEVELS, bodyMat, cycleBody, updateBody, updateMood, setMood, makeRipple, VISOR, VISOR_LEVELS, updateVisor, visorSplash, cycleVisor, postRender, GDIR, bodyPose, bodyLegs, bodyFootAt, bodyLegAt,
   FLY, boardShip, flyLand, updateFly, flyReset, placeShip,
   MIS, missionSites, startMission, stopMission, restartMission, finishMission, updateMission, missionAction, toggleRadar, radarFix, setMode, setLevel, fmtMS,
   SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip, CK, COCKPIT, cockpitUpdate,

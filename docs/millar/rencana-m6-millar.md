@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: M6a, M6a-2, M6b, dan M6c selesai, M6d-M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a sampai M6d selesai, M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -157,7 +157,7 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | M6a-2 | Selesai 4 Oktober 2026 (revisi setelah uji pemilik, lihat bagian di bawah) |
 | M6b | Selesai 4 Oktober 2026 (lihat bagian di bawah) |
 | M6c | Selesai 4 Oktober 2026, menunggu uji pemilik di GPU (lihat bagian di bawah) |
-| M6d | Belum |
+| M6d | Selesai 4 Oktober 2026 (lihat bagian di bawah) |
 | M6e | Belum |
 
 ## Catatan M6a (selesai 4 Oktober 2026)
@@ -252,3 +252,30 @@ Uji M5c (percikan menyatu) sempat gagal sekali dengan tonjolan -200 mm (batas je
 Batasan: bagian wahana yang lebih dekat dari 0,7 m ke sumbu tubuh (mis. batang kaki pendarat) tidak membayangi tubuh; bayangan lengan di badan tidak ada.
 
 Wajib dicek pemilik di GTX 1060 dan M1 (SwiftShader tidak memperlihatkan): tubuh tidak berkedip atau bergaris saat berjalan di bawah dan di samping KS-07; tidak ada titik putih; cincin busa menempel di kaki saat ombak (Ultra FFT dan Hemat Gerstner); garis basah turun pelan setelah lompat atau lari.
+
+## M6d (selesai 4 Oktober 2026): helm dan visor
+
+Semua efek visor ada di pass komposit `M_COMP` yang sudah ada (tanpa render target baru). Visor aktif hanya saat berjalan kaki orang pertama; mati saat terbang, sinematik, mode foto, dan tampilan drone (uniform `uVis` = 0, blok dilewati).
+
+| Bagian | Isi |
+| --- | --- |
+| Bingkai | Superelips gelap di tepi. Tipis (bawaan) = hanya sudut; Penuh = bingkai helm jelas dengan garis tepi dalam terang tipis. Tengah layar tidak tersentuh |
+| Kilau | Busur hangat tipis di tepi atas saat menghadap Gargantua (kuat 0,35 x cerah), di posisi x Gargantua di layar |
+| Embun napas | Gumpalan di bawah tengah, alfa paling tinggi 0,12 (`CONFIG.visor.fogMax`), menebal saat hembusan; lelah `VISOR.ex` naik saat lari (6 s), hilang saat diam lama |
+| Tetes air | Lensa kecil yang membalik gambar (sampel `tHdr` dibiaskan), tepi gelap dan titik kilap, jarang di tengah; dari `footstep()` (mendarat di air > 0,3 m: +0,3; lari di air > 0,2 m: kadang +0,06 x tenaga) dan tersapu (= 1); kering linear dalam 8 s, pola baru tiap basah dari kering |
+| Suara | Napas pink noise bandpass (hembus 700 Hz lebih keras, tarik 1.400 Hz lebih pelan, fase sama dengan embun) dan dengung suit 92 + 184 Hz, langsung ke master (di dalam helm, tidak diredam bawah air), ikut U dan Visor Mati |
+| Panel | Baris Visor (Mati / Tipis / Penuh) sebelum baris Tubuh, `millar.visor`; tanpa tombol baru |
+
+| Uji (blok 5q) | Hasil |
+| --- | --- |
+| Tengah layar Penuh vs Mati | 0,00% piksel beda; sudut 100% |
+| Mati saat terbang / sinematik / foto / drone | `uVis` 0 / 0 / 0 / 0 |
+| Embun | lari 20 s maksimum 0,115; diam 30 s 0,0007 |
+| Tetes | mendarat 0,30; kering dalam 9 s; tersapu 1,00; render basah 2,2% piksel beda |
+| Kilau | menghadap Gargantua 0,35, membelakangi 0 |
+| Napas dan suit | simpul audio ada |
+| Uji Millar | 112 pemeriksaan lulus |
+
+Satu tangkapan layar (Penuh, lari, basah): bingkai helm dan tetes yang membiaskan laut terlihat; embun belum tampak karena baru 4 s berlari.
+
+Batasan: keluaran `M_COMP` 8 bit, jadi NaN di blok visor tidak terdeteksi uji; dijaga aturan GLSL (tanpa `normalize`, `pow` hanya dari nilai >= 0). Wajib dicek pemilik: tepi bingkai tanpa garis atau titik putih di GTX 1060 dan M1, tetes tidak menurunkan FPS, keras napas pas.
