@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: M6a sampai M6d selesai, M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a sampai M6d dan revisi M6d-2 selesai, M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -109,6 +109,7 @@ Warna vertex: putih kusam `[0.30,0.30,0.29]` (palet wahana), aksen jingga `[0.45
 
 | Item | Cara | Biaya |
 | --- | --- | --- |
+| Sambungan anggota badan (masukan pemilik setelah M6d) | kaki dan lengan tidak terlihat terputus: bahu, siku, pinggul, lutut, pergelangan disambung (bola sendi atau selongsong yang saling masuk, atau satu mesh berkulit sederhana) | +100 sampai +300 segitiga |
 | Detail pakaian | sambungan, selang, panel dada, ransel berbentuk lebih rinci, semua vertex color | +1.500 segitiga |
 | Kotor dan basah | warna vertex diperkotor oleh tinggi (paha lebih gelap), jelaga ringan seperti wahana | 0 (hitung saat bangun) |
 | LOD per preset | `PRESETS.bodyDetail` 0 / 1 / 2 (Hemat 0: 450, Rendah 1: 1.200, Sedang ke atas 2: 3.000) | satu draw call |
@@ -158,6 +159,7 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | M6b | Selesai 4 Oktober 2026 (lihat bagian di bawah) |
 | M6c | Selesai 4 Oktober 2026, menunggu uji pemilik di GPU (lihat bagian di bawah) |
 | M6d | Selesai 4 Oktober 2026 (lihat bagian di bawah) |
+| M6d-2 | Selesai 4 Oktober 2026 (revisi sudut pandang setelah uji pemilik, lihat bagian di bawah) |
 | M6e | Belum |
 
 ## Catatan M6a (selesai 4 Oktober 2026)
@@ -279,3 +281,31 @@ Semua efek visor ada di pass komposit `M_COMP` yang sudah ada (tanpa render targ
 Satu tangkapan layar (Penuh, lari, basah): bingkai helm dan tetes yang membiaskan laut terlihat; embun belum tampak karena baru 4 s berlari.
 
 Batasan: keluaran `M_COMP` 8 bit, jadi NaN di blok visor tidak terdeteksi uji; dijaga aturan GLSL (tanpa `normalize`, `pow` hanya dari nilai >= 0). Wajib dicek pemilik: tepi bingkai tanpa garis atau titik putih di GTX 1060 dan M1, tetes tidak menurunkan FPS, keras napas pas.
+
+## M6d-2 (selesai 4 Oktober 2026): sudut pandang tubuh (High)
+
+Masukan pemilik: saat menunduk, pangkal lengan dan bahu terlihat (sudut terlalu masuk ke badan); saat berjalan sambil menunduk, badan naik turun seolah lepas dari kepala; kaki dan lengan terlihat terputus (dialihkan ke M6e, butir pertama).
+
+| Masalah | Penyebab | Perbaikan |
+| --- | --- | --- |
+| Bahu terlihat | Mata tepat di sumbu badan, pangkal lengan 10 cm di belakang mata; menunduk sampai 83 derajat tanpa gerak leher | Leher `fpCamera()`: menunduk membawa mata maju `neckF` 0,14 m dan turun `neckD` 0,05 m (smoothstep dari pitch 0,30-1,05 rad); pitch 0 tidak berubah |
+| Badan lepas dari kepala | Kamera turun terdalam di tengah langkah (`BOB.dy`), badan turun terdalam saat kaki terbuka (geometri kaki): fase berlawanan, geser sekitar 6 cm; goyang samping dan getaran hanya di kamera | Satu sumber `bobDrop()` (fase dibalik: terdalam saat kaki menapak, seperti jalan sungguhan); badan atas = kamera tanpa leher (turun-naik, getaran `BOB.shX/shY`, goyang samping, roll) |
+| Kaki harus tetap menapak | Pinggul kini ikut kepala | `bodyLegs()` IK dua ruas: target pergelangan maju (langkah, menunduk, udara) dan angkat (kaki mengayun, mulai halus); lutut tidak pernah lurus penuh (jangkauan 0,88 m); di luar jangkauan langkah dipendekkan, telapak tetap di dasar; jongkok lari `runDrop` 0,04 m |
+| Halus / Mati | Kamera tidak turun-naik, pinggul tetap harus | Pinggul turun-naik penuh, badan atas tetap kaku ke kamera; paha masuk 6 cm ke badan menutup celah |
+
+Uji baru (blok 5r):
+
+| Pemeriksaan | Hasil |
+| --- | --- |
+| Pangkal kedua lengan dan 3 titik tepi tutup badan, pitch -0,9 / -1,2 / -1,45 x diam / jalan / lari | 0 titik terlihat, ndc.y tertinggi -1,72 (batas -1) |
+| Badan atas relatif kamera, jalan / lari x Normal / Halus / Mati | geser terbesar 0,61 mm (batas 3 mm) |
+| Telapak terendah tiap frame | 0,4 mm dari dasar, tidak ada di bawah dasar |
+| Gerak kepala saat langkah terpicu | -33,8 mm (minimum -34,0 mm) |
+| Pitch 0 diam | kamera tepat di posisi pemain |
+| Uji lama | jangkauan jalan 0,36 m / lari 0,51 m, selisih kaki lari 0,76 m, sendi berubah paling banyak 0,188 rad per frame |
+
+| Uji Millar | 117 pemeriksaan lulus |
+
+Tangkapan layar menunduk 75 derajat sambil berjalan: bahu dan tutup badan tidak tampak; terlihat depan perut, paha, lengan bawah, tangan, dan sepatu.
+
+Wajib dicek pemilik di GTX 1060 dan M1: rasa menunduk (mata maju 14 cm), rasa gerak kepala dengan fase baru (hentakan saat kaki menapak), badan tidak bergeser saat jalan dan lari sambil menunduk. Batasan: lengan atas yang terayun maju saat lari bisa tampak tipis di sudut bawah pada pitch maksimum (wajar, tertutup bingkai visor); di tingkat gerak kepala Mati langkah sedikit lebih pendek dari gerak maju (telapak bisa tampak sedikit tergelincir).

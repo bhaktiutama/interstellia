@@ -622,7 +622,7 @@ UJI = r"""
     const reach = (run) => { P.pitch = 0; M.BOB.run = run; M.BOB.amp = run ? 0.055 : 0.034; M.BOB.phase = PI; Q.mv = 1; M.updateBody(10);
       const F = M.bodyFootAt(-1), by = B.yaw; return -(F.x - P.x) * Math.sin(by) - (F.z - P.z) * Math.cos(by); };
     const rw = reach(0), rr = reach(1);
-    out[`jangkauan telapak: jalan ${rw.toFixed(3)} m (0,25 + ujung 0,07), lari ${rr.toFixed(3)} m (0,45 + ujung 0,07)`] = Math.abs(rw - 0.32) < 0.06 && Math.abs(rr - 0.52) < 0.06;
+    out[`jangkauan telapak: jalan ${rw.toFixed(3)} m (pinggul 0,04 + 0,25 + ujung 0,07), lari ${rr.toFixed(3)} m (0,04 + 0,40 + 0,07)`] = Math.abs(rw - 0.36) < 0.04 && Math.abs(rr - 0.51) < 0.04;
     M.BOB.run = 0; M.BOB.amp = 0; M.BOB.phase = 0; Q.mv = 0; M.updateBody(10);
     // titik kaki memotong muka air: di antara telapak dan pinggul, 0,5/0,9 dari telapak
     const F = M.bodyFootAt(1), G = M.bodyLegAt(1, 0.45), H = M.bodyLegAt(1, 0), Hh = M.bodyLegAt(1, 5);
@@ -636,6 +636,46 @@ UJI = r"""
     B.level = 0; P.pitch = -60 * PI / 180; M.updateBody(10); const Fm = M.bodyFootAt(1); B.level = 2; M.updateBody(10); const Fv = M.bodyFootAt(1);
     out[`pose tetap dihitung saat tubuh Mati: selisih telapak ${Math.hypot(Fm.x - Fv.x, Fm.z - Fv.z).toFixed(4)} m`] = Math.hypot(Fm.x - Fv.x, Fm.z - Fv.z) < 1e-6;
     P.depth = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -PI / 2 + 0.3; P.ground = true; M.updateBody(10);
+  }
+
+  // 5r. M6d-2: sudut pandang tubuh: bahu dan tutup badan di luar pandangan saat menunduk, badan atas kaku terhadap kepala, telapak menapak (IK)
+  {
+    const P = M.P, B = M.BODY, PI = Math.PI, V3 = M.THREE.Vector3, cam = M.camera, lv0 = M.BOB.level;
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false;
+    P.view = 0; P.x = 3; P.z = 3; P.y = M.seabed(3, 3) + M.CONFIG.eye; P.ground = true; P.yaw = 0.7; P.depth = 0.5; B.level = 2;
+    Object.assign(M.BOB, { shX: 0, shY: 0, y: 0, vy: 0, run: 0, amp: 0 });
+    const pts = () => [...B.arms.map((o) => o.getWorldPosition(new V3())), ...[[0.21, 0.47, 0.12], [-0.21, 0.47, 0.12], [0, 0.47, 0.24]].map((q) => B.torso.localToWorld(new V3(...q)))];
+    // speed 0 = diam; n frame, 60 pertama untuk menetap
+    const walk = (speed, run, pitch, lv, n = 150) => {
+      M.BOB.level = lv; P.pitch = pitch; const r = { rel: [[1e9, -1e9], [1e9, -1e9], [1e9, -1e9]], solMin: 1e9, lowMax: -1e9, seen: 0, ndcY: -9, dyStep: [], dyMin: 0, bad: 0 };
+      for (let f = 0; f < n; f++) {
+        const n0 = M.BOB.steps; M.headBob(1 / 60, speed, run, 0.5); M.fpCamera(); cam.updateMatrixWorld(true); M.updateBody(1 / 60); B.group.updateMatrixWorld(true);
+        if (f < 60) continue;
+        const t = B.torso.getWorldPosition(new V3()).sub(cam.position), c = Math.cos(P.yaw), s = Math.sin(P.yaw), loc = [t.x * c - t.z * s, t.y, t.x * s + t.z * c];
+        loc.forEach((v, k) => { r.rel[k][0] = Math.min(r.rel[k][0], v); r.rel[k][1] = Math.max(r.rel[k][1], v); });
+        const so = B.ankles.map((o) => o.getWorldPosition(new V3()).y - 0.05 - B.group.position.y);
+        r.solMin = Math.min(r.solMin, ...so); r.lowMax = Math.max(r.lowMax, Math.min(...so));
+        for (const q of pts()) { q.project(cam); if (q.z > -1 && q.z < 1 && Math.abs(q.x) <= 1) { r.ndcY = Math.max(r.ndcY, q.y); if (q.y >= -1) r.seen++; } }
+        if (M.BOB.steps !== n0) r.dyStep.push(M.BOB.dy); r.dyMin = Math.min(r.dyMin, M.BOB.dy);
+        for (const j of [...B.legs, ...B.knees, ...B.ankles, B.torso]) for (const v of [j.rotation.x, j.position.y]) if (!Number.isFinite(v)) r.bad++;
+      }
+      return r;
+    };
+    let seen = 0, ndcY = -9, bad = 0;
+    for (const pitch of [-0.9, -1.2, -1.45]) for (const [sp, rn] of [[0, false], [1.4, false], [3.0, true]]) { const r = walk(sp, rn, pitch, 2, 100); seen += r.seen; ndcY = Math.max(ndcY, r.ndcY); bad += r.bad; }
+    out[`bahu tersembunyi saat menunduk (pitch -0,9/-1,2/-1,45 x diam/jalan/lari): titik terlihat ${seen}, ndc.y tertinggi ${ndcY.toFixed(2)} (< -1)`] = seen === 0;
+    const span = (r) => Math.max(...r.rel.map(([a, b]) => b - a)) * 1000;
+    const rows = [], sol = [];
+    for (const lv of [2, 1, 0]) for (const [sp, rn] of [[1.4, false], [3.0, true]]) { const r = walk(sp, rn, -1.0, lv); rows.push(span(r)); sol.push([r.solMin, r.lowMax]); bad += r.bad;
+      if (lv === 2 && !rn) { const rw = r; out[`gerak kepala terdalam saat kaki menapak: BOB.dy saat langkah ${rw.dyStep.length ? (Math.max(...rw.dyStep) * 1000).toFixed(1) : '-'} mm, minimum ${(rw.dyMin * 1000).toFixed(1)} mm`] = rw.dyStep.length >= 2 && Math.max(...rw.dyStep) <= 0.9 * rw.dyMin; } }
+    out[`badan atas kaku terhadap kepala (jalan/lari x Normal/Halus/Mati): pergeseran terbesar ${Math.max(...rows).toFixed(2)} mm (< 3)`] = Math.max(...rows) < 3;
+    const sMin = Math.min(...sol.map((x) => x[0])), lMax = Math.max(...sol.map((x) => x[1]));
+    out[`telapak menapak (IK): telapak terendah tiap frame ${(lMax * 1000).toFixed(1)} mm dari dasar (< 15), tidak ada di bawah ${(sMin * 1000).toFixed(1)} mm (> -15), nilai tidak valid ${bad}`] = lMax < 0.015 && sMin > -0.015 && bad === 0;
+    // pitch 0, diam: kamera tepat di posisi pemain (leher 0)
+    Object.assign(M.BOB, { level: lv0, run: 0, amp: 0, phase: 0, y: 0, vy: 0, dy: 0, dx: 0, roll: 0, shX: 0, shY: 0 }); P.pitch = 0; M.fpCamera();
+    const d0 = Math.hypot(cam.position.x - P.x, cam.position.y - P.y, cam.position.z - P.z);
+    out[`pitch 0 diam: kamera = posisi pemain, selisih ${d0.toExponential(1)} m`] = d0 < 1e-9;
+    P.depth = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.yaw = -PI / 2 + 0.3; P.ground = true; M.updateBody(10);
   }
 
   // 5p. M6c: tubuh tidak membayangi dirinya, bayangan KS-07 tetap jatuh di tubuh, garis basah yang ingat, busa garis air di kaki

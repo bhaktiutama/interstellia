@@ -185,7 +185,8 @@ const CONFIG = {
   },
   fft: { lam: 0.9, foamJ: 0.7, foamTau: 2.5 },
   seaState: { far: 0.6, near: 1.5, dFar: 120000, dNear: 4000, tau: 4 },   // pengali tinggi ombak angin: kecil saat gelombang raksasa jauh, besar saat dekat
-  body: { smooth: 0.12, stand: 0.08, legDown: 0.6, kneeDown: 0.15, reachWalk: 0.25, reachRun: 0.45, yawLag: 0.25, yawMax: 0.44, kneeWalk: 0.8, kneeRun: 1.3, legAir: 0.5,
+  body: { smooth: 0.12, yawLag: 0.25, yawMax: 0.44,
+    standF: 0.02, footDown: 0.12, reachWalk: 0.23, reachRun: 0.38, liftWalk: 0.10, liftRun: 0.22, airLift: 0.25, airF: 0.10, runDrop: 0.04, neckF: 0.14, neckD: 0.05,   // M6d-2: target pergelangan IK (m), jongkok lari, leher (m)
     armFwd: 0.15, armDown: 0.15, armWalk: 0.4, armRun: 0.8, abduct: 0.12, abductRun: 0.25, abductAir: 0.6, elbow: 0.7, elbowRun: 1.5, elbowDown: 0.3,
     leanRun: 0.25, leanDown: 0.10,   // M6a-2: pose tubuh (rad, m, s)
     selfR: 0.7, wetWalk: 0.12, wetRun: 0.30, dryRate: 0.01, foam: 1 },
@@ -1840,7 +1841,8 @@ const BODY = { level: 2, cast: true, wetH: 0, foamK: 0, yaw: null, group: new TH
   BODY.head = mk([{ geo: new THREE.SphereGeometry(0.15, 10, 8).translate(0, 1.66 - H, 0.07), color: WH }], T);
   for (const sd of [-1, 1]) {
     const hip = pv(sd * (CONFIG.walk.legs + 0.03), H, -0.04, G), knee = pv(0, -0.45, 0, hip);
-    mk([cy(0.09, 0.07, 0.45, 0, -0.225, 0, WH, false)], hip); mk([cy(0.07, 0.06, 0.47, 0, -0.235, 0, GY, false)], knee);
+    mk([cy(0.09, 0.07, 0.51, 0, -0.195, 0, WH, false)], hip);   // M6d-2: paha masuk 6 cm ke badan
+    mk([cy(0.07, 0.06, 0.47, 0, -0.235, 0, GY, false)], knee);
     const ank = pv(0, -0.45, 0, knee);   // pergelangan: telapak tetap mendatar saat kaki terayun
     BODY.feet.push(mk([bx(0.13, 0.10, 0.20, 0, 0, -0.02, WH), bx(0.13, 0.08, 0.11, 0, -0.01, -0.17, OR)], ank));
     BODY.legs.push(hip); BODY.knees.push(knee); BODY.ankles.push(ank);
@@ -1857,18 +1859,22 @@ const BODY = { level: 2, cast: true, wetH: 0, foamK: 0, yaw: null, group: new TH
 const smoothstep01 = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
 // Sudut kaki dari keadaan sekarang (fungsi murni dari BODY.pose, BOB, CONFIG.body): dipakai pose dan posisi telapak (satu sumber).
 // Kaki dengan sd yang sama dengan footstep() maju maksimum tepat saat BOB.phase melewati kelipatan pi (cos = +-1): sd * cos(fase).
+// M6d-2: IK dua ruas (paha 0,45 + betis 0,45). Pinggul ikut turun-naik kepala (bobDrop, tanpa skala tingkat), target pergelangan: maju
+// (langkah, menunduk, udara) dan angkat (kaki yang sedang mengayun maju, mulai halus). Di luar jangkauan: langkah dipendekkan, telapak tetap di dasar.
 function bodyLegs() {
-  const Cb = CONFIG.body, Q = BODY.pose, r = Q.run, mv = Q.mv, dn = Q.dn, air = Q.air, th = [], kn = [], sw = [];
-  const reach = Cb.reachWalk + (Cb.reachRun - Cb.reachWalk) * r, amp = Math.asin(Math.min(0.95, reach / 0.9)) - Cb.stand;
+  const Cb = CONFIG.body, Q = BODY.pose, r = Q.run, mv = Q.mv, dn = Q.dn, air = Q.air, th = [], kn = [], sw = [], Dm = 0.88;   // lutut tidak pernah lurus penuh: IK dekat lurus terlalu peka (lutut melompat)
+  const reach = Cb.reachWalk + (Cb.reachRun - Cb.reachWalk) * r, lift = (Cb.liftWalk + (Cb.liftRun - Cb.liftWalk) * r) * mv;
+  const fp = P.view === 0 && !FLY.on && !SWEEP.on, hip = 0.92 - Cb.runDrop * BOB.run + bobDrop() + (fp ? BOB.shY : 0);   // pinggul 3 cm di bawah pangkal badan
   for (let i = 0; i < 2; i++) {
     const sd = i === 0 ? -1 : 1; sw[i] = sd * Math.cos(BOB.phase) * mv;
-    const flex = Math.max(0, -sw[i]) * (Cb.kneeWalk + (Cb.kneeRun - Cb.kneeWalk) * r);
-    th[i] = Cb.stand + Cb.legDown * dn + sw[i] * amp + air * Cb.legAir;
-    kn[i] = -(Cb.kneeDown * dn + flex + air * Cb.legAir * 1.4 + Cb.stand * 0.3);
+    let fz = Cb.standF + Cb.footDown * dn * (1 - r) + reach * sw[i] + Cb.airF * air;                                                  // maju dari pinggul ke pergelangan (m)
+    const fy = Math.max(0.2, hip - 0.05 - lift * Math.max(0, -sd * Math.sin(BOB.phase)) ** 2 - Cb.airLift * air);                // turun dari pinggul ke pergelangan (m)
+    if (fz * fz + fy * fy > Dm * Dm) fz = Math.sign(fz) * Math.sqrt(Math.max(0, Dm * Dm - Math.min(fy, Dm) ** 2));
+    const D = Math.min(Dm, Math.hypot(fz, fy));
+    kn[i] = -(Math.PI - Math.acos(Math.min(1, Math.max(-1, (0.405 - D * D) / 0.405))));
+    th[i] = Math.atan2(fz, fy) + Math.acos(Math.min(1, D / 0.9));
   }
-  // pinggul turun sebesar kaki yang paling terulur kehilangan tinggi (kaki tertekuk tetap menapak, tidak melayang)
-  const ext = (i) => 0.9 - 0.45 * (Math.cos(th[i]) + Math.cos(th[i] + kn[i]));
-  return { th, kn, sw, drop: Math.max(0, Math.min(ext(0), ext(1))) * (1 - air) };
+  return { th, kn, sw, hip };
 }
 // Posisi dunia telapak (pusat sepatu) kaki sd (-1 kiri, +1 kanan) dan titik kaki memotong muka air; yaw badan (BODY.yaw)
 function bodyFootAt(sd) {
@@ -1888,13 +1894,19 @@ function bodyPose(dtp) {
   const tn = P.view === 0 ? smoothstep01(0.30, 1.05, -P.pitch) : 0, tm = Math.min(1, BOB.amp / 0.034) * (P.ground ? 1 : 0);
   Q.dn += (tn - Q.dn) * k; Q.mv += (tm - Q.mv) * k; Q.run += (BOB.run - Q.run) * k; Q.air += ((P.ground ? 0 : 1) - Q.air) * k;
   const r = Q.run, dn = Q.dn, air = Q.air, lean = Cb.leanRun * r + Cb.leanDown * dn, L = bodyLegs();
-  B.torso.rotation.x = -lean; B.torso.position.z = 0.45 * Math.sin(lean); B.torso.position.y = 0.95 - L.drop;
+  // M6d-2: badan atas = kamera tanpa leher (turun-naik, getaran, goyang samping, roll), jadi tidak bergeser terhadap kepala saat melangkah.
+  // Di tingkat gerak kepala Halus/Mati pinggul tetap turun-naik penuh (kaki menapak); paha masuk 6 cm ke badan menutup celahnya.
+  const fp = P.view === 0 && !FLY.on && !SWEEP.on, m = fp ? BOB_LEVELS[BOB.level][1] : 1;
+  const up = 0.95 - Cb.runDrop * BOB.run + bobDrop() * m + (fp ? BOB.shY : 0);
+  const sx = fp ? BOB.dx + BOB.shX : 0, a = P.yaw - (B.yaw === null ? P.yaw : B.yaw), lx = sx * Math.cos(a), lz = -sx * Math.sin(a);   // arah kamera -> kerangka badan
+  B.torso.rotation.set(-lean, 0, fp ? BOB.roll : 0); B.torso.position.set(lx, up, 0.45 * Math.sin(lean) + lz);
   for (let i = 0; i < 2; i++) {
     const sd = i === 0 ? -1 : 1, asw = -L.sw[i] * (Cb.armWalk + (Cb.armRun - Cb.armWalk) * r);
     B.arms[i].rotation.set(Cb.armFwd + Cb.armDown * dn + asw + air * 0.3, 0, sd * (Cb.abduct + Cb.abductRun * r + Cb.abductAir * air));
     B.elbows[i].rotation.x = Cb.elbow + (Cb.elbowRun - Cb.elbow) * r + Cb.elbowDown * dn;
-    B.legs[i].position.y = 0.95 - L.drop; B.legs[i].rotation.x = L.th[i]; B.knees[i].rotation.x = L.kn[i];
-    B.ankles[i].rotation.x = Math.max(-0.6, Math.min(0.9, -(L.th[i] + L.kn[i]) * 0.85));
+    B.legs[i].position.set(sd * (CONFIG.walk.legs + 0.03) + lx, L.hip, -0.04 + lz); B.legs[i].rotation.set(L.th[i], 0, -lx / 0.9);   // telapak tidak ikut goyang samping
+    B.knees[i].rotation.x = L.kn[i];
+    B.ankles[i].rotation.x = Math.max(-0.6, Math.min(0.9, -(L.th[i] + L.kn[i])));   // telapak mendatar
   }
 }
 function updateBody(dtp) {
@@ -1972,6 +1984,16 @@ function shipPush() {
   }
 }
 const shipDist = () => Math.hypot(P.x - SHIP.x, P.z - SHIP.z);
+// Kamera jalan kaki (M6d-2): gerak kepala + getaran (badan atas ikut persis, lihat bodyPose), jongkok lari, dan leher: menunduk membawa
+// mata maju neckF dan turun neckD (kepala berputar di leher, bukan di mata) sehingga bahu keluar dari pandangan. Pitch 0 = tidak berubah.
+function fpCamera() {
+  const onFoot = P.view === 0 && !FLY.on, fp = onFoot && !SWEEP.on, Cb = CONFIG.body, cy = Math.cos(P.yaw), sy = Math.sin(P.yaw);
+  const k = fp ? smoothstep01(0.30, 1.05, -P.pitch) : 0, nf = Cb.neckF * k, dx = onFoot ? BOB.dx + BOB.shX : 0;
+  const dy = (onFoot ? BOB.dy + BOB.shY : 0) - (fp ? Cb.runDrop * BOB.run + Cb.neckD * k : 0) + (SWEEP.on ? SWEEP.t * 6 : 0);
+  camera.position.set(P.x + cy * dx - sy * nf, P.y + dy, P.z - sy * dx - cy * nf);
+  if (SWEEP.on) camera.rotation.set(P.pitch + SWEEP.rx, P.yaw + SWEEP.ry, SWEEP.rz);
+  else camera.rotation.set(P.pitch, P.yaw, onFoot ? BOB.roll : 0);
+}
 function updateShip(dt, t) {
   SHIP.navT += dt; SHIP.nav.strobe.visible = (SHIP.navT % 1.3) < 0.07;       // strobo putih berkedip
   shipU.uWater.value = drawdown(SHIP.mesh.position.x - frontX(SHIP.mesh.position.z)) + CONFIG.chop.Hs * U.uChopK.value * 0.25;
@@ -1988,7 +2010,10 @@ const STATE = { started: false, simT: 0, visT: 0 };
 const P = { x: 0, z: 0, y: 0, vy: 0, vx: 0, vz: 0, ground: true, yaw: -Math.PI / 2 + 18 * DEG, pitch: 4 * DEG, view: 0, speed: 0, depth: 0 };
 // Gerak kepala (R3, pola BOB Copper Corn Station): langkah, ayun, hentakan mendarat; B = Mati / Halus / Normal
 const BOB_LEVELS = [['Mati', 0], ['Halus', 0.5], ['Normal', 1]];
-const BOB = { level: 2, run: 0, phase: 0, side: 0, amp: 0, y: 0, vy: 0, steps: 0, dy: 0, dx: 0, roll: 0 };
+const BOB = { level: 2, run: 0, phase: 0, side: 0, amp: 0, y: 0, vy: 0, steps: 0, dy: 0, dx: 0, roll: 0, shX: 0, shY: 0 };
+// M6d-2: turun-naik pinggul (m, tanpa skala tingkat), satu sumber untuk kamera, badan atas, dan pinggul: terdalam saat kaki menapak
+// (fase kelipatan pi, saat footstep() terpicu, kaki paling terbuka), tertinggi di tengah langkah; ditambah pegas hentakan mendarat
+const bobDrop = () => -BOB.amp * Math.pow((1 + Math.cos(2 * BOB.phase)) / 2, 0.8) + BOB.y;
 const keys = {};
 const CLK = { planet: 0, swept: 0, white: 0, msgT: 0 };
 const SWEEP = { on: false, t: 0, rx: 0, ry: 0, rz: 0, wx: 0, wy: 0, wz: 0, under: 0 };
@@ -2239,8 +2264,8 @@ function headBob(dt, speed, run, depth) {
   const target = speed > 0.08 && P.ground ? (run ? 0.055 : 0.034) : 0;
   BOB.amp += (target - BOB.amp) * Math.min(1, dt * 5);
   BOB.vy += (-90 * BOB.y - 11 * BOB.vy) * dt; BOB.y += BOB.vy * dt;          // pegas hentakan mendarat
-  const m = BOB_LEVELS[BOB.level][1], c = Math.cos(2 * BOB.phase);
-  BOB.dy = (-BOB.amp * Math.pow((1 - c) / 2, 0.8) + BOB.y) * m;             // turun lebih tajam tiap langkah: berat 1,3 g
+  const m = BOB_LEVELS[BOB.level][1];
+  BOB.dy = bobDrop() * m;                                                    // turun tajam saat kaki menapak: berat 1,3 g
   BOB.dx = BOB.amp * 0.55 * Math.sin(BOB.phase) * m;
   BOB.roll = BOB.amp * 0.22 * Math.sin(BOB.phase) * m;
 }
@@ -3305,10 +3330,8 @@ function frame(now) {
   }
   // Getaran tanah (R5): gemuruh gelombang raksasa terasa di kaki, ikut tingkat gerak kepala (B)
   const shk = onFoot && !SWEEP.on ? AM.shake * BOB_LEVELS[BOB.level][1] : 0, tv = now / 1000;
-  const shY = shk * (Math.sin(tv * 81.7) + 0.6 * Math.sin(tv * 107.3 + 1.3)), shX = shk * 0.5 * Math.sin(tv * 94.2 + 0.7);
-  camera.position.set(P.x + (onFoot ? Math.cos(P.yaw) * (BOB.dx + shX) : 0), P.y + (onFoot ? BOB.dy + shY : 0) + (SWEEP.on ? SWEEP.t * 6 : 0), P.z - (onFoot ? Math.sin(P.yaw) * (BOB.dx + shX) : 0));
-  if (SWEEP.on) camera.rotation.set(P.pitch + SWEEP.rx, P.yaw + SWEEP.ry, SWEEP.rz);
-  else camera.rotation.set(P.pitch, P.yaw, onFoot ? BOB.roll : 0);
+  BOB.shY = shk * (Math.sin(tv * 81.7) + 0.6 * Math.sin(tv * 107.3 + 1.3)); BOB.shX = shk * 0.5 * Math.sin(tv * 94.2 + 0.7);
+  fpCamera();
   if (FLY.on) flyCamera();
   if (CINE.on) cineStep(dt);                           // M4: kamera sinematik menimpa kamera biasa
   M_COMP.uniforms.uUnder.value = SWEEP.under; M_COMP.uniforms.uTime.value = STATE.visT;
@@ -3344,7 +3367,7 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, CROWN, spawnCrown, stepCrown, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
   SWEEP, currentAt, SPRAY, US, ZS, ARC, M_COMP, waveG, waveHz, COMMON,
   AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
-  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob, BODY, BODY_LEVELS, bodyMat, cycleBody, updateBody, updateMood, setMood, makeRipple, VISOR, VISOR_LEVELS, updateVisor, visorSplash, cycleVisor, postRender, GDIR, bodyPose, bodyLegs, bodyFootAt, bodyLegAt,
+  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob, BODY, BODY_LEVELS, bodyMat, cycleBody, updateBody, updateMood, setMood, makeRipple, VISOR, VISOR_LEVELS, updateVisor, visorSplash, cycleVisor, postRender, GDIR, bodyPose, bodyLegs, bobDrop, fpCamera, bodyFootAt, bodyLegAt,
   FLY, boardShip, flyLand, updateFly, flyReset, placeShip,
   MIS, missionSites, startMission, stopMission, restartMission, finishMission, updateMission, missionAction, toggleRadar, radarFix, setMode, setLevel, fmtMS,
   SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip, CK, COCKPIT, cockpitUpdate,
