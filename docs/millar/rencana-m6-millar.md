@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: M6a sampai M6d dan revisi M6d-2 selesai, M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a sampai M6e selesai (M6e sebagian, lihat bagian M6e di bawah). Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -160,7 +160,7 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | M6c | Selesai 4 Oktober 2026, menunggu uji pemilik di GPU (lihat bagian di bawah) |
 | M6d | Selesai 4 Oktober 2026 (lihat bagian di bawah) |
 | M6d-2 | Selesai 4 Oktober 2026 (revisi sudut pandang setelah uji pemilik, lihat bagian di bawah) |
-| M6e | Belum |
+| M6e | Selesai 4 Oktober 2026, sebagian (tangga dan tersapu ditunda, lihat bagian di bawah) |
 
 ## Catatan M6a (selesai 4 Oktober 2026)
 
@@ -309,3 +309,33 @@ Uji baru (blok 5r):
 Tangkapan layar menunduk 75 derajat sambil berjalan: bahu dan tutup badan tidak tampak; terlihat depan perut, paha, lengan bawah, tangan, dan sepatu.
 
 Wajib dicek pemilik di GTX 1060 dan M1: rasa menunduk (mata maju 14 cm), rasa gerak kepala dengan fase baru (hentakan saat kaki menapak), badan tidak bergeser saat jalan dan lari sambil menunduk. Batasan: lengan atas yang terayun maju saat lari bisa tampak tipis di sudut bawah pada pitch maksimum (wajar, tertutup bingkai visor); di tingkat gerak kepala Mati langkah sedikit lebih pendek dari gerak maju (telapak bisa tampak sedikit tergelincir).
+
+## M6e (selesai 4 Oktober 2026): menuju realistis dengan sumber daya minimum (Medium)
+
+| Item | Hasil |
+| --- | --- |
+| Sambungan anggota badan | Sendi bola di bahu, siku, lutut, pergelangan (dan pinggul di detail 2) menutup celah saat menekuk; silinder anggota badan terbuka (ujungnya tertutup bola) |
+| Tingkat detail per preset | `BODY_DETAIL` = [2, 2, 2, 1, 0] (Ultra, Tinggi, Sedang, Rendah, Hemat), `setBodyDetail(d)` dari `applyPreset()`; tiap bagian dibangun 3 kali saat muat lalu geometri ditukar, tetap 14 draw call |
+| Segitiga | Hemat 408 (batas 450, dulu 624), Rendah 1.092 (batas 1.200), Sedang ke atas 2.988 (batas 3.000) |
+| Detail pakaian | Rendah: unit kontrol dada, leher sepatu, sol gelap, bahu melengkung ke cincin leher. Sedang ke atas: tombol di unit dada, 2 selang, ransel bertingkat dengan tabung samping, saku paha, lipatan lutut dan siku, ibu jari, visor emas gelap dan cincin leher helm (helm hanya tampak di bayangan dan drone) |
+| Kotor dan basah lama | Warna titik dihitung sekali saat muat: makin gelap ke bawah (sepatu 30% lebih gelap), bercak acak per titik, tanpa tekstur |
+| Pilot di kokpit | Pandangan kokpit (V saat terbang): badan duduk menempel pada wahana, mata tepat di `CK.eye`, kaki ke pijakan, tangan kanan di tongkat, kiri di tuas gas lewat IK lengan `armReach()` (lengan diperbesar sampai 1,2x karena konsol lebar 0,8 m dari sumbu); lambung membayangi (kapsul abaikan bayangan diri dimatikan saat duduk); tampilan belakang tidak menampilkan pilot (kaca gelap) |
+| Ambil barang | Tahan E di dekat barang misi: tangan kanan menjangkau barang (IK, 0,15 s), kembali saat dilepas |
+| Ditunda | Tangan ke tangga saat E (naik ke wahana sekarang langsung; menunda naik mengubah alur misi), tubuh terguling saat tersapu (opsional) |
+
+Uji baru (blok 5s):
+
+| Pemeriksaan | Hasil |
+| --- | --- |
+| Segitiga per tingkat, nilai valid, 14 bagian, peta preset | 408 / 1.092 / 2.988, 0 tidak valid |
+| Kotor: putih sepatu dibanding lengan atas | rasio 0,70 (batas 0,8) |
+| Biaya `updateBody()` | 0,0042 ms rata-rata per frame (batas 0,1) |
+| Pilot | tangan 2,5 / 2,3 cm dari tongkat / tuas, mata = kamera, lutut terlihat saat menunduk, tangan terlihat saat menoleh, render tanpa nilai tidak valid, tersembunyi di tampilan belakang |
+| Ambil barang | tangan 0,52 -> 0,24 m dari barang saat tahan E, kembali 0,52 m |
+| Per preset (blok 6) | detail sesuai preset, tubuh menunduk tanpa nilai tidak valid di 3 suasana |
+
+Uji busa garis air: batas atas 5% -> 10%. Bukan karena busa berubah: kaki kini lebih gelap (kotor), jadi busa yang terlihat menembus air di atas kaki lebih kontras dan lebih banyak piksel melewati ambang beda (terbukti: tanpa tubuh beda 0%, detail 0 vs 2 berbeda). Uji ambil barang memulai misi (gelombang dan keadaan laut berpindah); posisi gelombang dan `uChopK` dikembalikan setelahnya supaya blok uji berikutnya tidak terpengaruh.
+
+Tangkapan layar: menunduk 70 derajat sambil berjalan (unit dada, selang, lipatan siku, saku paha terlihat); kokpit (paha, lutut, sepatu ke pijakan, sarung tangan di tongkat).
+
+Wajib dicek pemilik: FPS Hemat tidak turun dibanding tubuh Mati (tidak bisa diukur di sandbox), sendi tidak tampak berkedip di GTX 1060 / M1, posisi tangan di tongkat dan tuas wajar.

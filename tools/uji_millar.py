@@ -461,7 +461,7 @@ UJI = r"""
     M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false;
     P.view = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.ground = true; P.yaw = -Math.PI / 2 + 0.3; M.MOOD.brk = 1;
     let bad = 0; for (const o of B.parts) for (const n of ['position', 'normal', 'color']) for (const v of o.geometry.attributes[n].array) if (!Number.isFinite(v)) bad++;
-    out[`tubuh: ${B.tris} segitiga (<= 650), ${B.parts.length} bagian, nilai tidak valid ${bad}`] = B.tris > 0 && B.tris <= 650 && bad === 0;
+    out[`tubuh: ${B.tris} segitiga (detail ${B.detail}, <= ${[450, 1200, 3000][B.detail]}), ${B.parts.length} bagian, nilai tidak valid ${bad}`] = B.tris > 0 && B.tris <= [450, 1200, 3000][B.detail] && bad === 0;
     // dua gambar dalam satu tugas sinkron (waktu, ombak, kamera sama), hanya tingkat tubuh berbeda
     const shot = (lv) => { B.level = lv; M.camera.position.set(P.x, P.y, P.z); M.camera.rotation.set(P.pitch, P.yaw, 0); M.camera.updateMatrixWorld(true); M.U.uCam.value.copy(M.camera.position); M.updateShadow(); M.renderer.setRenderTarget(M.POST.hdr); M.renderer.clear(); M.renderer.render(M.scene, M.camera); M.renderer.setRenderTarget(null); return snap(); };
     const lumD = (a, b) => { let n = 0, l = 0; for (let k = 0; k < a.length; k += 4) if (Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]) > 40) { n++; l += 0.3 * M.THREE.DataUtils.fromHalfFloat(a[k]) + 0.59 * M.THREE.DataUtils.fromHalfFloat(a[k + 1]) + 0.11 * M.THREE.DataUtils.fromHalfFloat(a[k + 2]); } return n ? l / n : 0; };
@@ -678,6 +678,56 @@ UJI = r"""
     P.depth = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.yaw = -PI / 2 + 0.3; P.ground = true; M.updateBody(10);
   }
 
+  // 5s. M6e: tingkat detail tubuh (segitiga per tingkat, nilai valid), kotor di bawah, biaya updateBody, pilot di kokpit (tangan di tongkat dan tuas),
+  //     tangan menjangkau barang misi saat tahan E
+  {
+    const P = M.P, B = M.BODY, V3 = M.THREE.Vector3, cam = M.camera, d0 = B.detail, lim = [450, 1200, 3000], tr = [];
+    let bad = 0;
+    for (const d of [0, 1, 2]) { M.setBodyDetail(d); tr.push(B.tris); for (const o of B.parts) for (const n of ['position', 'normal', 'color']) for (const v of o.geometry.attributes[n].array) if (!Number.isFinite(v)) bad++; }
+    out[`tubuh per tingkat detail: ${tr.join(' / ')} segitiga (<= 450 / 1.200 / 3.000), ${B.parts.length} bagian, nilai tidak valid ${bad}, preset -> detail ${M.BODY_DETAIL.join(',')}`] =
+      tr.every((n, i) => n > 0 && n <= lim[i]) && tr[0] < tr[1] && tr[1] < tr[2] && bad === 0 && B.parts.length === 14 && M.BODY_DETAIL.join() === '2,2,2,1,0';
+    M.setBodyDetail(d0);
+    // kotor: rata-rata terang warna titik sepatu dibanding badan
+    // hanya titik berwarna putih pakaian (abu netral, terang > 0,3): sepatu (tumit) dibanding lengan atas
+    const lum = (o) => { const c = o.geometry.attributes.color.array; let l = 0, n = 0; for (let k = 0; k < c.length; k += 3) if (Math.abs(c[k] - c[k + 2]) < 0.06 && c[k] > 0.3) { l += 0.3 * c[k] + 0.59 * c[k + 1] + 0.11 * c[k + 2]; n++; } return n ? l / n : 0; };
+    const kl = lum(B.arms[0].children.find((o) => o.isMesh)), kf = lum(B.feet[0]);
+    out[`kotor: sepatu ${kf.toFixed(3)} lebih gelap dari lengan atas ${kl.toFixed(3)} (rasio ${(kf / kl).toFixed(2)} < 0,8)`] = kf > 0 && kf / kl < 0.8;
+    // biaya: updateBody rata-rata 600 panggilan saat berjalan
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false;
+    P.view = 0; P.x = 3; P.z = 3; P.y = M.seabed(3, 3) + M.CONFIG.eye; P.ground = true; P.pitch = -1.0; B.level = 2; M.BOB.amp = 0.034; M.BOB.run = 0;
+    let t0 = performance.now(); for (let f = 0; f < 600; f++) { M.BOB.phase += 0.1; M.updateBody(1 / 60); } const ms = (performance.now() - t0) / 600;
+    out[`biaya updateBody: ${ms.toFixed(4)} ms rata-rata (600 frame, < 0,1)`] = ms < 0.1;
+    // pilot di kokpit
+    M.boardShip(); M.FLY.view = 1; M.flyCamera(); cam.updateMatrixWorld(true); M.updateBody(1 / 60); B.group.updateMatrixWorld(true);
+    const hw = (o) => { const v = o.userData.c.clone(); return o.localToWorld(v); };
+    const gS = M.COCKPIT.stick.localToWorld(new V3(0, 0.21, 0.01)), gT = M.COCKPIT.throttle.localToWorld(new V3(0.02, 0.15, 0));
+    const eS = hw(B.hands[1]).distanceTo(gS), eT = hw(B.hands[0]).distanceTo(gT), eye = B.group.localToWorld(new V3(0, M.CONFIG.eye, 0)).distanceTo(cam.position);
+    M.FLY.lookP = -0.7; M.flyCamera(); cam.updateMatrixWorld(true); M.updateBody(1 / 60); B.group.updateMatrixWorld(true);
+    // kokpit lebar: tangan di konsol samping, terlihat saat menoleh ke sisinya (lutut terlihat saat menunduk lurus)
+    const inFr = (v) => { v.project(cam); return Math.abs(v.x) < 1 && Math.abs(v.y) < 1 && v.z < 1; }, kneeIn = B.knees.every((o) => inFr(o.getWorldPosition(new V3())));
+    const handIn = (i) => [-1.1, -0.7, 0.7, 1.1].some((ly) => { M.FLY.lookY = ly; M.flyCamera(); cam.updateMatrixWorld(true); return inFr(hw(B.hands[i])); });
+    const inF = kneeIn && handIn(0) && handIn(1); M.FLY.lookY = 0; M.flyCamera(); cam.updateMatrixWorld(true);
+    const seatVis = B.group.visible && B.seat;
+    // render kokpit HDR: tanpa nilai tidak valid atau titik menyala
+    const r = M.renderer, T = M.POST.hdr, w = T.width, h = T.height, buf = new Uint16Array(w * h * 4), from = M.THREE.DataUtils.fromHalfFloat; let nb = 0, nh = 0;
+    M.U.uCam.value.copy(cam.position);
+    M.updateShadow(); r.setRenderTarget(T); r.clear(); r.render(M.scene, cam); r.setRenderTarget(null); r.readRenderTargetPixels(T, 0, 0, w, h, buf);
+    for (let k = 0; k < buf.length; k += 4) for (let c = 0; c < 3; c++) { const x = from(buf[k + c]); if (!Number.isFinite(x)) nb++; else if (x > 50) nh++; }
+    M.FLY.view = 0; M.flyCamera(); M.updateBody(1 / 60); const rearHidden = !B.group.visible;
+    out[`pilot di kokpit: tangan kanan ${(eS * 100).toFixed(1)} cm dari tongkat, kiri ${(eT * 100).toFixed(1)} cm dari tuas (< 4), mata ${(eye * 100).toFixed(2)} cm dari kamera, lutut dan tangan (menoleh) di bingkai ${inF}, render tidak valid ${nb} / menyala ${nh}, tampilan belakang tersembunyi ${rearHidden}`] =
+      seatVis && eS < 0.04 && eT < 0.04 && eye < 0.01 && inF && nb === 0 && nh === 0 && rearHidden;
+    M.flyReset(); M.updateBody(10);
+    // tahan E: tangan kanan menuju barang
+    const wx0 = M.U.uWX.value, ck0 = M.U.uChopK.value;   // startMission memindah gelombang dan keadaan laut: dikembalikan setelahnya
+    M.setMode('misi'); M.setLevel(1); M.startMission(); const S = M.MIS.sites[0]; P.x = S.ix + 0.6; P.z = S.iz; P.y = M.seabed(P.x, P.z) + M.CONFIG.eye; P.yaw = Math.PI / 2; P.pitch = -0.6; M.updateBody(10);
+    const it = S.item.getWorldPosition(new V3()), d1 = hw(B.hands[1]).distanceTo(it);
+    M.MIS.near = 0; M.MIS.hold = 0.5; for (let f = 0; f < 30; f++) M.updateBody(1 / 60); const d2 = hw(B.hands[1]).distanceTo(it), dl = hw(B.hands[0]).distanceTo(it);
+    M.MIS.hold = 0; for (let f = 0; f < 60; f++) M.updateBody(1 / 60); const d3 = hw(B.hands[1]).distanceTo(it);
+    out[`ambil barang: tangan kanan ${d1.toFixed(2)} -> ${d2.toFixed(2)} m dari barang saat tahan E (lebih dekat 30%), kembali ${d3.toFixed(2)} m saat dilepas`] = d2 < 0.7 * d1 && Math.abs(d3 - d1) < 0.03;
+    M.stopMission(); M.setMode('jelajah'); M.U.uWX.value = wx0; M.U.uChopK.value = ck0;
+    P.depth = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -Math.PI / 2 + 0.3; P.ground = true; M.updateBody(10);
+  }
+
   // 5p. M6c: tubuh tidak membayangi dirinya, bayangan KS-07 tetap jatuh di tubuh, garis basah yang ingat, busa garis air di kaki
   {
     const P = M.P, B = M.BODY, Cb = M.CONFIG.body, PI = Math.PI, from = M.THREE.DataUtils.fromHalfFloat, V3 = M.THREE.Vector3;
@@ -728,7 +778,7 @@ UJI = r"""
     out[`busa garis air: titik = bodyLegAt (selisih ${le.toFixed(4)} m), kekuatan ${k1.toFixed(2)} di air, Mati ${kM}, udara ${kA}, terbang ${kF}`] = le < 0.01 && (dep > 0.85 || k1 > 0.5) && kM === 0 && kA === 0 && kF === 0;
     P.vx = -Math.sin(P.yaw) * 4; P.vz = -Math.cos(P.yaw) * 4; Cb.foam = 1; const f1 = shot(); Cb.foam = 0; const f0 = shot(); Cb.foam = 1; P.vx = 0; P.vz = 0;
     const fa = 100 * maskOf(f1, f0).length / (f1.length / 4);
-    out[`busa garis air terlihat dan setempat: ${fa.toFixed(2)}% piksel beda (0,05-5%)`] = fa > 0.05 && fa < 5;
+    out[`busa garis air terlihat dan setempat: ${fa.toFixed(2)}% piksel beda (0,05-10%; M6e: kaki kotor lebih gelap, busa di atasnya lebih kontras)`] = fa > 0.05 && fa < 10;
     place(0, 0); P.pitch = 0; P.yaw = -PI / 2 + 0.3; M.updateBody(10);
   }
 
@@ -791,7 +841,7 @@ UJI = r"""
         M.updateShadow(); r.setRenderTarget(T); r.clear(); r.render(M.scene, M.camera); r.setRenderTarget(null); r.readRenderTargetPixels(T, 0, 0, w, h, buf);
         for (let k = 0; k < buf.length; k += 4) for (let c = 0; c < 3; c++) { const x = from(buf[k + c]); if (!Number.isFinite(x)) bb++; else if (x > 50) bh++; } }
       M.MOOD.idx = 0; M.updateMood(60, M.STATE.visT); M.MOOD.brk = 1; P.pitch = sv;
-      out[`preset ${M.PRESETS[i].name}: tubuh menunduk di 3 suasana, tidak valid ${bb}, titik > 50: ${bh}`] = bb === 0 && bh === 0; }
+      out[`preset ${M.PRESETS[i].name}: tubuh menunduk di 3 suasana (detail ${M.BODY.detail}, ${M.BODY.tris} segitiga), tidak valid ${bb}, titik > 50: ${bh}`] = bb === 0 && bh === 0 && M.BODY.detail === M.BODY_DETAIL[i]; }
   }
   M.applyPreset(4);
   return out;
