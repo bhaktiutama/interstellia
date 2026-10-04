@@ -39,7 +39,8 @@ Langkah mekanis di dalam tahap High (entri kamus, teks HUD, pembaruan dokumen) b
 | --- | --- |
 | G1a | Selesai 4 Oktober 2026: `tools/siapkan_wahana_gx.mjs` (Node, bukan Python: tidak perlu browser) membuat `experiences/gargantua/assets/gx01.data.js` dari `KESTREL.buildV3()`: 5.184 segitiga (dari 6.092; kaki pendarat dibuang di bawah y = -2,45 m), 102 verteks kaca kokpit, 264 KB. Stensil GX-01 = quad bertekstur kanvas di halaman |
 | G1b | Selesai 4 Oktober 2026: V = wahana GX-01 (kamera luar 40 m di belakang, 7,5 m di atas), V lagi = kokpit (mata 0, 1,25, -7,2 m; kaca tidak digambar dari dalam, sekat tetap; dasbor kanvas), Esc keluar, tombol panel. Wahana menahan posisi di titik orbit kamera menghadap pusat; disinari dari titik piringan terdekat. Uji `tools/uji_misi_gargantua.py` 13/13 lulus (SwiftShader). Belum diuji di GTX 1060 dan M1. Catatan: tangkap layar dan mode foto tidak memuat dasbor kokpit (lapisan HTML) |
-| G2-G6 | Belum dimulai; G6 berjalan per kelompok |
+| G2 | Selesai 4 Oktober 2026 (lihat bagian G2 di bawah): kamera jatuh di shader (`uFall`), 7 skenario jatuh, kendali terbatas (dorongan W/S A/D R/F, Shift, anggaran delta-v), sikap X (pusat / mendatar / bebas), waktu Z, HUD dan 3 layar MFD, layar akhir. Kokpit diganti pod kaca di depan (permintaan pemilik: pandangan tidak lagi tertutup 2 lengan). Uji 35/35 lulus (SwiftShader). Belum diuji di GTX 1060 dan M1 |
+| G3-G6 | Belum dimulai; G6 berjalan per kelompok |
 
 Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
 
@@ -114,21 +115,40 @@ Lintasan wahana di CPU: geodesik timelike Schwarzschild, RK4 pada (r, dr/dtau, p
 | Sumber | Blokout v3, yang sudah dipindah ke modul bersama sebagai `KESTREL.buildV3(THREE)` di `shared/kestrel.js` (geometri blokout + pintu, tapak, lampu). Kaki pendarat dilipat (tidak digambar saat terbang). Stensil diganti "GX-01". `buildV3` tidak diubah (pertahankan yang ada) |
 | Alat olah | `tools/siapkan_wahana_gx.mjs` (baru, Node): muat three.js + `shared/kestrel.js` di Node (vm), panggil `buildV3`, gabungkan geometri jadi satu array posisi, normal, warna, simpan base64 ke `experiences/gargantua/assets/gx01.data.js`. Sama seperti cara `tools/siapkan_motor.py`: Gargantua tetap tanpa three.js dan jalan dari file:// |
 | Render | Program raster kecil + depth di Gargantua, digambar ke `T.scene` sebelum bloom. Disinari dari arah piringan (warna jingga, kuat dari bawah saat terbang rendah), sisi lain ambient redup. Pembelokan cahaya di skala 27,5 m nol (rs = 2,954e11 m), jadi raster biasa tetap benar |
-| Kokpit | Mata di kokpit kaca bersekat tengah depan. Bingkai sekat kaca dari geometri kokpit model itu sendiri (dilihat dari dalam), instrumen di kanvas 2D |
+| Kokpit | G2: kokpit v3 di tengah (kaca sempit, sekat tepat di depan mata, ujung lengan garpu menutup pandangan) diganti pod kaca di depan, duduk di pelat dek di antara ujung lengan, disambung leher ke badan tengah. Mata pilot (0; 1,0; -13,0 m) sejajar kabin ujung lengan, jadi lengan ada tepat di samping (80-90 derajat) dan pandangan depan sekitar 160 derajat bebas. Kaca depan, atas, samping; rangka 6 cm gelap doff hanya di sudut; konsol rendah dengan 3 layar MFD; interior hanya disinari cahaya yang masuk lewat kanopi. FOV kokpit 75 derajat |
 | Kamera luar | Kamera kejar di belakang-atas wahana, seperti komposisi foto 1 (wahana kecil di tengah, piringan di bawah) |
 | Nama | GX-01 "Ambang" (ambang = batas, horizon). Usulan, bisa diganti |
 | Dokumen | `docs/app/penamaan.md` ditambah baris GX-01 |
 
-## G2: kamera jatuh dan jalur kutub
+## G2: kamera jatuh, skenario, kendali terbatas (selesai)
+
+Permintaan tambahan pemilik saat menjalankan kelompok 2: (1) saat jatuh ada kendali terbatas, (2) berbagai cara dan kondisi jatuh, (3) kokpit diperbaiki, pandangan tidak tertutup 2 lengan.
 
 | Bagian | Isi |
 | --- | --- |
-| Masuk misi | Tombol "Misi" di panel kontrol (`). Tidak memakai tombol huruf baru: semua huruf sudah terpakai di `docs/app/tombol.md` |
-| Jalur kutub (langsung) | Jatuh radial lewat sumbu, tidak menyentuh piringan. Jalur paling sederhana untuk syarat "masuk langsung" |
-| Kamera | Kamera jatuh di shader (rumus di atas): bayangan hitam membesar, langit belakang menyempit dan memerah, tidak ada tanda visual tiba-tiba saat lewat horizon |
-| HUD | r (rs dan km), waktu wajar, sisa waktu ke singularitas, laju lokal, faktor pergeseran langit, pasang surut, status (luar / horizon / dalam) |
-| Waktu | Z = kecepatan waktu (tombol umum). Melambat otomatis dekat horizon |
-| Akhir | r = 0,006 rs: layar gelap bertahap, ringkasan misi |
+| Masuk misi | Panel kontrol (`): bagian "Misi: jatuh ke Gargantua", pilih skenario, Mulai misi. Tidak ada huruf baru |
+| Kamera | Shader: `uFall`, `uObsV` (kecepatan wahana di kerangka rain), `uObsG`, `uBeta`. Arah foton di kerangka wahana diaberasi ke kerangka rain, jejak mundur = -n + beta r_hat, langkah = jarak tempuh (laju datar jauh dari 1 di r kecil), tertelan hanya bila r < 1 dan bergerak ke dalam. Foton dengan E <= 0 (di dalam horizon, dari arah bawah) digambar gelap: dalam lubang hitam nyata cahaya itu berasal dari materi yang jatuh lebih dulu, tidak dimodelkan. Warna dan kecerahan piringan dan langit memakai faktor frekuensi pengamat jatuh (dibatasi agar tidak meledak) |
+| Fisika wahana | CPU, `misAcc()` / `rk4()` / `misAdvance()`: geodesik Schwarzschild dalam koordinat Kartesius datar, d2x/dtau2 = -M x / r^3 (1 + 3 L^2 / r^2), reguler di horizon, langkah ikut waktu dinamis. Kerangka rain `rainOf()`: gamma = K / (E - beta ur). Terukur: 22 rs ke horizon 68,1261 rs/c (rumus 68,1261), dilepas diam ke singularitas 162,0888 (rumus 162,0891) |
+| Kendali terbatas | W/S maju-mundur, A/D kiri-kanan, R/F naik-turun di kerangka wahana (boost relativistik `misThrust()`), Shift = mesin utama 0,004 c per detik nyata, tanpa Shift 0,0008 c/s. Anggaran delta-v 0,02-0,04 c per skenario. E dijaga >= 0,01. Di dalam horizon dorongan penuh ke luar tetap tidak bisa membuat dr/dtau >= 0 (diuji). Seret mouse = arah hidung |
+| Sikap (X) | Hidung ke pusat / hidung mendatar (tegak lurus jari-jari, atas = menjauhi lubang hitam; dari dalam horizon langit tampak sebagai pita mendatar) / bebas (seret) |
+| Waktu (Z) | Otomatis: 1 s nyata = 985 x 1,41 r^1,5 / 10 detik waktu wajar (sekitar 14.400 di 22 rs, minimum 1 di r < 0,03), jadi jatuh lurus sekitar 50 s nyata: 22 s sampai horizon, sisanya di dalam, beberapa detik terakhir dalam waktu nyata. Pilihan: Otomatis, x4, x16, Lambat x0,25. Space menjeda |
+| HUD | Kiri atas di kedua tampilan: skenario, r (rs dan km), status di luar / DI DALAM HORIZON, waktu wajar, prakiraan (singularitas dalam ..., lolos, menabrak piringan, orbit terikat), laju (terhadap pengamat diam di luar horizon, terhadap kerangka jatuh di dalam), faktor frekuensi langit depan dan belakang, pasang surut 2 m, delta-v, laju waktu. Baris tombol di bawah |
+| MFD kokpit | Atlas kanvas 3 layar, 5 kali per detik: kiri r (skala log) terhadap waktu wajar dengan garis ISCO, 1,5 rs, horizon, riwayat dan prakiraan; tengah data utama; kanan langit, laju, delta-v, dorongan, sikap |
+| Akhir | Singularitas (r < 0,006 rs, pasang surut 1 g), menembus piringan (bidang y = 0 di rIn..rOut), lolos (r > 70 rs bergerak keluar). Layar ringkasan: waktu wajar total, waktu lewat horizon, horizon sampai akhir, laju tercepat, delta-v. Enter atau "Terbang lagi" mengulang, Esc keluar |
+
+Tujuh skenario (rs = 1, mulai di 22 rs kecuali orbit tak stabil). Hasil tanpa dorongan terukur di `tools/uji_misi_gargantua.py`:
+
+| Skenario | Kondisi awal | Hasil tanpa dorongan | Waktu wajar | Yang diperlihatkan |
+| --- | --- | --- | --- | --- |
+| Lurus lewat kutub | E = 1 (datang dari jauh), radial | singularitas | 68,79 rs/c = 18,8 jam | Masuk langsung; horizon tanpa tanda |
+| Dilepas diam di 22 rs | E = 0,977, radial | singularitas | 162,09 rs/c = 44,4 jam | Mulai diam, jatuh makin cepat |
+| Datang cepat | E = 1,3 (0,86 c di 22 rs) | singularitas | 23,73 rs/c | Aberasi: langit memampat ke depan, bayangan tampak lebih kecil |
+| Miring, lewat celah dalam | L = 1,6 (0,8 kritis), bidang miring 35 derajat, sudut awal 57,5 derajat | singularitas, memotong bidang piringan di sekitar 2 rs (di dalam tepi 3 rs) | 78,41 rs/c | Berayun, menyelinap di antara piringan dan horizon |
+| Berputar di 2 rs | L = 2 (1 - 2e-6), sedikit di bawah kritis | singularitas setelah beberapa putaran | 117,61 rs/c | Zoom-whirl di orbit tak stabil |
+| Nyaris lolos | L = 2,05, sedikit di atas kritis | lolos | - | Dorongan mundur 0,02 c sebelum 4 rs = tertangkap; rem terlambat = orbit terikat yang menembus piringan |
+| Orbit tak stabil 2,4 rs | Orbit melingkar di dalam ISCO, gangguan kecil ke dalam | singularitas | 43,96 rs/c | Tidak ada orbit stabil di dalam 3 rs; dorongan bisa menunda |
+
+Sudut awal skenario miring, berputar, dan nyaris lolos dipilih dari hitungan numerik lintasan agar perpotongan dengan bidang piringan jatuh di luar 3-12 rs. Bila pemain mengubah radius piringan di panel, hasilnya bisa berubah (wajar).
 
 ## G3: terbang rendah di atas piringan dan partikel (foto 1 dan 2)
 
@@ -203,12 +223,18 @@ Mengikuti `docs/app/tombol.md`: tidak ada huruf baru.
 
 | Tombol | Fungsi |
 | --- | --- |
-| Panel ` | Mulai misi, pilih jalur (susur piringan / kutub) |
+| Panel ` | Mulai misi, pilih skenario (G2: 7 skenario) dan sikap |
 | V | Kokpit / kamera luar |
-| Z | Kecepatan waktu |
-| W A S D, Shift, Enter | Bidik sudut (G5), kunci |
+| Z | Kecepatan waktu (Otomatis, x4, x16, Lambat x0,25) |
+| W/S, A/D, R/F, Shift | Dorong maju-mundur, kiri-kanan, naik-turun; Shift = mesin utama (G2, mengikuti tombol pesawat Copper) |
+| Seret mouse, roda | Arah hidung; jarak kamera luar |
+| X | Sikap: hidung ke pusat / mendatar / bebas (G2) |
+| Enter | Terbang lagi di layar akhir (G2); kunci bidikan (G5) |
 | E | Tembak suar (G4) |
-| Esc | Keluar misi |
+| Space | Jeda |
+| Esc | Akhiri misi |
+
+Selama misi F dan R dipakai untuk dorongan (seperti pesawat Copper), jadi mode foto dan atur ulang kamera tidak tersedia sampai misi diakhiri.
 
 ## Batasan dan catatan
 

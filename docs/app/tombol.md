@@ -14,7 +14,7 @@ Per 30 September 2026. Patokan: Copper Corn Station. Fungsi yang sama memakai to
 | U | Suara nyala / mati | ya | ya (dulu M) | - (tanpa suara) |
 | N | Cuaca / suasana | cuaca | suasana | - |
 | Z | Kecepatan waktu | ya | ya | - |
-| V | Tampilan / kamera luar | kamera luar | jalan kaki, drone, tinggi | wahana GX-01: kamera luar / kokpit (misi G1; Esc keluar) |
+| V | Tampilan / kamera luar | kamera luar | jalan kaki, drone, tinggi | wahana GX-01: kamera luar / kokpit (Esc keluar) |
 | F | Mode foto (UI disembunyikan, Enter simpan PNG, F atau Esc keluar) | ya | ya (baru) | ya (dulu layar penuh) |
 | R | Kembali ke titik awal / atur ulang | ya | ya | atur ulang kamera |
 | H | Sembunyikan HUD | ya | ya | ya |
@@ -60,3 +60,4 @@ Sinematik (Millar M4): Spasi, Enter, Esc, atau klik = lewati. Pandangan orbit ti
 - Pakai tabel tombol umum di atas. Fungsi baru yang khusus experience: pilih tombol yang tidak ada di kedua tabel, atau letakkan di panel kontrol.
 - Semua tombol dicantumkan di bantuan (?) dan teks tombol di layar, dua bahasa.
 - Penerbangan (shuttle KS-07) mengikuti tombol pesawat di Copper: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
+- Misi Gargantua (wahana GX-01, G2): W/S, A/D, R/F dorong, Shift mesin utama, seret mouse = arah hidung, X sikap (pusat / mendatar / bebas), Z waktu, V tampilan, Space jeda, Esc akhiri, Enter terbang lagi. Z/C guling tidak dipakai (Z = waktu, sesuai tabel umum). Selama misi F dan R = dorongan, jadi mode foto dan atur ulang kamera menunggu misi selesai.
