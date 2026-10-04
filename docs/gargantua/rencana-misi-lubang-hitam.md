@@ -40,7 +40,9 @@ Langkah mekanis di dalam tahap High (entri kamus, teks HUD, pembaruan dokumen) b
 | G1a | Selesai 4 Oktober 2026: `tools/siapkan_wahana_gx.mjs` (Node, bukan Python: tidak perlu browser) membuat `experiences/gargantua/assets/gx01.data.js` dari `KESTREL.buildV3()`: 5.184 segitiga (dari 6.092; kaki pendarat dibuang di bawah y = -2,45 m), 102 verteks kaca kokpit, 264 KB. Stensil GX-01 = quad bertekstur kanvas di halaman |
 | G1b | Selesai 4 Oktober 2026: V = wahana GX-01 (kamera luar 40 m di belakang, 7,5 m di atas), V lagi = kokpit (mata 0, 1,25, -7,2 m; kaca tidak digambar dari dalam, sekat tetap; dasbor kanvas), Esc keluar, tombol panel. Wahana menahan posisi di titik orbit kamera menghadap pusat; disinari dari titik piringan terdekat. Uji `tools/uji_misi_gargantua.py` 13/13 lulus (SwiftShader). Belum diuji di GTX 1060 dan M1. Catatan: tangkap layar dan mode foto tidak memuat dasbor kokpit (lapisan HTML) |
 | G2 | Selesai 4 Oktober 2026 (lihat bagian G2 di bawah): kamera jatuh di shader (`uFall`), 7 skenario jatuh, kendali terbatas (dorongan W/S A/D R/F, Shift, anggaran delta-v), sikap X (pusat / mendatar / bebas), waktu Z, HUD dan 3 layar MFD, layar akhir. Kokpit diganti pod kaca di depan (permintaan pemilik: pandangan tidak lagi tertutup 2 lengan). Uji 35/35 lulus (SwiftShader). Belum diuji di GTX 1060 dan M1 |
-| G3-G6 | Belum dimulai; G6 berjalan per kelompok |
+| G3a | Selesai 4 Oktober 2026 (lihat bagian G3): jalur susur piringan dengan autopilot (2 skenario baru, melawan dan searah arus gas), lempeng piringan tebal volumetrik di sekitar kamera (derau 3D, menyambung dengan piringan tipis), disk berputar menurut waktu wajar wahana selama misi, eksposur otomatis misi. Belum diuji di GTX 1060 dan M1 |
+| G3b | Selesai 4 Oktober 2026: garis bara (partikel GPU), awan debu, tumbukan kaca kokpit (kilat, pijar, retak menetap), guncangan, kerusakan kaca (100% = akhir misi), label distilisasi di panel dan layar akhir |
+| G4-G6 | Belum dimulai; G6 berjalan per kelompok (uji G3 ada di `tools/uji_misi_gargantua.py`) |
 
 Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
 
@@ -150,7 +152,33 @@ Tujuh skenario (rs = 1, mulai di 22 rs kecuali orbit tak stabil). Hasil tanpa do
 
 Sudut awal skenario miring, berputar, dan nyaris lolos dipilih dari hitungan numerik lintasan agar perpotongan dengan bidang piringan jatuh di luar 3-12 rs. Bila pemain mengubah radius piringan di panel, hasilnya bisa berubah (wajar).
 
-## G3: terbang rendah di atas piringan dan partikel (foto 1 dan 2)
+## G3: terbang rendah di atas piringan dan partikel (foto 1 dan 2) (selesai)
+
+### Hasil G3 (4 Oktober 2026)
+
+| Bagian | Isi |
+| --- | --- |
+| Skenario baru | "Susur piringan, melawan arus" (pilihan awal di panel, jalur utama) dan "Susur piringan, searah arus". Mulai di 16 rs, 0,05 r di atas bidang piringan, orbit melingkar + turun 0,1 c. Total 9 skenario |
+| Autopilot susur (O) | Kecepatan sasaran = orbit melingkar (melawan atau searah gas) + laju turun + koreksi tinggi ke h r di atas bidang piringan. Selisih di kerangka rain dikoreksi dengan dorongan (`misThrust`, ikut anggaran delta-v 0,3 c), paling besar 0,02 c per rs/c. Dilepas otomatis di dalam ISCO (3 rs): tidak ada orbit stabil, wahana menukik dan memotong bidang di celah dalam. Selama autopilot: R/F tinggi sasaran (0,015-0,3 r), W/S laju turun (0-0,25 c), Shift 3x lebih cepat. O mematikan: orbit miring segera menembus piringan (diuji). Delta-v habis = autopilot lepas, wahana turun ke piringan (diuji) |
+| Terukur | Melawan dan searah arus: 16 rs ke ISCO lalu singularitas, waktu wajar 143,5 rs/c (39,3 jam), delta-v 0,19 c dari 0,3 c (tinggi 0,03 r: 0,275 c), galat tinggi < 0,005 r. Waktu nyata dengan waktu Otomatis: 47 s sampai ISCO, 75 s sampai horizon, 80 s sampai akhir |
+| Lempeng tebal | Shader: daerah bola 0,4 r (0,8-2,5 rs) di sekitar kamera, H = 0,025 r, profil exp(-(y/H)^4) dengan tinggi lapisan diangkat oleh derau (permukaan bergolak), derau 3D 64^3 berulang dibuat di CPU (koordinat mutlak ln r, phi, y/H, memanjang 4,5x searah orbit, ikut rotasi Kepler dua lapis). Warna dan pola besar dari `shadeDisk()` di titik tengah langkah, jadi menyambung dengan piringan tipis (di tepi daerah bobot berpindah). Paling banyak 16 / 24 / 32 / 48 sampel per piksel (Rendah / Sedang / Tinggi / Ultra). Aktif hanya saat misi dan kamera kurang dari 6 H dari bidang |
+| Waktu piringan | Selama misi piringan berputar menurut waktu wajar wahana (sebelumnya waktu tampilan tetap), jadi gerak gas relatif wahana konsisten |
+| Eksposur otomatis | Hanya saat misi: rata-rata 30% bagian layar paling terang (grid 16 x 9, dibaca asinkron dengan PBO + fence), eksposur turun bila terang (paling kecil 0,12), ambang bloom ikut. Di luar misi tidak berubah |
+| Partikel | 400 / 900 / 1.600 / 2.500 garis bara per preset di kotak 300 m sekitar mata, bergerak searah kecepatan gas relatif wahana (boost dari kerangka rain), laju tampilan 80 + 700 v m/s (distilisasi). Awan debu layar penuh dalam koordinat terowongan di sekitar arah datang gas. Kerapatan debu exp(-(y / 2,5 H)^2), nol di jalur kutub |
+| Kaca | Tumbukan hanya di kaca yang menghadap arus (segitiga kaca GX-01 dibobot luas x cos), laju 30 x kerapatan x min(1, (v / 0,4)^2) per detik nyata. Kilat putih, pijar jingga, retak menetap (paling banyak 96). Kerusakan 0,05% x (v / 0,5)^2 per tumbukan; 100% = "Kaca kokpit pecah" (akhir misi). Terukur dengan waktu Otomatis: melawan arus 774 tumbukan, kerusakan 71% di akhir; tinggi 0,03 r: 1.100 tumbukan, 99%; searah arus 58 tumbukan, 0,1% |
+| Guncangan | Sudut kecil ikut kerapatan debu x laju relatif + hentakan tiap tumbukan |
+| HUD dan MFD | Baris baru: piringan (tinggi dalam H, gas relatif), autopilot, kaca. Prakiraan "autopilot menahan tinggi (tanpa autopilot: piringan dalam ...)" |
+
+Kecepatan gas relatif wahana pada susur melawan arus (keduanya orbit melingkar berlawanan, terhadap pengamat diam: 2v / (1 + v^2), v = sqrt(M / (r - 2M))). Diuji: 0,5750 c di 6 rs dan 0,8000 c di 3 rs. Searah arus: 0 (gas hanya lewat sebesar laju turun 0,1 c).
+
+| r | Gas (thd diam) | Relatif melawan arus | Lorentz gamma | Energi 1 mikrogram debu |
+| --- | --- | --- | --- | --- |
+| 12 rs | 0,213 c | 0,408 c | 1,095 | 8,6e6 J (2,0 kg TNT) |
+| 6 rs | 0,316 c | 0,575 c | 1,222 | 2,0e7 J (4,8 kg TNT) |
+| 4 rs | 0,408 c | 0,700 c | 1,400 | 3,6e7 J (8,6 kg TNT) |
+| 3 rs (ISCO) | 0,500 c | 0,800 c | 1,667 | 6,0e7 J (14,3 kg TNT) |
+
+Rencana awal di bawah dipertahankan sebagai rujukan.
 
 ### Jalur "susur piringan" (jalur utama misi)
 
@@ -223,12 +251,13 @@ Mengikuti `docs/app/tombol.md`: tidak ada huruf baru.
 
 | Tombol | Fungsi |
 | --- | --- |
-| Panel ` | Mulai misi, pilih skenario (G2: 7 skenario) dan sikap |
+| Panel ` | Mulai misi, pilih skenario (G2: 7 skenario; G3: + 2 susur piringan) dan sikap; tombol autopilot susur |
 | V | Kokpit / kamera luar |
 | Z | Kecepatan waktu (Otomatis, x4, x16, Lambat x0,25) |
 | W/S, A/D, R/F, Shift | Dorong maju-mundur, kiri-kanan, naik-turun; Shift = mesin utama (G2, mengikuti tombol pesawat Copper) |
 | Seret mouse, roda | Arah hidung; jarak kamera luar |
-| X | Sikap: hidung ke pusat / mendatar / bebas (G2) |
+| X | Sikap: hidung ke pusat / mendatar / searah lintasan dengan piringan di bawah (G3; seret = arah pandang) / bebas (G2) |
+| O | Autopilot susur nyala / mati (G3; huruf O = "otomatis", seperti jalan otomatis di Copper). Selama autopilot: R/F tinggi, W/S laju turun |
 | Enter | Terbang lagi di layar akhir (G2); kunci bidikan (G5) |
 | E | Tembak suar (G4) |
 | Space | Jeda |
@@ -242,5 +271,6 @@ Selama misi F dan R dipakai untuk dorongan (seperti pesawat Copper), jadi mode f
 - Partikel, tumbukan kaca, dan kepadatan piringan distilisasi demi tampilan; piringan akresi nyata jauh lebih tipis dan wahana tidak akan selamat.
 - Tesseract dan gerbang murni fiksi. Jatuh, horizon, pulsa, kecepatan relatif, dan sudut tangkap mengikuti fisika.
 - Animasi piringan tidak memperhitungkan waktu tunda cahaya.
-- Biaya GPU terbesar: lapisan volumetrik dekat kamera (G3). Perlu diukur di GTX 1060 dan M1; bila berat, jumlah langkah dan radius lapisan diturunkan per preset.
+- Biaya GPU terbesar: lapisan volumetrik dekat kamera (G3). Perlu diukur di GTX 1060 dan M1; bila berat, jumlah sampel (`vol` di `CONFIG.presets`) dan radius daerah (`volParams()`) diturunkan.
+- Autopilot susur fiksi: menahan wahana di atas piringan butuh dorongan terus-menerus (0,19 c untuk satu jalur). Laju partikel, tumbukan, dan kerusakan kaca dihitung per detik nyata (bukan waktu wajar), jadi Z (waktu lebih cepat) mengurangi tumbukan.
 - Nama Ranger dan desain kendaraan film tidak dipakai.

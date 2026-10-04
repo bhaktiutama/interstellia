@@ -16,6 +16,14 @@ Kelompok 2 (G2, kamera jatuh dan misi):
 - render kamera jatuh tanpa nilai tidak valid di r 5, 1,0001, 0,5, 0,01 (buffer HDR dibaca), tidak gelap total di dalam horizon,
 - tampilan lama identik dengan versi sebelum G2 (commit G1, uFall = 0) saat misi mati,
 - alur misi: tombol panel Mulai, X / Z / V berganti, layar akhir muncul, Esc mengakhiri.
+Kelompok 3 (G3, susur piringan, lempeng tebal, partikel):
+- autopilot susur (melawan dan searah arus) sampai ISCO tanpa menembus piringan, tinggi terjaga, delta-v di bawah anggaran,
+  dilepas di dalam ISCO lalu berakhir di singularitas; tanpa autopilot / delta-v habis = menabrak piringan,
+- kecepatan gas relatif: orbit melingkar melawan arus di r 6 = 2v/(1 + v^2) = 0,575 c, di r 3 = 0,8 c, searah arus = 0,
+- render lempeng tebal (kamera di atas dan di dalam lempeng, kokpit dan kamera luar) tanpa nilai tidak valid,
+- garis bara tergambar dekat piringan dan tidak ada di jalur kutub, tumbukan kaca terjadi (kokpit), kaca pecah = akhir misi,
+- eksposur otomatis hanya saat misi (k = 1 di luar misi), menggelap di atas piringan terang,
+- kamus ID untuk teks baru.
 Pakai: python tools/uji_misi_gargantua.py   (butuh: pip install playwright; CHROMIUM=<jalur> opsional, default /opt/pw-browsers/chromium
 bila ada). Tanpa GPU dipakai SwiftShader."""
 import asyncio, os, pathlib, sys
@@ -120,9 +128,10 @@ async def kelompok2(p, exe, pg):
     import math
     aDrip = math.pi / 2 * 22 ** 1.5
     cek('dilepas diam: waktu ke singularitas = (pi/2) 22^1,5', abs(drip['tau'] - aDrip) < 0.01, f"{drip['tau']:.4f} vs {aDrip:.4f} rs/c")
-    harap = {'polar': 'singularity', 'drip': 'singularity', 'fast': 'singularity', 'slant': 'singularity', 'whirl': 'singularity', 'near': 'escape', 'unstable': 'singularity'}
-    salah = {k: v['end'] for k, v in sim.items() if v['end'] != harap[k]}
-    cek('7 skenario tanpa dorongan berakhir sesuai rancangan (tidak ada yang menembus piringan)', not salah, str(salah) if salah else ', '.join(f"{k} {v['end']}" for k, v in sim.items()))
+    harap = {'polar': 'singularity', 'drip': 'singularity', 'fast': 'singularity', 'slant': 'singularity', 'whirl': 'singularity', 'near': 'escape', 'unstable': 'singularity',
+             'skim': 'disk', 'skimPro': 'disk'}   # G3: susur tanpa autopilot (geodesik murni) = menembus piringan
+    salah = {k: v['end'] for k, v in sim.items() if v['end'] != harap.get(k)}
+    cek('9 skenario tanpa dorongan berakhir sesuai rancangan (7 skenario G2 tidak menembus piringan, susur tanpa autopilot menembus)', not salah, str(salah) if salah else ', '.join(f"{k} {v['end']}" for k, v in sim.items()))
     cek('zoom-whirl lebih lama dari miring (berputar di 2 rs)', sim['whirl']['tau'] > sim['slant']['tau'] + 20, f"{sim['whirl']['tau']:.1f} vs {sim['slant']['tau']:.1f} rs/c")
 
     # --- kendali terbatas ---
@@ -207,8 +216,80 @@ async def kelompok2(p, exe, pg):
     keys |= set(re.findall(r"(?:name|info): '((?:[^'\\]|\\.)*)'", src[i0:i1]))
     keys |= set(re.findall(r"(?:label|sec): '((?:[^'\\]|\\.)*)'", src))
     keys |= {'Start mission', 'End mission (Esc)', 'Torn apart by tides near the singularity', 'Destroyed in the accretion disk', 'Escaped: thrown back out',
-             'Nose to the centre', 'Nose level: looking along the sky band', 'Free attitude (drag)'}
+             'Nose to the centre', 'Nose level: looking along the sky band', 'Free attitude (drag)',
+             'Nose along the track, disk below (drag = look)', 'Canopy shattered by disk dust', 'Autopilot skim (O)'}
+    keys |= set(re.findall(r"apOff\('((?:[^'\\]|\\.)*)'\)", src)) | set(re.findall(r"text: '((?:[^'\\]|\\.)*)'", src))
     hilang = sorted(k for k in keys if f"'{k}':" not in idb and k not in ('GX-01', 'RGBA16F', 'RGBA8 (fallback)', 'Q', 'Esc'))
     cek('kamus ID lengkap (semua txt(), skenario, label)', not hilang, '; '.join(hilang[:6]) or f'{len(keys)} kunci')
+    await kelompok3(pg)
+
+async def kelompok3(pg):
+    # --- fisika susur: autopilot sampai ISCO ---
+    sim = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, out = {}; G.state.paused = true;
+      for (const sc of ['skim', 'skimPro']) {
+        G.startMission(sc); let res = null, hErr = 0, rRel = null, n = 0;
+        while (!res && n++ < 20000) {
+          res = G.misFly(0.1); const rxz = Math.hypot(M.x[0], M.x[2]);
+          if (M.ap.on && rxz > 4 && rxz < 12) hErr = Math.max(hErr, Math.abs(M.x[1] / rxz - M.ap.h));
+          if (rRel === null && !M.ap.on) rRel = Math.hypot(...M.x);
+        }
+        out[sc] = { end: res && res.kind, tau: M.tau, dv: M.dvUsed, dvMax: M.dvMax, hErr, rRel };
+      }
+      G.startMission('skim'); G.toggleAP(); let r1 = null; for (let i = 0; !r1 && i < 20000; i++) r1 = G.misFly(0.1);
+      G.startMission('skim'); for (let i = 0; i < 300; i++) G.misFly(0.1); M.dvUsed = M.dvMax - 1e-4;
+      let r2 = null; for (let i = 0; !r2 && i < 20000; i++) r2 = G.misFly(0.1);
+      out.off = r1 && r1.kind; out.empty = r2 && r2.kind; G.stopMission(); return out; }''')
+    for sc, nama in (('skim', 'melawan arus'), ('skimPro', 'searah arus')):
+        v = sim[sc]
+        cek(f'susur {nama}: autopilot sampai ISCO tanpa menembus piringan, lalu singularitas', v['end'] == 'singularity' and v['rRel'] is not None and v['rRel'] < 3.05,
+            f"akhir {v['end']}, dilepas di r {v['rRel']:.3f}, waktu wajar {v['tau']:.1f} rs/c ({v['tau'] * 985.27 / 3600:.1f} jam)")
+        cek(f'susur {nama}: tinggi terjaga dan delta-v di bawah anggaran', v['hErr'] < 0.005 and v['dv'] < v['dvMax'],
+            f"galat tinggi maks {v['hErr']:.4f} r, delta-v {v['dv']:.4f} / {v['dvMax']} c")
+    cek('susur tanpa autopilot (O) menabrak piringan', sim['off'] == 'disk', str(sim['off']))
+    cek('susur dengan delta-v habis: autopilot lepas, menabrak piringan', sim['empty'] == 'disk', str(sim['empty']))
+
+    # --- kecepatan gas relatif ---
+    g = await pg.evaluate('''() => { const G = window.__gargantua, out = {};
+      for (const [k, r, dir] of [['retro6', 6, -1], ['pro6', 6, 1], ['retro3', 3.0001, -1]]) {
+        const x = [r, 0, 0], xd = [0, 0, dir * Math.sqrt(0.5 / (r - 1.5))]; out[k] = G.gasRel(x, xd).v; }
+      return out; }''')
+    import math
+    v6 = math.sqrt(0.5 / 5); a6 = 2 * v6 / (1 + v6 * v6)
+    cek('gas relatif melawan arus r 6 = 2v/(1 + v^2)', abs(g['retro6'] - a6) < 1e-6, f"{g['retro6']:.6f} vs {a6:.6f} c")
+    cek('gas relatif melawan arus r 3 (ISCO) = 0,8 c', abs(g['retro3'] - 0.8) < 1e-3, f"{g['retro3']:.5f} c")
+    cek('gas relatif searah arus = 0', g['pro6'] < 1e-6, f"{g['pro6']:.2e} c")
+
+    # --- render lempeng tebal, partikel, tumbukan ---
+    await pg.evaluate('() => { const G = window.__gargantua; G.CONFIG.adaptive = false; G.state.postMode = 0; }')
+    for rT, view, h in [(6, 'chase', 0.05), (6, 'cockpit', 0.05), (3.5, 'cockpit', 0.05), (8, 'chase', 0.01)]:
+        await pg.evaluate('''([rT, view, h]) => { const G = window.__gargantua, M = G.MIS; G.startMission('skim'); G.SHIP.view = view; M.ap.h = h;
+          G.state.paused = true; while (Math.hypot(...M.x) > rT) if (G.misFly(0.1)) break; G.state.paused = false; M.warp = 3; }''', [rT, view, h])
+        await pg.wait_for_timeout(1500)
+        st = await pg.evaluate('() => new Promise((r) => { window.__gargantua.state.readCb = r; })')
+        info = await pg.evaluate('() => { const G = window.__gargantua, M = G.MIS; return { vol: !!G.volParams(M.x), parts: G.state.partsDrawn, hits: M.hits, imps: M.imps.length }; }')
+        cek(f'lempeng tebal r {rT} tinggi {h} r ({view}) tanpa nilai tidak valid', info['vol'] and st['bad'] == 0 and st['max'] < 1e4,
+            f"tidak valid {st['bad']}, maks {st['max']:.1f}, rata {st['mean']:.3f}, lempeng {info['vol']}")
+        if view == 'cockpit' and rT == 6:
+            cek('garis bara tergambar dan debu menabrak kaca (kokpit, dekat piringan)', info['parts'] > 0 and info['hits'] > 0 and info['imps'] > 0, str(info))
+    await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS; G.startMission('polar'); G.state.paused = true;
+      while (Math.hypot(...M.x) > 15) G.misAdvance(M, 0.1); G.state.paused = false; }''')
+    await pg.wait_for_timeout(1500)
+    pol = await pg.evaluate('() => { const G = window.__gargantua, M = G.MIS; return { parts: G.state.partsDrawn, hits: M.hits, vol: !!G.volParams(M.x), k: G.AE.k }; }')
+    cek('jalur kutub: tanpa garis bara, tumbukan, dan lempeng tebal', not pol['parts'] and pol['hits'] == 0 and not pol['vol'], str(pol))
+    await pg.evaluate("() => { const G = window.__gargantua, M = G.MIS; G.startMission('skim'); G.state.paused = false; M.glass = 99.999; M.hitAcc = 5; }")
+    await pg.wait_for_function('window.__gargantua.MIS.end !== null', timeout=30000)
+    e = await pg.evaluate('() => ({ kind: window.__gargantua.MIS.end.kind, title: document.getElementById("mendTitle").textContent })')
+    cek('kaca rusak 100% = akhir misi (kaca pecah)', e['kind'] == 'glass', e['title'])
+
+    # --- eksposur otomatis ---
+    await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS; G.startMission('skim'); G.SHIP.view = 'chase'; G.state.paused = true;
+      while (Math.hypot(...M.x) > 4) G.misFly(0.1); G.state.paused = false; M.warp = 3; }''')
+    await pg.wait_for_function('window.__gargantua.AE.L !== null && window.__gargantua.AE.kt < 1', timeout=60000)
+    ae = await pg.evaluate('() => { const A = window.__gargantua.AE; return { kt: A.kt, L: A.L }; }')
+    cek('eksposur otomatis menggelap di atas piringan terang', ae['kt'] < 0.8, f"k sasaran {ae['kt']:.3f}, terang {ae['L']:.2f}")
+    await pg.evaluate('() => window.__gargantua.stopMission()')
+    await pg.wait_for_timeout(400)
+    k = await pg.evaluate('() => window.__gargantua.AE.k')
+    cek('di luar misi eksposur tidak diubah (k = 1)', k == 1, str(k))
 
 asyncio.run(main())

@@ -113,11 +113,11 @@
 const CONFIG = {
   quality: 'medium',
   presets: {
-    //        max RK steps | step factor (dt = k*r) | fbm octaves | max render scale
-    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6 },
-    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8 },
-    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0 },
-    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0 },
+    //        max RK steps | step factor (dt = k*r) | fbm octaves | max render scale | G3: volume samples, disk particles
+    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, vol: 16, parts: 400 },
+    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, vol: 24, parts: 900 },
+    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, vol: 32, parts: 1600 },
+    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, vol: 48, parts: 2500 },
   },
   adaptive: true,          // adaptive resolution
   renderScale: 0.8,        // current internal resolution factor
@@ -178,6 +178,12 @@ uniform float uEnc;
 uniform float uFall, uObsG, uBeta;
 uniform vec3 uObsV;
 float gObsK = 1.0;                   // G2: frekuensi teramati / frekuensi di tak hingga untuk sinar piksel ini
+// G3a: lempeng piringan tebal (volumetrik) di sekitar kamera saat misi dekat piringan. uVol = 0: tidak ada perubahan.
+// Tebal skala H = uVolH r, daerah bola radius uVolR di sekitar kamera, paling banyak uVolN sampel per piksel.
+precision mediump sampler3D;
+uniform float uVol, uVolR, uVolH;
+uniform int uVolN;
+uniform sampler3D uNoise;            // derau 3D 64^3 berulang (dibuat di CPU, periode 1 di tiap sumbu)
 
 // Geometric units: G = c = 1, Schwarzschild radius rs = 1  =>  M = 0.5
 const float RS = 1.0;
@@ -310,6 +316,23 @@ vec4 shadeDisk(vec3 hit, vec3 vel, float r) {
   return vec4(col * I, alpha);
 }
 
+// G3a: detail 3D lempeng tebal. Koordinat mutlak (tidak ikut kamera): radial ln r, azimut phi (skala dipilih agar 2 pi = 32 satuan,
+// kelipatan periode tekstur: tanpa sambungan di phi = pi), tinggi y / H. Pola ikut rotasi Kepler, dua lapis dicampur silang
+// seperti diskDensity() agar geseran diferensial tidak menggulung tanpa batas. Memanjang searah orbit (garis seret).
+float volTex(vec3 q) { return 0.62 * texture(uNoise, q * 0.25).r + 0.38 * texture(uNoise, q * 0.75 + 0.37).r; }
+float volDetail(vec3 sp, float rx, float zy) {
+  float phi = atan(sp.z, sp.x);
+  float om = sqrt(M / (rx * rx * rx));
+  const float P = 8.0;
+  float c1 = fract(uTime / P), c2 = fract(uTime / P + 0.5);
+  float w1 = 1.0 - abs(2.0 * c1 - 1.0);
+  vec3 b = vec3(log(rx) * 22.0, 0.0, zy * 0.6);
+  const float KA = 5.0929582;                                         // 32 / (2 pi)
+  float n1 = volTex(vec3(b.x, (phi - om * c1 * P) * KA, b.z));
+  float n2 = volTex(vec3(b.x, (phi - om * c2 * P) * KA, b.z) + vec3(17.3, 6.0, 9.7));
+  return mix(n2, n1, w1);
+}
+
 vec3 starLayer(vec3 d, float scale, float density, float seed, float bright) {
   vec3 p = d * scale;
   vec3 cell = floor(p);
@@ -372,6 +395,9 @@ void main() {
   vec3 col = vec3(0.0);
   float trans = 1.0;
   int state = 0;                     // 0 running, 1 absorbed, 2 escaped, 3 opaque
+  bool volOn = uVol > 0.5;           // G3a: masih di daerah lempeng tebal dekat kamera
+  int volUsed = 0;
+  float jit = uVol > 0.5 ? hash13(vec3(gl_FragCoord.xy, 7.0)) : 0.5;   // geser sampel per piksel (pita jadi butiran halus)
 
   for (int i = 0; i < MAX_ITER; i++) {
     if (i >= uMaxSteps) break;
@@ -388,6 +414,39 @@ void main() {
     vec3 a1 = accel(pos, vel + a0 * dt, h2);
     vel += 0.5 * (a0 + a1) * dt;
 
+    // G3a: lempeng tebal dekat kamera. Warna dan pola besar dari shadeDisk() di titik tengah langkah (sama dengan piringan tipis,
+    // jadi menyambung di batas daerah), detail 3D per sampel, profil tinggi exp(-(y/H)^2). Kedalaman optik satu lempeng tegak
+    // kira-kira sama dengan alpha piringan tipis. Profil exp(-(y/H)^4) (permukaan jelas, udara di atasnya bening). Di tepi daerah (0,6..1 uVolR) bobot lempeng turun, piringan tipis naik.
+    if (volOn) {
+      vec3 mid = 0.5 * (prev + pos);
+      if (length(mid - uCamPos) > uVolR || volUsed >= uVolN) volOn = false;
+      else {
+        float rx = length(mid.xz), Hs = uVolH * rx;
+        float ylo = prev.y * pos.y < 0.0 ? 0.0 : min(abs(prev.y), abs(pos.y));
+        if (ylo < 2.3 * Hs && rx > uRin * 0.9 && rx < uRout * 1.05) {
+          vec4 dl = shadeDisk(vec3(mid.x, 0.0, mid.z), vel, rx);
+          float seg = length(pos - prev);
+          int n = min(clamp(int(seg / (0.45 * Hs)) + 1, 1, 8), uVolN - volUsed);
+          float ds = seg / float(n);
+          for (int k = 0; k < 8; k++) {
+            if (k >= n) break;
+            vec3 sp = mix(prev, pos, (float(k) + jit) / float(n));
+            float spx = length(sp.xz);
+            float zy = sp.y / (uVolH * spx);
+            float wv = 1.0 - smoothstep(0.6 * uVolR, uVolR, length(sp - uCamPos));
+            if (abs(zy) > 2.2 || wv < 1e-3) continue;
+            float det = smoothstep(0.28, 0.78, volDetail(sp, spx, zy));
+            float ze = zy * (1.3 - 0.6 * det), ze2 = ze * ze, prof = exp(-ze2 * ze2);   // permukaan bergolak: detail mengangkat lapisan
+            float a = 1.0 - exp(-1.4 * prof * wv * dl.a * (0.15 + 1.7 * det) * ds / Hs);
+            col += trans * dl.rgb * (0.25 + 1.5 * det) * a;
+            trans *= 1.0 - a;
+          }
+          volUsed += n;
+          if (trans < 0.01) { state = 3; break; }
+        }
+      }
+    }
+
     // thin-disk crossing (plane y = 0): interpolate hit, composite front-to-back
     if (prev.y * pos.y < 0.0) {
       float t = prev.y / (prev.y - pos.y);
@@ -395,6 +454,7 @@ void main() {
       float rh = length(hit.xz);
       if (rh > uRin && rh < uRout) {
         vec4 dcol = shadeDisk(hit, vel, rh);
+        if (volOn) dcol.a *= smoothstep(0.6 * uVolR, uVolR, length(hit - uCamPos));   // G3a: dekat kamera diganti lempeng tebal
         col += trans * dcol.rgb * dcol.a;
         trans *= 1.0 - dcol.a;
         if (trans < 0.01) { state = 3; break; }
@@ -536,6 +596,115 @@ void main() {
   o = vec4(c * uEnc, 1.0);
 }`;
 
+/* G3a: eksposur otomatis misi. Rata-rata luminans scene di grid 16 x 9 (tiap piksel 16 sampel, disimpan L / (1 + L)), RGBA8, dibaca asinkron
+   lewat PBO + fence (tanpa menahan GPU). Hanya dipakai saat misi: menggelapkan bila scene terang (terbang rendah di atas piringan). */
+const LUM_FS = COMMON + `
+in vec2 vUv; out vec4 o;
+uniform sampler2D uTex; uniform float uDec;
+void main() {
+  float s = 0.0;
+  for (int j = 0; j < 4; j++) for (int i = 0; i < 4; i++) {
+    vec3 c = texture(uTex, vUv + (vec2(float(i), float(j)) - 1.5) / vec2(64.0, 36.0)).rgb * uDec;
+    s += max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 0.0);
+  }
+  s /= 16.0;
+  o = vec4(s / (1.0 + s), 0.0, 0.0, 1.0);
+}`;
+
+/* G3b: partikel piringan (distilisasi). Garis bara: titik di kotak sekitar mata (meter, kerangka model wahana), bergerak searah
+   kecepatan gas relatif wahana (uFlow), dibungkus ulang di tepi kotak; digambar sebagai pita tipis dari kepala ke ekor (jadi
+   tampak memancar dari satu titik hilang). Tanpa atribut: gl_VertexID (6 sudut) dan gl_InstanceID (partikel). */
+const PART_VS = `#version 300 es
+precision highp float;
+uniform mat4 uMV, uProj; uniform vec3 uFlow, uEye; uniform vec2 uRes;
+uniform float uSpeed, uLen, uTime, uBox, uDens, uNearR, uPx;
+out float vA, vS, vHeat;
+uvec3 pcg3d(uvec3 v) {
+  v = v * 1664525u + 1013904223u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  v ^= v >> 16u;
+  v.x += v.y * v.z; v.y += v.z * v.x; v.z += v.x * v.y;
+  return v;
+}
+void main() {
+  vec3 h = vec3(pcg3d(uvec3(uint(gl_InstanceID), 11u, 7u))) * (1.0 / 4294967295.0);
+  vec3 h2 = vec3(pcg3d(uvec3(uint(gl_InstanceID), 5u, 3u))) * (1.0 / 4294967295.0);
+  int c = gl_VertexID % 6;
+  float t = (c == 1 || c == 2 || c == 4) ? 1.0 : 0.0;                 // 0 kepala, 1 ekor
+  float s = (c == 2 || c == 4 || c == 5) ? 1.0 : -1.0;                // sisi pita
+  vA = 0.0; vS = s; vHeat = h2.z;
+  gl_Position = vec4(2.0, 2.0, 2.0, 1.0);                             // tidak aktif: di luar layar
+  if (h2.x >= uDens) return;
+  vec3 p = uEye + mod((h - 0.5) * uBox + uFlow * uSpeed * (0.7 + 0.6 * h2.y) * uTime + 0.5 * uBox, uBox) - 0.5 * uBox;
+  float d = length(p - uEye);
+  float f = smoothstep(uNearR, uNearR * 2.5, d) * (1.0 - smoothstep(0.3 * uBox, 0.5 * uBox, d));
+  if (f <= 0.0) return;
+  vec4 vh = uMV * vec4(p, 1.0), vt = uMV * vec4(p - uFlow * uLen * (0.6 + 0.8 * h.y), 1.0);
+  const float ZN = -0.05;
+  if (vh.z > ZN && vt.z > ZN) return;                                 // seluruhnya di belakang kamera
+  if (vh.z > ZN) vh = vt + (vh - vt) * ((ZN - vt.z) / (vh.z - vt.z));
+  if (vt.z > ZN) vt = vh + (vt - vh) * ((ZN - vh.z) / (vt.z - vh.z));
+  vec4 ch = uProj * vh, ct = uProj * vt;
+  vec2 sh = ch.xy / ch.w * uRes * 0.5, st = ct.xy / ct.w * uRes * 0.5, dd = st - sh;
+  float L = length(dd);
+  vec2 n = L > 1e-3 ? vec2(-dd.y, dd.x) / L : vec2(0.0, 1.0);
+  vec4 cc = t > 0.5 ? ct : ch;
+  gl_Position = cc + vec4(n * s * uPx / (uRes * 0.5) * cc.w, 0.0, 0.0);
+  vA = f * mix(1.0, 0.12, t) * clamp(4.0 / max(L, 1.0), 0.25, 1.0);  // garis panjang lebih redup per piksel
+}`;
+const PART_FS = `#version 300 es
+precision highp float;
+in float vA, vS, vHeat; out vec4 o;
+uniform float uEnc, uGain;
+void main() {
+  vec3 c = mix(vec3(1.0, 0.42, 0.10), vec3(1.0, 0.86, 0.62), vHeat * vHeat);
+  o = vec4(c * vA * (1.0 - vS * vS) * uGain * uEnc, 1.0);
+}`;
+// G3b: tumbukan di kaca kokpit (quad di bidang kaca, koordinat model): kilat putih, pijar jingga memudar, retak yang menetap
+const IMP_VS = `#version 300 es
+in vec3 aPos; in vec2 aC; in vec4 aD;
+uniform mat4 uMV, uProj;
+out vec2 vC; out vec4 vD;
+void main() { vC = aC; vD = aD; gl_Position = uProj * (uMV * vec4(aPos, 1.0)); }`;
+const IMP_FS = `#version 300 es
+precision highp float;
+in vec2 vC; in vec4 vD; out vec4 o;
+uniform float uEnc; uniform vec3 uLCol;
+void main() {
+  float r = length(vC);
+  if (r > 1.0) discard;
+  float age = vD.x, seed = vD.y, rc = r * 3.0;                         // rc dalam satuan ukuran tumbukan (quad = 3 ukuran)
+  float flash = 8.0 * exp(-age / 0.04) * exp(-rc * rc * 3.0);
+  float ember = 2.0 * exp(-age / 1.2) * exp(-rc * rc * 6.0) + 0.4 * exp(-age / 4.0) * exp(-rc * rc * 12.0);
+  float a = atan(vC.y, vC.x) / 6.2831853, nL = 5.0 + floor(seed * 4.0), u = a * nL + seed * 7.0;
+  float g = abs(fract(u) - 0.5) * 6.2831853 / nL * r;                 // jarak ke garis retak terdekat (satuan quad)
+  float len = 0.45 + 0.55 * fract(floor(u) * 0.618 + seed * 3.1);
+  float crack = (1.0 - smoothstep(0.0, 0.012, g)) * step(r, len) * smoothstep(0.03, 0.08, r);
+  crack = max(crack, (1.0 - smoothstep(0.0, 0.01, abs(r - 0.18 - 0.1 * seed))) * step(0.5, fract(u * 0.5)));
+  vec3 c = vec3(1.0) * flash + vec3(1.0, 0.45, 0.12) * ember + (uLCol * 0.06 + 0.04) * crack * min(age / 0.3, 1.0);
+  o = vec4(c * uEnc, 1.0);
+}`;
+// G3b: awan debu (layar penuh, dicampur di atas ray tracing sebelum wahana): derau dalam koordinat terowongan di sekitar arah
+// datang partikel (uSrc, ruang pandang), jadi tampak memancar dan melesat dari titik hilang. Abu-kebiruan, menyerap cahaya piringan.
+const DUST_FS = COMMON + `
+precision mediump sampler3D;
+in vec2 vUv; out vec4 o;
+uniform sampler3D uNoise; uniform vec3 uSrc, uTint; uniform float uDust, uTime, uTanHalf, uAsp, uEnc;
+void main() {
+  vec2 q = vUv * 2.0 - 1.0;
+  vec3 d = normalize(vec3(q.x * uTanHalf * uAsp, q.y * uTanHalf, -1.0));
+  float c = dot(d, uSrc);
+  vec3 e1 = normalize(cross(uSrc, abs(uSrc.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0))), e2 = cross(uSrc, e1);
+  vec3 pp = d - uSrc * c;
+  float s = length(pp), ang = atan(dot(pp, e2), dot(pp, e1));
+  float z = c / max(s, 0.03);                                          // kedalaman di terowongan berjari-jari 1
+  vec3 tq = vec3(cos(ang) * 4.0, sin(ang) * 4.0, z * 0.2 - uTime);
+  float n = 0.65 * texture(uNoise, tq * 0.25).r + 0.35 * texture(uNoise, tq * vec3(0.75, 0.75, 0.4) + 0.5).r;
+  float m = smoothstep(0.04, 0.3, s) * smoothstep(-0.3, 0.5, c);
+  float k = uDust * smoothstep(0.45, 0.85, n) * m;
+  o = vec4(uTint * k * uEnc, clamp(k * 0.45, 0.0, 0.6));
+}`;
+
 /* =====================================================================
    GL SETUP
    ===================================================================== */
@@ -649,14 +818,43 @@ const ID = {
   'v local fall frame': 'v kerangka jatuh',
   'v vs static': 'v thd diam',
   'vs static': 'thd pengamat diam',
-  'Mission keys: W/S A/D R/F thrust, Shift main engine, drag turns the nose, X attitude (centre, level, free), Z time, V view, Esc ends': 'Tombol misi: W/S A/D R/F dorong, Shift mesin utama, seret memutar hidung, X sikap (pusat, mendatar, bebas), Z waktu, V tampilan, Esc mengakhiri',
-  'Start a mission from the panel (`): 7 ways to fall in': 'Mulai misi dari panel (`): 7 cara jatuh',
+  'Mission keys: W/S A/D R/F thrust, Shift main engine, drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, Z time, V view, Esc ends': 'Tombol misi: W/S A/D R/F dorong, Shift mesin utama, seret memutar hidung, X sikap (pusat, mendatar, lintasan, bebas), O autopilot susur, Z waktu, V tampilan, Esc mengakhiri',
+  'Start a mission from the panel (`): 9 ways to fall in, two of them skimming the disk': 'Mulai misi dari panel (`): 9 cara jatuh, dua di antaranya menyusur piringan',
   'Mission': 'Misi', 'In the mission': 'Dalam misi',
   'GX-01 vessel': 'Wahana GX-01', 'Vessel GX-01: chase camera (V cockpit, Esc exit)': 'Wahana GX-01: kamera luar (V kokpit, Esc keluar)',
   'Vessel GX-01: cockpit (V chase camera, Esc exit)': 'Wahana GX-01: kokpit (V kamera luar, Esc keluar)', 'Vessel GX-01: off': 'Wahana GX-01: mati',
   'Vessel GX-01 model is missing (assets/gx01.data.js)': 'Model wahana GX-01 tidak ada (assets/gx01.data.js)',
   'Vessel view: GX-01 chase camera / cockpit (Esc exits)': 'Tampilan wahana: kamera luar GX-01 / kokpit (Esc keluar)',
   'Distance to centre': 'Jarak ke pusat', 'Holding position (fall: stage G2)': 'Menahan posisi (jatuh: tahap G2)',
+  'Skim the disk, against the flow': 'Susur piringan, melawan arus',
+  'Skim the disk, with the flow': 'Susur piringan, searah arus',
+  'Main route: the autopilot holds the vessel low over the disk while it spirals from 16 rs to the inner edge (ISCO, 3 rs), flying against the gas (0.4 to 0.8 c head-on). R/F height, W/S descent rate, O autopilot. Inside the ISCO it plunges.': 'Jalur utama: autopilot menahan wahana rendah di atas piringan sambil berpilin dari 16 rs ke tepi dalam (ISCO, 3 rs), terbang melawan gas (0,4 sampai 0,8 c dari depan). R/F tinggi, W/S laju turun, O autopilot. Di dalam ISCO wahana menukik.',
+  'The same low route, but orbiting with the gas: it barely moves past you. A calm look at the disk surface.': 'Jalur rendah yang sama, tetapi mengorbit searah gas: gas nyaris diam terhadap wahana. Pemandangan tenang permukaan piringan.',
+  'Nose along the track, disk below (drag = look)': 'Hidung searah lintasan, piringan di bawah (seret = arah pandang)',
+  'Canopy shattered by disk dust': 'Kaca kokpit pecah oleh debu piringan',
+  'Dust impacts on the canopy: {n} · damage {d}%': 'Tumbukan debu di kaca kokpit: {n} · kerusakan {d}%',
+  'Distilled: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT); no vessel would survive the disk.': 'Distilisasi: butir debu nyata 1 mikrogram pada 0,8 c membawa 6,0e7 J (sekitar 14 kg TNT); tidak ada wahana yang selamat di piringan.',
+  'Autopilot: delta-v exhausted, the vessel sinks toward the disk': 'Autopilot: delta-v habis, wahana turun ke piringan',
+  'Autopilot off: free fall. A tilted orbit soon cuts through the disk': 'Autopilot mati: jatuh bebas. Orbit yang miring segera menembus piringan',
+  'Autopilot skim needs the vessel near the disk: outside the ISCO, height under half the radius, delta-v left': 'Autopilot susur butuh wahana dekat piringan: di luar ISCO, tinggi di bawah setengah jari-jari, delta-v masih ada',
+  'Autopilot skim on: R/F height, W/S descent rate, O off': 'Autopilot susur nyala: R/F tinggi, W/S laju turun, O mati',
+  'Inside the ISCO: no stable orbit here, the gas plunges too. Autopilot released, falling in': 'Di dalam ISCO: tidak ada orbit stabil, gas juga menukik. Autopilot dilepas, wahana jatuh',
+  'autopilot holds height (without it: disk in': 'autopilot menahan tinggi (tanpa autopilot: piringan dalam',
+  'far from the disk': 'jauh dari piringan',
+  'height': 'tinggi',
+  'gas': 'gas',
+  'skim': 'susur',
+  'descent': 'turun',
+  'off (O)': 'mati (O)',
+  'Disk': 'Piringan',
+  'Autopilot': 'Autopilot',
+  'Canopy': 'Kaca',
+  'damage': 'rusak',
+  'hits': 'tumbukan',
+  'canopy': 'kaca',
+  'Autopilot: R/F height · W/S descent rate · O off · drag = look · X attitude · Z time · V view · Esc end': 'Autopilot: R/F tinggi · W/S laju turun · O mati · seret = arah pandang · X sikap · Z waktu · V tampilan · Esc akhiri',
+  'Autopilot skim (O)': 'Autopilot susur (O)',
+  'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT). The thick disk layer near the vessel is also exaggerated.': 'Partikel piringan dan tumbukan kaca distilisasi demi tampilan: butir debu nyata 1 mikrogram pada 0,8 c membawa 6,0e7 J (sekitar 14 kg TNT). Lempeng piringan tebal di dekat wahana juga dilebih-lebihkan.',
   'Disk light': 'Cahaya piringan', 'View': 'Tampilan', 'Cockpit': 'Kokpit', 'Chase': 'Kamera luar', 'Vessel': 'Wahana',
 };
 const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
@@ -669,8 +867,8 @@ function applyStaticLang() {
     [txt('Drag / wheel / pinch'), txt('Orbit and zoom the camera')], ['1 - 4', txt('Camera presets: film, edge-on, top-down, close approach')],
     ['Space', txt('Pause / resume time')], ['Q', txt('Quality preset: Ultra, High, Medium, Low')],
     ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')], ['F', txt('Photo mode: UI hidden, Enter saves PNG, F or Esc exits')],
-    ['V · Esc', txt('Vessel view: GX-01 chase camera / cockpit (Esc exits)')], [txt('Mission'), txt('Start a mission from the panel (`): 7 ways to fall in')],
-    [txt('In the mission'), txt('Mission keys: W/S A/D R/F thrust, Shift main engine, drag turns the nose, X attitude (centre, level, free), Z time, V view, Esc ends')], ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
+    ['V · Esc', txt('Vessel view: GX-01 chase camera / cockpit (Esc exits)')], [txt('Mission'), txt('Start a mission from the panel (`): 9 ways to fall in, two of them skimming the disk')],
+    [txt('In the mission'), txt('Mission keys: W/S A/D R/F thrust, Shift main engine, drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, Z time, V view, Esc ends')], ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
   $('#mendAgain').textContent = txt('Fly again'); $('#mendExit').textContent = txt('Exit mission');
   const m = $('#menuLink'); if (m) m.href = `../../index.html?lang=${LANG}`;
@@ -837,6 +1035,64 @@ function main() {
   const SHIP = { on: false, view: 'chase', ready: false, data: window.__GX01 || null,
     chase: [0, 7.5, 40], aim: [0, 0, -6], near: { chase: 0.5, cockpit: 0.04 } };
   const SHIP_P = program(SHIP_FS, 'ship', SHIP_VS);
+  // G3: program partikel, tumbukan kaca, awan debu; derau 3D 64^3 berulang (3 oktaf derau nilai halus berperiode, unit tekstur 6)
+  const PART_P = program(PART_FS, 'particles', PART_VS), IMP_P = program(IMP_FS, 'impacts', IMP_VS);
+  P.dust = program(DUST_FS, 'dust'); P.lum = program(LUM_FS, 'lum');
+  // G3a: target 16 x 9 RGBA8 + PBO untuk eksposur otomatis misi
+  const AE = { k: 1, kt: 1, fence: null, t: 0, L: null, tgt: null, pbo: gl.createBuffer() };
+  {
+    const tx = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tx);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 16, 9, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tx, 0); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    AE.tgt = { tex: tx, fb, w: 16, h: 9 };
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, AE.pbo); gl.bufferData(gl.PIXEL_PACK_BUFFER, 16 * 9 * 4, gl.STREAM_READ); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  }
+  function autoExposure(dt) {
+    if (!MIS.on) { AE.k = AE.kt = 1; return; }
+    if (AE.fence) {                                              // hasil baca sebelumnya siap?
+      if (gl.getSyncParameter(AE.fence, gl.SYNC_STATUS) === gl.SIGNALED) {
+        gl.deleteSync(AE.fence); AE.fence = null;
+        const px = new Uint8Array(16 * 9 * 4); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, AE.pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, px); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        const v = []; for (let i = 0; i < px.length; i += 4) { const a = Math.min(px[i], 254) / 255; v.push(a / (1 - a)); }
+        v.sort((a, b) => b - a);                                 // rata-rata 30% sel paling terang (langit gelap tidak menarik ke bawah)
+        AE.L = v.slice(0, 43).reduce((a, b) => a + b, 0) / 43; AE.kt = Math.max(0.12, Math.min(1, 0.7 / Math.max(AE.L, 1e-3)));
+      } else if ((AE.t -= dt) < -1) { gl.deleteSync(AE.fence); AE.fence = null; AE.t = 0; }   // tidak kunjung siap: ulang
+    } else if ((AE.t -= dt) <= 0) {                              // ukur lagi tiap 0,2 s
+      AE.t = 0.2;
+      pass(P.lum, AE.tgt, (p) => { tex(p, 'uTex', T.scene.tex, 0); gl.uniform1f(p.u('uDec'), 1 / FMT.enc); });
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, AE.pbo); gl.readPixels(0, 0, 16, 9, gl.RGBA, gl.UNSIGNED_BYTE, 0); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      AE.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush();
+    }
+    AE.k += (AE.kt - AE.k) * (1 - Math.exp(-3 * dt));
+  }
+  {
+    const N = 64, data = new Uint8Array(N * N * N), acc = new Float32Array(N * N * N);
+    let seed = 1234567;
+    const rnd = () => { seed = (seed + 0x6D2B79F5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    let amp = 1, tot = 0;
+    for (const P0 of [4, 8, 16]) {                                    // jumlah sel kisi per sisi (periode = N)
+      const lat = new Float32Array(P0 * P0 * P0).map(rnd), cs = N / P0, sm = (f) => f * f * (3 - 2 * f);
+      const L = (i, j, k) => lat[((i % P0) * P0 + (j % P0)) * P0 + (k % P0)];
+      for (let z = 0; z < N; z++) for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const fx = x / cs, fy = y / cs, fz = z / cs, i = Math.floor(fx), j = Math.floor(fy), k = Math.floor(fz);
+        const u = sm(fx - i), v = sm(fy - j), w = sm(fz - k);
+        const a = L(i, j, k) + (L(i + 1, j, k) - L(i, j, k)) * u, b = L(i, j + 1, k) + (L(i + 1, j + 1, k) - L(i, j + 1, k)) * u;
+        const c = L(i, j, k + 1) + (L(i + 1, j, k + 1) - L(i, j, k + 1)) * u, d = L(i, j + 1, k + 1) + (L(i + 1, j + 1, k + 1) - L(i, j + 1, k + 1)) * u;
+        acc[(z * N + y) * N + x] += amp * ((a + (b - a) * v) + ((c + (d - c) * v) - (a + (b - a) * v)) * w);
+      }
+      tot += amp; amp *= 0.5;
+    }
+    for (let i = 0; i < acc.length; i++) data[i] = Math.round(255 * Math.min(1, Math.max(0, (acc[i] / tot - 0.5) * 1.6 + 0.5)));
+    const tx = gl.createTexture(); gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_3D, tx);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage3D(gl.TEXTURE_3D, 0, gl.R8, N, N, N, 0, gl.RED, gl.UNSIGNED_BYTE, data);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.REPEAT], [gl.TEXTURE_WRAP_T, gl.REPEAT], [gl.TEXTURE_WRAP_R, gl.REPEAT]])
+      gl.texParameteri(gl.TEXTURE_3D, k, v);
+    gl.activeTexture(gl.TEXTURE0);
+  }
   if (SHIP.data) {
     const D = SHIP.data, raw = (b) => Uint8Array.from(atob(b), (ch) => ch.charCodeAt(0));
     const pos = raw(D.pos), nrm = raw(D.nrm), col = raw(D.col), mat = raw(D.mat);
@@ -885,6 +1141,10 @@ function main() {
      ===================================================================== */
   const MIS_T = 985.27, RS_KM = 2.954e8, MM = 0.5, R_END = 0.006, RS_M = 2.954e11, C2 = 8.988e16;
   const SCEN = {
+    skim:     { name: 'Skim the disk, against the flow', skim: -1, dv: 0.3, lock: 'track',
+                info: 'Main route: the autopilot holds the vessel low over the disk while it spirals from 16 rs to the inner edge (ISCO, 3 rs), flying against the gas (0.4 to 0.8 c head-on). R/F height, W/S descent rate, O autopilot. Inside the ISCO it plunges.' },
+    skimPro:  { name: 'Skim the disk, with the flow', skim: 1, dv: 0.3, lock: 'track',
+                info: 'The same low route, but orbiting with the gas: it barely moves past you. A calm look at the disk surface.' },
     polar:    { name: 'Straight in over the pole', E: 1, L: 0, dv: 0.03,
                 info: 'Radial fall along the spin axis from 22 rs, arriving from far away (rain frame). Never touches the disk.' },
     drip:     { name: 'Released at rest at 22 rs', E: Math.sqrt(1 - 1 / 22), L: 0, dv: 0.03,
@@ -901,9 +1161,13 @@ function main() {
                 info: 'Circular orbit inside the ISCO (3 rs): no stable orbit exists here. A tiny nudge starts the plunge; thrust can delay it.' },
   };
   const WARPS = [{ k: 1, name: 'Auto' }, { k: 4, name: 'Auto x4' }, { k: 16, name: 'Auto x16' }, { k: 0.25, name: 'Slow x0.25' }];
-  const LOCKS = ['centre', 'level', 'free'];                    // X: hidung ke pusat / hidung mendatar (pita langit) / bebas
-  const MIS = { on: false, sc: 'polar', x: [0, 22, 0], xd: [0, 0, 0], tau: 0, att: null, lock: 'centre', warp: 0, chase: 40,
-    dvUsed: 0, dvMax: 0.03, end: null, tauH: null, hist: [], pred: null, predT: 0, vMax: 0, thr: [0, 0, 0], keys: new Set(), fade: 0 };
+  // X: hidung ke pusat / hidung mendatar (pita langit) / searah lintasan, piringan di bawah (G3) / bebas
+  const LOCKS = ['centre', 'level', 'track', 'free'];
+  // G3: ap = autopilot susur (dir +1 searah gas, -1 melawan; h tinggi target / r; vin laju turun dr/dtau), look = arah pandang
+  // relatif lintasan (sikap 'track'), gas = gas piringan relatif wahana, imps = tumbukan kaca, glass = kerusakan kaca (%)
+  const MIS = { on: false, sc: 'skim', x: [0, 22, 0], xd: [0, 0, 0], tau: 0, att: null, lock: 'centre', warp: 0, chase: 40,
+    dvUsed: 0, dvMax: 0.03, end: null, tauH: null, hist: [], pred: null, predT: 0, vMax: 0, thr: [0, 0, 0], keys: new Set(), fade: 0,
+    ap: { on: false, dir: -1, h: 0.05, vin: 0.1 }, look: { yaw: 0, pitch: 0 }, gas: null, imps: [], hits: 0, glass: 0, shake: 0, clock: 0, hitAcc: 0 };
 
   function misAcc(x, xd) {
     const r2 = v3.dot(x, x), r = Math.sqrt(r2), Lv = v3.cross(x, xd), L2 = v3.dot(Lv, Lv);
@@ -954,16 +1218,31 @@ function main() {
   function misLockAtt() {
     const rh = v3.norm(MIS.x), A = MIS.att;
     if (MIS.lock === 'centre') { MIS.att = attTo(v3.mul(rh, -1), A ? A.u : [0, 0, -1]); return; }
+    if (MIS.lock === 'track') {                                 // G3: hidung searah gerak (sejajar piringan), atas = normal piringan di sisi wahana
+      const ny = [0, MIS.x[1] >= 0 ? 1 : -1, 0], v = rainOf(MIS.x, MIS.xd).v;
+      let f = v3.sub(v, v3.mul(ny, v3.dot(v, ny)));
+      if (Math.hypot(...f) < 1e-4) f = Math.hypot(MIS.x[0], MIS.x[2]) > 1e-6 ? [-MIS.x[2], 0, MIS.x[0]] : [1, 0, 0];
+      const B = attTo(v3.norm(f), ny), L = MIS.look;
+      let f2 = v3.add(v3.mul(B.f, Math.cos(L.yaw)), v3.mul(B.r, Math.sin(L.yaw)));
+      f2 = v3.norm(v3.add(v3.mul(f2, Math.cos(L.pitch)), v3.mul(B.u, Math.sin(L.pitch))));
+      MIS.att = attTo(f2, ny); return;
+    }
     // mendatar: hidung tegak lurus jari-jari (ke arah gerak menyamping bila ada), atas = menjauhi lubang hitam
     let f = A ? v3.sub(A.f, v3.mul(rh, v3.dot(A.f, rh))) : [0, 0, 0];
     if (Math.hypot(...f) < 0.2) { const t = v3.sub(MIS.xd, v3.mul(rh, v3.dot(MIS.xd, rh))); f = Math.hypot(...t) > 1e-6 ? t : v3.cross(rh, Math.abs(rh[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]); }
     MIS.att = attTo(v3.norm(f), rh);
   }
-  const lockName = (k) => ({ centre: 'Nose to the centre', level: 'Nose level: looking along the sky band', free: 'Free attitude (drag)' })[k];
+  const lockName = (k) => ({ centre: 'Nose to the centre', level: 'Nose level: looking along the sky band',
+    track: 'Nose along the track, disk below (drag = look)', free: 'Free attitude (drag)' })[k];
   function startMission(id = MIS.sc) {
     if (!SHIP.ready) { toast(txt('Vessel GX-01 model is missing (assets/gx01.data.js)'), 3); return; }
     const S = SCEN[id]; MIS.sc = id;
-    if (S.circ || S.L) {
+    MIS.ap = { on: false, dir: S.skim || -1, h: 0.05, vin: 0.1 };
+    AE.k = AE.kt = 1; AE.L = null;                               // G3a: eksposur mulai dari normal tiap misi
+    if (S.skim) {                                                // G3: mulai di 16 rs, 0,05 r di atas bidang piringan, orbit melingkar + turun
+      const r0 = 16; MIS.ap.on = true;
+      MIS.x = [r0, MIS.ap.h * r0, 0]; MIS.xd = apVel(MIS.x, MIS.ap);
+    } else if (S.circ || S.L) {
       const i = (S.inc || 90) * Math.PI / 180, ps = (S.psi0 || 0) * Math.PI / 180;
       const en = [1, 0, 0], ep = [0, Math.sin(i), Math.cos(i)];
       const rh = v3.add(v3.mul(en, Math.cos(ps)), v3.mul(ep, Math.sin(ps))), th = v3.add(v3.mul(en, -Math.sin(ps)), v3.mul(ep, Math.cos(ps)));
@@ -975,22 +1254,28 @@ function main() {
       const r0 = 22, ur = -Math.sqrt(Math.max(S.E * S.E - (1 - 1 / r0), 0));
       MIS.x = [0, r0, 0]; MIS.xd = [0, ur, 0];
     }
-    Object.assign(MIS, { on: true, tau: 0, att: null, lock: S.lock || 'centre', dvUsed: 0, dvMax: S.dv, end: null, tauH: null, hist: [], pred: null, predT: 0, vMax: 0, fade: 0 });
+    Object.assign(MIS, { on: true, tau: 0, att: null, lock: S.lock || 'centre', dvUsed: 0, dvMax: S.dv, end: null, tauH: null, hist: [], pred: null, predT: 0, vMax: 0, fade: 0,
+      look: { yaw: 0, pitch: S.skim ? -0.12 : 0 }, gas: null, imps: [], hits: 0, glass: 0, shake: 0, clock: 0, hitAcc: 0 });
     misLockAtt();
+    if (S.skim) {                                                // pandang sedikit ke arah lubang hitam (bayangan dan dinding cahaya di depan)
+      MIS.look.yaw = 0.62 * (Math.sign(v3.dot(v3.mul(v3.norm(MIS.x), -1), MIS.att.r)) || 1); misLockAtt();
+    }
+    MIS.gas = gasRel();
     SHIP.on = true; state.tween = null;
     $('#mend').hidden = true; $('#dash').hidden = false;
     misPredict(); toast(txt(S.info), 6);
     syncUI();
   }
   function stopMission() {
-    MIS.on = false; MIS.end = null; SHIP.on = false; MIS.keys.clear();
+    MIS.on = false; MIS.end = null; SHIP.on = false; MIS.keys.clear(); AE.k = AE.kt = 1;
     $('#mend').hidden = true; $('#dash').hidden = true; syncUI();
   }
   function endMission(kind, extra = {}) {
     if (MIS.end) return;
     MIS.end = { kind, tau: MIS.tau, r: Math.hypot(...MIS.x), ...extra };
     const s = (t) => fmtTau(t), E = MIS.end, lines = [];
-    const title = { singularity: 'Torn apart by tides near the singularity', disk: 'Destroyed in the accretion disk', escape: 'Escaped: thrown back out' }[kind];
+    const title = { singularity: 'Torn apart by tides near the singularity', disk: 'Destroyed in the accretion disk', escape: 'Escaped: thrown back out',
+      glass: 'Canopy shattered by disk dust' }[kind];
     lines.push(txt('Scenario') + ': ' + txt(SCEN[MIS.sc].name));
     lines.push(txt('Proper time on board') + ': ' + s(E.tau));
     if (MIS.tauH !== null) {
@@ -999,6 +1284,8 @@ function main() {
     }
     if (kind === 'singularity') lines.push(txt('Tidal stretch on a 2 m body reached 1 g only 0.3 s before the end (r = 0.006 rs).'));
     if (kind === 'disk') lines.push(txt('Crossed the disk plane at r = {r} rs, inside the disk (gas at about 0.5 c relative).').replace('{r}', fmtN(E.rc, 2)));
+    if (MIS.hits) lines.push(txt('Dust impacts on the canopy: {n} · damage {d}%').replace('{n}', MIS.hits).replace('{d}', fmtN(MIS.glass, 0)));
+    if (kind === 'glass' || MIS.hits) lines.push(txt('Distilled: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT); no vessel would survive the disk.'));
     lines.push(txt('Fastest speed in the local falling frame') + ': ' + fmtN(MIS.vMax, 3) + ' c · ' + txt('delta-v used') + ': ' + fmtN(MIS.dvUsed, 4) + ' c');
     $('#mendTitle').textContent = txt(title);
     $('#mendBody').innerHTML = lines.map((l) => `<p>${l}</p>`).join('');
@@ -1042,34 +1329,148 @@ function main() {
     }
     MIS.pred = { kind: res ? res.kind : 'bound', dTau: st.tau - MIS.tau, horizon: horizon === null ? null : horizon - MIS.tau, pts };
   }
-  function stepMission(dt) {
+  /* G3: autopilot susur, gas piringan, tumbukan kaca. Lempeng tebal H = VOL_H r (shader uVolH, angka sama).
+     Autopilot: kecepatan sasaran = orbit melingkar (searah atau melawan gas) + turun vin + koreksi tinggi ke h r di atas bidang
+     piringan; selisih di kerangka rain dikoreksi dengan dorongan (boost misThrust, ikut anggaran delta-v), paling besar
+     AP.aMax per rs/c. Dilepas di dalam ISCO (3 rs atau tepi dalam piringan bila lebih kecil): tidak ada orbit stabil, menukik. */
+  const VOL_H = 0.025, AP = { aMax: 0.02, tau: 2, hMin: 0.015, hMax: 0.3, vMax: 0.25 };
+  function apVel(x, ap) {                                        // dx/dtau sasaran autopilot di titik x
+    const r = Math.hypot(...x), rh = v3.mul(x, 1 / r), rxz = Math.max(Math.hypot(x[0], x[2]), 1e-6);
+    const ph = [-x[2] / rxz, 0, x[0] / rxz], ut = Math.sqrt(MM / Math.max(r - 1.5, 0.05));   // arah putar piringan x -> z
+    const s = x[1] >= 0 ? 1 : -1, e = v3.norm(v3.sub([0, 1, 0], v3.mul(rh, rh[1])));
+    const vy = Math.max(-0.05, Math.min(0.05, (s * ap.h * rxz - x[1]) / AP.tau));
+    return v3.add(v3.add(v3.mul(rh, -ap.vin), v3.mul(ph, ap.dir * ut)), v3.mul(e, vy));
+  }
+  function apOff(msg) { MIS.ap.on = false; if (msg) toast(txt(msg), 5); }
+  function misAutopilot(h) {
+    const lim = Math.min(AP.aMax * h, MIS.dvMax - MIS.dvUsed);
+    if (lim <= 1e-9) { apOff('Autopilot: delta-v exhausted, the vessel sinks toward the disk'); return; }
+    const Rc = rainOf(MIS.x, MIS.xd), Rd = rainOf(MIS.x, apVel(MIS.x, MIS.ap));
+    let dw = v3.mul(v3.sub(Rd.U, Rc.U), Math.min(1, h / AP.tau) / Rc.g);
+    const m = Math.hypot(...dw); if (m > lim) dw = v3.mul(dw, lim / m);
+    if (m > 1e-12) misThrust(dw);
+  }
+  function toggleAP() {
     if (!MIS.on || MIS.end) return;
+    if (MIS.ap.on) { apOff('Autopilot off: free fall. A tilted orbit soon cuts through the disk'); syncUI(); return; }
+    const x = MIS.x, rxz = Math.hypot(x[0], x[2]), d = CONFIG.disk;
+    if (!(rxz > Math.min(3, d.rIn) && rxz < d.rOut * 1.6 && Math.abs(x[1]) < 0.5 * rxz) || MIS.dvUsed >= MIS.dvMax) {
+      toast(txt('Autopilot skim needs the vessel near the disk: outside the ISCO, height under half the radius, delta-v left'), 4); return;
+    }
+    const t = v3.dot(MIS.xd, [-x[2] / rxz, 0, x[0] / rxz]);
+    Object.assign(MIS.ap, { on: true, dir: t >= 0 ? 1 : -1, h: Math.max(AP.hMin, Math.min(AP.hMax, Math.abs(x[1]) / rxz)) });
+    toast(txt('Autopilot skim on: R/F height, W/S descent rate, O off'), 3); syncUI();
+  }
+  // integrasi waktu wajar dtau dengan autopilot (potongan kecil agar koreksi mengikuti orbit); dipakai stepMission dan uji
+  function misFly(dtau, onHorizon) {
+    let left = dtau, res = null, n = 0;
+    while (left > 1e-12 && !res && n++ < 400) {
+      const r = Math.hypot(...MIS.x);
+      if (MIS.ap.on && Math.hypot(MIS.x[0], MIS.x[2]) < Math.min(3, CONFIG.disk.rIn))
+        apOff('Inside the ISCO: no stable orbit here, the gas plunges too. Autopilot released, falling in');
+      const h = MIS.ap.on ? Math.min(left, 0.05 * Math.pow(r, 1.5)) : left;
+      if (MIS.ap.on) misAutopilot(h);
+      const st = { x: MIS.x, xd: MIS.xd, tau: MIS.tau, onHorizon };
+      res = misAdvance(st, h); MIS.x = st.x; MIS.xd = st.xd; MIS.tau = st.tau; left -= h;
+    }
+    return res;
+  }
+  // gas piringan di titik x: orbit melingkar searah putaran piringan (di dalam tepi dalam: jatuh dengan E, L tepi dalam);
+  // dens = kerapatan debu relatif (profil exp(-(y / 2,5 H)^2), lebih lebar dari lempeng bercahaya), 0 jauh dari piringan
+  function gasAt(x) {
+    const d = CONFIG.disk, r = Math.hypot(...x), rxz = Math.hypot(x[0], x[2]);
+    if (rxz < 1e-6 || r < 1.05) return null;
+    const rh = v3.mul(x, 1 / r), ph = [-x[2] / rxz, 0, x[0] / rxz], H = VOL_H * rxz, ri = Math.max(d.rIn, 1.6);
+    let ur = 0, ut = Math.sqrt(MM / Math.max(r - 1.5, 0.05));
+    if (r < ri) {
+      const Li = ri * Math.sqrt(MM / (ri - 1.5)), Ei = (1 - 1 / ri) / Math.sqrt(1 - 1.5 / ri);
+      ut = Li / r; ur = -Math.sqrt(Math.max(Ei * Ei - (1 - 1 / r) * (1 + Li * Li / (r * r)), 0));
+    }
+    const zy = x[1] / (2.5 * H), out = Math.min(1, Math.max(0, (d.rOut * 1.05 - rxz) / (0.25 * d.rOut)));
+    const inner = rxz < d.rIn ? 0.5 * Math.max(0, (rxz - 1) / (d.rIn - 1)) ** 2 : 1;
+    return { xd: v3.add(v3.mul(rh, ur), v3.mul(ph, ut)), dens: Math.exp(-zy * zy) * out * inner, H, rxz };
+  }
+  // kecepatan gas di kerangka wahana (boost dari kerangka rain): v = U' / gamma', U' = Ug + Us ((Us.Ug) / (gs + 1) - gg)
+  function gasRel(x = MIS.x, xd = MIS.xd) {
+    const g = gasAt(x), none = { v: 0, dir: [0, 0, -1], dens: 0, H: g ? g.H : 0, y: x[1] };
+    if (!g) return none;
+    const Rs = rainOf(x, xd), Rg = rainOf(x, g.xd), uu = v3.dot(Rs.U, Rg.U);
+    const Up = v3.add(Rg.U, v3.mul(Rs.U, uu / (Rs.g + 1) - Rg.g)), v = v3.mul(Up, 1 / (Rs.g * Rg.g - uu)), sp = Math.hypot(...v);
+    return { v: sp, dir: sp > 1e-9 ? v3.mul(v, 1 / sp) : [0, 0, -1], dens: g.dens, H: g.H, y: x[1] };
+  }
+  // segitiga kaca kokpit (material 1) untuk titik tumbukan: titik, normal keluar, luas
+  const GLASS = [];
+  if (SHIP.data) {
+    const D = SHIP.data, raw = (b) => Uint8Array.from(atob(b), (ch) => ch.charCodeAt(0));
+    const P = new Int16Array(raw(D.pos).buffer), N = new Int8Array(raw(D.nrm).buffer), Mt = raw(D.mat);
+    const at = (i) => [P[3 * i] * D.scale, P[3 * i + 1] * D.scale, P[3 * i + 2] * D.scale];
+    for (let i = 0; i + 2 < D.n; i += 3) {
+      if (Mt[i] !== 1) continue;
+      const a = at(i), b = at(i + 1), c = at(i + 2), cr = v3.cross(v3.sub(b, a), v3.sub(c, a)), ar = Math.hypot(...cr) / 2;
+      if (ar < 1e-6) continue;
+      let n = v3.norm(cr); if (v3.dot(n, [N[3 * i], N[3 * i + 1], N[3 * i + 2]]) < 0) n = v3.mul(n, -1);
+      GLASS.push({ a, b, c, n, area: ar });
+    }
+  }
+  const toModel = (w) => [v3.dot(w, MIS.att.r), v3.dot(w, MIS.att.u), -v3.dot(w, MIS.att.f)];
+  function spawnImpact(G) {                                      // distilisasi: titik kaca yang menghadap arus gas
+    const fm = toModel(G.dir); let tot = 0;
+    const w = GLASS.map((t) => { const k = t.area * Math.max(0, -v3.dot(t.n, fm)); tot += k; return k; });
+    if (tot <= 0) return;
+    let u = Math.random() * tot, i = 0; while (i < w.length - 1 && u > w[i]) { u -= w[i]; i++; }
+    const t = GLASS[i]; let a = Math.random(), b = Math.random(); if (a + b > 1) { a = 1 - a; b = 1 - b; }
+    const vk = G.v / 0.5;
+    MIS.imps.push({ p: v3.add(t.a, v3.add(v3.mul(v3.sub(t.b, t.a), a), v3.mul(v3.sub(t.c, t.a), b))), n: t.n, t0: MIS.clock, seed: Math.random(),
+      size: 0.012 + 0.03 * Math.random() * Math.min(1.6, vk) });
+    if (MIS.imps.length > 96) MIS.imps.shift();
+    MIS.hits++; MIS.glass = Math.min(100, MIS.glass + 0.05 * vk * vk); MIS.shake = Math.min(1, MIS.shake + 0.25 * Math.min(1.5, vk));
+  }
+  function stepMission(dt) {
+    if (!MIS.on || MIS.end) return 0;
     // kendali: W/S maju-mundur, A/D kiri-kanan, R/F naik-turun (kerangka wahana), Shift = mesin utama
     const K = MIS.keys, A = MIS.att, ax = (a, b) => (K.has(a) ? 1 : 0) - (K.has(b) ? 1 : 0);
     const fw = ax('KeyW', 'KeyS'), rt = ax('KeyD', 'KeyA'), up = ax('KeyR', 'KeyF');
     MIS.thr = [fw, rt, up];
-    if ((fw || rt || up) && !state.paused && MIS.dvUsed < MIS.dvMax) {
+    if (MIS.ap.on) {                                             // G3: autopilot susur: R/F tinggi sasaran, W/S laju turun
+      MIS.thr = [fw, 0, up];
+      const k = (K.has('ShiftLeft') || K.has('ShiftRight') ? 3 : 1) * dt;
+      if (up) MIS.ap.h = Math.max(AP.hMin, Math.min(AP.hMax, MIS.ap.h * Math.exp(0.5 * up * k)));
+      if (fw) MIS.ap.vin = Math.max(0, Math.min(AP.vMax, MIS.ap.vin + 0.05 * fw * k));
+    } else if ((fw || rt || up) && !state.paused && MIS.dvUsed < MIS.dvMax) {
       const rate = K.has('ShiftLeft') || K.has('ShiftRight') ? 0.004 : 0.0008;
       const dir = v3.add(v3.add(v3.mul(A.f, fw), v3.mul(A.r, rt)), v3.mul(A.u, up));
       const amt = Math.min(rate * dt, MIS.dvMax - MIS.dvUsed);
       if (amt > 0 && misThrust(v3.mul(v3.norm(dir), amt)) > 0) MIS.predT = 0;
     }
+    let dTau = 0;
     if (!state.paused) {
-      const st = { x: MIS.x, xd: MIS.xd, tau: MIS.tau,
-        onHorizon: (t) => { MIS.tauH = t; toast(txt('Event horizon crossed: nothing to feel here, but no way back. Every path now leads inward.'), 6); } };
-      const res = misAdvance(st, dt * misWarp() / MIS_T);
-      MIS.x = st.x; MIS.xd = st.xd; MIS.tau = st.tau;
+      dTau = dt * misWarp() / MIS_T;
+      const res = misFly(dTau, (t) => { MIS.tauH = t; toast(txt('Event horizon crossed: nothing to feel here, but no way back. Every path now leads inward.'), 6); });
       const R = rainOf(MIS.x, MIS.xd); MIS.vMax = Math.max(MIS.vMax, Math.hypot(...R.v));
       const last = MIS.hist[MIS.hist.length - 1];
       if (!last || MIS.tau - last[0] > 0.002 * Math.max(1, MIS.tau) || Math.abs(Math.log(R.r / last[1])) > 0.03) MIS.hist.push([MIS.tau, R.r]);
       if (MIS.hist.length > 900) MIS.hist = MIS.hist.filter((_, i) => i % 2 === 0);
-      if (res) { endMission(res.kind, res); return; }
+      if (res) { endMission(res.kind, res); return dTau; }
+      // G3b: gas relatif, tumbukan debu di kaca (waktu nyata, distilisasi: laju ~ kerapatan debu x (v / 0,4)^2), guncangan
+      MIS.clock += dt; MIS.gas = gasRel();
+      const G = MIS.gas;
+      MIS.hitAcc += 30 * G.dens * Math.min(1, (G.v / 0.4) ** 2) * dt * (0.5 + Math.random());
+      while (MIS.hitAcc >= 1) { MIS.hitAcc -= 1; spawnImpact(G); }
+      MIS.shake *= Math.exp(-6 * dt);
+      if (MIS.glass >= 100) { endMission('glass'); return dTau; }
     }
     if (MIS.lock !== 'free') misLockAtt();
     MIS.predT -= dt; if (MIS.predT <= 0) { MIS.predT = 0.4; misPredict(); }
+    return dTau;
   }
 
   // basis kamera untuk ray tracer (posisi dalam rs) dan untuk raster wahana (mata dalam meter relatif wahana)
+  // G3a: lempeng tebal aktif bila kamera dekat piringan (|y| < 6 H, di sekitar rIn..rOut); radius daerah 0,4 r (0,8..2,5 rs)
+  function volParams(p) {
+    const d = CONFIG.disk, rxz = Math.hypot(p[0], p[2]);
+    if (!(Math.abs(p[1]) < 6 * VOL_H * rxz && rxz > d.rIn * 0.7 && rxz < d.rOut * 1.25)) return null;
+    return { R: Math.max(0.8, Math.min(2.5, 0.4 * rxz)) };
+  }
   function viewBasis() {
     let S, obs = null;
     if (MIS.on) {
@@ -1081,11 +1482,23 @@ function main() {
       if (!SHIP.on || !SHIP.ready) return { ...S, eye: null };
     }
     const fov = MIS.on && SHIP.view === 'cockpit' ? 75 : null;
-    if (SHIP.view === 'cockpit') return { pos: S.pos, f: S.f, r: S.r, u: S.u, eye: shipToWorld(S, SHIP.data.eye), ship: S, obs, fov };
-    const ch = MIS.on ? [0, MIS.chase * 0.19, MIS.chase] : SHIP.chase;
-    const eye = shipToWorld(S, ch), f = v3.norm(v3.sub(shipToWorld(S, SHIP.aim), eye));
-    const r = v3.norm(v3.cross(f, S.u)), u = v3.cross(r, f);
-    return { pos: S.pos, f, r, u, eye, ship: S, obs, fov };
+    let B;
+    if (SHIP.view === 'cockpit') B = { pos: S.pos, f: S.f, r: S.r, u: S.u, eye: shipToWorld(S, SHIP.data.eye), ship: S, obs, fov };
+    else {
+      const ch = MIS.on ? [0, MIS.chase * 0.19, MIS.chase] : SHIP.chase;
+      const eye = shipToWorld(S, ch), f = v3.norm(v3.sub(shipToWorld(S, SHIP.aim), eye));
+      const r = v3.norm(v3.cross(f, S.u)), u = v3.cross(r, f);
+      B = { pos: S.pos, f, r, u, eye, ship: S, obs, fov };
+    }
+    // G3b: guncangan (arus debu + hentakan tumbukan), sudut kecil; mata tetap, jadi ray tracer dan raster tetap selaras
+    const G = MIS.on && !MIS.end ? MIS.gas : null;
+    const amp = G ? 0.0035 * G.dens * Math.min(1, G.v / 0.5) + 0.006 * MIS.shake : 0;
+    if (amp > 1e-5) {
+      const t = MIS.clock, ya = amp * (Math.sin(t * 37.1) + 0.6 * Math.sin(t * 61.7 + 1.3)), pa = amp * (Math.sin(t * 43.3 + 0.7) + 0.5 * Math.sin(t * 71.9 + 2.1));
+      const f = v3.norm(v3.add(B.f, v3.add(v3.mul(B.r, ya), v3.mul(B.u, pa)))), r = v3.norm(v3.cross(f, B.u));
+      Object.assign(B, { f, r, u: v3.cross(r, f) });
+    }
+    return B;
   }
   function setShip(on = !SHIP.on, view) {
     if (on && !SHIP.ready) { toast(txt('Vessel GX-01 model is missing (assets/gx01.data.js)'), 3); return; }
@@ -1131,10 +1544,18 @@ function main() {
     const R = rainOf(MIS.x, MIS.xd), A = MIS.att, r = R.r;
     const gs = r > 1 ? R.E / Math.sqrt(1 - 1 / r) : null, vs = gs ? Math.sqrt(Math.max(0, 1 - 1 / (gs * gs))) : null;
     return { R, r, km: r * RS_KM, inside: r < 1, vStatic: vs, vRain: Math.hypot(...R.v), ahead: skyShift(R, A.f), behind: skyShift(R, v3.mul(A.f, -1)),
-      tidal: 2 * C2 / (r * r * r * RS_M * RS_M) / 9.81, warp: misWarp(), dvLeft: Math.max(0, MIS.dvMax - MIS.dvUsed) };
+      tidal: 2 * C2 / (r * r * r * RS_M * RS_M) / 9.81, warp: misWarp(), dvLeft: Math.max(0, MIS.dvMax - MIS.dvUsed), gas: MIS.gas || gasRel() };
   }
+  // G3: baris piringan dan autopilot (HUD dan MFD)
+  function diskRow(D) {
+    const G = D.gas;
+    if (!G.H) return txt('far from the disk');
+    return `${txt('height')} ${fmtN(Math.abs(G.y) / G.H, 1)} H · ${txt('gas')} ${fmtN(G.v, 3)} c`;
+  }
+  const apRow = () => (MIS.ap.on ? `${txt('skim')} h ${fmtN(MIS.ap.h, 3)} r · ${txt('descent')} ${fmtN(MIS.ap.vin, 2)} c` : txt('off (O)'));
   function predText(p) {
     if (!p) return '-';
+    if (MIS.ap.on && p.kind === 'disk') return txt('autopilot holds height (without it: disk in') + ' ' + fmtTau(p.dTau) + ')';
     if (p.kind === 'singularity') return txt('singularity in') + ' ' + fmtTau(p.dTau);
     if (p.kind === 'disk') return txt('hits the disk in') + ' ' + fmtTau(p.dTau);
     if (p.kind === 'escape') return txt('escapes (no capture)');
@@ -1169,7 +1590,7 @@ function main() {
       g.fillText(D.km.toExponential(3) + ' km', ox + 12, 74);
       g.fillStyle = D.inside ? red : amber; g.fillText(txt(D.inside ? 'INSIDE THE HORIZON' : 'outside the horizon'), ox + 12, 98);
       g.fillStyle = pale; g.fillText(txt('proper time') + ' ' + fmtTau(MIS.tau), ox + 12, 126);
-      g.fillText(predText(MIS.pred), ox + 12, 150);
+      g.fillText(predText(MIS.pred), ox + 12, 150, W - 24);                // G3: teks prakiraan panjang dipadatkan, tidak meluber
       g.fillText(txt('tidal (2 m)') + ' ' + D.tidal.toExponential(1) + ' g', ox + 12, 174);
       g.fillStyle = dim; g.fillText('1 s = ' + Math.round(D.warp).toLocaleString(LANG === 'id' ? 'id-ID' : 'en-US') + ' s · ' + txt(WARPS[MIS.warp].name), ox + 12, 204);
     }
@@ -1186,12 +1607,14 @@ function main() {
       const th = MIS.thr; g.fillStyle = th.some((v) => v) ? amber : dim;
       g.fillText(txt('thrust') + ' ' + ['W', 'S'][th[0] > 0 ? 0 : 1].repeat(Math.abs(th[0])) + ['D', 'A'][th[1] > 0 ? 0 : 1].repeat(Math.abs(th[1])) + ['R', 'F'][th[2] > 0 ? 0 : 1].repeat(Math.abs(th[2])), ox + 12, 182);
       g.fillStyle = MIS.lock !== 'free' ? amber : dim; g.fillText('X: ' + txt(lockName(MIS.lock)).slice(0, 30), ox + 12, 206);
+      g.fillStyle = MIS.glass > 60 ? red : MIS.ap.on ? amber : dim;
+      g.fillText((MIS.ap.on ? 'AP ' : '') + txt('gas') + ' ' + fmtN(D.gas.v, 2) + ' c · ' + txt('canopy') + ' ' + fmtN(MIS.glass, 0) + '%', ox + 12, 230);
     }
     for (let k = 1; k < 3; k++) { g.fillStyle = '#000'; g.fillRect(k * W - 2, 0, 4, H); }
     gl.bindTexture(gl.TEXTURE_2D, MFD.tex); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, MFD.cv);
   }
-  function drawShip(B, sw, sh, tanHalf) {
-    const S = B.ship, cockpit = SHIP.view === 'cockpit';
+  function shipMats(B, sw, sh, tanHalf) {
+    const S = B.ship;
     // ruang pandang: baris = cr, cu, -cf; model -> dunia: kolom = S.r, S.u, -S.f
     const VR = [B.r, B.u, v3.mul(B.f, -1)], MC = [S.r, S.u, v3.mul(S.f, -1)];
     const rot = []; for (let c = 0; c < 3; c++) for (let rr = 0; rr < 3; rr++) rot.push(v3.dot(VR[rr], MC[c]));   // mat3 kolom-mayor
@@ -1199,6 +1622,10 @@ function main() {
     const mv = [rot[0], rot[1], rot[2], 0, rot[3], rot[4], rot[5], 0, rot[6], rot[7], rot[8], 0, t[0], t[1], t[2], 1];
     const n = SHIP.near[SHIP.view], fa = 4000, fy = 1 / tanHalf, asp = sw / sh;
     const proj = [fy / asp, 0, 0, 0, 0, fy, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0];
+    return { S, VR, rot, mv, proj };
+  }
+  function drawShip(B, sw, sh, tanHalf) {
+    const cockpit = SHIP.view === 'cockpit', { S, VR, rot, mv, proj } = shipMats(B, sw, sh, tanHalf);
     const li = diskLight(S.pos), Lv = VR.map((row) => v3.dot(row, li.L));
     gl.bindFramebuffer(gl.FRAMEBUFFER, T.shipFb); gl.viewport(0, 0, sw, sh);
     gl.enable(gl.DEPTH_TEST); gl.clear(gl.DEPTH_BUFFER_BIT);
@@ -1219,6 +1646,67 @@ function main() {
     }
     gl.bindVertexArray(vao); gl.disable(gl.DEPTH_TEST);
   }
+  // G3b: garis bara (setelah wahana: diuji terhadap depth wahana, tanpa menulis depth, aditif)
+  function drawParts(B, sw, sh, tanHalf) {
+    const G = MIS.gas, n = Q().parts;
+    if (!G || G.dens < 0.003 || !n) return 0;
+    const { mv, proj } = shipMats(B, sw, sh, tanHalf), cockpit = SHIP.view === 'cockpit', speed = 80 + 700 * G.v;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, T.shipFb); gl.viewport(0, 0, sw, sh);
+    gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(PART_P.p);
+    gl.uniformMatrix4fv(PART_P.u('uMV'), false, mv); gl.uniformMatrix4fv(PART_P.u('uProj'), false, proj);
+    gl.uniform3fv(PART_P.u('uFlow'), toModel(G.dir)); gl.uniform3fv(PART_P.u('uEye'), cockpit ? SHIP.data.eye : [0, MIS.chase * 0.19, MIS.chase]);
+    gl.uniform2f(PART_P.u('uRes'), sw, sh); gl.uniform1f(PART_P.u('uSpeed'), speed); gl.uniform1f(PART_P.u('uLen'), Math.min(60, Math.max(3, speed * 0.06)));
+    gl.uniform1f(PART_P.u('uTime'), MIS.clock); gl.uniform1f(PART_P.u('uBox'), 300); gl.uniform1f(PART_P.u('uDens'), Math.min(1, G.dens * 1.4));
+    gl.uniform1f(PART_P.u('uNearR'), cockpit ? 3.2 : 1.5); gl.uniform1f(PART_P.u('uPx'), Math.max(0.6, Math.min(2, sh / 450)));
+    gl.uniform1f(PART_P.u('uGain'), 2.5); gl.uniform1f(PART_P.u('uEnc'), FMT.enc);
+    gl.bindVertexArray(vao); gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, n);
+    gl.depthMask(true); gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST);
+    return n;
+  }
+  // G3b: tumbukan di kaca kokpit (quad di bidang kaca, sedikit ke dalam; retak menetap selama misi, paling banyak 96)
+  const IMP = { buf: gl.createBuffer(), vao: gl.createVertexArray() };
+  {
+    gl.bindVertexArray(IMP.vao); gl.bindBuffer(gl.ARRAY_BUFFER, IMP.buf);
+    for (const [name, size, off] of [['aPos', 3, 0], ['aC', 2, 3], ['aD', 4, 5]]) {
+      const l = gl.getAttribLocation(IMP_P.p, name); if (l < 0) continue;
+      gl.enableVertexAttribArray(l); gl.vertexAttribPointer(l, size, gl.FLOAT, false, 36, off * 4);
+    }
+    gl.bindVertexArray(vao);
+  }
+  function drawImps(B, sw, sh, tanHalf) {
+    if (SHIP.view !== 'cockpit' || !MIS.imps.length) return;
+    const { mv, proj, S } = shipMats(B, sw, sh, tanHalf), data = new Float32Array(MIS.imps.length * 54);
+    const Cn = [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]];
+    MIS.imps.forEach((m, i) => {
+      const t1 = v3.norm(v3.cross(m.n, Math.abs(m.n[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0])), t2 = v3.cross(m.n, t1), hs = m.size * 3;
+      const p0 = v3.sub(m.p, v3.mul(m.n, 0.012));
+      Cn.forEach(([a, b], k) => { const p = v3.add(p0, v3.add(v3.mul(t1, a * hs), v3.mul(t2, b * hs))); data.set([...p, a, b, MIS.clock - m.t0, m.seed, 0, 0], (i * 6 + k) * 9); });
+    });
+    gl.bindFramebuffer(gl.FRAMEBUFFER, T.shipFb); gl.viewport(0, 0, sw, sh);
+    gl.enable(gl.DEPTH_TEST); gl.depthMask(false); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+    gl.useProgram(IMP_P.p);
+    gl.uniformMatrix4fv(IMP_P.u('uMV'), false, mv); gl.uniformMatrix4fv(IMP_P.u('uProj'), false, proj);
+    gl.uniform1f(IMP_P.u('uEnc'), FMT.enc); gl.uniform3fv(IMP_P.u('uLCol'), diskLight(S.pos).col);
+    gl.bindVertexArray(IMP.vao); gl.bindBuffer(gl.ARRAY_BUFFER, IMP.buf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW);
+    gl.drawArrays(gl.TRIANGLES, 0, MIS.imps.length * 6);
+    gl.bindVertexArray(vao); gl.depthMask(true); gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST);
+  }
+  // G3b: awan debu (layar penuh di atas ray tracing, sebelum wahana)
+  function drawDust(B, sw, sh, tanHalf) {
+    const G = MIS.gas;
+    if (!G || G.dens < 0.005) return;
+    const src = v3.mul(G.dir, -1), sv = [v3.dot(src, B.r), v3.dot(src, B.u), -v3.dot(src, B.f)], li = diskLight(B.pos).col;
+    const k = 0.55 * G.dens * (0.25 + 0.75 * Math.min(1, G.v / 0.4));
+    gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    pass(P.dust, T.scene, (p) => {
+      gl.uniform1i(p.u('uNoise'), 6); gl.uniform3fv(p.u('uSrc'), sv);
+      gl.uniform3f(p.u('uTint'), 0.05 + li[0] * 0.05, 0.06 + li[1] * 0.05, 0.08 + li[2] * 0.05);
+      gl.uniform1f(p.u('uDust'), k); gl.uniform1f(p.u('uTime'), MIS.clock * (0.3 + 3 * G.v)); gl.uniform1f(p.u('uTanHalf'), tanHalf);
+      gl.uniform1f(p.u('uAsp'), sw / sh); gl.uniform1f(p.u('uEnc'), FMT.enc);
+    });
+    gl.disable(gl.BLEND);
+  }
   // HUD di atas render (kanvas 2D): panel ringkas kiri atas + baris kendali bawah; dalam misi untuk kedua tampilan
   const dash = $('#dash'); let dashT = 0;
   function drawDash(now) {
@@ -1234,7 +1722,9 @@ function main() {
         [txt('Forecast'), predText(MIS.pred)], [txt('Speed'), D.vStatic === null ? `${fmtN(D.vRain, 3)} c (${txt('fall frame')})` : `${fmtN(D.vStatic, 3)} c (${txt('vs static')})`],
         [txt('Sky'), `${txt('ahead')} x${fmtN(D.ahead, 2)} · ${txt('behind')} x${fmtN(D.behind, 2)}`],
         [txt('Tidal 2 m'), `${D.tidal.toExponential(1)} g`], ['delta-v', `${fmtN(D.dvLeft, 4)} c`],
-        [txt('Time'), `1 s = ${Math.round(D.warp).toLocaleString(LANG === 'id' ? 'id-ID' : 'en-US')} s (${txt(WARPS[MIS.warp].name)})`]];
+        [txt('Time'), `1 s = ${Math.round(D.warp).toLocaleString(LANG === 'id' ? 'id-ID' : 'en-US')} s (${txt(WARPS[MIS.warp].name)})`],
+        [txt('Disk'), diskRow(D)], [txt('Autopilot'), apRow()],
+        [txt('Canopy'), `${fmtN(MIS.glass, 0)}% ${txt('damage')} · ${MIS.hits} ${txt('hits')}`]];
     } else {
       const rs = Math.hypot(...cameraBasis().pos);
       rows = [['GX-01', 'AMBANG'], [txt('Distance to centre'), `${fmtN(rs, 2)} rs · ${(rs * RS_KM).toExponential(3)} km`],
@@ -1250,7 +1740,8 @@ function main() {
       g.fillStyle = MIS.on && i === 2 && misData().inside ? 'rgba(255,120,95,0.95)' : 'rgba(215,220,226,0.95)'; g.fillText(b, x0 + 118 * s, y);
     });
     if (MIS.on && !MIS.end) {
-      const hint = txt('W/S A/D R/F thrust (Shift main engine) · drag = turn nose · X attitude · Z time · V view · Esc end');
+      const hint = MIS.ap.on ? txt('Autopilot: R/F height · W/S descent rate · O off · drag = look · X attitude · Z time · V view · Esc end')
+        : txt('W/S A/D R/F thrust (Shift main engine) · drag = turn nose · X attitude · Z time · V view · Esc end');
       g.font = `${11 * s}px ui-monospace, Menlo, Consolas, monospace`; g.textAlign = 'center';
       g.fillStyle = 'rgba(6,8,11,0.45)'; const tw = g.measureText(hint).width + 20 * s; g.fillRect((w - tw) / 2, h - 34 * s, tw, 20 * s);
       g.fillStyle = 'rgba(215,220,226,0.85)'; g.fillText(hint, w / 2, h - 24 * s); g.textAlign = 'left';
@@ -1274,7 +1765,10 @@ function main() {
     if (!p) return;
     const dx = e.clientX - p.x, dy = e.clientY - p.y;
     p.x = e.clientX; p.y = e.clientY;
-    if (pointers.size === 1 && MIS.on && MIS.att) {                // G2: geser = arah hidung wahana (mematikan kunci ke pusat)
+    if (pointers.size === 1 && MIS.on && MIS.att && MIS.lock === 'track') {   // G3: sikap lintasan: geser = arah pandang relatif lintasan
+      const L = MIS.look; L.yaw = Math.atan2(Math.sin(L.yaw + dx * 0.003), Math.cos(L.yaw + dx * 0.003));
+      L.pitch = Math.max(-1.45, Math.min(1.45, L.pitch - dy * 0.003)); misLockAtt();
+    } else if (pointers.size === 1 && MIS.on && MIS.att) {         // G2: geser = arah hidung wahana (mematikan kunci ke pusat)
       if (MIS.lock !== 'free' && Math.hypot(dx, dy) > 2) { MIS.lock = 'free'; toast(txt(lockName('free')) + ' · X', 2.5); }
       if (MIS.lock === 'free') {
         const A = MIS.att, ya = -dx * 0.003, pa = -dy * 0.003;
@@ -1330,6 +1824,7 @@ function main() {
     if (MIS.on) {
       if (c === 'Escape') { if (MIS.end) $('#mend').hidden = true; stopMission(); toast(txt('Mission ended'), 2); return; }
       if (c === 'KeyX') { MIS.lock = LOCKS[(LOCKS.indexOf(MIS.lock) + 1) % LOCKS.length]; toast(txt(lockName(MIS.lock)), 2); syncUI(); return; }
+      if (c === 'KeyO') { toggleAP(); return; }
       if (c === 'KeyZ') { MIS.warp = (MIS.warp + 1) % WARPS.length; toast(txt('Time: {m}').replace('{m}', txt(WARPS[MIS.warp].name)), 1.5); return; }
       if (c === 'Enter' && MIS.end) { startMission(MIS.sc); return; }
       if (/^Digit[1-4]$/.test(c)) return;
@@ -1386,6 +1881,7 @@ function main() {
     { type: 'select', label: 'Scenario', options: Object.keys(SCEN), names: (k) => SCEN[k].name, get: () => MIS.sc, set: (v) => { MIS.sc = v; } },
     { type: 'select', label: 'Attitude (X)', options: LOCKS, names: lockName, get: () => MIS.lock, set: (v) => { MIS.lock = v; } },
     { type: 'mission' },
+    { type: 'note', text: 'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT). The thick disk layer near the vessel is also exaggerated.' },
   ];
   const syncers = [];
   function buildUI() {
@@ -1432,10 +1928,13 @@ function main() {
         body.appendChild(box);
       } else if (c.type === 'mission') {
         const box = document.createElement('div'); box.className = 'btns';
-        for (const [t, fn] of [['Start mission', () => startMission(MIS.sc)], ['End mission (Esc)', () => { if (MIS.on) { stopMission(); toast(txt('Mission ended'), 2); } }]]) {
+        for (const [t, fn] of [['Start mission', () => startMission(MIS.sc)], ['End mission (Esc)', () => { if (MIS.on) { stopMission(); toast(txt('Mission ended'), 2); } }],
+                               ['Autopilot skim (O)', toggleAP]]) {
           const b = document.createElement('button'); b.textContent = txt(t); b.addEventListener('click', () => { fn(); b.blur(); }); box.appendChild(b);
         }
         body.appendChild(box);
+      } else if (c.type === 'note') {
+        const d = document.createElement('div'); d.className = 'keys'; d.textContent = txt(c.text); body.appendChild(d);
       }
     }
     const ro = document.createElement('div'); ro.id = 'readout';
@@ -1493,7 +1992,8 @@ function main() {
     if (state.halt) return;   // debugging hook: stops the loop
     const dt = Math.min(0.1, Math.max(0, (now - state.last) / 1000));
     state.last = now;
-    if (!state.paused) state.simTime += dt * CONFIG.timeScale * CONFIG.disk.speed;
+    // G3: selama misi piringan berputar menurut waktu wajar wahana (gerak relatif gas dan wahana konsisten), lihat stepMission
+    if (!state.paused && !(MIS.on && !MIS.end)) state.simTime += dt * CONFIG.timeScale * CONFIG.disk.speed;
     state.frame = (state.frame + 1) >>> 0;
 
     // camera animation
@@ -1510,8 +2010,9 @@ function main() {
     const sh = Math.max(8, Math.round(canvas.height * CONFIG.renderScale));
     buildTargets(sw, sh);
 
-    stepMission(dt);
+    state.simTime += stepMission(dt) * CONFIG.disk.speed;
     const b = viewBasis();
+    const vol = b.obs ? volParams(b.pos) : null;
     const q = Q();
     const tanHalf = Math.tan((b.fov || cam.fov) * Math.PI / 360);
     const enc = FMT.enc, dec = 1 / FMT.enc;
@@ -1544,10 +2045,17 @@ function main() {
       gl.uniform1f(p.u('uSpin'), ph.spin);
       gl.uniform1f(p.u('uStars'), CONFIG.sky.stars);
       gl.uniform1f(p.u('uEnc'), enc);
+      gl.uniform1f(p.u('uVol'), vol ? 1 : 0); gl.uniform1f(p.u('uVolR'), vol ? vol.R : 0); gl.uniform1f(p.u('uVolH'), VOL_H);
+      gl.uniform1i(p.u('uVolN'), q.vol); gl.uniform1i(p.u('uNoise'), 6);
     });
 
-    // 1b) G1: wahana GX-01 di atas hasil ray tracing, sebelum bloom
-    if (SHIP.on && SHIP.ready && b.eye) { if (MIS.on && SHIP.view === 'cockpit') drawMFD(now); drawShip(b, sw, sh, tanHalf); }
+    // 1b) G1: wahana GX-01 di atas hasil ray tracing, sebelum bloom; G3b: awan debu sebelum wahana, garis bara dan tumbukan kaca sesudahnya
+    if (MIS.on) drawDust(b, sw, sh, tanHalf);
+    if (SHIP.on && SHIP.ready && b.eye) {
+      if (MIS.on && SHIP.view === 'cockpit') drawMFD(now);
+      drawShip(b, sw, sh, tanHalf);
+      if (MIS.on) { state.partsDrawn = drawParts(b, sw, sh, tanHalf); drawImps(b, sw, sh, tanHalf); }
+    }
     drawDash(now);
     if (state.readCb && FMT.type === gl.HALF_FLOAT) {                  // uji: statistik buffer HDR scene (nilai tidak valid, maks, rata-rata)
       const cb = state.readCb, px = new Float32Array(sw * sh * 4); state.readCb = null;
@@ -1557,11 +2065,13 @@ function main() {
       cb({ bad, max: mx, mean: sum / (sw * sh * 3), w: sw, h: sh });
     }
 
+    autoExposure(dt);                                                // G3a: hanya saat misi (di luar misi k = 1)
+
     // 2) bright pass -> bloom level 0
     const L = T.bloom;
     pass(P.bright, L[0].a, (p) => {
       tex(p, 'uTex', T.scene.tex, 0);
-      gl.uniform1f(p.u('uThr'), CONFIG.post.threshold);
+      gl.uniform1f(p.u('uThr'), CONFIG.post.threshold / AE.k);          // G3a: ambang bloom ikut eksposur misi (k = 1 di luar misi)
       gl.uniform1f(p.u('uDec'), dec); gl.uniform1f(p.u('uEnc'), enc);
     });
     // 3) bloom mip chain with separable blur
@@ -1593,7 +2103,7 @@ function main() {
       tex(p, 'uB2', L[2].a.tex, 3); tex(p, 'uB3', L[3].a.tex, 4);
       tex(p, 'uStreak', T.streakOut.tex, 5);
       const po = CONFIG.post;
-      gl.uniform1f(p.u('uExposure'), po.exposure); gl.uniform1f(p.u('uBloom'), po.bloom * PM.bloom);
+      gl.uniform1f(p.u('uExposure'), po.exposure * AE.k); gl.uniform1f(p.u('uBloom'), po.bloom * PM.bloom);
       gl.uniform1f(p.u('uStreakAmt'), po.streak * PM.streak); gl.uniform1f(p.u('uGrain'), po.grain * PM.grain);
       gl.uniform1f(p.u('uVig'), po.vignette * PM.vig); gl.uniform1f(p.u('uDec'), dec);
       gl.uniform2f(p.u('uRes'), canvas.width, canvas.height);
@@ -1619,7 +2129,8 @@ function main() {
   }
 
   window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
-    SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T };   // debugging hook
+    SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
+    misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, volParams, AE, stepMission };   // debugging hook
   requestAnimationFrame(frame);
 }
 
