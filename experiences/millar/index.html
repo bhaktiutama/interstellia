@@ -1888,17 +1888,18 @@ const BODY_DETAIL = [2, 2, 2, 1, 0];
   const TK = [[0.82, 0.0, 0.20, 0.12], [0.86, 0, 0.225, 0.13], [0.92, 0, 0.235, 0.135], [0.98, 0, 0.215, 0.128], [1.05, 0.005, 0.195, 0.12], [1.12, 0.015, 0.185, 0.115],
     [1.20, 0.03, 0.19, 0.115], [1.28, 0.06, 0.20, 0.12], [1.35, 0.09, 0.21, 0.122], [1.42, 0.12, 0.215, 0.12], [1.46, 0.12, 0.19, 0.11], [1.50, 0.11, 0.13, 0.10]];
   const TS = [[0, 2, 5, 9, 11], [0, 2, 4, 6, 8, 9, 11], TK.map((_, i) => i)];
-  // kaki: jarak di bawah pinggul (m), jari-jari; dari dalam panggul sampai di dalam leher sepatu
-  const LK = [[-0.08, 0.085], [-0.03, 0.098], [0.04, 0.100], [0.12, 0.098], [0.22, 0.094], [0.32, 0.088], [0.40, 0.081], [0.45, 0.079], [0.50, 0.076], [0.58, 0.074], [0.66, 0.072], [0.74, 0.066], [0.82, 0.062], [0.88, 0.060]];
-  const LS = [[0, 2, 5, 7, 9, 13], [0, 2, 4, 6, 7, 8, 10, 12, 13], LK.map((_, i) => i)];
-  // lengan: jarak di bawah bahu (m), jari-jari; dari dalam bahu sampai di dalam manset
-  const AK = [[-0.07, 0.070], [-0.02, 0.078], [0.04, 0.072], [0.12, 0.064], [0.20, 0.058], [0.26, 0.055], [0.30, 0.054], [0.34, 0.052], [0.40, 0.050], [0.48, 0.048], [0.54, 0.046], [0.57, 0.045]];
+  // kaki: jarak di bawah pinggul (m), jari-jari, [jarak pusat dari tengah badan]; dari dalam panggul sampai di dalam leher sepatu.
+  // Cincin atas digeser ke tengah dan diperkecil supaya seluruhnya di dalam panggul (ujung tabung tidak mencuat keluar), lalu ditutup.
+  const LK = [[-0.08, 0.06, 0.085], [-0.03, 0.08, 0.12], [0.04, 0.094, 0.15], [0.12, 0.098], [0.22, 0.094], [0.32, 0.088], [0.40, 0.081], [0.45, 0.079], [0.50, 0.076], [0.58, 0.074], [0.66, 0.072], [0.74, 0.066], [0.82, 0.062], [0.88, 0.060]];
+  const LS = [[0, 2, 7, 9, 13], [0, 2, 4, 6, 7, 8, 10, 12, 13], LK.map((_, i) => i)];
+  // lengan: jarak di bawah bahu (m), jari-jari, [jarak pusat dari tengah badan]; cincin atas ke dalam bahu, lalu ditutup (bahu membulat)
+  const AK = [[-0.07, 0.05, 0.20], [-0.02, 0.07, 0.22], [0.04, 0.072], [0.12, 0.064], [0.20, 0.058], [0.26, 0.055], [0.30, 0.054], [0.34, 0.052], [0.40, 0.050], [0.48, 0.048], [0.54, 0.046], [0.57, 0.045]];
   const AS = [[0, 2, 6, 11], [0, 2, 3, 5, 6, 7, 9, 11], AK.map((_, i) => i)];
   const suitGeo = (d) => {
     const pos = [], col = [], bi = [], bw = [], idx = [];
     const ring = (cx, y, cz, hw, hd, N, b0, b1, w, c) => { const s = pos.length / 3; for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2; pos.push(cx + Math.cos(a) * hw, y, cz + Math.sin(a) * hd); col.push(...c); bi.push(b0, b1); bw.push(w); } return s; };
     const strip = (r0, r1, N) => { for (let i = 0; i < N; i++) { const a = r0 + i, b = r0 + (i + 1) % N; idx.push(a, r1 + i, b, b, r1 + i, r1 + (i + 1) % N); } };   // r1 di atas r0: normal keluar
-    const cap = (r, N, y, cz, up, b0, b1, w) => { const c = pos.length / 3; pos.push(0, y, cz); col.push(...WH); bi.push(b0, b1); bw.push(w); for (let i = 0; i < N; i++) idx.push(c, r + (up ? i : (i + 1) % N), r + (up ? (i + 1) % N : i)); };
+    const cap = (r, N, y, cz, up, b0, b1, w, cx = 0) => { const c = pos.length / 3; pos.push(cx, y, cz); col.push(...WH); bi.push(b0, b1); bw.push(w); for (let i = 0; i < N; i++) idx.push(c, r + (up ? i : (i + 1) % N), r + (up ? (i + 1) % N : i)); };
     const crease = (k, lo, hi, dd) => dd > lo && dd < hi && k % 2 ? WH.map((v) => v * 0.84) : WH;   // lipatan kain di sendi (pita gelap bergantian)
     // badan (panggul -> badan atas)
     const NT = SEG[d] + (d === 2 ? 2 : 0), tr = TS[d].map((k) => { const [y, zc, hw, hd] = TK[k]; return ring(0, y, zc, hw, hd, NT, 0, 1, 1 - ss(0.95, 1.06, y), WH); });
@@ -1907,16 +1908,18 @@ const BODY_DETAIL = [2, 2, 2, 1, 0];
     // kaki (cincin dari bawah ke atas)
     for (const s of [0, 1]) {
       const sd = s ? 1 : -1, bh = 2 + 2 * s, bk = 3 + 2 * s, N = SEG[d];
-      const rs = LS[d].slice().reverse().map((k) => { const [dd, r] = LK[k];
-        return dd < 0.25 ? ring(sd * HX, HP - dd, -0.04, r, r * 0.96, N, 0, bh, 1 - ss(-0.06, 0.10, dd), crease(k, 0.37, 0.55, dd)) : ring(sd * HX, HP - dd, -0.04, r, r * 0.96, N, bk, bh, ss(0.38, 0.52, dd), crease(k, 0.37, 0.55, dd)); });
+      const rs = LS[d].slice().reverse().map((k) => { const [dd, r, cx = HX] = LK[k];
+        return dd < 0.25 ? ring(sd * cx, HP - dd, -0.04, r, r * 0.96, N, 0, bh, 1 - ss(-0.06, 0.10, dd), crease(k, 0.37, 0.55, dd)) : ring(sd * cx, HP - dd, -0.04, r, r * 0.96, N, bk, bh, ss(0.38, 0.52, dd), crease(k, 0.37, 0.55, dd)); });
       for (let r = 0; r < rs.length - 1; r++) strip(rs[r], rs[r + 1], N);
+      cap(rs[rs.length - 1], N, HP + 0.10, -0.04, true, 0, bh, 1, sd * LK[0][2]);   // tutup atas (di dalam panggul)
     }
     // lengan (cincin dari bawah ke atas)
     for (const s of [0, 1]) {
       const sd = s ? 1 : -1, bs = 6 + 2 * s, be = 7 + 2 * s, N = d === 2 ? 10 : SEG[d];
-      const rs = AS[d].slice().reverse().map((k) => { const [dd, r] = AK[k];
-        return dd < 0.15 ? ring(sd * 0.24, 1.40 - dd, 0.10, r, r, N, 1, bs, 1 - ss(-0.05, 0.08, dd), crease(k, 0.23, 0.37, dd)) : ring(sd * 0.24, 1.40 - dd, 0.10, r, r, N, be, bs, ss(0.24, 0.36, dd), crease(k, 0.23, 0.37, dd)); });
+      const rs = AS[d].slice().reverse().map((k) => { const [dd, r, cx = 0.24] = AK[k];
+        return dd < 0.15 ? ring(sd * cx, 1.40 - dd, 0.10, r, r, N, 1, bs, 1 - ss(-0.05, 0.08, dd), crease(k, 0.23, 0.37, dd)) : ring(sd * cx, 1.40 - dd, 0.10, r, r, N, be, bs, ss(0.24, 0.36, dd), crease(k, 0.23, 0.37, dd)); });
       for (let r = 0; r < rs.length - 1; r++) strip(rs[r], rs[r + 1], N);
+      cap(rs[rs.length - 1], N, 1.40 + 0.09, 0.10, true, 1, bs, 1, sd * AK[0][2]);   // tutup atas (bahu)
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();

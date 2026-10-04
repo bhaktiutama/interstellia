@@ -361,3 +361,16 @@ Uji baru (blok 5t), per tingkat detail di pose lari (dua fase), udara, dan duduk
 Tangkapan layar menunduk sambil lari: paha keluar dari panggul sebagai satu kain, siku melengkung.
 
 Wajib dicek pemilik: kain di pinggul dan lutut saat lari dan duduk di kokpit, FPS Hemat. Berikutnya bila perlu: lipatan kain halus lewat noise normal di fragment (M6f-4 di rencana), bentuk panel dada lebih rinci.
+
+### Revisi M6f-b (4 Oktober 2026): lubang di pangkal paha
+
+Masukan pemilik: saat menunduk, di pangkal paha terlihat lubang (air tampak di dalamnya). Penyebab: ujung atas tabung paha terbuka dan cincin teratasnya (pusat 0,16 m dari tengah, jari-jari 0,085 m, tepi luar 0,245 m) lebih lebar dari panggul di ketinggian itu (sekitar 0,21 m), jadi bibir tabung yang bolong mencuat keluar dari badan. Hal yang sama di puncak bahu.
+
+| Perbaikan | Hasil |
+| --- | --- |
+| Cincin atas paha digeser ke tengah dan diperkecil (pusat 0,085 / 0,12 / 0,15 m, jari-jari 0,06 / 0,08 / 0,094 m) | Seluruh pangkal paha di dalam panggul |
+| Cincin atas lengan ke dalam bahu (pusat 0,20 / 0,22 m) | Bahu membulat |
+| Ujung atas tabung kaki dan lengan ditutup | Tepi terbuka hanya di dalam sepatu dan manset |
+| Segitiga | Hemat 432, Rendah 1.012, Sedang ke atas 2.452 |
+
+Uji baru: titik tepi terbuka di luar sepatu / manset 0, titik pangkal paha di luar panggul 0. Uji Millar 124 pemeriksaan lulus.

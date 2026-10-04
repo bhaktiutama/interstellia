@@ -734,12 +734,18 @@ UJI = r"""
     const P = M.P, B = M.BODY, V3 = M.THREE.Vector3, d0 = B.detail;
     M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false;
     P.view = 0; P.x = 3; P.z = 3; P.y = M.seabed(3, 3) + M.CONFIG.eye; P.ground = true; P.pitch = -1.0; B.level = 2;
-    const rows = []; let bad = 0, okW = true;
+    const rows = []; let bad = 0, okW = true, openBad = 0, outBad = 0;
     for (const d of [0, 1, 2]) {
       M.setBodyDetail(d); const g = B.suit.geometry, S = g.userData.skin, ix = g.index.array, P0 = S.p0;
       for (let v = 0; v < S.count; v++) if (!(S.w[v] >= 0 && S.w[v] <= 1)) okW = false;
       const edges = (arr) => { let mx = 0; for (let t = 0; t < ix.length; t += 3) for (const [a, b] of [[ix[t], ix[t + 1]], [ix[t + 1], ix[t + 2]], [ix[t + 2], ix[t]]]) mx = Math.max(mx, Math.hypot(arr[3 * a] - arr[3 * b], arr[3 * a + 1] - arr[3 * b + 1], arr[3 * a + 2] - arr[3 * b + 2])); return mx; };
       const e0 = edges(P0);
+      // tepi terbuka (sisi milik satu segitiga) hanya di ujung bawah kaki (di dalam sepatu) dan lengan (di dalam manset); pangkal paha di dalam panggul
+      const ec = new Map(); for (let t = 0; t < ix.length; t += 3) for (const [a, b] of [[ix[t], ix[t + 1]], [ix[t + 1], ix[t + 2]], [ix[t + 2], ix[t]]]) { const key = a < b ? a + ',' + b : b + ',' + a; ec.set(key, (ec.get(key) || 0) + 1); }
+      for (const [key, n] of ec) if (n === 1) for (const v of key.split(',').map(Number)) { const y = P0[3 * v + 1]; if (!(Math.abs(y - 0.04) < 0.01 || Math.abs(y - 0.83) < 0.01)) openBad++; }
+      for (let v = 0; v < S.count; v++) if (S.bi[2 * v] === 0 && (S.bi[2 * v + 1] === 2 || S.bi[2 * v + 1] === 4) && S.w[v] > 0.99 && P0[3 * v + 1] < 1.05) {
+        const y = P0[3 * v + 1], hw = y > 0.98 ? 0.215 : 0.225, x = Math.abs(P0[3 * v]), z = P0[3 * v + 2];
+        if ((x / hw) ** 2 + (z / 0.125) ** 2 > 1) outBad++; }
       // lingkar lutut kiri: titik bobot campur paha/betis terdekat lutut
       const knee = (arr) => { let s = 0, n = 0; const c = new V3(); const pts = []; for (let v = 0; v < S.count; v++) if (S.bi[2 * v] === 3 && Math.abs(P0[3 * v + 1] - 0.47) < 0.03) pts.push(v);
         for (const v of pts) c.add(new V3(arr[3 * v], arr[3 * v + 1], arr[3 * v + 2])); c.multiplyScalar(1 / Math.max(1, pts.length));
@@ -767,6 +773,7 @@ UJI = r"""
     }
     M.setBodyDetail(d0); M.BOB.run = 0; M.BOB.amp = 0; M.BOB.phase = 0; P.pitch = 0; M.updateBody(10);
     out[`pakaian satu mesh berkulit (M6f): ${rows.join('; ')} (tepi < 2,5x, lutut > 0,6x, < 1 mm), nilai tidak valid ${bad}`] = okW && bad === 0;
+    out[`pakaian tanpa lubang: titik tepi terbuka di luar sepatu / manset ${openBad}, pangkal paha keluar dari panggul ${outBad} titik`] = openBad === 0 && outBad === 0;
   }
 
   // 5p. M6c: tubuh tidak membayangi dirinya, bayangan KS-07 tetap jatuh di tubuh, garis basah yang ingat, busa garis air di kaki
