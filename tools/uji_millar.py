@@ -685,13 +685,14 @@ UJI = r"""
     let bad = 0;
     for (const d of [0, 1, 2]) { M.setBodyDetail(d); tr.push(B.tris); for (const o of B.parts) for (const n of ['position', 'normal', 'color']) for (const v of o.geometry.attributes[n].array) if (!Number.isFinite(v)) bad++; }
     out[`tubuh per tingkat detail: ${tr.join(' / ')} segitiga (<= 450 / 1.200 / 3.000), ${B.parts.length} bagian, nilai tidak valid ${bad}, preset -> detail ${M.BODY_DETAIL.join(',')}`] =
-      tr.every((n, i) => n > 0 && n <= lim[i]) && tr[0] < tr[1] && tr[1] < tr[2] && bad === 0 && B.parts.length === 14 && M.BODY_DETAIL.join() === '2,2,2,1,0';
+      tr.every((n, i) => n > 0 && n <= lim[i]) && tr[0] < tr[1] && tr[1] < tr[2] && bad === 0 && B.parts.length === 7 && M.BODY_DETAIL.join() === '2,2,2,1,0';
     M.setBodyDetail(d0);
     // kotor: rata-rata terang warna titik sepatu dibanding badan
-    // hanya titik berwarna putih pakaian (abu netral, terang > 0,3): sepatu (tumit) dibanding lengan atas
-    const lum = (o) => { const c = o.geometry.attributes.color.array; let l = 0, n = 0; for (let k = 0; k < c.length; k += 3) if (Math.abs(c[k] - c[k + 2]) < 0.06 && c[k] > 0.3) { l += 0.3 * c[k] + 0.59 * c[k + 1] + 0.11 * c[k + 2]; n++; } return n ? l / n : 0; };
-    const kl = lum(B.arms[0].children.find((o) => o.isMesh)), kf = lum(B.feet[0]);
-    out[`kotor: sepatu ${kf.toFixed(3)} lebih gelap dari lengan atas ${kl.toFixed(3)} (rasio ${(kf / kl).toFixed(2)} < 0,8)`] = kf > 0 && kf / kl < 0.8;
+    // pakaian (pose ikat): titik di bawah 0,35 m (betis) dibanding di atas 1,1 m (dada, lengan atas)
+    const sg = B.suit.geometry, sc = sg.attributes.color.array, sp = sg.userData.skin.p0; let lo = 0, nlo = 0, hi = 0, nhi = 0;
+    for (let k = 0; k < sc.length; k += 3) { const l = 0.3 * sc[k] + 0.59 * sc[k + 1] + 0.11 * sc[k + 2]; if (sp[k + 1] < 0.35) { lo += l; nlo++; } else if (sp[k + 1] > 1.1) { hi += l; nhi++; } }
+    const kf = lo / Math.max(1, nlo), kl = hi / Math.max(1, nhi);
+    out[`kotor: betis ${kf.toFixed(3)} lebih gelap dari dada ${kl.toFixed(3)} (rasio ${(kf / kl).toFixed(2)} < 0,8)`] = nlo > 0 && kf / kl < 0.8;
     // biaya: updateBody rata-rata 600 panggilan saat berjalan
     M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false;
     P.view = 0; P.x = 3; P.z = 3; P.y = M.seabed(3, 3) + M.CONFIG.eye; P.ground = true; P.pitch = -1.0; B.level = 2; M.BOB.amp = 0.034; M.BOB.run = 0;
@@ -701,7 +702,7 @@ UJI = r"""
     M.boardShip(); M.FLY.view = 1; M.flyCamera(); cam.updateMatrixWorld(true); M.updateBody(1 / 60); B.group.updateMatrixWorld(true);
     const hw = (o) => { const v = o.userData.c.clone(); return o.localToWorld(v); };
     const gS = M.COCKPIT.stick.localToWorld(new V3(0, 0.21, 0.01)), gT = M.COCKPIT.throttle.localToWorld(new V3(0.02, 0.15, 0));
-    const eS = hw(B.hands[1]).distanceTo(gS), eT = hw(B.hands[0]).distanceTo(gT), eye = B.group.localToWorld(new V3(0, M.CONFIG.eye, 0)).distanceTo(cam.position);
+    const glove = (i) => B.elbows[i].localToWorld(new V3(0, -0.33, -0.02)), eS = glove(1).distanceTo(gS), eT = glove(0).distanceTo(gT), eye = B.group.localToWorld(new V3(0, M.CONFIG.eye, 0)).distanceTo(cam.position);
     M.FLY.lookP = -0.7; M.flyCamera(); cam.updateMatrixWorld(true); M.updateBody(1 / 60); B.group.updateMatrixWorld(true);
     // kokpit lebar: tangan di konsol samping, terlihat saat menoleh ke sisinya (lutut terlihat saat menunduk lurus)
     const inFr = (v) => { v.project(cam); return Math.abs(v.x) < 1 && Math.abs(v.y) < 1 && v.z < 1; }, kneeIn = B.knees.every((o) => inFr(o.getWorldPosition(new V3())));
@@ -726,6 +727,46 @@ UJI = r"""
     out[`ambil barang: tangan kanan ${d1.toFixed(2)} -> ${d2.toFixed(2)} m dari barang saat tahan E (lebih dekat 30%), kembali ${d3.toFixed(2)} m saat dilepas`] = d2 < 0.7 * d1 && Math.abs(d3 - d1) < 0.03;
     M.stopMission(); M.setMode('jelajah'); M.U.uWX.value = wx0; M.U.uChopK.value = ck0;
     P.depth = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -Math.PI / 2 + 0.3; P.ground = true; M.updateBody(10);
+  }
+
+  // 5t. M6f: pakaian satu mesh berkulit: kulit = tulang, tidak robek atau mengempis saat lari / duduk / menjangkau, tanpa nilai tidak valid
+  {
+    const P = M.P, B = M.BODY, V3 = M.THREE.Vector3, d0 = B.detail;
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false;
+    P.view = 0; P.x = 3; P.z = 3; P.y = M.seabed(3, 3) + M.CONFIG.eye; P.ground = true; P.pitch = -1.0; B.level = 2;
+    const rows = []; let bad = 0, okW = true;
+    for (const d of [0, 1, 2]) {
+      M.setBodyDetail(d); const g = B.suit.geometry, S = g.userData.skin, ix = g.index.array, P0 = S.p0;
+      for (let v = 0; v < S.count; v++) if (!(S.w[v] >= 0 && S.w[v] <= 1)) okW = false;
+      const edges = (arr) => { let mx = 0; for (let t = 0; t < ix.length; t += 3) for (const [a, b] of [[ix[t], ix[t + 1]], [ix[t + 1], ix[t + 2]], [ix[t + 2], ix[t]]]) mx = Math.max(mx, Math.hypot(arr[3 * a] - arr[3 * b], arr[3 * a + 1] - arr[3 * b + 1], arr[3 * a + 2] - arr[3 * b + 2])); return mx; };
+      const e0 = edges(P0);
+      // lingkar lutut kiri: titik bobot campur paha/betis terdekat lutut
+      const knee = (arr) => { let s = 0, n = 0; const c = new V3(); const pts = []; for (let v = 0; v < S.count; v++) if (S.bi[2 * v] === 3 && Math.abs(P0[3 * v + 1] - 0.47) < 0.03) pts.push(v);
+        for (const v of pts) c.add(new V3(arr[3 * v], arr[3 * v + 1], arr[3 * v + 2])); c.multiplyScalar(1 / Math.max(1, pts.length));
+        for (const v of pts) { s += Math.hypot(arr[3 * v] - c.x, arr[3 * v + 1] - c.y, arr[3 * v + 2] - c.z); n++; } return n ? s / n : 0; };
+      const k0 = knee(P0); let eMax = 0, kMin = 9, errMax = 0;
+      const poses = [
+        () => { M.BOB.run = 1; M.BOB.amp = 0.055; M.BOB.phase = 0; M.updateBody(10); },
+        () => { M.BOB.run = 1; M.BOB.amp = 0.055; M.BOB.phase = Math.PI / 2; M.updateBody(10); },
+        () => { M.BOB.run = 0; M.BOB.amp = 0; P.ground = false; M.updateBody(10); P.ground = true; },
+        () => { M.boardShip(); M.FLY.view = 1; M.flyCamera(); M.updateBody(1 / 60); },
+      ];
+      for (const f of poses) {
+        f(); const a = g.attributes.position.array, nn = g.attributes.normal.array;
+        for (const x of a) if (!Number.isFinite(x)) bad++; for (const x of nn) if (!Number.isFinite(x)) bad++;
+        eMax = Math.max(eMax, edges(a) / e0); kMin = Math.min(kMin, knee(a) / k0);
+        // titik dengan bobot penuh betis = pivot lutut x posisi ikat lokal
+        for (let v = 0; v < S.count; v += 7) if (S.bi[2 * v] === 3 && S.w[v] === 1) {
+          const q = B.knees[0].worldToLocal(B.group.localToWorld(new V3(a[3 * v], a[3 * v + 1], a[3 * v + 2])));
+          const loc = new V3(P0[3 * v], P0[3 * v + 1], P0[3 * v + 2]).applyMatrix4(B.bindInv[3]); errMax = Math.max(errMax, q.distanceTo(loc));
+        }
+        M.flyReset(); M.FLY.view = 0;
+      }
+      rows.push(`d${d}: tepi terpanjang ${eMax.toFixed(2)}x, lutut ${kMin.toFixed(2)}x, kulit=tulang ${(errMax * 1000).toFixed(2)} mm`);
+      okW = okW && eMax < 2.5 && kMin > 0.6 && errMax < 1e-3;
+    }
+    M.setBodyDetail(d0); M.BOB.run = 0; M.BOB.amp = 0; M.BOB.phase = 0; P.pitch = 0; M.updateBody(10);
+    out[`pakaian satu mesh berkulit (M6f): ${rows.join('; ')} (tepi < 2,5x, lutut > 0,6x, < 1 mm), nilai tidak valid ${bad}`] = okW && bad === 0;
   }
 
   // 5p. M6c: tubuh tidak membayangi dirinya, bayangan KS-07 tetap jatuh di tubuh, garis basah yang ingat, busa garis air di kaki

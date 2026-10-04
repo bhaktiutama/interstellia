@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: M6a sampai M6e selesai (M6e sebagian, lihat bagian M6e di bawah). Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a sampai M6f selesai (M6e sebagian, lihat bagian M6e di bawah). Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -161,6 +161,7 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | M6d | Selesai 4 Oktober 2026 (lihat bagian di bawah) |
 | M6d-2 | Selesai 4 Oktober 2026 (revisi sudut pandang setelah uji pemilik, lihat bagian di bawah) |
 | M6e | Selesai 4 Oktober 2026, sebagian (tangga dan tersapu ditunda, lihat bagian di bawah) |
+| M6f | Selesai 4 Oktober 2026: pakaian satu mesh berkulit (lihat bagian di bawah) |
 
 ## Catatan M6a (selesai 4 Oktober 2026)
 
@@ -339,3 +340,24 @@ Uji busa garis air: batas atas 5% -> 10%. Bukan karena busa berubah: kaki kini l
 Tangkapan layar: menunduk 70 derajat sambil berjalan (unit dada, selang, lipatan siku, saku paha terlihat); kokpit (paha, lutut, sepatu ke pijakan, sarung tangan di tongkat).
 
 Wajib dicek pemilik: FPS Hemat tidak turun dibanding tubuh Mati (tidak bisa diukur di sandbox), sendi tidak tampak berkedip di GTX 1060 / M1, posisi tangan di tongkat dan tuas wajar.
+
+## M6f (selesai 4 Oktober 2026): pakaian satu mesh berkulit (High)
+
+Masukan pemilik: kaki masih tidak menyatu dengan badan (pangkal paha tampak sebagai tabung dan bola terpisah di bawah perut); ingin kesan seperti foto astronaut di air. Kesan yang diambil: pakaian satu kulit, panggul dan celana lebar, panel dada dan bahu, sabuk, lipatan di sendi. Bentuk persis, logo, dan papan nama pakaian film tidak ditiru; foto tidak di-commit.
+
+| Item | Hasil |
+| --- | --- |
+| Pakaian | Satu mesh (`BODY.suit`): badan dengan panggul lebar (setengah lebar 0,235 m) + kedua kaki dari dalam panggul sampai di dalam leher sepatu + kedua lengan dari dalam bahu sampai di dalam manset |
+| Kulit | Tiap titik ikut 1-2 tulang dari pivot yang sudah ada (tulang panggul baru `BODY.pelvis` mengikuti pinggul), bobot halus: panggul ke paha 16 cm, lutut 14 cm, badan ke lengan atas 13 cm, siku 12 cm. Dihitung di CPU (`skinBody()`), bukan GPU seperti rencana: pass bayangan dan material turunan `shipMat` tidak perlu diubah, tanpa risiko NaN shader di M1 (normal nol memakai normal ikat) |
+| Benda kaku | Helm, sepatu dengan leher sepatu, sarung tangan dengan manset, ransel / sabuk elips / unit dada lebih kecil dan terang (Rendah ke atas), panel dada dan bahu, kantong sabuk, selang (Sedang ke atas). Sendi bola M6e dihapus (tidak diperlukan lagi) |
+| Lipatan | Pita warna gelap bergantian di lutut dan siku (Rendah ke atas) |
+| Segitiga | Hemat 432, Rendah 980, Sedang ke atas 2.408; 7 bagian (dulu 14) |
+| Tetap | Pose, IK kaki dan lengan, pilot duduk, kamera leher, bayangan tubuh, basah, busa, visor |
+
+Uji baru (blok 5t), per tingkat detail di pose lari (dua fase), udara, dan duduk di kokpit: tepi segitiga terpanjang paling banyak 1,19x pose ikat (tidak robek), lingkar lutut 0,85x (tidak mengempis), titik berbobot penuh betis tepat di tulang (0,00 mm), tanpa nilai tidak valid. Biaya `updateBody()` dengan kulit 0,064 ms per frame di sandbox (batas 0,1).
+
+| Uji Millar | 123 pemeriksaan lulus |
+
+Tangkapan layar menunduk sambil lari: paha keluar dari panggul sebagai satu kain, siku melengkung.
+
+Wajib dicek pemilik: kain di pinggul dan lutut saat lari dan duduk di kokpit, FPS Hemat. Berikutnya bila perlu: lipatan kain halus lewat noise normal di fragment (M6f-4 di rencana), bentuk panel dada lebih rinci.
