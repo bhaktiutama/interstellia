@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: M6a, M6a-2, dan M6b selesai, M6c-M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a, M6a-2, M6b, dan M6c selesai, M6d-M6e belum. Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -156,7 +156,7 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | M6a | Selesai 4 Oktober 2026 (lihat catatan di bawah) |
 | M6a-2 | Selesai 4 Oktober 2026 (revisi setelah uji pemilik, lihat bagian di bawah) |
 | M6b | Selesai 4 Oktober 2026 (lihat bagian di bawah) |
-| M6c | Belum |
+| M6c | Selesai 4 Oktober 2026, menunggu uji pemilik di GPU (lihat bagian di bawah) |
 | M6d | Belum |
 | M6e | Belum |
 
@@ -225,3 +225,30 @@ Catatan untuk M6b: `footstep()` baru (M5c) menaruh percikan, riak, dan mahkota a
 
 Dampak yang diterima: saat menunduk (`dn` 1) sepatu terlihat sekitar 0,5 m di depan dan percikan keluar di sana; saat menatap lurus sekitar 0,3 m (reach 0,25 m + ujung sepatu). Busa garis air tidak dibuat terpisah (cincin buih M5c sudah ada); dipertimbangkan ulang di M6c bila masih kurang.
 
+## M6c (selesai 4 Oktober 2026): bayangan tubuh, basah yang ingat, busa garis air
+
+Keputusan: tubuh tidak membayangi dirinya sendiri. Peta bayangan Gargantua 96 m berarti 4,7 cm per texel (Ultra) sampai 19 cm (Hemat), sedangkan paha dan lengan 12-18 cm, jadi bayangan diri hanya berupa jerawat dan bercak. Bentuk tubuh tetap terbaca dari arah cahaya (sisi yang membelakangi Gargantua gelap).
+
+| Perubahan | Isi |
+| --- | --- |
+| Bayangan tubuh | `shadowBody()` di fragment `bodyMat`: salinan `shadowAt()` (sampel, tepi, kelembutan sama); tiap sampel merekonstruksi posisi dunia penghalang lewat `bodyU.uShMI` (invers `uShM`, diisi di `updateShadow()`), penghalang di dalam kapsul tubuh (sumbu tegak 1,8 m dari telapak, radius `CONFIG.body.selfR` 0,7 m) diabaikan. Bias kembali seperti wahana (0,1 / 0,15, sebelumnya sementara 0,3 / 0,4), jadi tepi bayangan wahana di tubuh tepat |
+| Fragment aman | `bodyMat` dibangun dengan `swapGL()` yang melempar error bila teks `shipMat` yang ditukar berubah (dulu `replace` bisa gagal diam-diam) |
+| Basah yang ingat | `BODY.wetH` (m di atas telapak) naik seketika ke muka air + cipratan (jalan +0,12 m `wetWalk`, lari +0,30 m `wetRun`), kering 0,01 m/s (`dryRate`, sekitar 50 s), tersapu = seluruh tubuh basah; batas bergerigi dari noise koordinat lokal tubuh. Dekat muka air tetap paling basah. Sebelumnya basah ikut muka air dunia: saat lompat kaki langsung kering |
+| Busa garis air | Di shader laut dekat (bukan geometri, jadi menempel di permukaan ombak yang terlihat): cincin di sekitar dua titik `bodyLegAt(sd, kedalaman)`, tepi dalam di dalam kaki (tanpa celah air), lebar 4 cm diam sampai 15 cm lari, menumpuk di depan arah gerak. Hanya saat Tubuh Tampil, menapak, kedalaman 0,05-0,95 m (pudar 0,85-0,95); `uLegs`, `uLegK`, `uLegV`, peredaman 0,15 s `BODY.foamK`, pengali `CONFIG.body.foam` |
+| Alat banding | `BODY.cast` false = tubuh tidak masuk peta bayangan (untuk uji) |
+
+| Uji (blok 5p dan blok 6) | Hasil |
+| --- | --- |
+| `uShMI x uShM` | identitas, galat 5,7e-14 |
+| Tanpa bayangan diri (piksel tubuh, tubuh di peta bayangan vs tidak) | beda 0,00% (masker 11,0%) |
+| Bayangan KS-07 jatuh di tubuh | 24,6% lebih gelap (> 20%) |
+| Basah (kedalaman 0,66 m) | diam 0,66, lari 1,08, lompat 1 s turun 0,010 m, 60 s kembali 0,66, tersapu 2,0 |
+| Busa | titik = `bodyLegAt` (selisih 0), kekuatan 1 di air, 0 saat Mati / udara / terbang; render 3,35% piksel beda |
+| NaN dan titik > 50, tubuh menunduk, 5 preset x 3 suasana | 0 |
+| Uji Millar | 105 pemeriksaan lulus |
+
+Uji M5c (percikan menyatu) sempat gagal sekali dengan tonjolan -200 mm (batas jepit riak): sisa riak uji lari sebelumnya. Blok itu kini mengosongkan grid riak dulu (`makeRipple()` diekspor). Satu tangkapan layar menunduk di air: cincin busa putih terlihat di garis air kedua paha.
+
+Batasan: bagian wahana yang lebih dekat dari 0,7 m ke sumbu tubuh (mis. batang kaki pendarat) tidak membayangi tubuh; bayangan lengan di badan tidak ada.
+
+Wajib dicek pemilik di GTX 1060 dan M1 (SwiftShader tidak memperlihatkan): tubuh tidak berkedip atau bergaris saat berjalan di bawah dan di samping KS-07; tidak ada titik putih; cincin busa menempel di kaki saat ombak (Ultra FFT dan Hemat Gerstner); garis basah turun pelan setelah lompat atau lari.

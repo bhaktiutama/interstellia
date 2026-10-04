@@ -187,7 +187,8 @@ const CONFIG = {
   seaState: { far: 0.6, near: 1.5, dFar: 120000, dNear: 4000, tau: 4 },   // pengali tinggi ombak angin: kecil saat gelombang raksasa jauh, besar saat dekat
   body: { smooth: 0.12, stand: 0.08, legDown: 0.6, kneeDown: 0.15, reachWalk: 0.25, reachRun: 0.45, yawLag: 0.25, yawMax: 0.44, kneeWalk: 0.8, kneeRun: 1.3, legAir: 0.5,
     armFwd: 0.15, armDown: 0.15, armWalk: 0.4, armRun: 0.8, abduct: 0.12, abductRun: 0.25, abductAir: 0.6, elbow: 0.7, elbowRun: 1.5, elbowDown: 0.3,
-    leanRun: 0.25, leanDown: 0.10 },   // M6a-2: pose tubuh (rad, m, s)
+    leanRun: 0.25, leanDown: 0.10,   // M6a-2: pose tubuh (rad, m, s)
+    selfR: 0.7, wetWalk: 0.12, wetRun: 0.30, dryRate: 0.01, foam: 1 },   // M6c: kapsul abaikan bayangan diri (m), cipratan basah jalan / lari (m), kering (m/s), busa garis air
   walk: { stride: 0.72, strideRun: 1.25, drag: 0.35, legs: 0.13, fovRun: 6 },        // R3: panjang langkah (m), waktu tanggap di air (s), jarak kaki dari tengah (m)
   current: { max: 1.6, at: 2500, w: 3500, push: 0.35 },                  // R4: arus air surut ke arah gelombang (m/s, puncak di depan muka, lebar, tarikan ke pemain)
   sweep: { burst: 0.5, under: 3.4, out: 4.3 },                            // R4: urutan tersapu (s): buih putih, di bawah air, memutih   // R2: kecuraman horizontal (choppy), ambang Jacobian buih, waktu pudar buih (s)
@@ -1169,7 +1170,8 @@ function seaMat(near) {
   const u = { ...U, uOff: { value: new THREE.Vector3() }, uCell: { value: 1 }, uNearR: { value: 70 },
     tD0: { value: null }, tD1: { value: null }, tD2: { value: null }, tS0: { value: null }, tS1: { value: null }, tS2: { value: null }, tFoam: { value: null },
     uLc: { value: new THREE.Vector3(1, 1, 1) }, uTexel: { value: new THREE.Vector3(1, 1, 1) }, uFoamJ: { value: CONFIG.fft.foamJ }, uCaustK: U.uCaustK,
-    tRip: { value: TEX0 }, uRipO: { value: new THREE.Vector2() }, uRipS: { value: 16 }, uRipTx: { value: 0.25 } };
+    tRip: { value: TEX0 }, uRipO: { value: new THREE.Vector2() }, uRipS: { value: 16 }, uRipTx: { value: 0.25 },
+    uLegs: { value: new THREE.Vector4() }, uLegK: { value: 0 }, uLegV: { value: new THREE.Vector2() } };   // M6c: busa garis air di kaki tubuh
   return new THREE.ShaderMaterial({
     uniforms: u, defines: { NW: 16, NM: 12, NEAR: near ? 1 : 0, FFT: 0, NC: 1, CAUST: 0, RIP: near ? 1 : 0 },
     vertexShader: LOG_VS + COMMON + FFT_GLSL + /* glsl */`
@@ -1195,6 +1197,7 @@ function seaMat(near) {
     fragmentShader: LOG_FS + COMMON + FFT_GLSL + /* glsl */`
       uniform float uNearR;
       uniform sampler2D tRip; uniform vec2 uRipO; uniform float uRipS, uRipTx;
+      uniform vec4 uLegs; uniform float uLegK; uniform vec2 uLegV;
       varying vec3 vR; varying vec2 vP; varying float vDepth;
       void main() {
         #include <logdepthbuf_fragment>
@@ -1247,6 +1250,17 @@ function seaMat(near) {
         // M5a-2: buih berkelompok dalam bercak (bukan rata di mana-mana) dan menipis dengan jarak; buih jejak kaki tetap
         foam = max(foam * mix(1.0, (0.25 + 1.1 * smoothstep(0.32, 0.78, mc.y)) * (1.0 - 0.6 * smoothstep(90.0, 900.0, dist)), uMacroK), rf * 0.7);
       #if NEAR
+        // M6c: busa garis air melingkari kaki tubuh (tepi dalam di dalam kaki: tertutup kaki, tanpa celah air), menumpuk di depan arah gerak
+        if (uLegK > 0.0) {
+          float sp = length(uLegV), wv = min(sp / 4.0, 1.0); vec2 dv = sp > 0.05 ? uLegV / sp : vec2(0.0);
+          for (int i = 0; i < 2; i++) {
+            vec2 e = vP - (i == 0 ? uLegs.xy : uLegs.zw); float d = length(e);
+            if (d > 0.4) continue;
+            float fr = d > 1e-4 ? max(dot(e / d, dv), 0.0) : 0.0, wd = 0.04 + 0.11 * wv * (0.5 + fr);
+            float ring = smoothstep(0.03, 0.06, d) * (1.0 - smoothstep(0.06 + wd * 0.4, 0.06 + wd, d));
+            foam = max(foam, ring * uLegK * (0.55 + 0.45 * vn2(vP * 18.0 + vec2(uT * 1.7, -uT * 1.3))));
+          }
+        }
         float shd = shadowAt(vec3(vP.x, seabed(vP), vP.y), 0.03);
       #else
         float shd = 1.0;
@@ -1740,12 +1754,37 @@ function makeShadow(size) {
    Dada 0,11 m di depan mata supaya terlihat saat menunduk. Kepala tidak dirender kamera orang pertama (kamera di dalamnya), hanya
    bayangan; di tampilan drone (V) kepala ikut terlihat. Material turunan shipMat (cahaya Gargantua, kabut, garis basah sendiri). */
 const BODY_LEVELS = [['Mati', 0], ['Bayangan', 1], ['Tampil', 2]];
-const bodyU = { ...U, uWater: { value: 0 }, uMatte: { value: 1 }, uGDirL: { value: GDIR } };
-const bodyMat = new THREE.ShaderMaterial({
-  uniforms: bodyU, defines: { NW: 1, NM: 1 }, side: THREE.DoubleSide, vertexShader: shipMat.vertexShader,
-  fragmentShader: shipMat.fragmentShader.replace('shadowAt(vW + n * 0.1, 0.15)', 'shadowAt(vW + n * 0.3, 0.4)'),   // bias lebih besar: tubuh ada di peta bayangannya sendiri
-});
-const BODY = { level: 2, yaw: null, group: new THREE.Group(), parts: [], head: null, torso: null, legs: [], knees: [], ankles: [], arms: [], elbows: [], hands: [], feet: [], tris: 0, t: 0, pose: { dn: 0, mv: 0, run: 0, air: 0 } };
+const bodyU = { ...U, uWater: { value: 0 }, uMatte: { value: 1 }, uGDirL: { value: GDIR },
+  uShMI: { value: new THREE.Matrix4() }, uBodyP: { value: new THREE.Vector3() }, uSelfR: { value: CONFIG.body.selfR }, uWetH: { value: 0 } };
+// M6c: fragment wahana dengan penukar yang gagal keras bila teks sumber berubah (replace diam-diam bisa tidak terjadi)
+const swapGL = (s, a, b) => { if (!s.includes(a)) throw new Error('bodyMat: teks tidak ditemukan: ' + a); return s.replace(a, b); };
+let bodyFS = swapGL(shipMat.fragmentShader, 'void main() {', /* glsl */`uniform mat4 uShMI; uniform vec3 uBodyP; uniform float uSelfR, uWetH;
+    // Bayangan untuk tubuh: sama dengan shadowAt(), tetapi penghalang yang jatuh di dalam kapsul tubuh (sumbu tegak dari telapak
+    // setinggi 1,8 m, radius uSelfR) diabaikan. Pada 4,7-19 cm per texel bayangan diri hanya jerawat dan bercak; wahana dan pecahan tetap membayangi.
+    float shadowBody(vec3 w, float biasM) {
+      if (uShK <= 0.0) return 1.0;
+      vec3 p = (uShM * vec4(w, 1.0)).xyz * 0.5 + 0.5;
+      if (p.x <= 0.0 || p.x >= 1.0 || p.y <= 0.0 || p.y >= 1.0 || p.z >= 1.0) return 1.0;
+      float s = 0.0, rr = uShPx * uShSoft * 1.8, a0 = fract(sin(dot(floor(w.xz * 100.0), vec2(12.9898, 78.233))) * 43758.5453) * 6.2832;
+      for (int i = 0; i < 8; i++) {
+        float an = a0 + float(i) * 2.39996, rad = sqrt((float(i) + 0.5) / 8.0) * rr;
+        vec2 q = p.xy + vec2(cos(an), sin(an)) * rad;
+        float d = texture(uShTex, q).r;
+        vec3 o = (uShMI * vec4(vec3(q, d) * 2.0 - 1.0, 1.0)).xyz - uBodyP;   // posisi dunia penghalang, relatif telapak (ortografik: w = 1)
+        o.y -= clamp(o.y, 0.0, 1.8);
+        s += dot(o, o) < uSelfR * uSelfR ? 1.0 : step(p.z - biasM * uShD, d);
+      }
+      vec2 e = min(p.xy, 1.0 - p.xy);
+      return mix(1.0, s / 8.0, smoothstep(0.0, 0.06, min(e.x, e.y)));
+    }
+    void main() {`);
+bodyFS = swapGL(bodyFS, 'shadowAt(vW + n * 0.1, 0.15)', 'shadowBody(vW + n * 0.1, 0.15)');
+// basah: terendam (dekat muka air) + basah yang diingat sampai uWetH di atas telapak, batasnya bergerigi (noise koordinat lokal, tidak berenang saat berjalan)
+bodyFS = swapGL(bodyFS, 'float wet = 1.0 - smoothstep(0.0, 0.6, vW.y - uWater);', /* glsl */`vec3 lb = vW - uBodyP;
+      float wet = max(1.0 - smoothstep(-0.02, 0.10, vW.y - uWater),
+                      0.85 * (1.0 - smoothstep(-0.05, 0.05, lb.y - uWetH + 0.07 * (vn2(lb.xz * 9.0 + lb.y * 2.0) - 0.5))));`);
+const bodyMat = new THREE.ShaderMaterial({ uniforms: bodyU, defines: { NW: 1, NM: 1 }, side: THREE.DoubleSide, vertexShader: shipMat.vertexShader, fragmentShader: bodyFS });
+const BODY = { level: 2, cast: true, wetH: 0, foamK: 0, yaw: null, group: new THREE.Group(), parts: [], head: null, torso: null, legs: [], knees: [], ankles: [], arms: [], elbows: [], hands: [], feet: [], tris: 0, t: 0, pose: { dn: 0, mv: 0, run: 0, air: 0 } };
 {
   // Kamera ada di depan badan: dada di belakang / tepat di bawah mata, hanya perut dan pinggul mencuat; kaki dan tangan di depan (terlihat saat menunduk)
   const WH = [0.74, 0.74, 0.72], GY = [0.35, 0.35, 0.36], OR = [0.85, 0.35, 0.08], H = 0.95;
@@ -1834,12 +1873,20 @@ function updateBody(dtp) {
   if (B.yaw === null || dtp >= 1) B.yaw = P.yaw;
   else { let d = P.yaw - B.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)) * Math.exp(-dtp / Cb.yawLag); B.yaw = P.yaw - Math.max(-Cb.yawMax, Math.min(Cb.yawMax, d)); }
   bodyPose(dtp);   // pose dihitung walau tubuh tak terlihat: posisi telapak (percikan) tidak bergantung pada panel Tubuh
+  const bed = seabed(P.x, P.z), feet = P.view === 0 ? Math.max(bed, P.y - CONFIG.eye) : bed, wl = waterHere(STATE.visT), depth = wl - feet;
+  // M6c: tinggi basah (m di atas telapak) naik seketika ke muka air + cipratan, turun pelan (kering); tersapu = basah seluruhnya
+  const Q = B.pose, wetT = SWEEP.on ? 2 : depth + (depth > 0.05 ? Cb.wetWalk * Q.mv + Cb.wetRun * Q.run : 0);
+  B.wetH = Math.max(wetT, B.wetH - Cb.dryRate * dtp, 0);   // dtp besar (uji) = waktu berlalu, bukan reset
+  // M6c: busa garis air di kaki (shader laut dekat): hanya saat tubuh tampil, menapak, kaki terendam di bawah pinggul (pudar 0,85-0,95 m)
+  const fk = show && B.level === 2 && P.ground ? smoothstep01(0.05, 0.12, depth) * (1 - smoothstep01(0.85, 0.95, depth)) * Cb.foam : 0;
+  B.foamK += (fk - B.foamK) * (dtp >= 1 ? 1 : 1 - Math.exp(-dtp / 0.15)); if (B.foamK < 1e-3) B.foamK = 0;
+  const su = seaNear.material.uniforms, L0 = bodyLegAt(-1, depth), L1 = bodyLegAt(1, depth);
+  su.uLegs.value.set(L0.x, L0.z, L1.x, L1.z); su.uLegK.value = B.foamK; su.uLegV.value.set(P.vx, P.vz);
   B.group.visible = show; if (!show) return;
-  const bed = seabed(P.x, P.z);
-  B.group.position.set(P.x, P.view === 0 ? Math.max(bed, P.y - CONFIG.eye) : bed, P.z); B.group.rotation.y = B.yaw;
+  B.group.position.set(P.x, feet, P.z); B.group.rotation.y = B.yaw;
   const main = B.level === 2;
-  for (const o of B.parts) { o.layers.set(3); if (main && (o !== B.head || P.view > 0)) o.layers.enable(0); }
-  bodyU.uWater.value = waterHere(STATE.visT);
+  for (const o of B.parts) { o.layers.set(3); if (main && (o !== B.head || P.view > 0)) o.layers.enable(0); if (!B.cast) o.layers.disable(3); }   // cast false: alat banding uji
+  bodyU.uWater.value = wl; bodyU.uBodyP.value.copy(B.group.position); bodyU.uSelfR.value = Cb.selfR; bodyU.uWetH.value = B.wetH;
 }
 const _shA = new THREE.Vector3(), _shB = new THREE.Vector3(), _shC = new THREE.Vector3();
 function updateShadow() {
@@ -1852,6 +1899,7 @@ function updateShadow() {
   const a = C.position.dot(right), b = C.position.dot(up);
   C.position.addScaledVector(right, Math.round(a / tx) * tx - a).addScaledVector(up, Math.round(b / tx) * tx - b); C.updateMatrixWorld();
   U.uShM.value.multiplyMatrices(C.projectionMatrix, C.matrixWorldInverse);
+  bodyU.uShMI.value.copy(U.uShM.value).invert();   // M6c: posisi dunia penghalang di shader tubuh
   scene.overrideMaterial = SHD.mat;
   renderer.setRenderTarget(SHD.rt); renderer.clear(); renderer.render(scene, C);
   scene.overrideMaterial = null;
@@ -3226,7 +3274,7 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, CROWN, spawnCrown, stepCrown, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
   SWEEP, currentAt, SPRAY, US, ZS, ARC, M_COMP, waveG, waveHz, COMMON,
   AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
-  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob, BODY, BODY_LEVELS, bodyMat, cycleBody, updateBody, bodyPose, bodyLegs, bodyFootAt, bodyLegAt,
+  PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob, BODY, BODY_LEVELS, bodyMat, cycleBody, updateBody, updateMood, setMood, makeRipple, bodyPose, bodyLegs, bodyFootAt, bodyLegAt,
   FLY, boardShip, flyLand, updateFly, flyReset, placeShip,
   MIS, missionSites, startMission, stopMission, restartMission, finishMission, updateMission, missionAction, toggleRadar, radarFix, setMode, setLevel, fmtMS,
   SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip, CK, COCKPIT, cockpitUpdate,

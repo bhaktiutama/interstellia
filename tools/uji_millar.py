@@ -554,6 +554,7 @@ UJI = r"""
   {
     const P = M.P, S = M.SPL, R = M.RIP, from = M.THREE.DataUtils.fromHalfFloat;
     for (let k = 0; k < 200; k++) M.stepSplash(0.05);
+    M.makeRipple(M.PRESETS[M.PRESET.idx]);   // grid riak kosong: sisa riak uji lari sebelumnya bisa jenuh di batas +-0,2 m (pernah gagal -200 mm)
     P.view = 0; P.x = 0; P.z = 0; P.depth = 0.5; P.yaw = 0; P.vx = 0; P.vz = -3; P.ground = true; M.updateBody(10);
     const fw = Math.max(...[-1, 1].map((sd) => -M.bodyFootAt(sd).z));   // M6b: percikan keluar dari sepatu yang terlihat
     M.footstep(1.2, true); let fRel = 0, t = 0, nb = 0;
@@ -637,6 +638,60 @@ UJI = r"""
     P.depth = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -PI / 2 + 0.3; P.ground = true; M.updateBody(10);
   }
 
+  // 5p. M6c: tubuh tidak membayangi dirinya, bayangan KS-07 tetap jatuh di tubuh, garis basah yang ingat, busa garis air di kaki
+  {
+    const P = M.P, B = M.BODY, Cb = M.CONFIG.body, PI = Math.PI, from = M.THREE.DataUtils.fromHalfFloat, V3 = M.THREE.Vector3;
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false;
+    P.view = 0; P.ground = true; P.depth = 0; B.level = 2; B.cast = true; M.MOOD.brk = 1; M.BOB.run = 0; M.BOB.amp = 0; M.BOB.phase = 0; P.vx = 0; P.vz = 0;
+    const snap = () => { const T = M.POST.hdr, w = T.width, h = T.height, b = new Uint16Array(w * h * 4); M.renderer.readRenderTargetPixels(T, 0, 0, w, h, b); return b; };
+    // render sinkron (waktu, ombak sama); updateBody(10) setelah peta bayangan: peredaman busa dan yaw langsung di sasaran
+    const shot = () => { M.camera.position.set(P.x, P.y, P.z); M.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); M.camera.updateMatrixWorld(true); M.U.uCam.value.copy(M.camera.position);
+      M.updateShadow(); M.updateBody(10); M.renderer.setRenderTarget(M.POST.hdr); M.renderer.clear(); M.renderer.render(M.scene, M.camera); M.renderer.setRenderTarget(null); return snap(); };
+    const lum = (b, k) => 0.3 * from(b[k]) + 0.59 * from(b[k + 1]) + 0.11 * from(b[k + 2]);
+    const maskOf = (a, b) => { const m = []; for (let k = 0; k < a.length; k += 4) if (Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]) > 40) m.push(k); return m; };
+    const mlum = (b, m) => { let l = 0; for (const k of m) l += lum(b, k); return m.length ? l / m.length : 0; };
+    const place = (x, z) => { P.x = x; P.z = z; P.y = M.seabed(x, z) + M.CONFIG.eye; };
+    // invers matriks bayangan
+    place(0, 0); P.yaw = -PI / 2 + 0.3; P.pitch = -60 * PI / 180; M.updateBody(10); M.updateShadow();
+    const I = new M.THREE.Matrix4().multiplyMatrices(M.bodyMat.uniforms.uShMI.value, M.U.uShM.value).elements;
+    let ie = 0; for (let k = 0; k < 16; k++) ie = Math.max(ie, Math.abs(I[k] - (k % 5 === 0 ? 1 : 0)));
+    out[`bayangan tubuh: uShMI x uShM = identitas, galat ${ie.toExponential(1)} (< 1e-4)`] = ie < 1e-4;
+    // tanpa bayangan diri: masker tubuh = Tampil vs Bayangan (bayangan tubuh di dasar laut ada di keduanya); dalam masker, tubuh menghalangi vs tidak
+    const gd = new V3(Math.cos(22 * PI / 180) * Math.cos(28 * PI / 180), Math.sin(22 * PI / 180), -Math.cos(22 * PI / 180) * Math.sin(28 * PI / 180)), gh = Math.hypot(gd.x, gd.z);
+    P.yaw = Math.atan2(-gd.x, -gd.z);   // menghadap cahaya: sisi depan tubuh tersinari
+    B.level = 2; const a2 = shot(); B.level = 1; const a1 = shot(); B.level = 2; B.cast = false; const a2n = shot(); B.cast = true;
+    const m0 = maskOf(a2, a1), l2 = mlum(a2, m0), l2n = mlum(a2n, m0), area = 100 * m0.length / (a2.length / 4);
+    out[`tanpa bayangan diri: masker tubuh ${area.toFixed(1)}% (5-40%), terang dengan tubuh di peta bayangan ${l2.toFixed(4)} vs tanpa ${l2n.toFixed(4)} (beda ${(100 * Math.abs(l2 / l2n - 1)).toFixed(2)}%, < 1%)`] = area > 5 && area < 40 && Math.abs(l2 / l2n - 1) < 0.01;
+    // bayangan KS-07 tetap jatuh di tubuh: pemain di titik yang dada / pinggulnya terhalang wahana, KS-07 di peta bayangan vs tidak
+    let best = { d: 0, h: 0, l1: 0, l0: 0 };
+    for (const hb of [0.6, 1.0, 1.4]) {
+      const sy = M.seabed(M.SHIP.x, M.SHIP.z), h = M.SHIP.y + 0.3 - (sy + hb); place(M.SHIP.x - gd.x * h / gd.y, M.SHIP.z - gd.z * h / gd.y);
+      B.level = 2; const s2 = shot(); B.level = 1; const s1 = shot(); B.level = 2; const mm = maskOf(s2, s1);
+      M.SHIP.mesh.traverse((o) => o.layers.disable(3)); const s2o = shot(); M.SHIP.mesh.traverse((o) => o.layers.enable(3));
+      const l1 = mlum(s2, mm), l0 = mlum(s2o, mm), d = l0 > 0 ? 1 - l1 / l0 : 0; if (d > best.d) best = { d, h: hb, l1, l0 };
+    }
+    out[`bayangan KS-07 di tubuh: terang ${best.l1.toFixed(4)} vs tanpa wahana ${best.l0.toFixed(4)} (${(100 * best.d).toFixed(1)}% lebih gelap, > 20%, titik setinggi ${best.h} m)`] = best.d > 0.2;
+    // basah yang ingat: diam = kedalaman, lari naik, lompat turun pelan, kering kembali ke muka air, tersapu = seluruhnya
+    let spot = null; for (let x = 0; x <= 60 && !spot; x += 3) for (let z = -30; z <= 30 && !spot; z += 3) { place(x, z); const d = M.waterHere(M.STATE.visT) - M.seabed(x, z); if (d > 0.2 && d < 0.8 && Math.hypot(x - M.SHIP.x, z - M.SHIP.z) > 12) spot = [x, z]; }
+    place(...(spot || [0, 0])); P.pitch = -60 * PI / 180; B.wetH = 0; M.updateBody(10); const dep = M.waterHere(M.STATE.visT) - M.seabed(P.x, P.z), w0 = B.wetH;
+    M.BOB.run = 1; M.BOB.amp = 0.055; M.updateBody(10); const wr = B.wetH, wr2 = wr; M.BOB.run = 0; M.BOB.amp = 0;
+    P.y += 1.2; P.ground = false; for (let f = 0; f < 60; f++) M.updateBody(1 / 60); const wj = B.wetH; P.y -= 1.2; P.ground = true;
+    for (let f = 0; f < 600; f++) M.updateBody(0.1); const wd = B.wetH, uw = M.bodyMat.uniforms.uWetH.value;
+    M.SWEEP.on = true; M.updateBody(1 / 60); const ws = B.wetH; M.SWEEP.on = false; M.updateBody(10);
+    out[`basah: kedalaman ${dep.toFixed(2)} m, diam ${w0.toFixed(2)}, lari ${wr.toFixed(2)} (>= +0,25), lompat 1 s ${wj.toFixed(3)} (turun ${(wr2 - wj).toFixed(3)} <= 0,02), 60 s ${wd.toFixed(2)} (= kedalaman), tersapu ${ws.toFixed(1)}, uWetH ${uw.toFixed(2)}`] =
+      Math.abs(w0 - dep) < 0.02 && wr >= dep + 0.25 && wr2 - wj > 0 && wr2 - wj <= 0.02 && Math.abs(wd - dep) < 0.02 && ws === 2 && Math.abs(uw - wd) < 1e-6;
+    // busa garis air: titik = bodyLegAt, kekuatan 0 saat Mati / di udara / terbang, terlihat dan setempat di render
+    const su = M.seaNear.material.uniforms; M.updateBody(10); const L0 = M.bodyLegAt(-1, dep), L1 = M.bodyLegAt(1, dep), lg = su.uLegs.value;
+    const le = Math.max(Math.hypot(lg.x - L0.x, lg.y - L0.z), Math.hypot(lg.z - L1.x, lg.w - L1.z)), k1 = su.uLegK.value;
+    B.level = 0; M.updateBody(10); const kM = su.uLegK.value; B.level = 2; P.ground = false; M.updateBody(10); const kA = su.uLegK.value; P.ground = true;
+    M.FLY.on = true; M.updateBody(10); const kF = su.uLegK.value; M.FLY.on = false; M.updateBody(10);
+    out[`busa garis air: titik = bodyLegAt (selisih ${le.toFixed(4)} m), kekuatan ${k1.toFixed(2)} di air, Mati ${kM}, udara ${kA}, terbang ${kF}`] = le < 0.01 && (dep > 0.85 || k1 > 0.5) && kM === 0 && kA === 0 && kF === 0;
+    P.vx = -Math.sin(P.yaw) * 4; P.vz = -Math.cos(P.yaw) * 4; Cb.foam = 1; const f1 = shot(); Cb.foam = 0; const f0 = shot(); Cb.foam = 1; P.vx = 0; P.vz = 0;
+    const fa = 100 * maskOf(f1, f0).length / (f1.length / 4);
+    out[`busa garis air terlihat dan setempat: ${fa.toFixed(2)}% piksel beda (0,05-5%)`] = fa > 0.05 && fa < 5;
+    place(0, 0); P.pitch = 0; P.yaw = -PI / 2 + 0.3; M.updateBody(10);
+  }
+
   // 6. tiap preset: berganti tanpa error, render HDR tanpa NaN/Inf dan tanpa titik menyala (> 50) di cakrawala dan di Gargantua
   //    (dulu: dengan MSAA, kedalaman air diekstrapolasi negatif di segitiga kecil cakrawala -> nilai meledak)
   const r = M.renderer, from = M.THREE.DataUtils.fromHalfFloat;
@@ -648,6 +703,14 @@ UJI = r"""
     const buf = new Uint16Array(w * h * 4); r.readRenderTargetPixels(T, 0, 0, w, h, buf);
     for (let k = 0; k < buf.length; k += 4) for (let c = 0; c < 3; c++) { const x = from(buf[k + c]); if (!Number.isFinite(x)) bad++; else { if (x > 50) hot++; mx = Math.max(mx, x); } }
     out[`preset ${M.PRESETS[i].name}: ${w}x${h}${T.samples ? ' MSAA ' + T.samples : ''}, tidak valid ${bad}, titik > 50: ${hot}, maks ${mx.toFixed(2)}`] = bad === 0 && hot === 0;
+    // M6c: tubuh terlihat (menunduk) di 3 suasana: tanpa nilai tidak valid atau titik menyala
+    { const P = M.P, sv = P.pitch; let bb = 0, bh = 0; P.pitch = -60 * Math.PI / 180; M.BODY.level = 2; P.view = 0;
+      for (const mi of [0, 1, 2]) { M.MOOD.idx = mi; M.updateMood(60, M.STATE.visT);
+        M.camera.position.set(P.x, P.y, P.z); M.camera.rotation.set(P.pitch, P.yaw, 0, 'YXZ'); M.camera.updateMatrixWorld(true); M.U.uCam.value.copy(M.camera.position);
+        M.updateShadow(); r.setRenderTarget(T); r.clear(); r.render(M.scene, M.camera); r.setRenderTarget(null); r.readRenderTargetPixels(T, 0, 0, w, h, buf);
+        for (let k = 0; k < buf.length; k += 4) for (let c = 0; c < 3; c++) { const x = from(buf[k + c]); if (!Number.isFinite(x)) bb++; else if (x > 50) bh++; } }
+      M.MOOD.idx = 0; M.updateMood(60, M.STATE.visT); M.MOOD.brk = 1; P.pitch = sv;
+      out[`preset ${M.PRESETS[i].name}: tubuh menunduk di 3 suasana, tidak valid ${bb}, titik > 50: ${bh}`] = bb === 0 && bh === 0; }
   }
   M.applyPreset(4);
   return out;
