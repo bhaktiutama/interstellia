@@ -186,9 +186,9 @@ const CONFIG = {
   fft: { lam: 0.9, foamJ: 0.7, foamTau: 2.5 },
   seaState: { far: 0.6, near: 1.5, dFar: 120000, dNear: 4000, tau: 4 },   // pengali tinggi ombak angin: kecil saat gelombang raksasa jauh, besar saat dekat
   body: { smooth: 0.12, yawLag: 0.25, yawMax: 0.44,
-    standF: 0.02, footDown: 0.12, reachWalk: 0.23, reachRun: 0.38, liftWalk: 0.10, liftRun: 0.22, airLift: 0.25, airF: 0.10, runDrop: 0.04, neckF: 0.14, neckD: 0.05,   // M6d-2: target pergelangan IK (m), jongkok lari, leher (m)
+    standF: 0.02, footDown: 0.12, reachWalk: 0.23, reachRun: 0.38, liftWalk: 0.10, liftRun: 0.22, airLift: 0.25, airF: 0.10, runDrop: 0.06, neckF: 0.14, neckD: 0.05,   // M6d-2: target pergelangan IK (m), jongkok lari, leher (m)
     armFwd: 0.15, armDown: 0.15, armWalk: 0.4, armRun: 0.8, abduct: 0.12, abductRun: 0.25, abductAir: 0.6, elbow: 0.7, elbowRun: 1.5, elbowDown: 0.3,
-    leanRun: 0.25, leanDown: 0.10,   // M6a-2: pose tubuh (rad, m, s)
+    leanRun: 0.10, leanDown: 0.08,   // M6a-2: pose tubuh (rad, m, s)
     selfR: 0.7, wetWalk: 0.12, wetRun: 0.30, dryRate: 0.01, foam: 1 },
   visor: { fogMax: 0.12, exTau: 6, breathRest: 0.25, breathRun: 0.6, dryT: 8, dropRun: 0.06, dropLand: 0.3, glint: 0.35 },   // M6d: embun (alfa), lelah (s), napas (Hz), kering (s), tetes per langkah lari / mendarat, kilau   // M6c: kapsul abaikan bayangan diri (m), cipratan basah jalan / lari (m), kering (m/s), busa garis air
   walk: { stride: 0.72, strideRun: 1.25, drag: 0.35, legs: 0.13, fovRun: 6 },        // R3: panjang langkah (m), waktu tanggap di air (s), jarak kaki dari tengah (m)
@@ -1853,7 +1853,6 @@ const BODY_DETAIL = [2, 2, 2, 1, 0];
     if (d >= 1) p.push(bx(0.15, 0.09, 0.05, 0, 1.25 - H, -0.085, LG));                                   // unit kontrol dada (terlihat saat menunduk)
     if (d === 2) {
       for (const [x, c] of [[-0.045, OR], [0, DK], [0.045, MT]]) p.push(bx(0.025, 0.022, 0.02, x, 1.265 - H, -0.115, c));
-      p.push(bx(0.30, 0.12, 0.025, 0, 1.37 - H, -0.035, WH));                                              // panel dada
       for (const s of [-1, 1]) p.push(bx(0.13, 0.03, 0.17, s * 0.20, 1.475 - H, 0.10, WH), bx(0.05, 0.07, 0.08, s * 0.225, 1.0 - H, -0.03, GY),   // panel bahu, kantong sabuk
         tube([[s * 0.07, 1.22 - H, -0.10], [s * 0.15, 1.17 - H, -0.07], [s * 0.19, 1.08 - H, 0.04]], 0.014, MT));                                // selang
       p.push(bx(0.30, 0.10, 0.16, 0, 1.52 - H, 0.33, WH));
@@ -1897,12 +1896,14 @@ const BODY_DETAIL = [2, 2, 2, 1, 0];
   const AS = [[0, 2, 6, 11], [0, 2, 3, 5, 6, 7, 9, 11], AK.map((_, i) => i)];
   const suitGeo = (d) => {
     const pos = [], col = [], bi = [], bw = [], idx = [];
-    const ring = (cx, y, cz, hw, hd, N, b0, b1, w, c) => { const s = pos.length / 3; for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2; pos.push(cx + Math.cos(a) * hw, y, cz + Math.sin(a) * hd); col.push(...c); bi.push(b0, b1); bw.push(w); } return s; };
+    const ring = (cx, y, cz, hw, hd, N, b0, b1, w, c) => { const s = pos.length / 3; for (let i = 0; i < N; i++) { const a = i / N * Math.PI * 2, x = cx + Math.cos(a) * hw, z = cz + Math.sin(a) * hd; pos.push(x, y, z); col.push(...(typeof c === 'function' ? c(x, y, z, cz) : c)); bi.push(b0, b1); bw.push(w); } return s; };
+    // panel dada dan sambungan pinggang lewat warna kain (tanpa lempeng: dari atas lempeng datar tampak seperti rak)
+    const torsoC = (x, y, z, cz) => (z < cz - 0.02 && Math.abs(x) < 0.15 && y > 1.29 && y < 1.45) ? [0.82, 0.81, 0.78] : (y > 0.96 && y < 1.03) ? WH.map((q) => q * 0.9) : WH;
     const strip = (r0, r1, N) => { for (let i = 0; i < N; i++) { const a = r0 + i, b = r0 + (i + 1) % N; idx.push(a, r1 + i, b, b, r1 + i, r1 + (i + 1) % N); } };   // r1 di atas r0: normal keluar
     const cap = (r, N, y, cz, up, b0, b1, w, cx = 0) => { const c = pos.length / 3; pos.push(cx, y, cz); col.push(...WH); bi.push(b0, b1); bw.push(w); for (let i = 0; i < N; i++) idx.push(c, r + (up ? i : (i + 1) % N), r + (up ? (i + 1) % N : i)); };
     const crease = (k, lo, hi, dd) => dd > lo && dd < hi && k % 2 ? WH.map((v) => v * 0.84) : WH;   // lipatan kain di sendi (pita gelap bergantian)
     // badan (panggul -> badan atas)
-    const NT = SEG[d] + (d === 2 ? 2 : 0), tr = TS[d].map((k) => { const [y, zc, hw, hd] = TK[k]; return ring(0, y, zc, hw, hd, NT, 0, 1, 1 - ss(0.95, 1.06, y), WH); });
+    const NT = SEG[d] + (d === 2 ? 2 : 0), tr = TS[d].map((k) => { const [y, zc, hw, hd] = TK[k]; return ring(0, y, zc, hw, hd, NT, 0, 1, 1 - ss(0.95, 1.06, y), torsoC); });
     for (let r = 0; r < tr.length - 1; r++) strip(tr[r], tr[r + 1], NT);
     cap(tr[0], NT, TK[0][0], 0, false, 0, 1, 1); cap(tr[tr.length - 1], NT, TK[11][0], TK[11][1], true, 0, 1, 0);
     // kaki (cincin dari bawah ke atas)
@@ -1981,16 +1982,26 @@ function skinBody() {
 function bodyLegs() {
   const Cb = CONFIG.body, Q = BODY.pose, r = Q.run, mv = Q.mv, dn = Q.dn, air = Q.air, th = [], kn = [], sw = [], Dm = 0.88;   // lutut tidak pernah lurus penuh: IK dekat lurus terlalu peka (lutut melompat)
   const reach = Cb.reachWalk + (Cb.reachRun - Cb.reachWalk) * r, lift = (Cb.liftWalk + (Cb.liftRun - Cb.liftWalk) * r) * mv;
-  const fp = P.view === 0 && !FLY.on && !SWEEP.on, hip = 0.92 - Cb.runDrop * BOB.run + bobDrop() + (fp ? BOB.shY : 0);   // pinggul 3 cm di bawah pangkal badan
+  // M6f-c: pinggul ikut batang tubuh yang kaku (badan atas + panggul satu kesatuan, condong dan geser bersama), target telapak tetap di kerangka badan
+  const T = bodyTrunk(), cl = Math.cos(T.lean), sl = Math.sin(T.lean), hip = T.up - 0.03 * cl - 0.04 * sl, hz = T.tz + 0.03 * sl - 0.04 * cl, hf = -hz;
   for (let i = 0; i < 2; i++) {
     const sd = i === 0 ? -1 : 1; sw[i] = sd * Math.cos(BOB.phase) * mv;
-    let fz = Cb.standF + Cb.footDown * dn * (1 - r) + reach * sw[i] + Cb.airF * air;                                                  // maju dari pinggul ke pergelangan (m)
+    let fz = 0.04 - hf + Cb.standF + Cb.footDown * dn * (1 - r) + reach * sw[i] + Cb.airF * air;                                     // maju dari pinggul ke pergelangan (m)
     const fy = Math.max(0.2, hip - 0.05 - lift * Math.max(0, -sd * Math.sin(BOB.phase)) ** 2 - Cb.airLift * air);                // turun dari pinggul ke pergelangan (m)
     if (fz * fz + fy * fy > Dm * Dm) fz = Math.sign(fz) * Math.sqrt(Math.max(0, Dm * Dm - Math.min(fy, Dm) ** 2));
     [th[i], kn[i]] = legIK(fz, fy);
   }
-  return { th, kn, sw, hip };
+  return { th, kn, sw, hip, hz, hf, T };
 }
+// M6f-c: batang tubuh (badan atas dan panggul kaku): tinggi pangkal badan (= kamera tanpa leher), condong, geser samping kamera ke kerangka badan
+function bodyTrunk() {
+  const B = BODY, Cb = CONFIG.body, Q = B.pose, fp = P.view === 0 && !FLY.on && !SWEEP.on, m = fp ? BOB_LEVELS[BOB.level][1] : 1;
+  const lean = Cb.leanRun * Q.run + Cb.leanDown * Q.dn, up = 0.95 - Cb.runDrop * BOB.run + bobDrop() * m + (fp ? BOB.shY : 0);
+  const sx = fp ? BOB.dx + BOB.shX : 0, a = P.yaw - (B.yaw === null ? P.yaw : B.yaw), lx = sx * Math.cos(a), lz = -sx * Math.sin(a);
+  return { lean, up, lx, lz, tz: 0.45 * Math.sin(lean) + lz, roll: fp ? BOB.roll : 0 };
+}
+// titik (x, y, z) di kerangka pangkal badan (diputar a di sumbu x) ke kerangka kelompok
+const trunkAt = (tp, a, x, y, z, out) => out.set(tp.x + x, tp.y + y * Math.cos(a) - z * Math.sin(a), tp.z + y * Math.sin(a) + z * Math.cos(a));
 // sudut paha (+ maju) dan lutut (- betis ke belakang) agar pergelangan di (maju fz, turun fy) dari pinggul; ruas 0,45 + 0,45, jangkauan maks 0,88
 function legIK(fz, fy) {
   const D = Math.min(0.88, Math.hypot(fz, fy));
@@ -2021,10 +2032,10 @@ const SEAT_OFF = new THREE.Vector3(0, CK.eye[1] - CONFIG.eye, CK.eye[2]), _sG = 
 function bodySeat() {
   const B = BODY, M = SHIP.mesh; M.updateMatrixWorld(true);
   B.group.position.copy(SEAT_OFF).applyMatrix4(M.matrixWorld); B.group.quaternion.copy(M.quaternion);
-  B.torso.rotation.set(0.06, 0, 0); B.torso.position.set(0, 0.97, 0.03); B.pelvis.position.set(0, 0.95, 0.03);                         // tegak, sedikit bersandar; pinggul di dudukan
+  B.torso.rotation.set(0.06, 0, 0); B.torso.position.set(0, 0.97, 0.03); B.pelvis.rotation.set(0.06, 0, 0); trunkAt(B.torso.position, 0.06, 0, -0.03, 0, B.pelvis.position);                         // tegak, sedikit bersandar; pinggul di dudukan
   for (let i = 0; i < 2; i++) {
     const sd = i === 0 ? -1 : 1, [th, kn] = legIK(0.82, 0.28);                                       // pergelangan di tepi belakang pijakan kaki
-    B.legs[i].position.set(sd * (CONFIG.walk.legs + 0.03), 0.95, -0.01); B.legs[i].rotation.set(th, 0, 0); B.knees[i].rotation.x = kn; B.ankles[i].rotation.x = -(th + kn);
+    trunkAt(B.torso.position, 0.06, sd * (CONFIG.walk.legs + 0.03), -0.03, -0.04, B.legs[i].position); B.legs[i].rotation.set(th, 0, 0); B.knees[i].rotation.x = kn; B.ankles[i].rotation.x = -(th + kn);
     B.arms[i].rotation.set(0, 0, 0); B.arms[i].scale.setScalar(1); B.elbows[i].rotation.x = 0;
   }
   B.group.updateMatrixWorld(true);
@@ -2033,11 +2044,11 @@ function bodySeat() {
 }
 // Posisi dunia telapak (pusat sepatu) kaki sd (-1 kiri, +1 kanan) dan titik kaki memotong muka air; yaw badan (BODY.yaw)
 function bodyFootAt(sd) {
-  const L = bodyLegs(), i = sd < 0 ? 0 : 1, f = 0.04 + 0.45 * Math.sin(L.th[i]) + 0.45 * Math.sin(L.th[i] + L.kn[i]) + 0.07;
+  const L = bodyLegs(), i = sd < 0 ? 0 : 1, f = L.hf + 0.45 * Math.sin(L.th[i]) + 0.45 * Math.sin(L.th[i] + L.kn[i]) + 0.07;
   return bodyWorldXZ(sd * (CONFIG.walk.legs + 0.03), f);
 }
 function bodyLegAt(sd, depth) {
-  const F = bodyFootAt(sd), H = bodyWorldXZ(sd * (CONFIG.walk.legs + 0.03), 0.04), t = Math.min(1, Math.max(0, depth / 0.9));
+  const F = bodyFootAt(sd), H = bodyWorldXZ(sd * (CONFIG.walk.legs + 0.03), bodyLegs().hf), t = Math.min(1, Math.max(0, depth / 0.9));
   return { x: F.x + (H.x - F.x) * t, z: F.z + (H.z - F.z) * t };
 }
 function bodyWorldXZ(xl, f) {   // xl ke kanan badan, f ke depan badan (m)
@@ -2048,18 +2059,16 @@ function bodyPose(dtp) {
   const B = BODY, Q = B.pose, Cb = CONFIG.body, k = dtp >= 1 ? 1 : 1 - Math.exp(-dtp / Cb.smooth);
   const tn = P.view === 0 ? smoothstep01(0.30, 1.05, -P.pitch) : 0, tm = Math.min(1, BOB.amp / 0.034) * (P.ground ? 1 : 0);
   Q.dn += (tn - Q.dn) * k; Q.mv += (tm - Q.mv) * k; Q.run += (BOB.run - Q.run) * k; Q.air += ((P.ground ? 0 : 1) - Q.air) * k;
-  const r = Q.run, dn = Q.dn, air = Q.air, lean = Cb.leanRun * r + Cb.leanDown * dn, L = bodyLegs();
+  const r = Q.run, dn = Q.dn, air = Q.air, L = bodyLegs(), T = L.T, lx = T.lx;
   // M6d-2: badan atas = kamera tanpa leher (turun-naik, getaran, goyang samping, roll), jadi tidak bergeser terhadap kepala saat melangkah.
-  // Di tingkat gerak kepala Halus/Mati pinggul tetap turun-naik penuh (kaki menapak); paha masuk 6 cm ke badan menutup celahnya.
-  const fp = P.view === 0 && !FLY.on && !SWEEP.on, m = fp ? BOB_LEVELS[BOB.level][1] : 1;
-  const up = 0.95 - Cb.runDrop * BOB.run + bobDrop() * m + (fp ? BOB.shY : 0);
-  const sx = fp ? BOB.dx + BOB.shX : 0, a = P.yaw - (B.yaw === null ? P.yaw : B.yaw), lx = sx * Math.cos(a), lz = -sx * Math.sin(a);   // arah kamera -> kerangka badan
-  B.torso.rotation.set(-lean, 0, fp ? BOB.roll : 0); B.torso.position.set(lx, up, 0.45 * Math.sin(lean) + lz); B.pelvis.position.set(lx, L.hip, lz);   // M6f: panggul ikut pinggul
+  // M6f-c: panggul kaku bersama badan atas (sama transformasinya), pinggul ikut batang: pinggang tidak tertekuk saat condong lari / menunduk.
+  B.torso.rotation.set(-T.lean, 0, T.roll); B.torso.position.set(lx, T.up, T.tz);
+  B.pelvis.rotation.copy(B.torso.rotation); trunkAt(B.torso.position, -T.lean, 0, -0.03, 0, B.pelvis.position);
   for (let i = 0; i < 2; i++) {
     const sd = i === 0 ? -1 : 1, asw = -L.sw[i] * (Cb.armWalk + (Cb.armRun - Cb.armWalk) * r);
     B.arms[i].rotation.set(Cb.armFwd + Cb.armDown * dn + asw + air * 0.3, 0, sd * (Cb.abduct + Cb.abductRun * r + Cb.abductAir * air)); B.arms[i].scale.setScalar(1);
     B.elbows[i].rotation.x = Cb.elbow + (Cb.elbowRun - Cb.elbow) * r + Cb.elbowDown * dn;
-    B.legs[i].position.set(sd * (CONFIG.walk.legs + 0.03) + lx, L.hip, -0.04 + lz); B.legs[i].rotation.set(L.th[i], 0, -lx / 0.9);   // telapak tidak ikut goyang samping
+    B.legs[i].position.set(sd * (CONFIG.walk.legs + 0.03) + lx, L.hip, L.hz); B.legs[i].rotation.set(L.th[i], 0, -lx / 0.9);   // telapak tidak ikut goyang samping
     B.knees[i].rotation.x = L.kn[i];
     B.ankles[i].rotation.x = Math.max(-0.6, Math.min(0.9, -(L.th[i] + L.kn[i])));   // telapak mendatar
   }

@@ -374,3 +374,17 @@ Masukan pemilik: saat menunduk, di pangkal paha terlihat lubang (air tampak di d
 | Segitiga | Hemat 432, Rendah 1.012, Sedang ke atas 2.452 |
 
 Uji baru: titik tepi terbuka di luar sepatu / manset 0, titik pangkal paha di luar panggul 0. Uji Millar 124 pemeriksaan lulus.
+
+### Revisi M6f-c (4 Oktober 2026): badan bengkok dan tonjolan saat lari
+
+Masukan pemilik: saat lari muncul tonjolan di tengah (di bawah unit dada), badan terasa dan terlihat bengkok.
+
+Penyebab (dilihat dari samping): saat lari dan menunduk, badan atas condong 0,35 rad dan digeser sekitar 15 cm ke belakang (agar dada tetap di bawah kamera), sedangkan panggul (tulang terpisah sejak M6f) tidak ikut. Kain di pinggang tertekuk dan tergeser sekitar 14 cm, sehingga panggul dan perut menonjol ke depan dan badan tampak patah di pinggang. Panel dada berupa lempeng datar juga tampak seperti rak dari atas.
+
+| Perbaikan | Hasil |
+| --- | --- |
+| Batang tubuh kaku: panggul memakai transformasi yang sama dengan badan atas (`bodyTrunk()`, `trunkAt()`), pinggul ikut batang, target telapak tetap di kerangka badan (IK) | Pinggang tidak tertekuk; panggul vs badan atas 0 mm saat lari dan menunduk |
+| Condong dikurangi: lari 0,25 -> 0,10 rad, menunduk 0,10 -> 0,08 rad; jongkok lari 0,04 -> 0,06 m (langkah lari tetap terjangkau) | Tidak terasa bengkok, langkah lari 0,51 m tetap |
+| Panel dada lempeng dihapus, diganti warna kain lebih terang di dada dan pita pinggang | Tidak ada lagi rak datar saat menunduk |
+
+Uji baru: batang tubuh kaku (panggul vs badan atas < 2 mm). Uji Millar 125 pemeriksaan lulus.

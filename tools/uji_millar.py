@@ -771,6 +771,11 @@ UJI = r"""
       rows.push(`d${d}: tepi terpanjang ${eMax.toFixed(2)}x, lutut ${kMin.toFixed(2)}x, kulit=tulang ${(errMax * 1000).toFixed(2)} mm`);
       okW = okW && eMax < 2.5 && kMin > 0.6 && errMax < 1e-3;
     }
+    // batang kaku: panggul = badan atas x geser (0, -0,03, 0) saat lari dan menunduk (pinggang tidak tertekuk / tergeser)
+    let trk = 0; for (const [run, pt] of [[1, -1.2], [1, 0], [0, -1.2]]) { P.pitch = pt; M.BOB.run = run; M.BOB.amp = run ? 0.055 : 0.034; M.BOB.phase = 0.7; M.updateBody(10); B.group.updateMatrixWorld(true);
+      const q = B.torso.localToWorld(new V3(0, -0.03, 0)).distanceTo(B.pelvis.getWorldPosition(new V3())), qa = B.torso.getWorldQuaternion(new M.THREE.Quaternion()).angleTo(B.pelvis.getWorldQuaternion(new M.THREE.Quaternion()));
+      trk = Math.max(trk, q + qa * 0.5); }
+    out[`batang tubuh kaku (M6f-c): panggul vs badan atas saat lari / menunduk ${(trk * 1000).toFixed(2)} mm (< 2)`] = trk < 0.002;
     M.setBodyDetail(d0); M.BOB.run = 0; M.BOB.amp = 0; M.BOB.phase = 0; P.pitch = 0; M.updateBody(10);
     out[`pakaian satu mesh berkulit (M6f): ${rows.join('; ')} (tepi < 2,5x, lutut > 0,6x, < 1 mm), nilai tidak valid ${bad}`] = okW && bad === 0;
     out[`pakaian tanpa lubang: titik tepi terbuka di luar sepatu / manset ${openBad}, pangkal paha keluar dari panggul ${outBad} titik`] = openBad === 0 && outBad === 0;
