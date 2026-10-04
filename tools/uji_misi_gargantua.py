@@ -38,6 +38,9 @@ Kelompok 5 (G5, sudut masuk tesseract, fiksi):
 - bidang orbit menentukan: bidang 90 derajat menembus piringan, bidang gerbang ada bidikan tepat sasaran,
 - membidik: waktu beku, W/S mengubah delta, A/D bidang, Enter mengunci; terbang mengikuti lintasan acuan = prakiraan, berakhir di gerbang
   (arah dalam toleransi 5 derajat), meleset = lanjut ke singularitas, adegan tesseract lalu kartu akhir, Esc keluar.
+Kelompok 7 (G7, suara disintesis):
+- campuran audioMix(): gemuruh piringan dekat piringan (lebih terang melawan arus), nol di jalur kutub, nada pasang surut hanya di dalam
+  horizon, pendorong saat W/S (tidak saat membidik), akord tesseract; AudioContext dibuat setelah tombol, U bisu / nyala + localStorage, panel.
 Pakai: python tools/uji_misi_gargantua.py   (butuh: pip install playwright; CHROMIUM=<jalur> opsional, default /opt/pw-browsers/chromium
 bila ada). Tanpa GPU dipakai SwiftShader."""
 import asyncio, os, pathlib, sys
@@ -460,5 +463,30 @@ async def kelompok5(pg):
       return { kind: res && res.kind, miss: M.tes.miss, err: M.tes.ref.err }; }''')
     cek('bidikan meleset: lanjut ke singularitas, galat tercatat', m['kind'] == 'singularity' and m['miss'] is not None and m['miss'] > 5, str(m))
     await pg.evaluate('() => window.__gargantua.stopMission()')
+    await kelompok7(pg)
+
+async def kelompok7(pg):
+    m = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, out = {}; G.state.paused = true;
+      const at = (sc, r) => { G.startMission(sc); while (Math.hypot(...M.x) > r) if (G.misFly(0.1)) break; M.gas = G.gasRel(); return G.audioMix(); };
+      out.retro = at('skim', 6); out.pro = at('skimPro', 6); out.pole = at('polar', 6);
+      G.startMission('polar'); const st = { x: M.x, xd: M.xd, tau: 0 }; while (Math.hypot(...st.x) > 0.5) G.misAdvance(st, 0.02); M.x = st.x; M.xd = st.xd; M.gas = G.gasRel();
+      out.inside = G.audioMix();
+      G.state.paused = false; M.keys.add('KeyW'); M.thr = [1, 0, 0]; out.push = G.audioMix();
+      G.startMission('tesseract'); M.keys.add('KeyW'); M.thr = [1, 0, 0]; out.aim = G.audioMix(); M.keys.clear();
+      G.stopMission(); Object.assign(G.TESV, { on: true, t: 5 }); out.tess = G.audioMix(); G.TESV.on = false; G.state.paused = true;
+      return out; }''')
+    cek('suara: gemuruh piringan dekat piringan, lebih terang melawan arus, nol di jalur kutub',
+        m['retro']['roar'] > 0.3 and m['retro']['roarCut'] > m['pro']['roarCut'] and m['pole']['roar'] == 0,
+        f"melawan {m['retro']['roar']:.2f} / {m['retro']['roarCut']:.0f} Hz, searah {m['pro']['roar']:.2f} / {m['pro']['roarCut']:.0f} Hz, kutub {m['pole']['roar']}")
+    cek('suara: nada pasang surut hanya di dalam horizon, pendorong saat W, tidak saat membidik, akord tesseract',
+        m['pole']['tidal'] == 0 and m['inside']['tidal'] > 0 and m['push']['thr'] > 0 and m['aim']['thr'] == 0 and m['tess']['tess'] > 0 and m['tess']['hum'] == 0,
+        f"pasang surut {m['inside']['tidal']:.2f} ({m['inside']['tidalF']:.0f} Hz), dorong {m['push']['thr']}, bidik {m['aim']['thr']}, tesseract {m['tess']['tess']:.2f}")
+    await pg.keyboard.press('KeyH'); await pg.keyboard.press('KeyH')   # gerakan pengguna: AudioContext dibuat
+    a0 = await pg.evaluate('() => { const A = window.__gargantua.AUDIO; return { ctx: !!A.ctx, on: A.on }; }')
+    await pg.keyboard.press('KeyU')
+    a1 = await pg.evaluate("() => ({ on: window.__gargantua.AUDIO.on, ls: localStorage.getItem('gargantua.sound') })")
+    await pg.keyboard.press('KeyU')
+    a2 = await pg.evaluate("() => ({ on: window.__gargantua.AUDIO.on, ls: localStorage.getItem('gargantua.sound'), panel: [...document.querySelectorAll('#uiBody label')].some((l) => l.textContent.includes('Suara (U)')) })")
+    cek('suara: AudioContext dibuat setelah tombol, U bisu lalu nyala (tersimpan), pilihan di panel', a0['ctx'] and a0['on'] and not a1['on'] and a1['ls'] == '0' and a2['on'] and a2['ls'] == '1' and a2['panel'], f"{a0} {a1} {a2}")
 
 asyncio.run(main())

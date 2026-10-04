@@ -47,7 +47,7 @@ Langkah mekanis di dalam tahap High (entri kamus, teks HUD, pembaruan dokumen) b
 | G4 | Selesai 4 Oktober 2026 (lihat bagian G4): waktu bersama Painleve-Gullstrand, relai 22 rs, pulsa tiap 1 s waktu wajar, jam wahana terlihat relai (melambat, memerah, membeku), pesan relai ke wahana, suar E, jendela relai dan diagram ruang-waktu (M), layar akhir dengan jendela relai hidup. Belum diuji di GTX 1060 dan M1 |
 | G5 | Selesai 4 Oktober 2026 (lihat bagian G5): skenario "Bidik tesseract (fiksi)", membidik sudut d dan bidang orbit dengan waktu beku, peta orbit, lintasan acuan yang dipakai saat terbang (prakiraan = hasil), gerbang fiksi di dalam horizon, adegan hiperkubus 4D, kartu akhir. Belum diuji di GTX 1060 dan M1 |
 | G6 | Berjalan per kelompok: uji G1 sampai G5 di `tools/uji_misi_gargantua.py`, kamus ID, CLAUDE.md, `tombol.md` |
-| G7 suara (usulan) | Belum dimulai, menunggu persetujuan pemilik (lihat bagian G7) |
+| G7 suara | Selesai 4 Oktober 2026 (lihat bagian G7): suara disintesis Web Audio, U nyala / mati, pilihan di panel. Belum didengar pemilik |
 
 Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
 
@@ -291,9 +291,28 @@ Rencana awal:
 | Gerbang | Di dalam horizon pada azimut dan bidang tertentu, toleransi +/- 5 derajat |
 | Tesseract | Hiperkubus 4D berputar, diproyeksikan ke layar, garis bercahaya orisinal. Label: "Fiksi / spekulatif: fisika nyata tidak mengenal tesseract di dalam lubang hitam" |
 
-## G7: suara (usulan, belum dikerjakan)
+## G7: suara (selesai)
 
-Saat ini Gargantua belum punya suara sama sekali. Usulan mengikuti cara Copper Corn Station dan Millar's World: semua suara disintesis Web Audio (tanpa berkas audio), tombol U nyala / mati sesuai `docs/app/tombol.md`, pilihan tersimpan di localStorage.
+### Hasil G7 (4 Oktober 2026)
+
+| Bagian | Isi |
+| --- | --- |
+| Mesin | Web Audio, semua disintesis (derau putih 2 s berulang + osilator), kompresor di ujung. AudioContext dibuat pada tombol atau klik pertama (kebijakan putar otomatis browser) |
+| U | Nyala / mati, tersimpan di localStorage `gargantua.sound` (bawaan nyala); juga kotak centang "Suara (U)" di panel |
+| Dengung kabin | 55 + 110 Hz + desis rendah, selama misi |
+| Pendorong | Desis pita 1,4 kHz saat W/S A/D R/F; Shift = mesin utama (gergaji 41 Hz lewat lowpass). Autopilot = desis pelan. Diam saat membidik (G5) dan saat delta-v habis |
+| Gemuruh piringan | Derau lowpass, keras = kerapatan debu x laju gas, potongan 180 sampai 2.380 Hz ikut laju gas: di 6 rs melawan arus 0,70 / 1.784 Hz, searah arus 0,33 / 478 Hz, jalur kutub 0 (diuji) |
+| Tumbukan kaca | Ketukan derau tinggi tiap tumbukan; denting retak setelah kerusakan > 60%; pecah berlapis saat kaca 100% |
+| Pesan relai | Bip tiap 1,6 s nyata, nada 880 Hz dikali laju jam relai yang terlihat wahana (makin rendah saat jatuh menjauh, tetap terdengar di dalam horizon) |
+| Suar | Desis naik + nada naik |
+| Horizon | Tidak berbunyi (tidak ada yang terasa saat lewat horizon) |
+| Pasang surut | Di dalam horizon nada rendah naik menjelang singularitas (r 0,5: 104 Hz; 38 sampai 298 Hz) |
+| Tesseract | Akord 110, 165, 220, 275, 330 Hz, nadanya bergeser pelan (fiksi) |
+| Uji | `audioMix()` fungsi murni diuji (gemuruh, pasang surut, pendorong, membidik, tesseract), AudioContext, U, localStorage, panel |
+
+Usulan awal:
+
+Usulan mengikuti cara Copper Corn Station dan Millar's World: semua suara disintesis Web Audio (tanpa berkas audio), tombol U nyala / mati sesuai `docs/app/tombol.md`, pilihan tersimpan di localStorage.
 
 | Suara | Kapan | Catatan |
 | --- | --- | --- |

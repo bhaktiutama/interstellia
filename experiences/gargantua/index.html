@@ -773,7 +773,7 @@ const ID = {
   'Film': 'Sinematik', 'Edge-on': 'Dari samping', 'Top-down': 'Dari atas', 'Close approach': 'Mendekat', 'Reset': 'Atur ulang', 'Screenshot': 'Tangkap layar',
   'FPS': 'FPS', 'Resolution': 'Resolusi', 'Max steps': 'Langkah maks', 'Distance': 'Jarak', 'Buffer': 'Buffer',
   'Language': 'Bahasa', '< MENU': '< MENU',
-  'Space pause · Q quality · P screen effects · F photo · V vessel · R reset · H hide UI · ` panel · ? help': 'Space jeda · Q kualitas · P efek layar · F foto · V wahana · R atur ulang · H sembunyikan UI · ` panel · ? bantuan',
+  'Space pause · Q quality · P screen effects · U sound · F photo · V vessel · R reset · H hide UI · ` panel · ? help': 'Space jeda · Q kualitas · P efek layar · U suara · F foto · V wahana · R atur ulang · H sembunyikan UI · ` panel · ? bantuan',
   'WebGL2 is not available in this browser or on this GPU.\n\nThis simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). Check that hardware acceleration is enabled in your browser settings.':
     'WebGL2 tidak tersedia di browser atau GPU ini.\n\nSimulasi ini butuh WebGL2 (Chrome, Edge, Firefox, Safari 15+). Pastikan akselerasi hardware aktif di pengaturan browser.',
   'WebGL context lost. Reload the page to restart.': 'Konteks WebGL hilang. Muat ulang halaman untuk memulai lagi.',
@@ -945,6 +945,10 @@ const ID = {
   'plane': 'bidang',
   'tesseract gate (fiction)': 'gerbang tesseract (fiksi)',
   'tesseract gate in': 'gerbang tesseract dalam',
+  'Sound (U)': 'Suara (U)',
+  'Sound: on (U)': 'Suara: nyala (U)',
+  'Sound: off (U)': 'Suara: mati (U)',
+  'Sound on / off: synthesized; space carries no sound, so cabin and impact sounds travel through the hull, the disk roar is distilled': 'Suara nyala / mati: disintesis; ruang hampa tidak menghantarkan suara, jadi suara kabin dan tumbukan merambat lewat badan wahana, gemuruh piringan distilisasi',
   'Disk light': 'Cahaya piringan', 'View': 'Tampilan', 'Cockpit': 'Kokpit', 'Chase': 'Kamera luar', 'Vessel': 'Wahana',
 };
 const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
@@ -956,7 +960,7 @@ function applyStaticLang() {
   $('#helpRows').innerHTML = [
     [txt('Drag / wheel / pinch'), txt('Orbit and zoom the camera')], ['1 - 4', txt('Camera presets: film, edge-on, top-down, close approach')],
     ['Space', txt('Pause / resume time')], ['Q', txt('Quality preset: Ultra, High, Medium, Low')],
-    ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')], ['F', txt('Photo mode: UI hidden, Enter saves PNG, F or Esc exits')],
+    ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')], ['U', txt('Sound on / off: synthesized; space carries no sound, so cabin and impact sounds travel through the hull, the disk roar is distilled')], ['F', txt('Photo mode: UI hidden, Enter saves PNG, F or Esc exits')],
     ['V · Esc', txt('Vessel view: GX-01 chase camera / cockpit (Esc exits)')], [txt('Mission'), txt('Start a mission from the panel (`): 10 ways to fall in, two of them skimming the disk, one aiming for the fictional tesseract')],
     [txt('In the mission'), txt('Mission keys: W/S A/D R/F thrust, Shift main engine, drag orbits the chase camera around the vessel (double-click resets; in the cockpit drag turns the nose), right-drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, E flare, M relay view and spacetime diagram, Z time, V view, Esc ends; tesseract scenario: W/S angle, A/D plane, Enter locks the aim')], ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
@@ -1412,6 +1416,7 @@ function main() {
     lines.push(txt('Fastest speed in the local falling frame') + ': ' + fmtN(MIS.vMax, 3) + ' c · ' + txt('delta-v used') + ': ' + fmtN(MIS.dvUsed, 4) + ' c');
     $('#mendTitle').textContent = txt(title);
     $('#mendBody').innerHTML = lines.map((l) => `<p>${l}</p>`).join('');
+    if (kind === 'glass') sfxShatter();
     if (kind === 'tesseract') tessStart(); else $('#mend').hidden = false;   // G5: kartu muncul setelah adegan hiperkubus
   }
   const fmtN = (v, d) => (LANG === 'id' ? v.toFixed(d).replace('.', ',') : v.toFixed(d));
@@ -1577,6 +1582,7 @@ function main() {
     const r = Math.hypot(...MIS.x);
     REL.flares.push({ tau: MIS.tau, T: MIS.T, r, C: MIS.T - Gout(r), tv: MIS.T + Hin(r) - r, arr: relArrive(MIS.T, r) });
     if (REL.flares.length > 4) REL.flares.shift();
+    sfxFlare();
     toast(txt(r <= 1 ? 'Flare fired straight outward at the speed of light. Inside the horizon even this light moves inward (dr/dT = 1 - 1/sqrt r < 0)'
       : 'Flare fired straight outward at the speed of light: it climbs out and will reach the relay'), 5);
   }
@@ -1709,7 +1715,7 @@ function main() {
     MIS.imps.push({ p: v3.add(t.a, v3.add(v3.mul(v3.sub(t.b, t.a), a), v3.mul(v3.sub(t.c, t.a), b))), n: t.n, t0: MIS.clock, seed: Math.random(),
       size: 0.012 + 0.03 * Math.random() * Math.min(1.6, vk) });
     if (MIS.imps.length > 96) MIS.imps.shift();
-    MIS.hits++; MIS.glass = Math.min(100, MIS.glass + 0.05 * vk * vk); MIS.shake = Math.min(1, MIS.shake + 0.25 * Math.min(1.5, vk));
+    MIS.hits++; MIS.glass = Math.min(100, MIS.glass + 0.05 * vk * vk); sfxImpact(vk); MIS.shake = Math.min(1, MIS.shake + 0.25 * Math.min(1.5, vk));
   }
   function stepMission(dt) {
     if (!MIS.on || MIS.end) return 0;
@@ -2285,6 +2291,91 @@ function main() {
     g.fillStyle = 'rgba(140,150,160,0.9)'; g.fillText(`${fmtN(Rm, 1)} rs`, ox + W * 0.42, yb);
   }
 
+
+  /* =====================================================================
+     G7: SUARA (Web Audio, semua disintesis, tanpa berkas). U nyala / mati (localStorage 'gargantua.sound').
+     Ruang hampa tidak menghantarkan suara: dengung kabin, pendorong, dan ketukan tumbukan merambat lewat badan wahana;
+     gemuruh piringan dan nada tesseract distilisasi. Lewat horizon tidak berbunyi apa-apa (tidak ada yang terasa di sana).
+     audioMix() = fungsi murni (dipakai uji): tingkat tiap lapisan dari keadaan misi.
+     ===================================================================== */
+  const AUDIO = { on: true, ctx: null, n: {}, pingT: 0.8, lastMix: null };
+  try { AUDIO.on = localStorage.getItem('gargantua.sound') !== '0'; } catch (e) { /* abaikan */ }
+  function audioMix() {
+    const m = { hum: 0, thr: 0, main: 0, roar: 0, roarCut: 300, tidal: 0, tidalF: 40, tess: 0 };
+    if (TESV.on) { m.tess = Math.min(1, TESV.t / 3); return m; }
+    if (!MIS.on || MIS.end) return m;
+    const K = MIS.keys, sh = K.has('ShiftLeft') || K.has('ShiftRight'), aiming = MIS.tes && !MIS.tes.locked;
+    m.hum = 1;
+    const push = !aiming && !state.paused && MIS.dvUsed < MIS.dvMax && MIS.thr.some((v) => v);
+    m.thr = push ? (sh ? 1 : 0.5) : MIS.ap.on && !state.paused ? 0.12 : 0;
+    m.main = push && sh ? 1 : 0;
+    const G = MIS.gas; if (G && !aiming) { m.roar = Math.min(1, G.dens * 1.3) * Math.min(1, 0.25 + G.v / 0.5); m.roarCut = 180 + 2200 * Math.min(1, G.v / 0.8); }
+    const r = Math.hypot(...MIS.x);
+    if (r < 1) { m.tidal = Math.min(1, (1 - r) * 1.2); m.tidalF = 38 + 260 * (1 - r) ** 2; }
+    return m;
+  }
+  function audioInit() {                                         // dibuat saat gerakan pengguna pertama (kebijakan putar otomatis)
+    if (AUDIO.ctx || !AUDIO.on) return;
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    const c = new AC(), N = AUDIO.n; AUDIO.ctx = c;
+    const nb = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = nb.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    AUDIO.noise = nb;
+    N.master = c.createGain(); N.master.gain.value = 0.7;
+    const comp = c.createDynamicsCompressor(); N.master.connect(comp); comp.connect(c.destination);
+    const gain = (v = 0) => { const g = c.createGain(); g.gain.value = v; g.connect(N.master); return g; };
+    const noise = () => { const s0 = c.createBufferSource(); s0.buffer = nb; s0.loop = true; s0.start(); return s0; };
+    const osc = (type, f) => { const o = c.createOscillator(); o.type = type; o.frequency.value = f; o.start(); return o; };
+    // dengung kabin: 55 + 110 Hz + desis rendah
+    N.hum = gain(); for (const [f, k] of [[55, 0.5], [110, 0.25]]) { const o = osc('sine', f), g = c.createGain(); g.gain.value = k; o.connect(g); g.connect(N.hum); }
+    { const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 220; noise().connect(lp); const g = c.createGain(); g.gain.value = 0.35; lp.connect(g); g.connect(N.hum); }
+    // pendorong: desis pita; mesin utama: gergaji 41 Hz lewat lowpass
+    N.thr = gain(); { const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1400; bp.Q.value = 0.7; noise().connect(bp); bp.connect(N.thr); }
+    N.main = gain(); { const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 160; osc('sawtooth', 41).connect(lp); noise().connect(lp); lp.connect(N.main); }
+    // gemuruh piringan: derau lowpass, potongan ikut laju gas
+    N.roar = gain(); N.roarLp = c.createBiquadFilter(); N.roarLp.type = 'lowpass'; noise().connect(N.roarLp); N.roarLp.connect(N.roar);
+    // nada pasang surut: sinus naik menjelang singularitas
+    N.tidal = gain(); N.tidalO = osc('sine', 40); N.tidalO.connect(N.tidal);
+    // tesseract (fiksi): akord harmonis berputar pelan
+    N.tess = gain(); N.tessO = [110, 165, 220, 275, 330].map((f, i) => { const o = osc('sine', f), g = c.createGain(); g.gain.value = 0.22 / (1 + i * 0.4); o.connect(g); g.connect(N.tess); return o; });
+  }
+  function setSound(on = !AUDIO.on) {
+    AUDIO.on = on; try { localStorage.setItem('gargantua.sound', on ? '1' : '0'); } catch (e) { /* abaikan */ }
+    if (on) { audioInit(); AUDIO.ctx && AUDIO.ctx.resume(); }
+    if (AUDIO.ctx) AUDIO.n.master.gain.setTargetAtTime(on ? 0.7 : 0, AUDIO.ctx.currentTime, 0.05);
+    syncUI(); toast(txt(on ? 'Sound: on (U)' : 'Sound: off (U)'), 1.5);
+  }
+  function updateAudio(dt) {
+    const m = audioMix(); AUDIO.lastMix = m;
+    const c = AUDIO.ctx; if (!c || !AUDIO.on) return;
+    const N = AUDIO.n, t = c.currentTime, set = (p, v, k = 0.08) => p.setTargetAtTime(v, t, k);
+    set(N.hum.gain, 0.05 * m.hum); set(N.thr.gain, 0.09 * m.thr, 0.03); set(N.main.gain, 0.35 * m.main, 0.1);
+    set(N.roar.gain, 0.32 * m.roar, 0.15); set(N.roarLp.frequency, m.roarCut, 0.2);
+    set(N.tidal.gain, 0.12 * m.tidal, 0.2); set(N.tidalO.frequency, m.tidalF, 0.2);
+    set(N.tess.gain, 0.25 * m.tess, 0.6);
+    if (m.tess) N.tessO.forEach((o, i) => set(o.frequency, [110, 165, 220, 275, 330][i] * (1 + 0.004 * Math.sin(TESV.t * (0.31 + i * 0.17))), 0.3));
+    // pesan relai: bip tiap 1,6 s nyata, nada dikali laju jam relai yang terlihat wahana (memerah saat menjauh)
+    if (MIS.on && !MIS.end && !state.paused && (AUDIO.pingT -= dt) <= 0) { AUDIO.pingT = 1.6; sfxTone(Math.max(60, Math.min(4000, 880 * relMsg().rate)), 0.18, 0.05, 'sine'); }
+  }
+  function sfxTone(f, dur, vol, type = 'sine', f2 = null) {
+    const c = AUDIO.ctx; if (!c || !AUDIO.on) return;
+    const o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
+    o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(1e-4, t + dur);
+    o.connect(g); g.connect(AUDIO.n.master); o.start(t); o.stop(t + dur + 0.05);
+  }
+  function sfxNoise(dur, vol, type, f, f2 = null, Q = 1) {
+    const c = AUDIO.ctx; if (!c || !AUDIO.on) return;
+    const s0 = c.createBufferSource(), bq = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime;
+    s0.buffer = AUDIO.noise; bq.type = type; bq.Q.value = Q; bq.frequency.setValueAtTime(f, t); if (f2) bq.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(1e-4, t + dur);
+    s0.connect(bq); bq.connect(g); g.connect(AUDIO.n.master); s0.start(t, Math.random()); s0.stop(t + dur + 0.05);
+  }
+  const sfxImpact = (vk) => { sfxNoise(0.05 + 0.04 * Math.random(), 0.25 * Math.min(1.5, vk), 'highpass', 2500 + 2000 * Math.random()); if (MIS.glass > 60) sfxTone(2600 + 900 * Math.random(), 0.12, 0.05, 'triangle', 1400); };
+  const sfxFlare = () => { sfxNoise(0.9, 0.3, 'bandpass', 400, 3000, 2); sfxTone(300, 0.6, 0.06, 'sine', 900); };
+  const sfxShatter = () => { sfxNoise(1.4, 0.6, 'highpass', 1800, 600); for (let i = 0; i < 6; i++) setTimeout(() => sfxTone(1800 + 2500 * Math.random(), 0.25, 0.05, 'triangle', 600), i * 70); };
+  for (const ev of ['keydown', 'pointerdown']) window.addEventListener(ev, () => { if (AUDIO.on) { audioInit(); if (AUDIO.ctx && AUDIO.ctx.state === 'suspended') AUDIO.ctx.resume(); } }, { capture: true });
+
   /* =====================================================================
      INPUT
      ===================================================================== */
@@ -2384,6 +2475,7 @@ function main() {
     else if (c === 'KeyH') { $('#ui').classList.toggle('hidden'); $('#caption').classList.toggle('hidden'); $('#hint').classList.toggle('hidden'); }
     else if (c === 'Backquote') { $('#ui').classList.remove('hidden'); $('#ui').classList.toggle('collapsed'); }
     else if (c === 'KeyQ') cycleQuality();
+    else if (c === 'KeyU') setSound();
     else if (c === 'KeyP') cyclePost();
     else if (c === 'KeyR') resetCamera();
     else if (c === 'Digit1') setPreset('film');
@@ -2427,6 +2519,7 @@ function main() {
     { type: 'select', label: 'Scenario', options: Object.keys(SCEN), names: (k) => SCEN[k].name, get: () => MIS.sc, set: (v) => { MIS.sc = v; } },
     { type: 'select', label: 'Attitude (X)', options: LOCKS, names: lockName, get: () => MIS.lock, set: (v) => { MIS.lock = v; } },
     { type: 'mission' },
+    { type: 'check', label: 'Sound (U)', get: () => AUDIO.on, set: (v) => { if (v !== AUDIO.on) setSound(v); } },
     { type: 'check', label: 'Relay view and spacetime diagram (M)', get: () => REL.on, set: (v) => { REL.on = v; } },
     { type: 'note', text: 'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT). The thick disk layer near the vessel is also exaggerated.' },
   ];
@@ -2488,7 +2581,7 @@ function main() {
     ro.innerHTML = `${txt('FPS')}<b id="rFps">-</b>${txt('Resolution')}<b id="rRes">-</b>${txt('Max steps')}<b id="rSteps">-</b>${txt('Distance')}<b id="rDist">-</b>${txt('Buffer')}<b id="rFmt">-</b>`;
     body.appendChild(ro);
     const keys = document.createElement('div'); keys.className = 'keys';
-    keys.textContent = txt('Space pause · Q quality · P screen effects · F photo · V vessel · R reset · H hide UI · ` panel · ? help');
+    keys.textContent = txt('Space pause · Q quality · P screen effects · U sound · F photo · V vessel · R reset · H hide UI · ` panel · ? help');
     body.appendChild(keys);
     const lr = document.createElement('div'); lr.className = 'sec'; lr.textContent = txt('Language'); body.appendChild(lr);
     const lb = document.createElement('div'); lb.className = 'btns';
@@ -2558,6 +2651,7 @@ function main() {
     buildTargets(sw, sh);
 
     state.simTime += stepMission(dt) * CONFIG.disk.speed;
+    updateAudio(dt);                                                 // G7: suara
     relStep(dt);                                                     // G4: waktu relai, zoom dan sinar diagram
     const b = viewBasis();
     const vol = b.obs ? volParams(b.pos) : null;
@@ -2679,7 +2773,7 @@ function main() {
     SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
     misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, volParams, AE, stepMission,
     REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,
-    TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim };   // debugging hook
+    TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound };   // debugging hook
   requestAnimationFrame(frame);
 }
 
