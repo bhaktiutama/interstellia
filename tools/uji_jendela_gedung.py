@@ -4,7 +4,7 @@ Ukuran:
   1. variasi: periode mullion (bay) dan tinggi lantai dari 10 menara kaca berbeda (autokorelasi profil kolom dan baris, kamera ortografik)
   2. ruangan: periode struktur di selisih gambar (interior hidup - mati) di 14 m dibanding periode mullion
   3. jauh: di 150 m gambar interior hidup = mati (0 nilai beda) untuk gaya 0 dan 1; di 14 m berbeda jelas
-  4. gaya lain (2, 3, 7, 9, 11) identik dengan commit sebelum 21d (HEAD, dimuat dari git) bila git tersedia
+  4. gaya lain (2, 3, 7, 8, 9, 11) sama dengan versi sebelum 21d (UJI_BASE, bawaan origin/main; selisih dalam kebisingan awan dan waktu) bila git tersedia
   5. tanpa nilai tidak valid siang dan malam di 15 / 60 / 150 / 800 m
 Pakai: python tools/uji_jendela_gedung.py   (butuh: pip install playwright && playwright install chromium)
 Tanpa akses CDN langsung: THREE_LOCAL=<folder berisi three.module.js dan three.core.js> python tools/uji_jendela_gedung.py
@@ -88,7 +88,31 @@ UJI = r"""
   out[`variasi jarak mullion: ${uniq(bays, 0.3)} nilai berbeda dari ${bays.length} menara (butuh >= 3)`] = uniq(bays, 0.3) >= 3;
   out[`variasi tinggi lantai: ${uniq(fhs, 0.25)} nilai berbeda (butuh >= 3)`] = uniq(fhs, 0.25) >= 3;
   const rooms = rows.filter((q) => q.roomStr > 0.2 && q.bayStr > 0.15 && q.bay > 0), wide = rooms.filter((q) => q.room >= 1.5 * q.bay).length;
-  info.room = `INFO ruangan lebih lebar dari satu bay: ${wide} dari ${rooms.length} menara dengan pola terukur (sisanya lantai terbuka atau pola terlalu lemah; tidak jadi syarat lulus)`;
+  info.room0 = `INFO autokorelasi selisih gambar: ${wide} dari ${rooms.length} menara berpola (metode berisik, tidak jadi syarat)`;
+  // lebar ruangan dari bentangan jendela menyala (malam 20.00, interior mati, kamera ortografik): bentangan menyala tidak putus
+  // oleh mullion / sirip (celah <= 1,7 m digabung); ruangan gelap di antara memutus. Persentil ke-10 panjang bentangan yang tidak
+  // menyentuh tepi gambar ~ lebar satu ruangan. Lantai terbuka (selebar muka) menyentuh tepi dan dilewati.
+  S.clock.hour = 20; S.updateLighting(); await wait(1500); S.BUILD_U.uInterior.value = 0;
+  const widths = [];
+  for (const idx of pick) {
+    const r = rig('flat', idx, SZ), H = r.L[4], p1 = shoot(r, ortho(r, 60, SPAN, -0.25 * H)), vals = [];
+    for (let i = 0; i < SZ * SZ; i++) vals.push(lum(p1, i * 4)); vals.sort((a, b) => a - b); const thr = Math.max(0.02, vals[Math.floor(vals.length * 0.99)] * 0.25), runs = [];
+    for (let y = 0; y < SZ; y++) {
+      let x = 0, start = -1, lastOn = -1;
+      for (x = 0; x <= SZ; x++) {
+        const on = x < SZ && lum(p1, (y * SZ + x) * 4) > thr;
+        if (on) { if (start < 0) start = x; lastOn = x; }
+        else if (start >= 0 && (x >= SZ || x - lastOn > 1.7 / mpp)) { if (start > 1 && lastOn < SZ - 2) runs.push((lastOn - start + 1) * mpp); start = -1; }
+      }
+    }
+    runs.sort((a, b) => a - b); const useful = runs.filter((v) => v > 1.0);
+    widths.push(useful.length >= 8 ? useful[Math.floor(useful.length * 0.1)] : -1); dispose(r);
+  }
+  S.BUILD_U.uInterior.value = 1;
+  const okW = widths.filter((v) => v > 0);
+  info.room = `INFO lebar ruangan terkecil per menara (m): ${widths.map((v) => v > 0 ? v.toFixed(1) : '-').join(' ')}`;
+  out[`lebar ruangan (persentil 10 bentangan menyala) >= 4,5 m pada ${okW.filter((v) => v >= 4.5).length} dari ${okW.length} menara terukur (lama: 1,5 m per bay; butuh > separuh)`] = okW.length >= 3 && okW.filter((v) => v >= 4.5).length * 2 > okW.length;
+  S.clock.hour = 11; S.updateLighting(); await wait(1000);
   out[`interior terlihat dari 14 m (selisih rata-rata ${rows.reduce((a, q) => a + q.diff, 0) / rows.length > 0.01 ? 'cukup' : 'kecil'})`] = rows.reduce((a, q) => a + q.diff, 0) / rows.length > 0.01;
 
   // 3. jauh tanpa ruangan: gaya 0 dan 1
@@ -120,7 +144,7 @@ UJI = r"""
     }
   }
   out[`siang dan malam di 15 / 60 / 150 / 800 m: tanpa nilai tidak valid (${bad} dari ${nPx})`] = bad === 0;
-  out.__info = info.rows.concat(info.room);
+  out.__info = info.rows.concat(info.room0, info.room);
   return out;
 })()
 """
@@ -143,9 +167,11 @@ OTHER = r"""
 })()
 """
 
+BASE = os.environ.get('UJI_BASE', 'origin/main')                       # versi sebelum 21d (commit 391ded6)
+
 def git_head_html():
     try:
-        return subprocess.run(['git', 'show', f'HEAD:{HTML}'], cwd=ROOT, capture_output=True, check=True).stdout
+        return subprocess.run(['git', 'show', f'{BASE}:{HTML}'], cwd=ROOT, capture_output=True, check=True).stdout
     except Exception:
         return None
 
@@ -169,7 +195,7 @@ async def main():
             await pg.evaluate(LIB)
             return pg
         pg = await page(HTML)
-        res = await pg.evaluate(UJI)
+        res = {} if os.environ.get('HANYA_GAYA_LAIN') else await pg.evaluate(UJI)
         info = res.pop('__info', [])
         for k, v in res.items(): print(('OK   ' if v else 'GAGAL'), k)
         print('menara:'); [print('   ', r) for r in info]
@@ -185,9 +211,13 @@ async def main():
                 new, before = await pg.evaluate(OTHER), await pg2.evaluate(OTHER)
             finally:
                 tmp.unlink(missing_ok=True)
-            keys = sorted(set(new) & set(before)); same = sum(1 for k in keys if new[k] == before[k])
-            diffk = [k for k in keys if new[k] != before[k]]
-            print(('OK   ' if keys and not diffk else 'GAGAL'), f'gaya 2, 3, 7, 8, 9, 11 identik dengan HEAD: {same} dari {len(keys)} gambar sama', diffk[:6])
+            new2 = await pg.evaluate(OTHER)                                   # kontrol: versi baru dirender lagi (awan dan waktu bergerak)
+            keys = sorted(set(new) & set(before))
+            mad = lambda a, b: sum(abs(x - y) for x, y in zip(a, b)) / max(1, len(a))
+            rows = [(k, mad(new[k], before[k]), mad(new[k], new2[k])) for k in keys]
+            bad = [(k, round(d, 5), round(c, 5)) for k, d, c in rows if d > 3 * c + 1e-4]
+            print(('OK   ' if keys and not bad else 'GAGAL'), f'gaya 2, 3, 7, 8, 9, 11 sama dengan {BASE} dalam kebisingan render (selisih rata-rata <= 3x kontrol): {len(keys) - len(bad)} dari {len(keys)} gambar', bad[:6])
+            print('   selisih terbesar vs sebelum / kontrol:', max(((round(d, 5), round(c, 5)) for _, d, c in rows), default=None))
         print('error:', errs[:10] or 'tidak ada')
         await b.close()
 
