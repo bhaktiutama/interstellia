@@ -22,8 +22,17 @@
 
   /* ===== hero ===== */
   .hero { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; padding: 60px 16px 40px; overflow: hidden; }
-  .hero::before { content: ''; position: absolute; inset: 0; background: url('experiences/gargantua/menu.webp') 0% 0% / max(160%, 1200px) auto no-repeat; opacity: 0.22;
-    -webkit-mask-image: radial-gradient(ellipse at 50% 45%, #000 20%, transparent 72%); mask-image: radial-gradient(ellipse at 50% 45%, #000 20%, transparent 72%); }
+  /* latar hero: foto ukuran asli (tidak diperbesar = tidak pecah), berganti saat lingkaran menu disorot */
+  .hbg { position: absolute !important; inset: 0; background: center / auto no-repeat; opacity: 0; transition: opacity .8s ease;
+    -webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 25%, transparent 75%); mask-image: radial-gradient(ellipse at 50% 50%, #000 25%, transparent 75%); }
+  .hbg.on { opacity: 0.26; }
+  /* Gargantua: bawah foto 520 px di bawah layar, jadi wahana jatuh di luar layar dan lubang hitam di bawah judul */
+  .hbg[data-bg=gargantua] { background-position: center calc(100% + 520px);
+    /* tepi atas foto (373 px dari bawah layar) dipudarkan */
+    -webkit-mask-image: radial-gradient(ellipse at 50% 50%, #000 25%, transparent 75%), linear-gradient(transparent calc(100% - 373px), #000 calc(100% - 200px));
+    -webkit-mask-composite: source-in;
+    mask-image: radial-gradient(ellipse at 50% 50%, #000 25%, transparent 75%), linear-gradient(transparent calc(100% - 373px), #000 calc(100% - 200px));
+    mask-composite: intersect; }
   .hero > * { position: relative; }
   .hero h1 { margin: 0; font-weight: 200; letter-spacing: 0.45em; margin-right: -0.45em; text-transform: uppercase; font-size: clamp(32px, 9vw, 92px);
     background: linear-gradient(90deg, #f3e2b0, #fff 40%, #ffd3a0 60%, #cfeef2); -webkit-background-clip: text; background-clip: text; color: transparent;
@@ -168,6 +177,9 @@
 
 <!-- ================= HERO: tiga dunia dari foto in-game ================= -->
 <header class="hero" id="top">
+  <div class="hbg" data-bg="cooper-station" style="background-image:url('experiences/cooper-station/menu.webp')"></div>
+  <div class="hbg on" data-bg="gargantua" style="background-image:url('experiences/gargantua/menu.webp')"></div>
+  <div class="hbg" data-bg="millar" style="background-image:url('experiences/millar/menu.webp')"></div>
   <h1 class="rv">Interstellia</h1>
   <p class="tag rv" style="--d:.2s" id="tagline"></p>
   <svg class="route rv" style="--d:.4s" viewBox="0 0 900 230" role="img" aria-label="Peta perjalanan">
@@ -619,6 +631,14 @@
   // penanda hanya berganti sendiri saat fotonya terlihat
   const io3 = new IntersectionObserver((es) => { for (const e of es) PH[e.target.dataset.p].vis = e.isIntersecting; }, { threshold: 0.5 });
   for (const k in PH) io3.observe(PH[k].el);
+
+  // ---- latar hero ikut lingkaran yang disorot; kembali ke Gargantua saat lepas ----
+  const heroBg = (id) => document.querySelectorAll('.hbg').forEach((d) => d.classList.toggle('on', d.dataset.bg === id));
+  document.querySelectorAll('.route a').forEach((a) => {
+    const id = a.getAttribute('href').slice(1);
+    a.addEventListener('mouseenter', () => heroBg(id)); a.addEventListener('focus', () => heroBg(id));
+    a.addEventListener('mouseleave', () => heroBg('gargantua')); a.addEventListener('blur', () => heroBg('gargantua'));
+  });
 
   // ---- titik navigasi ----
   const dots = [...document.querySelectorAll('.dots a')];
