@@ -20,7 +20,7 @@ Kelompok 3 (G3, susur piringan, lempeng tebal, partikel):
 - autopilot susur (melawan dan searah arus) sampai ISCO tanpa menembus piringan, tinggi terjaga, delta-v di bawah anggaran,
   dilepas di dalam ISCO lalu berakhir di singularitas; tanpa autopilot / delta-v habis = menabrak piringan,
 - kecepatan gas relatif: orbit melingkar melawan arus di r 6 = 2v/(1 + v^2) = 0,575 c, di r 3 = 0,8 c, searah arus = 0,
-- render lempeng tebal (kamera di atas dan di dalam lempeng, kokpit dan kamera luar) tanpa nilai tidak valid,
+- render dekat piringan (kokpit dan kamera luar) tanpa nilai tidak valid (lempeng tebal G3a dihapus),
 - garis bara tergambar dekat piringan dan tidak ada di jalur kutub, tumbukan kaca terjadi (kokpit), kaca pecah = akhir misi,
 - eksposur otomatis hanya saat misi (k = 1 di luar misi), menggelap di atas piringan terang,
 - kamus ID untuk teks baru.
@@ -277,23 +277,23 @@ async def kelompok3(pg):
     cek('gas relatif melawan arus r 3 (ISCO) = 0,8 c', abs(g['retro3'] - 0.8) < 1e-3, f"{g['retro3']:.5f} c")
     cek('gas relatif searah arus = 0', g['pro6'] < 1e-6, f"{g['pro6']:.2e} c")
 
-    # --- render lempeng tebal, partikel, tumbukan ---
+    # --- render dekat piringan (lempeng tebal G3a dihapus), partikel, tumbukan ---
     await pg.evaluate('() => { const G = window.__gargantua; G.CONFIG.adaptive = false; G.state.postMode = 0; }')
     for rT, view, h in [(6, 'chase', 0.05), (6, 'cockpit', 0.05), (3.5, 'cockpit', 0.05), (8, 'chase', 0.01)]:
         await pg.evaluate('''([rT, view, h]) => { const G = window.__gargantua, M = G.MIS; G.startMission('skim'); G.SHIP.view = view; M.ap.h = h;
           G.state.paused = true; while (Math.hypot(...M.x) > rT) if (G.misFly(0.1)) break; G.state.paused = false; M.warp = 3; }''', [rT, view, h])
         await pg.wait_for_timeout(1500)
         st = await pg.evaluate('() => new Promise((r) => { window.__gargantua.state.readCb = r; })')
-        info = await pg.evaluate('() => { const G = window.__gargantua, M = G.MIS; return { vol: !!G.volParams(M.x), parts: G.state.partsDrawn, hits: M.hits, imps: M.imps.length }; }')
-        cek(f'lempeng tebal r {rT} tinggi {h} r ({view}) tanpa nilai tidak valid', info['vol'] and st['bad'] == 0 and st['max'] < 1e4,
-            f"tidak valid {st['bad']}, maks {st['max']:.1f}, rata {st['mean']:.3f}, lempeng {info['vol']}")
+        info = await pg.evaluate('() => { const G = window.__gargantua, M = G.MIS; return { parts: G.state.partsDrawn, hits: M.hits, imps: M.imps.length }; }')
+        cek(f'dekat piringan r {rT} tinggi {h} r ({view}) tanpa nilai tidak valid', st['bad'] == 0 and st['max'] < 1e4,
+            f"tidak valid {st['bad']}, maks {st['max']:.1f}, rata {st['mean']:.3f}")
         if view == 'cockpit' and rT == 6:
             cek('garis bara tergambar dan debu menabrak kaca (kokpit, dekat piringan)', info['parts'] > 0 and info['hits'] > 0 and info['imps'] > 0, str(info))
     await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS; G.startMission('polar'); G.state.paused = true;
       while (Math.hypot(...M.x) > 15) G.misAdvance(M, 0.1); G.state.paused = false; }''')
     await pg.wait_for_timeout(1500)
-    pol = await pg.evaluate('() => { const G = window.__gargantua, M = G.MIS; return { parts: G.state.partsDrawn, hits: M.hits, vol: !!G.volParams(M.x), k: G.AE.k }; }')
-    cek('jalur kutub: tanpa garis bara, tumbukan, dan lempeng tebal', not pol['parts'] and pol['hits'] == 0 and not pol['vol'], str(pol))
+    pol = await pg.evaluate('() => { const G = window.__gargantua, M = G.MIS; return { parts: G.state.partsDrawn, hits: M.hits, k: G.AE.k }; }')
+    cek('jalur kutub: tanpa garis bara dan tumbukan', not pol['parts'] and pol['hits'] == 0, str(pol))
     await pg.evaluate("() => { const G = window.__gargantua, M = G.MIS; G.startMission('skim'); G.state.paused = false; M.glass = 99.999; M.hitAcc = 5; }")
     await pg.wait_for_function('window.__gargantua.MIS.end !== null', timeout=30000)
     e = await pg.evaluate('() => ({ kind: window.__gargantua.MIS.end.kind, title: document.getElementById("mendTitle").textContent })')
