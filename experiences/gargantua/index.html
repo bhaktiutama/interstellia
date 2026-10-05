@@ -417,6 +417,7 @@ void main() {
 #if VOL
   bool volOn = true;                 // G3a: masih di daerah lempeng tebal dekat kamera
   int volUsed = 0;
+  float volLen = 0.0;                // panjang lintasan di lempeng dalam satuan 0,6 H (kontinu, untuk pudar anggaran)
   vec4 dlP = vec4(-1.0);             // warna piringan di ujung langkah sebelumnya (interpolasi per sampel; < 0 = belum ada)
   float jit = hash13(vec3(gl_FragCoord.xy, 7.0));                    // geser sampel per piksel (pita jadi butiran halus)
 #endif
@@ -449,7 +450,7 @@ void main() {
     float rx = 1.0, Hs = 1.0;
     bool inVol = false;
     if (volOn) {
-      if (length(mid - uCamPos) > uVolR || volUsed >= uVolN) volOn = false;
+      if (length(prev - uCamPos) > uVolR || volUsed >= uVolN) volOn = false;   // awal langkah: sampel dengan wv > 0 tidak terpotong
       else {
         rx = length(mid.xz); Hs = uVolH * rx;
         float ylo = prev.y * pos.y < 0.0 ? 0.0 : min(abs(prev.y), abs(pos.y));
@@ -464,7 +465,8 @@ void main() {
       vec4 dl0 = (cross || dlP.a < 0.0) ? dl : dlP;
       if (inVol) {
         float seg = length(pos - prev);
-        int n = min(clamp(int(seg / (0.6 * Hs)) + 1, 1, 6), uVolN - volUsed);
+        float segH = seg / (0.6 * Hs);
+        int n = min(clamp(int(segH) + 1, 1, 6), uVolN - volUsed);
         float ds = seg / float(n);
         for (int k = 0; k < 6; k++) {
           if (k >= n) break;
@@ -474,7 +476,7 @@ void main() {
           // bobot lempeng turun mulus menurut jarak DAN sisa anggaran sampel (dulu anggaran habis = putus tajam, tampak
           // sebagai busur/lingkaran di permukaan piringan); piringan tipis mengisi sisanya (lihat cross di bawah)
           float wv = (1.0 - smoothstep(0.6 * uVolR, uVolR, length(sp - uCamPos)))
-                   * (1.0 - smoothstep(0.4, 1.0, float(volUsed + k) / float(uVolN)));
+                   * (1.0 - smoothstep(0.2, 0.55, (volLen + segH * (float(k) + jit) / float(n)) / float(uVolN)));
           if (abs(zy) > 2.2 || wv < 1e-3) continue;
           float det = smoothstep(0.28, 0.78, volDetail(sp, spx, zy));
           vec4 dk = mix(dl0, dl, (float(k) + jit) / float(n));
@@ -483,11 +485,11 @@ void main() {
           col += trans * dk.rgb * (0.25 + 1.5 * det) * a;
           trans *= 1.0 - a;
         }
-        volUsed += n;
+        volUsed += n; volLen += segH;
       }
       if (cross) {
         float wl = volOn ? (1.0 - smoothstep(0.6 * uVolR, uVolR, length(hit - uCamPos)))
-                         * (1.0 - smoothstep(0.4, 1.0, float(volUsed) / float(uVolN))) : 0.0;
+                         * (1.0 - smoothstep(0.2, 0.55, volLen / float(uVolN))) : 0.0;
         float a = dl.a * (1.0 - wl);
         col += trans * dl.rgb * a;
         trans *= 1.0 - a;
