@@ -126,10 +126,10 @@ const CONFIG = {
   quality: 'medium',
   presets: {
     //        max RK steps | step factor (dt = k*r) | fbm octaves | max render scale | G3: volume samples, disk particles
-    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, vol: 10, parts: 400 },
-    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, vol: 14, parts: 900 },
-    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, vol: 18, parts: 1600 },
-    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, vol: 24, parts: 2500 },
+    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, parts: 400 },
+    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, parts: 900 },
+    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, parts: 1600 },
+    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500 },
   },
   adaptive: true,          // adaptive resolution
   renderScale: 0.8,        // current internal resolution factor
@@ -190,16 +190,6 @@ uniform float uEnc;
 uniform float uFall, uObsG, uBeta;
 uniform vec3 uObsV;
 float gObsK = 1.0;                   // G2: frekuensi teramati / frekuensi di tak hingga untuk sinar piksel ini
-// G3a: lempeng piringan tebal (volumetrik) di sekitar kamera saat misi dekat piringan. Hanya di varian shader VOL = 1
-// (program P.sceneVol, dipakai bila volParams() aktif); varian VOL = 0 (P.scene) sama persis dengan versi G2, jadi tampilan
-// biasa tidak menanggung biaya kode lempeng (register dan cabang). Tebal skala H = uVolH r, daerah bola radius uVolR di
-// sekitar kamera, paling banyak uVolN sampel per piksel.
-#if VOL
-precision mediump sampler3D;
-uniform float uVolR, uVolH;
-uniform int uVolN;
-uniform sampler3D uNoise;            // derau 3D 64^3 berulang (dibuat di CPU, periode 1 di tiap sumbu)
-#endif
 
 // Geometric units: G = c = 1, Schwarzschild radius rs = 1  =>  M = 0.5
 const float RS = 1.0;
@@ -332,25 +322,6 @@ vec4 shadeDisk(vec3 hit, vec3 vel, float r) {
   return vec4(col * I, alpha);
 }
 
-// G3a: detail 3D lempeng tebal. Koordinat mutlak (tidak ikut kamera): radial ln r, azimut phi (skala dipilih agar 2 pi = 32 satuan,
-// kelipatan periode tekstur: tanpa sambungan di phi = pi), tinggi y / H. Pola ikut rotasi Kepler, dua lapis dicampur silang
-// seperti diskDensity() agar geseran diferensial tidak menggulung tanpa batas. Memanjang searah orbit (garis seret).
-#if VOL
-// textureLod: tanpa mipmap, di dalam loop (aliran kendali tidak seragam) tidak perlu turunan layar
-float volTex(vec3 q) { return 0.62 * textureLod(uNoise, q * 0.25, 0.0).r + 0.38 * textureLod(uNoise, q * 0.75 + 0.37, 0.0).r; }
-float volDetail(vec3 sp, float rx, float zy) {
-  float phi = atan(sp.z, sp.x);
-  float om = sqrt(M / (rx * rx * rx));
-  const float P = 8.0;
-  float c1 = fract(uTime / P), c2 = fract(uTime / P + 0.5);
-  float w1 = 1.0 - abs(2.0 * c1 - 1.0);
-  vec3 b = vec3(log(rx) * 22.0, 0.0, zy * 0.6);
-  const float KA = 5.0929582;                                         // 32 / (2 pi)
-  float n1 = volTex(vec3(b.x, (phi - om * c1 * P) * KA, b.z));
-  float n2 = volTex(vec3(b.x, (phi - om * c2 * P) * KA, b.z) + vec3(17.3, 6.0, 9.7));
-  return mix(n2, n1, w1);
-}
-#endif
 
 vec3 starLayer(vec3 d, float scale, float density, float seed, float bright) {
   vec3 p = d * scale;
@@ -414,11 +385,6 @@ void main() {
   vec3 col = vec3(0.0);
   float trans = 1.0;
   int state = 0;                     // 0 running, 1 absorbed, 2 escaped, 3 opaque
-#if VOL
-  bool volOn = true;                 // G3a: masih di daerah lempeng tebal dekat kamera
-  int volUsed = 0;
-  float jit = hash13(vec3(gl_FragCoord.xy, 7.0));                    // geser sampel per piksel (pita jadi butiran halus)
-#endif
 
   for (int i = 0; i < MAX_ITER; i++) {
     if (i >= uMaxSteps) break;
@@ -435,55 +401,6 @@ void main() {
     vec3 a1 = accel(pos, vel + a0 * dt, h2);
     vel += 0.5 * (a0 + a1) * dt;
 
-#if VOL
-    // G3a: lempeng tebal dekat kamera + piringan tipis, satu panggilan shadeDisk() per langkah (kode lebih kecil). Warna dan pola
-    // besar dari shadeDisk() (titik potong bidang, atau titik tengah langkah), jadi menyambung dengan piringan tipis di batas
-    // daerah; detail 3D per sampel; profil tinggi exp(-(y/H)^4) diangkat derau (permukaan bergolak, udara di atasnya bening).
-    // Kedalaman optik satu lempeng tegak kira-kira sama dengan alpha piringan tipis. Di tepi daerah (0,6..1 uVolR) bobot lempeng
-    // turun, piringan tipis naik.
-    bool cross = prev.y * pos.y < 0.0;
-    vec3 hit = vec3(0.0); float rh = 0.0;
-    if (cross) { hit = mix(prev, pos, prev.y / (prev.y - pos.y)); rh = length(hit.xz); cross = rh > uRin && rh < uRout; }
-    vec3 mid = 0.5 * (prev + pos);
-    float rx = 1.0, Hs = 1.0;
-    bool inVol = false;
-    if (volOn) {
-      if (length(mid - uCamPos) > uVolR || volUsed >= uVolN) volOn = false;
-      else {
-        rx = length(mid.xz); Hs = uVolH * rx;
-        float ylo = prev.y * pos.y < 0.0 ? 0.0 : min(abs(prev.y), abs(pos.y));
-        inVol = ylo < 2.3 * Hs && rx > uRin * 0.9 && rx < uRout * 1.05;
-      }
-    }
-    if (cross || inVol) {
-      vec4 dl = shadeDisk(cross ? hit : vec3(mid.x, 0.0, mid.z), vel, cross ? rh : rx);   // satu tempat panggil (inline sekali)
-      if (inVol) {
-        float seg = length(pos - prev);
-        int n = min(clamp(int(seg / (0.6 * Hs)) + 1, 1, 6), uVolN - volUsed);
-        float ds = seg / float(n);
-        for (int k = 0; k < 6; k++) {
-          if (k >= n) break;
-          vec3 sp = mix(prev, pos, (float(k) + jit) / float(n));
-          float spx = length(sp.xz);
-          float zy = sp.y / (uVolH * spx);
-          float wv = 1.0 - smoothstep(0.6 * uVolR, uVolR, length(sp - uCamPos));
-          if (abs(zy) > 2.2 || wv < 1e-3) continue;
-          float det = smoothstep(0.28, 0.78, volDetail(sp, spx, zy));
-          float ze = zy * (1.3 - 0.6 * det), ze2 = ze * ze, prof = exp(-ze2 * ze2);
-          float a = 1.0 - exp(-1.4 * prof * wv * dl.a * (0.15 + 1.7 * det) * ds / Hs);
-          col += trans * dl.rgb * (0.25 + 1.5 * det) * a;
-          trans *= 1.0 - a;
-        }
-        volUsed += n;
-      }
-      if (cross) {
-        float a = dl.a * (volOn ? smoothstep(0.6 * uVolR, uVolR, length(hit - uCamPos)) : 1.0);
-        col += trans * dl.rgb * a;
-        trans *= 1.0 - a;
-      }
-      if (trans < 0.01) { state = 3; break; }
-    }
-#else
     // thin-disk crossing (plane y = 0): interpolate hit, composite front-to-back
     if (prev.y * pos.y < 0.0) {
       float t = prev.y / (prev.y - pos.y);
@@ -496,7 +413,6 @@ void main() {
         if (trans < 0.01) { state = 3; break; }
       }
     }
-#endif
 
     float rn = length(pos);
     if (rn < RS && (uFall < 0.5 || dot(pos, vel) < 0.0 || rn < 2e-3)) { state = 1; break; }   // captured by the horizon
@@ -888,7 +804,7 @@ const ID = {
   'hits': 'tumbukan',
   'canopy': 'kaca',
   'Autopilot skim (O)': 'Autopilot susur (O)',
-  'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT). The thick disk layer near the vessel is also exaggerated.': 'Partikel piringan dan tumbukan kaca distilisasi demi tampilan: butir debu nyata 1 mikrogram pada 0,8 c membawa 6,0e7 J (sekitar 14 kg TNT). Lempeng piringan tebal di dekat wahana juga dilebih-lebihkan.',
+  'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT).': 'Partikel piringan dan tumbukan kaca distilisasi demi tampilan: butir debu nyata 1 mikrogram pada 0,8 c membawa 6,0e7 J (sekitar 14 kg TNT).',
   'Flare fired straight outward at the speed of light. Inside the horizon even this light moves inward (dr/dT = 1 - 1/sqrt r < 0)': 'Suar ditembakkan lurus menjauhi pusat dengan laju cahaya. Di dalam horizon cahaya ini pun bergerak ke dalam (dr/dT = 1 - 1/akar r < 0)',
   'Flare fired straight outward at the speed of light: it climbs out and will reach the relay': 'Suar ditembakkan lurus menjauhi pusat dengan laju cahaya: naik keluar dan akan tiba di relai',
   'Relay view and spacetime diagram: on (M)': 'Pandangan relai dan diagram ruang-waktu: nyala (M)',
@@ -1026,8 +942,7 @@ function main() {
   }
 
   const P = {
-    scene: program(SCENE_FS.replace('#version 300 es', '#version 300 es\n#define VOL 0'), 'scene'),
-    sceneVol: program(SCENE_FS.replace('#version 300 es', '#version 300 es\n#define VOL 1'), 'scene (G3a volume)'),
+    scene: program(SCENE_FS, 'scene'),
     bright: program(BRIGHT_FS, 'bright'),
     down: program(DOWN_FS, 'down'),
     blur: program(BLUR_FS, 'blur'),
@@ -1472,7 +1387,7 @@ function main() {
     }
     MIS.pred = { kind: res ? res.kind : 'bound', dTau: st.tau - MIS.tau, horizon: horizon === null ? null : horizon - MIS.tau, pts };
   }
-  /* G3: autopilot susur, gas piringan, tumbukan kaca. Lempeng tebal H = VOL_H r (shader uVolH, angka sama).
+  /* G3: autopilot susur, gas piringan, tumbukan kaca. Tebal skala piringan H = VOL_H r.
      Autopilot: kecepatan sasaran = orbit melingkar (searah atau melawan gas) + turun vin + koreksi tinggi ke h r di atas bidang
      piringan; selisih di kerangka rain dikoreksi dengan dorongan (boost misThrust, ikut anggaran delta-v), paling besar
      AP.aMax per rs/c. Dilepas di dalam ISCO (3 rs atau tepi dalam piringan bila lebih kecil): tidak ada orbit stabil, menukik. */
@@ -1774,12 +1689,7 @@ function main() {
   }
 
   // basis kamera untuk ray tracer (posisi dalam rs) dan untuk raster wahana (mata dalam meter relatif wahana)
-  // G3a: lempeng tebal aktif bila kamera dekat piringan (|y| < 6 H, di sekitar rIn..rOut); radius daerah 0,3 r (0,6..2 rs)
-  function volParams(p) {
-    const d = CONFIG.disk, rxz = Math.hypot(p[0], p[2]);
-    if (!(Math.abs(p[1]) < 6 * VOL_H * rxz && rxz > d.rIn * 0.7 && rxz < d.rOut * 1.25)) return null;
-    return { R: Math.max(0.6, Math.min(2.0, 0.3 * rxz)) };
-  }
+  // G3a lempeng tebal volumetrik dihapus atas permintaan pemilik: batas daerahnya tampak sebagai lingkaran di piringan
   // mata kamera luar misi (model, meter): posisi dasar (0, 0,19 d, d) diputar mengitari titik bidik oleh seret (MIS.orb);
   // orb 0 = posisi lama persis. Ray tracer tetap berpusat di wahana (jarak puluhan meter tidak berarti terhadap rs)
   const chaseE0 = () => Math.atan2(MIS.chase * 0.19, MIS.chase - SHIP.aim[2]);
@@ -2511,7 +2421,7 @@ function main() {
     { type: 'mission' },
     { type: 'check', label: 'Relay view and spacetime diagram (M)', get: () => REL.on, set: (v) => { REL.on = v; } },
     { type: 'buttons', defs: [['V', 'GX-01 vessel', cycleShipView]] },
-    { type: 'note', text: 'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT). The thick disk layer near the vessel is also exaggerated.' },
+    { type: 'note', text: 'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT).' },
     { tab: 'camera', label: 'Camera' },
     { type: 'buttons', defs: [['1', 'Film', () => setPreset('film')], ['2', 'Edge-on', () => setPreset('edge')], ['3', 'Top-down', () => setPreset('top')],
       ['4', 'Close approach', () => setPreset('close')], ['R', 'Reset', resetCamera]] },
@@ -2695,13 +2605,12 @@ function main() {
     updateAudio(dt);                                                 // G7: suara
     relStep(dt);                                                     // G4: waktu relai, zoom dan sinar diagram
     const b = viewBasis();
-    const vol = b.obs ? volParams(b.pos) : null;
     const q = Q();
     const tanHalf = Math.tan((b.fov || cam.fov) * Math.PI / 360);
     const enc = FMT.enc, dec = 1 / FMT.enc;
 
     // 1) ray-traced scene (HDR)
-    pass(vol ? P.sceneVol : P.scene, T.scene, (p) => {
+    pass(P.scene, T.scene, (p) => {
       gl.uniform2f(p.u('uRes'), sw, sh);
       gl.uniform3fv(p.u('uCamPos'), b.pos); gl.uniform3fv(p.u('uCamFwd'), b.f);
       gl.uniform3fv(p.u('uCamRight'), b.r); gl.uniform3fv(p.u('uCamUp'), b.u);
@@ -2728,7 +2637,6 @@ function main() {
       gl.uniform1f(p.u('uSpin'), ph.spin);
       gl.uniform1f(p.u('uStars'), CONFIG.sky.stars);
       gl.uniform1f(p.u('uEnc'), enc);
-      if (vol) { gl.uniform1f(p.u('uVolR'), vol.R); gl.uniform1f(p.u('uVolH'), VOL_H); gl.uniform1i(p.u('uVolN'), q.vol); gl.uniform1i(p.u('uNoise'), 6); }
     });
 
     // 1b) G1: wahana GX-01 di atas hasil ray tracing, sebelum bloom; G3b: awan debu sebelum wahana, garis bara dan tumbukan kaca sesudahnya
@@ -2812,7 +2720,7 @@ function main() {
 
   window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
     SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
-    misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, volParams, AE, stepMission,
+    misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, AE, stepMission,
     REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,
     TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound };   // debugging hook
   requestAnimationFrame(frame);
