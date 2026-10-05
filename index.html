@@ -10,7 +10,6 @@
   :root { --ink: #e8ecf2; --muted: #9aa2ae; --line: rgba(255,255,255,0.12); --glass: rgba(10,12,18,0.66);
     --cu: #d9bd62; --ga: #f3a55a; --mi: #8fd3dc; }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
   html, body { margin: 0; background: #000; color: var(--ink); font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
   canvas#sky { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
   .lang { position: fixed; top: 14px; right: 14px; display: flex; gap: 6px; z-index: 30; }
@@ -634,6 +633,29 @@
     a.addEventListener('mouseenter', () => heroBg(id)); a.addEventListener('focus', () => heroBg(id));
     a.addEventListener('mouseleave', () => heroBg('cooper-station')); a.addEventListener('blur', () => heroBg('cooper-station'));
   });
+
+  // ---- gulir ke bagian: cepat di awal lalu melambat sampai berhenti (easeOutQuart), bukan lompat ----
+  let scrollAnim = 0;
+  function glideTo(y) {
+    const y0 = scrollY, dy = y - y0;
+    if (reduce || Math.abs(dy) < 2) { scrollTo(0, y); return; }
+    const dur = Math.min(1600, 700 + Math.abs(dy) * 0.35), t0 = performance.now(), id = ++scrollAnim;
+    const step = (t) => {
+      if (id !== scrollAnim) return;                                   // klik baru membatalkan animasi lama
+      const k = Math.min(1, (t - t0) / dur);
+      scrollTo(0, y0 + dy * (1 - Math.pow(1 - k, 4)));
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+  addEventListener('wheel', () => { scrollAnim++; }, { passive: true });  // pengguna menggulir sendiri = berhenti
+  addEventListener('touchstart', () => { scrollAnim++; }, { passive: true });
+  document.querySelectorAll('a[href^="#"]').forEach((a) => a.addEventListener('click', (e) => {
+    const el = document.querySelector(a.getAttribute('href')); if (!el) return;
+    e.preventDefault();
+    glideTo(Math.round(el.getBoundingClientRect().top + scrollY));
+    history.replaceState(null, '', a.getAttribute('href'));
+  }));
 
   // ---- titik navigasi ----
   const dots = [...document.querySelectorAll('.dots a')];
