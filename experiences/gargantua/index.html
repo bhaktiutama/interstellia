@@ -417,6 +417,7 @@ void main() {
 #if VOL
   bool volOn = true;                 // G3a: masih di daerah lempeng tebal dekat kamera
   int volUsed = 0;
+  vec4 dlP = vec4(-1.0);             // warna piringan di ujung langkah sebelumnya (interpolasi per sampel; < 0 = belum ada)
   float jit = hash13(vec3(gl_FragCoord.xy, 7.0));                    // geser sampel per piksel (pita jadi butiran halus)
 #endif
 
@@ -456,7 +457,11 @@ void main() {
       }
     }
     if (cross || inVol) {
-      vec4 dl = shadeDisk(cross ? hit : vec3(mid.x, 0.0, mid.z), vel, cross ? rh : rx);   // satu tempat panggil (inline sekali)
+      // tanpa potong bidang: dievaluasi di UJUNG langkah dan diinterpolasi dari ujung sebelumnya per sampel, jadi warna dan
+      // alpha menyambung antarlangkah (dulu satu nilai per langkah di titik tengah = busur bertangga di batas langkah)
+      float rxe = length(pos.xz);
+      vec4 dl = shadeDisk(cross ? hit : vec3(pos.x, 0.0, pos.z), vel, cross ? rh : rxe);   // satu tempat panggil (inline sekali)
+      vec4 dl0 = (cross || dlP.a < 0.0) ? dl : dlP;
       if (inVol) {
         float seg = length(pos - prev);
         int n = min(clamp(int(seg / (0.6 * Hs)) + 1, 1, 6), uVolN - volUsed);
@@ -472,9 +477,10 @@ void main() {
                    * (1.0 - smoothstep(0.4, 1.0, float(volUsed + k) / float(uVolN)));
           if (abs(zy) > 2.2 || wv < 1e-3) continue;
           float det = smoothstep(0.28, 0.78, volDetail(sp, spx, zy));
+          vec4 dk = mix(dl0, dl, (float(k) + jit) / float(n));
           float ze = zy * (1.3 - 0.6 * det), ze2 = ze * ze, prof = exp(-ze2 * ze2);
-          float a = 1.0 - exp(-1.4 * prof * wv * dl.a * (0.15 + 1.7 * det) * ds / Hs);
-          col += trans * dl.rgb * (0.25 + 1.5 * det) * a;
+          float a = 1.0 - exp(-1.4 * prof * wv * dk.a * (0.15 + 1.7 * det) * ds / (uVolH * spx));
+          col += trans * dk.rgb * (0.25 + 1.5 * det) * a;
           trans *= 1.0 - a;
         }
         volUsed += n;
@@ -486,8 +492,9 @@ void main() {
         col += trans * dl.rgb * a;
         trans *= 1.0 - a;
       }
+      dlP = dl;
       if (trans < 0.01) { state = 3; break; }
-    }
+    } else dlP = vec4(-1.0);
 #else
     // thin-disk crossing (plane y = 0): interpolate hit, composite front-to-back
     if (prev.y * pos.y < 0.0) {
