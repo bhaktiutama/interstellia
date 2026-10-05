@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: M6a sampai M6g selesai (M6e sebagian, lihat bagian M6e di bawah). Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a sampai M6h selesai (M6e sebagian, lihat bagian M6e di bawah). Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -163,6 +163,7 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | M6e | Selesai 4 Oktober 2026, sebagian (tangga dan tersapu ditunda, lihat bagian di bawah) |
 | M6f | Selesai 4 Oktober 2026: pakaian satu mesh berkulit (lihat bagian di bawah) |
 | M6g | Selesai 4 Oktober 2026: shader kain pakaian (lipatan, jahitan, bantalan), menunggu uji pemilik di GPU (lihat bagian di bawah) |
+| M6h | Selesai 5 Oktober 2026: lengan natural (lihat bagian di bawah) |
 
 ## Catatan M6a (selesai 4 Oktober 2026)
 
@@ -424,4 +425,20 @@ Uji baru (blok 5u):
 Catatan: kaki pilot di kokpit hampir lurus ke depan (IK 0,82 / 0,28 m), jadi lipatan pilot terutama di pangkal paha dan pinggang, bukan di lutut.
 
 Wajib dicek pemilik di GTX 1060 dan M1: tidak ada titik putih atau kedip di kain (sandbox SwiftShader tidak memperlihatkan NaN), lipatan wajar saat lari dan duduk, kesan kain tidak terlalu kuat atau lemah (atur `CONFIG.body.cloth.k`), FPS Hemat.
+
+## M6h (selesai 5 Oktober 2026): lengan natural (Medium)
+
+Masukan pemilik: tangan kaku, siku menekuk terus. Penyebab: siku konstan (jalan 0,7 rad, lari 1,5 rad) dan bahu langsung mengikuti fase tanpa kelembaman.
+
+Framework animasi: three.js sudah punya `Skeleton` / `SkinnedMesh` / `AnimationMixer`; animasi rekaman (Mixamo, mocap) butuh GLTFLoader (addon, dilarang), lisensinya tidak jelas untuk repo publik, dan tidak bisa ikut IK kaki, menunduk, pilot, dan ambil barang. Dipilih gerak prosedural.
+
+| Item | Hasil |
+| --- | --- |
+| Siku dinamis | Diam 0,25 rad; jalan 0,35 (lengan di belakang) -> 0,75 (di depan); lari 1,0 -> 1,6 |
+| Kelembaman | Bahu dan siku lewat pegas teredam `armSpring()` (3 Hz, redaman 0,7), state `BODY.armS`; tenang 0,63 s setelah berhenti |
+| Santai | Diam: lengan menggantung, goyang napas ikut `VISOR.br`; jalan: ayun maju menyilang 0,08 rad, lengan bawah memutar ke dalam (siku urutan YXZ); lari: siku keluar, tanpa menyilang dan putar |
+| Tetap | Pilot (2,5 / 2,3 cm dari tongkat / tuas), ambil barang, bahu tersembunyi, lipatan kain ikut siku |
+| Parameter | `CONFIG.body` armRest, elbowRest, elbowWalkB/F, elbowRunB/F, armCross, foreTwist, armHz, armZeta, armBreath |
+
+Uji baru 5v: siku jalan 0,35..0,75 rad, lari 1,00..1,60, diam 0,23, tenang 0,63 s, nilai tidak valid 0. Uji Millar 129 pemeriksaan lulus.
 

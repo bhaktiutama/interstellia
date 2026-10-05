@@ -836,6 +836,26 @@ UJI = r"""
     P.pitch = 0; M.updateBody(10);
   }
 
+  // 5v. M6h: lengan natural: siku ikut fase langkah, santai saat diam, pegas tenang setelah berhenti
+  {
+    const P = M.P, B = M.BODY, PI = Math.PI;
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false;
+    P.view = 0; P.ground = true; P.depth = 0; P.x = 3; P.z = 3; P.y = M.seabed(3, 3) + M.CONFIG.eye; P.pitch = -0.3; B.level = 2;
+    let bad = 0;
+    const cyc = (run, amp) => { M.BOB.run = run; M.BOB.amp = amp; let lo = 9, hi = -9;
+      for (let f = 0; f < 240; f++) { M.BOB.phase = f * 0.1; M.updateBody(1 / 60); if (f < 120) continue;
+        const e = B.elbows[1].rotation.x; lo = Math.min(lo, e); hi = Math.max(hi, e); for (const o of [...B.arms, ...B.elbows]) for (const v of [o.rotation.x, o.rotation.y, o.rotation.z]) if (!Number.isFinite(v)) bad++; }
+      return [lo, hi]; };
+    const w = cyc(0, 0.034), rn = cyc(1, 0.055);
+    // berhenti mendadak: lengan berayun lalu tenang
+    M.BOB.run = 0; M.BOB.amp = 0; let tq = -1;
+    for (let f = 0; f < 240; f++) { M.updateBody(1 / 60); const S = B.armS[1]; if (tq < 0 && f > 6 && Math.abs(S.ve) + Math.abs(S.vx) < 0.02) tq = f / 60; }
+    M.updateBody(10); const rest = B.elbows[1].rotation.x;
+    out[`lengan natural (M6h): siku jalan ${w[0].toFixed(2)}..${w[1].toFixed(2)} rad (rentang > 0,3), lari ${rn[0].toFixed(2)}..${rn[1].toFixed(2)} (> 0,4), diam ${rest.toFixed(2)} (< 0,35), tenang setelah berhenti ${tq.toFixed(2)} s (< 1,5), nilai tidak valid ${bad}`] =
+      w[1] - w[0] > 0.3 && rn[1] - rn[0] > 0.4 && rest < 0.35 && tq >= 0 && tq < 1.5 && bad === 0;
+    P.pitch = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; M.updateBody(10);
+  }
+
   // 5p. M6c: tubuh tidak membayangi dirinya, bayangan KS-07 tetap jatuh di tubuh, garis basah yang ingat, busa garis air di kaki
   {
     const P = M.P, B = M.BODY, Cb = M.CONFIG.body, PI = Math.PI, from = M.THREE.DataUtils.fromHalfFloat, V3 = M.THREE.Vector3;

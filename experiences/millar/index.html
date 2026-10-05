@@ -189,6 +189,7 @@ const CONFIG = {
     standF: 0.02, footDown: 0.12, reachWalk: 0.23, reachRun: 0.38, liftWalk: 0.10, liftRun: 0.22, airLift: 0.25, airF: 0.10, runDrop: 0.06, neckF: 0.14, neckD: 0.05,   // M6d-2: target pergelangan IK (m), jongkok lari, leher (m)
     armFwd: 0.15, armDown: 0.15, armWalk: 0.4, armRun: 0.8, abduct: 0.12, abductRun: 0.25, abductAir: 0.6, elbow: 0.7, elbowRun: 1.5, elbowDown: 0.3,
     leanRun: 0.10, leanDown: 0.08,   // M6a-2: pose tubuh (rad, m, s)
+    armRest: 0.05, elbowRest: 0.25, elbowWalkB: 0.35, elbowWalkF: 0.75, elbowRunB: 1.0, elbowRunF: 1.6, armCross: 0.08, foreTwist: 0.25, armHz: 3, armZeta: 0.7, armBreath: 0.02,   // M6h: lengan natural (rad, Hz)
     selfR: 0.7, wetWalk: 0.12, wetRun: 0.30, dryRate: 0.01, foam: 1,
     cloth: { k: 1, sheen: 0.12 } },   // M6g: kekuatan tinggi kain (lipatan, jahitan, bantalan; 0 = polos), kilau kain di tepi
   visor: { fogMax: 0.12, exTau: 6, breathRest: 0.25, breathRun: 0.6, dryT: 8, dropRun: 0.06, dropLand: 0.3, glint: 0.35 },   // M6d: embun (alfa), lelah (s), napas (Hz), kering (s), tetes per langkah lari / mendarat, kilau   // M6c: kapsul abaikan bayangan diri (m), cipratan basah jalan / lari (m), kering (m/s), busa garis air
@@ -1897,7 +1898,7 @@ const bodyMat = new THREE.ShaderMaterial({ uniforms: bodyU, defines: { NW: 1, NM
 // benda kaku tidak punya aCloth: nilai bawaan atribut 0 (bukan kain) dipasang eksplisit, sebab nilai atribut umum WebGL bisa tersisa dari program lain
 bodyMat.defaultAttributeValues = { ...bodyMat.defaultAttributeValues, aCloth: [0, 0, 0, 0] };
 const smoothstep01 = (a, b, x) => { const u = Math.min(1, Math.max(0, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
-const BODY = { level: 2, cast: true, wetH: 0, foamK: 0, yaw: null, detail: 2, seat: false, reach: 0, reachT: new THREE.Vector3(), group: new THREE.Group(), parts: [], head: null, torso: null, pelvis: null, suit: null, bones: [], bindInv: [], legs: [], knees: [], ankles: [], arms: [], elbows: [], hands: [], feet: [], tris: 0, t: 0, pose: { dn: 0, mv: 0, run: 0, air: 0 } };
+const BODY = { armS: [{}, {}], level: 2, cast: true, wetH: 0, foamK: 0, yaw: null, detail: 2, seat: false, reach: 0, reachT: new THREE.Vector3(), group: new THREE.Group(), parts: [], head: null, torso: null, pelvis: null, suit: null, bones: [], bindInv: [], legs: [], knees: [], ankles: [], arms: [], elbows: [], hands: [], feet: [], tris: 0, t: 0, pose: { dn: 0, mv: 0, run: 0, air: 0 } };
 // M6e: tingkat detail per preset (indeks PRESETS): 0 Hemat <= 450 segitiga, 1 Rendah <= 1.200, 2 Sedang ke atas <= 3.000.
 const BODY_DETAIL = [2, 2, 2, 1, 0];
 {
@@ -2114,7 +2115,7 @@ function armReach(i, target, w, pole) {
   _aZ.copy(t).addScaledVector(_aU, -t.dot(_aU)); if (_aZ.lengthSq() < 1e-8) _aZ.copy(_aP); _aZ.normalize();   // arah lengan bawah menyimpang = -z lokal bahu
   _aY.copy(_aU).negate(); _aZ.negate(); _aX.crossVectors(_aY, _aZ);
   _aQ.setFromRotationMatrix(_aM.makeBasis(_aX, _aY, _aZ));
-  sh.quaternion.slerp(_aQ, w); sh.scale.setScalar(1 + (s - 1) * w); el.rotation.x += (bend - el.rotation.x) * w;
+  sh.quaternion.slerp(_aQ, w); sh.scale.setScalar(1 + (s - 1) * w); el.rotation.x += (bend - el.rotation.x) * w; el.rotation.y *= 1 - w;
 }
 // M6e: pilot duduk di kokpit (pandangan kokpit V): badan menempel pada wahana dengan mata di CK.eye, tangan kanan di tongkat, kiri di tuas gas, kaki ke pijakan
 const SEAT_OFF = new THREE.Vector3(0, CK.eye[1] - CONFIG.eye, CK.eye[2]), _sG = new THREE.Vector3(), _sT = new THREE.Vector3(),
@@ -2126,7 +2127,7 @@ function bodySeat() {
   for (let i = 0; i < 2; i++) {
     const sd = i === 0 ? -1 : 1, [th, kn] = legIK(0.82, 0.28);                                       // pergelangan di tepi belakang pijakan kaki
     trunkAt(B.torso.position, 0.06, sd * (CONFIG.walk.legs + 0.03), -0.03, -0.04, B.legs[i].position); B.legs[i].rotation.set(th, 0, 0); B.knees[i].rotation.x = kn; B.ankles[i].rotation.x = -(th + kn);
-    B.arms[i].rotation.set(0, 0, 0); B.arms[i].scale.setScalar(1); B.elbows[i].rotation.x = 0;
+    B.arms[i].rotation.set(0, 0, 0); B.arms[i].scale.setScalar(1); B.elbows[i].rotation.set(0, 0, 0); B.armS[i].init = false;
   }
   B.group.updateMatrixWorld(true);
   armReach(1, COCKPIT.stick.localToWorld(_sG.set(0, 0.21, 0.01)), 1, POLE_R);
@@ -2145,6 +2146,17 @@ function bodyWorldXZ(xl, f) {   // xl ke kanan badan, f ke depan badan (m)
   const y = BODY.yaw === null ? P.yaw : BODY.yaw, c = Math.cos(y), s = Math.sin(y);
   return { x: P.x + c * xl - s * f, z: P.z - s * xl - c * f };
 }
+// M6h: pegas teredam kritis-bawah untuk sudut lengan (bahu x / z, siku); langkah kecil agar stabil pada dt besar
+function armSpring(S, tx, tz, te, dt) {
+  const Cb = CONFIG.body, w = 2 * Math.PI * Cb.armHz, z2 = 2 * Cb.armZeta * w;
+  if (dt >= 1 || !S.init) { Object.assign(S, { x: tx, z: tz, e: te, vx: 0, vz: 0, ve: 0, init: true }); return; }
+  const n = Math.max(1, Math.ceil(dt / 0.008)), h = dt / n;
+  for (let k = 0; k < n; k++) {
+    S.vx += (w * w * (tx - S.x) - z2 * S.vx) * h; S.x += S.vx * h;
+    S.vz += (w * w * (tz - S.z) - z2 * S.vz) * h; S.z += S.vz * h;
+    S.ve += (w * w * (te - S.e) - z2 * S.ve) * h; S.e += S.ve * h;
+  }
+}
 function bodyPose(dtp) {
   const B = BODY, Q = B.pose, Cb = CONFIG.body, k = dtp >= 1 ? 1 : 1 - Math.exp(-dtp / Cb.smooth);
   const tn = P.view === 0 ? smoothstep01(0.30, 1.05, -P.pitch) : 0, tm = Math.min(1, BOB.amp / 0.034) * (P.ground ? 1 : 0);
@@ -2154,10 +2166,19 @@ function bodyPose(dtp) {
   // M6f-c: panggul kaku bersama badan atas (sama transformasinya), pinggul ikut batang: pinggang tidak tertekuk saat condong lari / menunduk.
   B.torso.rotation.set(-T.lean, 0, T.roll); B.torso.position.set(lx, T.up, T.tz);
   B.pelvis.rotation.copy(B.torso.rotation); trunkAt(B.torso.position, -T.lean, 0, -0.03, 0, B.pelvis.position);
+  // M6h: lengan natural. Diam: menggantung hampir lurus dengan goyang napas. Melangkah: siku ikut fase ayun (lurus saat lengan di belakang,
+  // menekuk saat di depan), ayun maju sedikit menyilang ke tengah, lengan bawah memutar ke dalam. Bahu dan siku lewat pegas teredam
+  // (lengan bawah tertinggal sedikit, berayun sebentar saat berhenti / mendarat); dtp >= 1 = langsung di sasaran.
+  const mv = Q.mv, brs = Math.sin(2 * Math.PI * VISOR.br) * Cb.armBreath * (1 - mv);
   for (let i = 0; i < 2; i++) {
-    const sd = i === 0 ? -1 : 1, asw = -L.sw[i] * (Cb.armWalk + (Cb.armRun - Cb.armWalk) * r);
-    B.arms[i].rotation.set(Cb.armFwd + Cb.armDown * dn + asw + air * 0.3, 0, sd * (Cb.abduct + Cb.abductRun * r + Cb.abductAir * air)); B.arms[i].scale.setScalar(1);
-    B.elbows[i].rotation.x = Cb.elbow + (Cb.elbowRun - Cb.elbow) * r + Cb.elbowDown * dn;
+    const sd = i === 0 ? -1 : 1, asw = -L.sw[i] * (Cb.armWalk + (Cb.armRun - Cb.armWalk) * r), fn = -sd * Math.cos(BOB.phase);   // fn: +1 lengan paling depan
+    const eB = Cb.elbowWalkB + (Cb.elbowRunB - Cb.elbowWalkB) * r, eF = Cb.elbowWalkF + (Cb.elbowRunF - Cb.elbowWalkF) * r;
+    const tx = Cb.armRest + (Cb.armFwd - Cb.armRest) * mv + Cb.armDown * dn + asw + air * 0.3 + brs;
+    const tz = sd * (Cb.abduct + Cb.abductRun * r * (0.7 + 0.3 * Math.max(0, fn)) + Cb.abductAir * air - Cb.armCross * Math.max(0, fn) * mv * (1 - r));   // lari: siku keluar, tidak menyilang
+    const te = Cb.elbowRest + mv * (eB + (eF - eB) * (0.5 + 0.5 * fn) - Cb.elbowRest) + Cb.elbowDown * 0.5 * dn + brs;
+    armSpring(B.armS[i], tx, tz, te, dtp);
+    B.arms[i].rotation.set(B.armS[i].x, 0, B.armS[i].z); B.arms[i].scale.setScalar(1);
+    B.elbows[i].rotation.set(Math.max(0.05, B.armS[i].e), sd * Cb.foreTwist * (0.4 + 0.6 * mv) * (0.6 + 0.4 * fn) * (1 - r), 0, 'YXZ');   // putar lengan bawah ke dalam (sumbu lengan atas)
     B.legs[i].position.set(sd * (CONFIG.walk.legs + 0.03) + lx, L.hip, L.hz); B.legs[i].rotation.set(L.th[i], 0, -lx / 0.9);   // telapak tidak ikut goyang samping
     B.knees[i].rotation.x = L.kn[i];
     B.ankles[i].rotation.x = Math.max(-0.6, Math.min(0.9, -(L.th[i] + L.kn[i])));   // telapak mendatar
