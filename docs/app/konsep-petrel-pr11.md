@@ -1,6 +1,6 @@
 # Konsep Petrel PR-11 (wahana dua awak, putih lapuk)
 
-Per 5 Oktober 2026 · Status: konsep blokout, menunggu persetujuan pemilik. Belum dipasang di experience mana pun. Keluarga Kestrel (KS-07 v2b sampai v5) tidak diubah.
+Per 5 Oktober 2026 · Status: konsep blokout, menunggu persetujuan pemilik. Belum dipasang di experience mana pun. Wahana terpisah, bukan versi Kestrel; seri KS-07 (v2b sampai v5) tidak diubah.
 
 ## Ringkasan
 
