@@ -20,6 +20,7 @@ Catatan: ini bukan nasihat hukum. Prinsipnya: logo, huruf judul, cuplikan gambar
 | Gargantua | Gargantua Black Hole | Judul experience di menu, judul halaman, panel | Gargantua dari novel Rabelais (1534), domain publik |
 | Ranger | (tidak dipakai) | - | Shuttle tetap Kestrel KS-07 |
 | Endurance | (tidak dipakai) | - | Tidak ada pesawat induk di aplikasi |
+| - | GX-01 "Ambang" | Wahana misi Gargantua (`docs/gargantua/rencana-misi-lubang-hitam.md`) | Orisinal, dari blokout KS-07 v3 (`KESTREL.buildV3`); nama usulan, bisa diganti |
 
 Nama yang tetap:
 

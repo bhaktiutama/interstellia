@@ -11,10 +11,10 @@ Per 30 September 2026. Patokan: Copper Corn Station. Fungsi yang sama memakai to
 | Space | Lompat | ya | ya | jeda waktu (tidak ada lompat) |
 | Q | Kualitas grafik (preset berikutnya) | ya | ya (dulu P) | ya (baru) |
 | P | Efek layar: Tinggi / Sedang / Mati | ya | ya (baru) | ya (baru; dulu tangkap layar) |
-| U | Suara nyala / mati | ya | ya (dulu M) | - (tanpa suara) |
+| U | Suara nyala / mati | ya | ya (dulu M) | ya (G7, suara disintesis) |
 | N | Cuaca / suasana | cuaca | suasana | - |
 | Z | Kecepatan waktu | ya | ya | - |
-| V | Tampilan / kamera luar | kamera luar | jalan kaki, drone, tinggi | - |
+| V | Tampilan / kamera luar | kamera luar | jalan kaki, drone, tinggi | wahana GX-01: kamera luar / kokpit (Esc keluar) |
 | F | Mode foto (UI disembunyikan, Enter simpan PNG, F atau Esc keluar) | ya | ya (baru) | ya (dulu layar penuh) |
 | R | Kembali ke titik awal / atur ulang | ya | ya | atur ulang kamera |
 | H | Sembunyikan HUD | ya | ya | ya |
@@ -67,3 +67,4 @@ Sinematik (Millar M4): Spasi, Enter, Esc, atau klik = lewati. Pandangan orbit ti
 - Pakai tabel tombol umum di atas. Fungsi baru yang khusus experience: pilih tombol yang tidak ada di kedua tabel, atau letakkan di panel kontrol.
 - Semua tombol dicantumkan di bantuan (?) dan teks tombol di layar, dua bahasa.
 - Penerbangan (shuttle KS-07) mengikuti tombol pesawat di Copper: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
+- Misi Gargantua (wahana GX-01, G2 + G3 + G4): W/S, A/D, R/F dorong, Shift mesin utama, seret mouse di kamera luar = kamera mengitari wahana (klik ganda = kembali ke belakang wahana), seret kanan (atau Ctrl + seret) dan seret di kokpit = arah hidung, X sikap (pusat / mendatar / searah lintasan / bebas), O autopilot susur piringan (O = otomatis, seperti jalan otomatis di Copper; selama autopilot R/F tinggi, W/S laju turun), E tembak suar (G4, setara E aksi di Copper), M pandangan relai dan diagram ruang-waktu (G4, setara M peta di Copper dan M radar di Millar), Z waktu, V tampilan, Space jeda, Esc akhiri, Enter terbang lagi; skenario tesseract (G5): selama membidik W/S sudut, A/D bidang orbit, Shift kasar, Enter kunci bidikan dan berangkat. U = suara (G7). Z/C guling tidak dipakai (Z = waktu, sesuai tabel umum). Selama misi F dan R = dorongan, jadi mode foto dan atur ulang kamera menunggu misi selesai.
