@@ -1,4 +1,4 @@
-# Rencana Tahap 21 Copper Corn Station: air mancur, kaca rumah Cooper, gedung kaca malam
+# Rencana Tahap 21 Copper Corn Station: air mancur, kaca rumah Cooper, gedung kaca malam, jendela gedung, kabut pagi
 
 Per 29 September 2026 · Bhakti
 
@@ -8,7 +8,10 @@ Per 29 September 2026 · Bhakti
 - **21b kaca rumah Cooper:** dari dalam rumah kaca tidak lagi memantulkan seluruh silinder. Yang terpantul hanya ruangan yang redup (lemah), jadi luar terlihat jelas. Dari luar pantulan daratan seberang tetap ada.
 - **21c gedung kaca malam:** gedung jauh tidak lagi putih rata. Lampu menyala per lantai dan per blok kantor (tetap bervariasi dari jauh), warna putih dingin kantor vs kuning hangat hunian, banyak kaca gelap, jumlah lampu ikut jam, lampu mahkota di sebagian menara, lampu merah penanda di atap.
 
-Urutan kerja: 1) 21a-1 (selesai), 2) 21b (selesai), 3) 21c (selesai), 4) 21a-2 + 21a-3 (paling besar).
+- **21d jendela gedung tinggi:** ukuran kaca, tinggi lantai, dan warna berbeda per menara; satu ruangan selebar beberapa jendela sampai satu lantai; ruangan tidak terlihat dari jauh.
+- **21e revisi dari foto:** hal yang sama untuk deretan menengah dan podium, kilau diagonal dihapus, kaca memantulkan gedung seberang jalan, kabut pagi.
+
+Urutan kerja: 1) 21a-1 (selesai), 2) 21b (selesai), 3) 21c (selesai), 4) 21d dan 21e (selesai), 5) 21a-2 + 21a-3 (paling besar).
 
 ## Penyebab di kode
 
@@ -173,6 +176,48 @@ Hasil `tools/uji_gedung_malam.py` (baru): menara kaca tertinggi (142 m) dirender
 
 Sebaran = simpangan baku dibagi rata-rata. Uji lama `qc_load` dan `uji_interior` dijalankan ulang.
 
+
+## 21d: jendela gedung tinggi (selesai)
+
+Keluhan Bhakti: satu jendela = satu ruangan (terlihat seperti bilik kecil), padahal satu kotak kaca bisa selebar lantai; dari jauh ruangan jarang terlihat; ukuran kaca semua menara sama.
+
+| Bagian | Isi |
+| --- | --- |
+| Variasi per gedung (gaya 0 dan 1) | Dari `vSeed`: jarak mullion (menara kaca 1,2 / 1,5 / 1,8 / 2,4 / 3,0 / 4,5 m), tinggi lantai (3,6-4,4 m), pola kaca (penuh, pita, berlubang, sirip), lebar mullion, tint kaca (biru, hijau, abu, perunggu), warna rangka |
+| Ruangan multi-bay | Satu ruangan = `rm` bay (lebar target 6-14 m), 20-30% gedung lantai terbuka selebar muka. Meja berderet tiap 2,6 m, kisi lampu plafon tiap 3 m, kerai per ruangan, lantai kantor lebih dalam (5-12 m) |
+| Jauh | Ruangan memudar di 35-100 m; jauh = kaca pantul + lantai menyala |
+| Gaya lain | Tidak berubah (`rm = 1`) |
+
+## 21e: revisi dari foto Bhakti (selesai)
+
+| Foto | Keluhan | Penyebab | Perbaikan |
+| --- | --- | --- | --- |
+| 1 | Masih ada 1 jendela 1 kamar | 21d hanya gaya 0 dan 1; deretan menengah / apartemen (gaya 2, gedung paling banyak) dan podium (gaya 11) tetap satu bay per ruangan | Variasi dan ruangan multi-bay juga untuk gaya 2 dan 11 |
+| 2 | Garis putih diagonal sebagai kilauan tidak meyakinkan | Pita diagonal `sheen` di kaca interior 14c | Dihapus; kaca hanya memakai pantulan utama (`farEnv`) |
+| 3 | Kaca memantulkan seluruh silinder padahal ada gedung di depannya (dibaca sebagai pantulan, bukan bayangan cahaya) | `farEnv` tanpa penghalang di kaca dan etalase | Model ngarai kota: sinar pantul yang tiba di muka seberang di bawah atapnya memantulkan gedung itu |
+| 4 | Pagi langsung terang | Kabut pagi lama x2,2 hanya sekitar 1 jam | Kabut pagi x5, 05.00-09.30, warna pucat hangat |
+
+| Bagian | Isi |
+| --- | --- |
+| Gaya 2 | Bay 3,0 / 3,4 / 4,2 / 5,0 m, lantai 3,0-3,5 m, pola berlubang / berlubang lebar / pita, ruangan 6-12 m, 20% lantai terbuka. Isi hunian (lantai kayu, gambar, tirai); modul lebih dari 5,5 m: perabot tiap 3,2 m dan kisi lampu plafon. Balkon berselang per ruangan, bukan per bay |
+| Gaya 11 | Bay 2,8 / 3,6 / 4,5 m, lantai 3,6-4,2 m, pola pita lebar / berlubang lebar, ruangan 8-16 m, 40% lantai terbuka, isi kantor |
+| Zona lampu | Ruangan lebar dan lantai terbuka dinyalakan per zona sekitar 6 m (ruangan <= 6 m: zona = ruangan, seperti 21d), jadi lantai terbuka tidak menyala rata selebar muka dari jauh. Ditemukan saat `uji_gedung_malam` dijalankan ulang (sebaran sepanjang baris turun ke 0,08 setelah 21d) |
+| Pantulan | Gaya 0, 1, 2, 8, 11. Muka seberang 28 m di depan; tinggi gedung seberang `clamp(0,9 H, 12, 60)` x 0,55-1,45 per segmen 28 m, 12% segmen = celah. Warna muka seberang dengan jendela (malam sebagian menyala). Kaca interior 14c, kaca jauh, dan etalase memakai model yang sama (siluet acak 14c lama dihapus). Pembagi dijaga, tanpa `pow` / `sqrt` |
+| Kabut pagi | Naik 04.48-06.00, penuh sampai 07.12, hilang 09.30; kerapatan dasar + 4 x dasar (1 km 43%, 2 km 89%); warna dicampur 60% ke pucat hangat; pantulan daratan seberang ikut berkabut. Mendung tetap menghapus kabut pagi; kamera luar tanpa kabut |
+
+### Hasil 21e
+
+| Uji | Hasil |
+| --- | --- |
+| `qc_load.py` | Tanpa error |
+| `uji_kabut_pagi.py` (baru) | 9 dari 9 OK: kerapatan jam 5 / 6 / 6,6 / 8 / 9 / 9,6 = 1,30 / 5,00 / 5,00 / 3,88 / 1,48 / 1,00 x dasar; di luar pagi `uL_FarAvg` sama dengan rumus lama; render jam 6,6 0 nilai tidak valid dari 192.000 |
+| `uji_jendela_gedung.py` (diubah) | Variasi: gaya 1 (8 gedung) 8 jarak mullion / 5 tinggi lantai berbeda, gaya 2 (6) 4 / 4, gaya 11 (6) 3 jarak mullion; 150 m interior hidup = mati untuk gaya 0, 1, 2, 11 (0 nilai beda dari 1.179.648); 0 nilai tidak valid dari 4.194.304. Pantulan: kaca lantai 90 m menara > 120 m tidak berubah (0,000); etalase dilihat tegak lurus berubah 1,6-2,5% dari rata-rata gambar (GAGAL ambang 0,05: dilihat tegak lurus bobot pantulan kecil karena Fresnel; uji sudut miring belum dijalankan) |
+| `uji_gedung_malam.py` | OK setelah zona lampu: sebaran sepanjang baris 0,34 (batas > 0,25; setelah 21d sempat 0,08), antarbaris 1,57 |
+| `uji_interior.py` | OK (kait shader uji disesuaikan dengan baris `kI` 21d): pantulan 15 m 0,11, 60 m 0,55 |
+| `uji_kaca_cooper.py`, `uji_pantulan.py` | OK |
+| `uji_menara.py` | GAGAL di bola jatuh dari dek ("bola belum mendarat"), dijalankan bersamaan dengan uji lain (CPU berebut); belum dicek apakah juga gagal di main. Bagian lain OK |
+
+Perbandingan dengan versi lama dari git dibuang dari `uji_jendela_gedung.py`: dua halaman tetap berbeda walau jam, putaran sunline, dan awan dibekukan (selisih kontrol satu halaman 0,0115), jadi diganti uji A/B dalam satu halaman (shader dipinjam sementara).
 
 ## Uji
 

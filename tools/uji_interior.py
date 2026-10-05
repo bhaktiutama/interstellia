@@ -46,7 +46,7 @@ UJI = r"""
   }
   // revisi 14c: kuat pantulan kaca (refK) rata-rata di piksel ruangan, dekat (15 m) lawan jauh (60 m); shader dipinjam sementara
   const mat = src.material, fs0 = mat.fragmentShader;
-  mat.fragmentShader = fs0.replace('kI = detail;', 'kI = detail; gl_FragColor = vec4(refK, 100.0, 0.0, 1.0); return;'); mat.needsUpdate = true;
+  mat.fragmentShader = fs0.replace(/kI = detail[^;]*;/, 'kI = detail; gl_FragColor = vec4(refK, 100.0, 0.0, 1.0); return;'); mat.needsUpdate = true;   // 21d: baris kI memakai pudar jarak
   S.clock.hour = 11; const ref = {};
   for (const d of [15, 60]) {
     const za = g[1] - g[3] / 2 - d;
