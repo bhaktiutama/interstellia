@@ -70,3 +70,8 @@ Hanya olahan nada dan warna per piksel, tidak ada objek yang diubah.
 | Bloom, vinyet, bahu highlight, butiran | Kesan sinematik tanpa highlight terpotong (0,00% di ketiga foto) |
 
 Ubah angka di `PRESET` lalu jalankan `python tools/poles_foto_menu.py [nama]`. Di prototipe v3 ada tombol "Lihat foto asli" untuk membandingkan.
+
+## Gaya foto: Poles / Realistis / Kartun / Asli
+- Versi Realistis dan Kartun dibuat pemilik di generator AI luar memakai prompt di `docs/app/prompt-foto-menu.md` (img2img dari `docs/app/menu/asli/`, komposisi wajib sama).
+- Hasil disimpan di `docs/app/menu/real/` dan `docs/app/menu/kartun/` dengan nama `cooper` / `gargantua` / `millar` (.webp).
+- Di v3, pemilih gaya ada di pojok kiri atas tiap foto. Gaya yang filenya belum ada nonaktif; foto yang belum punya file untuk gaya terpilih tetap memakai versi Poles. Pilihan diingat di localStorage `interstellia.menuStyle`.

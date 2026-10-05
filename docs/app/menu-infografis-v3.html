@@ -79,9 +79,11 @@
   .card b { display: block; font-size: 15px; color: #fff; }
   .card span { font-size: 13px; color: #c8ced7; }
   .card.r { left: auto; right: 18px; }
-  .ba { position: absolute; z-index: 4; top: 14px; left: 14px; font: 600 12px system-ui, sans-serif; color: #fff; cursor: pointer;
-    background: rgba(6,8,12,0.78); border: 1px solid rgba(255,255,255,0.25); border-radius: 99px; padding: 5px 12px; backdrop-filter: blur(6px); }
-  .ba.on { background: #fff; color: #111; }
+  .sty { position: absolute; z-index: 4; top: 14px; left: 14px; display: flex; gap: 2px; padding: 3px; border-radius: 99px;
+    background: rgba(6,8,12,0.78); border: 1px solid rgba(255,255,255,0.2); backdrop-filter: blur(6px); }
+  .sty button { font: 600 11.5px system-ui, sans-serif; color: #fff; background: none; border: 0; border-radius: 99px; padding: 4px 10px; cursor: pointer; }
+  .sty button.on { background: var(--a); color: #111; }
+  .sty button:disabled { opacity: 0.35; cursor: default; }
   .card.tr { left: auto; right: 18px; top: 18px; bottom: auto; }
   .imgbox { position: relative; }
   .card.fade { animation: cardIn .45s ease; }
@@ -319,7 +321,7 @@
   // Teks Indonesia = sumber; English di en. Bahasa dibagi lewat localStorage 'lazarus.lang' dan ?lang= (sama dengan index.html).
   const TXT = {
     id: {
-      tagline: 'Perjalanan dari Saturnus sampai tepi lubang hitam', scroll: 'Gulir', play: 'Mulai', ba_show: 'Lihat foto asli', ba_back: 'Kembali ke hasil poles',
+      tagline: 'Perjalanan dari Saturnus sampai tepi lubang hitam', scroll: 'Gulir', play: 'Mulai', st_poles: 'Poles', st_real: 'Realistis', st_kartun: 'Kartun', st_asli: 'Asli', st_none: 'Belum ada gambar untuk gaya ini',
       r1: 'kota berputar di orbit Saturnus', r2: 'lubang hitam berputar', r3: 'planet air, waktu melambat',
       c_kind: 'Silinder O\'Neill', c_hook: 'Berjalan di dinding dalam sebuah kota yang berputar.',
       c_lead: 'Foto di bawah diambil dari dalam silinder, menghadap sepanjang sumbu. Kota, ladang, dan sungai melingkar di sekelilingmu, dan putaran 63,4 s menekan semuanya ke dinding dengan 1 g.',
@@ -343,7 +345,7 @@
       footer: 'Proyek penggemar untuk belajar fisika dan grafis 3D. Tidak berafiliasi dengan studio film mana pun. Semua model, musik, dan desain dibuat sendiri.',
     },
     en: {
-      tagline: 'A journey from Saturn to the edge of a black hole', scroll: 'Scroll', play: 'Play', ba_show: 'Show original', ba_back: 'Back to graded',
+      tagline: 'A journey from Saturn to the edge of a black hole', scroll: 'Scroll', play: 'Play', st_poles: 'Graded', st_real: 'Realistic', st_kartun: 'Cartoon', st_asli: 'Original', st_none: 'No image for this style yet',
       r1: 'a spinning city orbiting Saturn', r2: 'a spinning black hole', r3: 'water world, time slows down',
       c_kind: 'O\'Neill cylinder', c_hook: 'Walk the inside wall of a spinning city.',
       c_lead: 'The shot below is taken inside the cylinder, looking along the axis. City, fields and river wrap all around you, and a 63.4 s spin presses everything to the wall at 1 g.',
@@ -473,16 +475,39 @@
   const icon = (k) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // ---- gaya foto: folder per gaya (gambar Realistis / Kartun dibuat di AI luar, lihat docs/app/prompt-foto-menu.md) ----
+  const STYLES = [['poles', 'menu/'], ['real', 'menu/real/'], ['kartun', 'menu/kartun/'], ['asli', 'menu/asli/']];
+  let STYLE = 'poles';
+  try { const v = localStorage.getItem('interstellia.menuStyle'); if (STYLES.some((x) => x[0] === v)) STYLE = v; } catch (e) { /* abaikan */ }
+  function applyStyle(key) {
+    const P = PH[key], st = P.ok[STYLE] ? STYLE : 'poles', dir = STYLES.find((x) => x[0] === st)[1];
+    if (P.img.getAttribute('src') !== dir + P.file) P.img.src = dir + P.file;
+    P.el.querySelectorAll('.sty button').forEach((b) => b.classList.toggle('on', b.dataset.st === st));
+  }
+  function setStyle(id) {
+    STYLE = id;
+    try { localStorage.setItem('interstellia.menuStyle', id); } catch (e) { /* abaikan */ }
+    for (const k in PH) applyStyle(k);
+  }
+
   // ---- penanda foto: hover / klik memilih; berganti sendiri tiap 5 s sampai pengguna menyentuh ----
   const PH = {};
   for (const p of document.querySelectorAll('.photo[data-p]')) {
     const key = p.dataset.p, S = SPOTS[key];
     PH[key] = { el: p, sel: 0, user: false, vis: false };
     const box = p.querySelector('.imgbox');
-    // prototipe: banding foto asli (menu/asli/) vs hasil poles (tools/poles_foto_menu.py)
-    const img = box.querySelector('img'), ba = document.createElement('button'), base = img.getAttribute('src');
-    ba.type = 'button'; ba.className = 'ba'; box.appendChild(ba);
-    ba.addEventListener('click', () => { const on = ba.classList.toggle('on'); img.src = on ? base.replace('menu/', 'menu/asli/') : base; ba.textContent = T(on ? 'ba_back' : 'ba_show'); });
+    // pemilih gaya foto (prototipe): Poles / Realistis / Kartun / Asli, file gaya di STYLES; gaya tanpa file = nonaktif
+    const img = box.querySelector('img'), sty = document.createElement('div'), file = img.getAttribute('src').replace('menu/', '');
+    sty.className = 'sty'; PH[key].img = img; PH[key].file = file; PH[key].ok = { poles: true };
+    for (const [id, dir] of STYLES) {
+      const b = document.createElement('button'); b.type = 'button'; b.dataset.st = id; b.disabled = id !== 'poles';
+      b.addEventListener('click', () => setStyle(id)); sty.appendChild(b);
+      if (id === 'poles') continue;
+      const t = new Image();
+      t.onload = () => { PH[key].ok[id] = true; b.disabled = false; b.title = ''; if (STYLE === id) applyStyle(key); };
+      t.src = dir + file;
+    }
+    box.appendChild(sty);
     S.list.forEach((s, i) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'spot' + (s.l ? ' l' : '');
       b.style.left = (s.x / S.w * 100) + '%'; b.style.top = (s.y / S.h * 100) + '%'; b.style.setProperty('--d', (0.5 + i * 0.12) + 's');
@@ -501,6 +526,7 @@
     c.querySelector('b').textContent = tx[0]; c.querySelector('span').textContent = tx[1];
     c.classList.remove('fade'); void c.offsetWidth; c.classList.add('fade');
   }
+  for (const k in PH) applyStyle(k);
   if (!reduce) setInterval(() => {
     for (const k in PH) { const P = PH[k]; if (P.vis && !P.user) selSpot(k, (P.sel + 1) % SPOTS[k].list.length); }
   }, 5000);
@@ -582,7 +608,7 @@
       PH[k].el.querySelectorAll('.spot .lab').forEach((l, i) => { l.textContent = (en ? SPOTS[k].list[i].en : SPOTS[k].list[i].id)[0]; });
       selSpot(k, PH[k].sel);
     }
-    document.querySelectorAll('.ba').forEach((b) => { b.textContent = T(b.classList.contains('on') ? 'ba_back' : 'ba_show'); });
+    document.querySelectorAll('.sty button').forEach((b) => { b.textContent = T('st_' + b.dataset.st); if (b.disabled) b.title = T('st_none'); });
     updCopper(); updMillar();
     langBox.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
   }
