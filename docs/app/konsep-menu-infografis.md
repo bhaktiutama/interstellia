@@ -43,3 +43,16 @@ Prototipe: `docs/app/menu-infografis.html` (buka langsung di browser). `index.ht
 | Ikon | SVG garis seragam, menggantikan emoji |
 
 Catatan: "di atas sekitar 2 rpm banyak orang pusing" adalah pedoman umum desain habitat berputar, bukan angka dari kode proyek.
+
+## Prototipe v3 (`docs/app/menu-infografis-v3.html`)
+Foto in-game dari pemilik (`docs/app/menu/cooper.webp`, `gargantua.webp`, `millar.webp`) dipakai langsung sebagai kanvas infografis.
+
+| Bagian | Isi |
+| --- | --- |
+| Hero | Tiga foto dipotong bulat sebagai "planet" di peta perjalanan, foto Gargantua samar di belakang judul |
+| Foto beranotasi | Penanda bernomor berdenyut + label, kartu penjelasan; berganti sendiri tiap 5 s sampai disentuh |
+| Lapisan grafis | Copper: lingkaran dan panah "bawah = menjauhi sumbu". Millar: garis ukur 1,2 km dan panah 125 m/s |
+| Tetap dari v2 | Angka menghitung naik, kalkulator radius Copper dan dilatasi Millar, fitur berikon, strip tombol |
+
+Posisi penanda ditulis dalam piksel foto asli (`SPOTS`), jadi bila foto diganti, koordinatnya ikut diubah.
+Saat dipasang ke `index.html`, foto sebaiknya pindah ke `experiences/<id>/menu.webp`.
