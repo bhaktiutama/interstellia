@@ -32,3 +32,14 @@ Prototipe: `docs/app/menu-infografis.html` (buka langsung di browser). `index.ht
 ## Catatan
 - Grafis seluruhnya SVG orisinal, tanpa library; animasi mati bila `prefers-reduced-motion`.
 - Ikon fitur memakai emoji (cepat untuk prototipe); bisa diganti ikon SVG garis bila ingin lebih seragam.
+
+## Prototipe v2 (`docs/app/menu-infografis-v2.html`)
+| Perubahan | Isi |
+| --- | --- |
+| Bagian selebar layar | Preview jadi latar penuh (paralaks), gradasi warna aksen, navigasi titik di kanan |
+| Muncul saat digulir | Teks dan panel naik pelan, garis diagram tergambar, angka menghitung naik, fitur muncul berurutan |
+| Diagram | Copper: silinder 3D, dinding dalam berputar, sunline menyala, penampang end cap berputar. Gargantua: piringan bercahaya, lengkung cahaya dibelokkan, wahana jatuh, relai memancarkan sinyal. Millar: langit mendung dengan Gargantua, gelombang raksasa bergerak, semburan, KS-07 terbang melewati puncak |
+| Interaktif | Copper: geser radius, periode, rpm, kecepatan tanah, dan beda gaya kepala-kaki dihitung (T = 2 pi akar(R/g), v = akar(gR)). Gargantua: sentuh zona (horizon, cahaya dibelokkan, ISCO, relai, lintasan jatuh) untuk penjelasan. Millar: geser lama di planet, tahun dan hari di luar dihitung (1 jam = 7 tahun) |
+| Ikon | SVG garis seragam, menggantikan emoji |
+
+Catatan: "di atas sekitar 2 rpm banyak orang pusing" adalah pedoman umum desain habitat berputar, bukan angka dari kode proyek.
