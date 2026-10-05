@@ -1,4 +1,5 @@
-"""Poles foto menu (docs/app/menu/asli/*.webp -> docs/app/menu/*.webp): lebih jernih, dramatis, sinematik.
+"""Poles foto menu (docs/app/menu/asli/*.webp -> experiences/<id>/menu.webp untuk index.html, dan salinan docs/app/menu/*.webp
+untuk prototipe): lebih jernih, dramatis, sinematik.
 Hanya olahan nada dan warna per piksel (clarity, penajaman, kurva S, split toning, bloom, vinyet, bahu highlight, butiran).
 Tidak ada objek yang ditambah, dihapus, atau dipindah; ukuran gambar sama persis, jadi penanda SPOTS tetap valid.
 Pakai: python tools/poles_foto_menu.py [nama ...]   (butuh: pip install numpy pillow)
@@ -10,6 +11,8 @@ from PIL import Image
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SRC = ROOT / 'docs/app/menu/asli'
 DST = ROOT / 'docs/app/menu'
+# folder experience per foto (menu utama memakai experiences/<id>/menu.webp)
+XP = {'cooper': 'cooper-station', 'gargantua': 'gargantua', 'millar': 'millar'}
 
 # Parameter per foto. clarity = kontras lokal (radius px), sharp = penajaman halus, curve = kekuatan kurva S,
 # bp = titik hitam, sh / hl = warna bayangan / highlight (RGB, ditambahkan), sat = saturasi,
@@ -109,6 +112,7 @@ def main():
         out = Image.fromarray((b * 255 + 0.5).astype(np.uint8))
         assert out.size == im.size
         out.save(DST / f'{n}.webp', quality=90, method=6)
+        out.save(ROOT / 'experiences' / XP[n] / 'menu.webp', quality=90, method=6)
         print(f'{n}: {im.size[0]}x{im.size[1]}')
         print(f'  asli   {stat(a)}')
         print(f'  poles  {stat(b)}')

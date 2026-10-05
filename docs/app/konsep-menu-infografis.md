@@ -75,3 +75,8 @@ Ubah angka di `PRESET` lalu jalankan `python tools/poles_foto_menu.py [nama]`. D
 - Versi Realistis dan Kartun dibuat pemilik di generator AI luar memakai prompt di `docs/app/prompt-foto-menu.md` (img2img dari `docs/app/menu/asli/`, komposisi wajib sama).
 - Hasil disimpan di `docs/app/menu/real/` dan `docs/app/menu/kartun/` dengan nama `cooper` / `gargantua` / `millar` (.webp).
 - Di v3, pemilih gaya ada di pojok kiri atas tiap foto. Gaya yang filenya belum ada nonaktif; foto yang belum punya file untuk gaya terpilih tetap memakai versi Poles. Pilihan diingat di localStorage `interstellia.menuStyle`.
+
+## Status: v3 dipasang di `index.html`
+- Foto menu kini `experiences/<id>/menu.webp`; tautan Mulai ke `experiences/<id>/index.html?lang=`.
+- Pemilih gaya foto dan prompt AI luar tidak dipakai di menu utama (tetap ada di prototipe dan `prompt-foto-menu.md` sebagai arsip).
+- Daftar experience tetap di `APP` / `EXPERIENCES`; experience `ready: false` tampil sebagai kartu segera.
