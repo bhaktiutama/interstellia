@@ -1,0 +1,34 @@
+# Konsep menu utama infografis
+
+Prototipe: `docs/app/menu-infografis.html` (buka langsung di browser). `index.html` belum diubah; diganti setelah disetujui pemilik.
+
+## Ringkasan
+- Menu jadi halaman gulir: hero dengan peta perjalanan, lalu satu bagian infografis per experience.
+- Tiap bagian: diagram SVG beranimasi, 4 kartu angka, 6 fitur utama berikon, strip tombol penting, tombol Mulai di atas preview.
+- Dua bahasa (ID sumber, EN), localStorage `lazarus.lang` dan `?lang=` seperti menu sekarang.
+
+## Struktur
+| Bagian | Isi |
+| --- | --- |
+| Hero | Judul, tagline, peta SVG Saturnus -> lubang hitam -> planet air (klik = gulir ke bagian) |
+| 01 Copper Corn Station (aksen emas) | Penampang silinder berputar: R, gaya sentrifugal = 1 g, sumbu nol-g, lintasan Coriolis |
+| 02 Gargantua (aksen oranye) | Bayangan, horizon, ISCO, relai 22 rs, lintasan GX-01 |
+| 03 Millar's World (aksen teal) | Profil gelombang 1,2 km vs KS-07, jam dilatasi |
+| Segera | Penerbangan Kestrel |
+| Footer | Penafian proyek penggemar (sama) |
+
+## Angka dan sumber
+| Angka | Sumber |
+| --- | --- |
+| Copper: L 8 km, R 1.000 m, 63,4 s, 99,05 m/s, 1 g, 14 distrik, gerhana 2,78 jam | CLAUDE.md (Angka dasar, tahap 16, 17a) |
+| Gargantua: 5 misi (G1-G5 + suara G7), 0,8 c di ISCO, sudut kritis 24,62 derajat, relai 22 rs | CLAUDE.md, `tools/uji_misi_gargantua.py` |
+| Millar: 1,3 g, gelombang 1,2 km dan 125 m/s, 1 jam = 7 tahun | CLAUDE.md, `experiences/millar/index.html` (teks HUD) |
+
+## Langkah adopsi ke index.html
+1. Pindahkan isi teks ke `APP` / `EXPERIENCES` / `TXT` (tambah field `stats`, `feats`, `keys` per entri).
+2. Ganti grid kartu dengan bagian infografis; path gambar jadi `experiences/<id>/preview.jpg`.
+3. Uji `python tools/qc_load.py index.html`.
+
+## Catatan
+- Grafis seluruhnya SVG orisinal, tanpa library; animasi mati bila `prefers-reduced-motion`.
+- Ikon fitur memakai emoji (cepat untuk prototipe); bisa diganti ikon SVG garis bila ingin lebih seragam.
