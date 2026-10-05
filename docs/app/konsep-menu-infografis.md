@@ -56,3 +56,17 @@ Foto in-game dari pemilik (`docs/app/menu/cooper.webp`, `gargantua.webp`, `milla
 
 Posisi penanda ditulis dalam piksel foto asli (`SPOTS`), jadi bila foto diganti, koordinatnya ikut diubah.
 Saat dipasang ke `index.html`, foto sebaiknya pindah ke `experiences/<id>/menu.webp`.
+
+## Poles foto menu (`tools/poles_foto_menu.py`)
+Foto asli disimpan di `docs/app/menu/asli/`; hasil poles menimpa `docs/app/menu/<nama>.webp` (ukuran sama, penanda tetap pas).
+Hanya olahan nada dan warna per piksel, tidak ada objek yang diubah.
+
+| Langkah | Efek |
+| --- | --- |
+| Clarity | Kontras lokal di nada tengah (radius 22-26 px) |
+| Penajaman | Radius 1 px, berambang agar artefak kompresi tidak ikut |
+| Titik hitam + kurva S | Hitam lebih dalam; Millar: nada terang dilindungi agar cincin di langit tetap terpisah |
+| Split toning + saturasi | Copper hijau kaya dan highlight keemasan; Gargantua emas dalam, bayangan teal; Millar dingin dan suram |
+| Bloom, vinyet, bahu highlight, butiran | Kesan sinematik tanpa highlight terpotong (0,00% di ketiga foto) |
+
+Ubah angka di `PRESET` lalu jalankan `python tools/poles_foto_menu.py [nama]`. Di prototipe v3 ada tombol "Lihat foto asli" untuk membandingkan.

@@ -79,6 +79,9 @@
   .card b { display: block; font-size: 15px; color: #fff; }
   .card span { font-size: 13px; color: #c8ced7; }
   .card.r { left: auto; right: 18px; }
+  .ba { position: absolute; z-index: 4; top: 14px; left: 14px; font: 600 12px system-ui, sans-serif; color: #fff; cursor: pointer;
+    background: rgba(6,8,12,0.78); border: 1px solid rgba(255,255,255,0.25); border-radius: 99px; padding: 5px 12px; backdrop-filter: blur(6px); }
+  .ba.on { background: #fff; color: #111; }
   .card.tr { left: auto; right: 18px; top: 18px; bottom: auto; }
   .imgbox { position: relative; }
   .card.fade { animation: cardIn .45s ease; }
@@ -316,7 +319,7 @@
   // Teks Indonesia = sumber; English di en. Bahasa dibagi lewat localStorage 'lazarus.lang' dan ?lang= (sama dengan index.html).
   const TXT = {
     id: {
-      tagline: 'Perjalanan dari Saturnus sampai tepi lubang hitam', scroll: 'Gulir', play: 'Mulai',
+      tagline: 'Perjalanan dari Saturnus sampai tepi lubang hitam', scroll: 'Gulir', play: 'Mulai', ba_show: 'Lihat foto asli', ba_back: 'Kembali ke hasil poles',
       r1: 'kota berputar di orbit Saturnus', r2: 'lubang hitam berputar', r3: 'planet air, waktu melambat',
       c_kind: 'Silinder O\'Neill', c_hook: 'Berjalan di dinding dalam sebuah kota yang berputar.',
       c_lead: 'Foto di bawah diambil dari dalam silinder, menghadap sepanjang sumbu. Kota, ladang, dan sungai melingkar di sekelilingmu, dan putaran 63,4 s menekan semuanya ke dinding dengan 1 g.',
@@ -340,7 +343,7 @@
       footer: 'Proyek penggemar untuk belajar fisika dan grafis 3D. Tidak berafiliasi dengan studio film mana pun. Semua model, musik, dan desain dibuat sendiri.',
     },
     en: {
-      tagline: 'A journey from Saturn to the edge of a black hole', scroll: 'Scroll', play: 'Play',
+      tagline: 'A journey from Saturn to the edge of a black hole', scroll: 'Scroll', play: 'Play', ba_show: 'Show original', ba_back: 'Back to graded',
       r1: 'a spinning city orbiting Saturn', r2: 'a spinning black hole', r3: 'water world, time slows down',
       c_kind: 'O\'Neill cylinder', c_hook: 'Walk the inside wall of a spinning city.',
       c_lead: 'The shot below is taken inside the cylinder, looking along the axis. City, fields and river wrap all around you, and a 63.4 s spin presses everything to the wall at 1 g.',
@@ -476,6 +479,10 @@
     const key = p.dataset.p, S = SPOTS[key];
     PH[key] = { el: p, sel: 0, user: false, vis: false };
     const box = p.querySelector('.imgbox');
+    // prototipe: banding foto asli (menu/asli/) vs hasil poles (tools/poles_foto_menu.py)
+    const img = box.querySelector('img'), ba = document.createElement('button'), base = img.getAttribute('src');
+    ba.type = 'button'; ba.className = 'ba'; box.appendChild(ba);
+    ba.addEventListener('click', () => { const on = ba.classList.toggle('on'); img.src = on ? base.replace('menu/', 'menu/asli/') : base; ba.textContent = T(on ? 'ba_back' : 'ba_show'); });
     S.list.forEach((s, i) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'spot' + (s.l ? ' l' : '');
       b.style.left = (s.x / S.w * 100) + '%'; b.style.top = (s.y / S.h * 100) + '%'; b.style.setProperty('--d', (0.5 + i * 0.12) + 's');
@@ -575,6 +582,7 @@
       PH[k].el.querySelectorAll('.spot .lab').forEach((l, i) => { l.textContent = (en ? SPOTS[k].list[i].en : SPOTS[k].list[i].id)[0]; });
       selSpot(k, PH[k].sel);
     }
+    document.querySelectorAll('.ba').forEach((b) => { b.textContent = T(b.classList.contains('on') ? 'ba_back' : 'ba_show'); });
     updCopper(); updMillar();
     langBox.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
   }
