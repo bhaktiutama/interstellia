@@ -856,6 +856,35 @@ UJI = r"""
     P.pitch = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; M.updateBody(10);
   }
 
+  // 5w. M6i: sarung tangan berjari: tekuk jari per keadaan, ujung jari menekuk, nilai valid
+  {
+    const P = M.P, B = M.BODY, V3 = M.THREE.Vector3, d0 = B.detail;
+    M.setMode('jelajah'); M.STATE.started = true; M.stopMission(); M.flyReset(); M.SWEEP.on = false; M.CINE.on = false;
+    P.view = 0; P.ground = true; P.depth = 0; P.x = 3; P.z = 3; P.y = M.seabed(3, 3) + M.CONFIG.eye; P.pitch = -0.3; B.level = 2;
+    let bad = 0; const tip = [];
+    for (const d of [0, 1, 2]) {
+      M.setBodyDetail(d); const g = B.hands[1].geometry, K = g.userData.keys;
+      if (!K || K.some((k) => k.p.length !== g.attributes.position.array.length)) bad++;
+      const far = (arr) => { let m = 0; for (let k = 0; k < arr.length; k += 3) m = Math.max(m, Math.hypot(arr[k], arr[k + 1], arr[k + 2])); return m; };   // jarak titik terjauh dari pergelangan
+      tip.push(far(K[2].p) / far(K[0].p));
+      for (const c of [0, 0.2, 0.4, 0.7, 1]) { M.handCurl(1, c); for (const n of ['position', 'normal']) for (const v of g.attributes[n].array) if (!Number.isFinite(v)) bad++; }
+    }
+    M.setBodyDetail(d0);
+    const settle = (n = 90) => { for (let f = 0; f < n; f++) { M.BOB.phase += 0.1; M.updateBody(1 / 60); } };
+    M.BOB.run = 0; M.BOB.amp = 0; settle(); const cRest = B.hand[1];
+    M.BOB.run = 1; M.BOB.amp = 0.055; settle(); const cRun = B.hand[1];
+    M.BOB.run = 0; M.BOB.amp = 0; settle();
+    M.boardShip(); M.FLY.view = 1; M.flyCamera(); for (let f = 0; f < 60; f++) M.updateBody(1 / 60); const cSeat = Math.min(...B.hand); M.flyReset(); M.FLY.view = 0; M.updateBody(10);
+    const wx0 = M.U.uWX.value, ck0 = M.U.uChopK.value;
+    M.setMode('misi'); M.setLevel(1); M.startMission(); const S = M.MIS.sites[0]; P.x = S.ix + 0.6; P.z = S.iz; P.y = M.seabed(P.x, P.z) + M.CONFIG.eye; P.yaw = Math.PI / 2; P.pitch = -0.6; M.updateBody(10);
+    M.MIS.near = 0; M.MIS.hold = 0.2; for (let f = 0; f < 40; f++) M.updateBody(1 / 60); const cOpen = B.hand[1];
+    M.MIS.hold = 0.95 * M.CONFIG.mission.hold; for (let f = 0; f < 40; f++) M.updateBody(1 / 60); const cPick = B.hand[1];
+    M.MIS.hold = 0; M.stopMission(); M.setMode('jelajah'); M.U.uWX.value = wx0; M.U.uChopK.value = ck0;
+    out[`sarung tangan berjari (M6i): tekuk diam ${cRest.toFixed(2)} (0,25-0,45), lari ${cRun.toFixed(2)} (> 0,55), pilot ${cSeat.toFixed(2)} (> 0,8), ambil barang ${cOpen.toFixed(2)} -> ${cPick.toFixed(2)} (< 0,2 lalu > 0,7), ujung terjauh genggam/terbuka ${tip.map((x) => x.toFixed(2)).join(' / ')} (< 0,8), nilai tidak valid ${bad}`] =
+      cRest > 0.25 && cRest < 0.45 && cRun > 0.55 && cSeat > 0.8 && cOpen < 0.2 && cPick > 0.7 && tip.every((x) => x < 0.8) && bad === 0;
+    P.depth = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -Math.PI / 2 + 0.3; P.ground = true; M.updateBody(10);
+  }
+
   // 5p. M6c: tubuh tidak membayangi dirinya, bayangan KS-07 tetap jatuh di tubuh, garis basah yang ingat, busa garis air di kaki
   {
     const P = M.P, B = M.BODY, Cb = M.CONFIG.body, PI = Math.PI, from = M.THREE.DataUtils.fromHalfFloat, V3 = M.THREE.Vector3;

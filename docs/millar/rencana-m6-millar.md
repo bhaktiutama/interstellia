@@ -1,6 +1,6 @@
 # Rencana M6 Millar's World: Tubuh orang pertama (astronaut)
 
-Per 4 Oktober 2026 · Status: M6a sampai M6h selesai (M6e sebagian, lihat bagian M6e di bawah). Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
+Per 4 Oktober 2026 · Status: M6a sampai M6i selesai (M6e sebagian, lihat bagian M6e di bawah). Butir 5 M5c (kaki dan lengan terlihat saat menunduk) dialihkan ke sini.
 
 ## Context
 
@@ -164,6 +164,7 @@ Uji Millar sekarang 72 pemeriksaan; semua harus tetap lulus dan blok 5m menambah
 | M6f | Selesai 4 Oktober 2026: pakaian satu mesh berkulit (lihat bagian di bawah) |
 | M6g | Selesai 4 Oktober 2026: shader kain pakaian (lipatan, jahitan, bantalan), menunggu uji pemilik di GPU (lihat bagian di bawah) |
 | M6h | Selesai 5 Oktober 2026: lengan natural (lihat bagian di bawah) |
+| M6i | Selesai 5 Oktober 2026: tangan natural, sarung tangan berjari (lihat bagian di bawah) |
 
 ## Catatan M6a (selesai 4 Oktober 2026)
 
@@ -441,4 +442,19 @@ Framework animasi: three.js sudah punya `Skeleton` / `SkinnedMesh` / `AnimationM
 | Parameter | `CONFIG.body` armRest, elbowRest, elbowWalkB/F, elbowRunB/F, armCross, foreTwist, armHz, armZeta, armBreath |
 
 Uji baru 5v: siku jalan 0,35..0,75 rad, lari 1,00..1,60, diam 0,23, tenang 0,63 s, nilai tidak valid 0. Uji Millar 129 pemeriksaan lulus.
+
+## M6i (selesai 5 Oktober 2026): tangan natural (Medium)
+
+Masukan pemilik: tangan seperti tinju terus. Penyebab: sarung tangan = satu bola dipipihkan, tanpa jari dan pergelangan, sama di semua keadaan.
+
+| Item | Hasil |
+| --- | --- |
+| Sarung tangan | Telapak + jari dari ruas kotak berantai + ibu jari, manset dengan dasar tertutup. Hemat: satu blok jari; Rendah: dua pasang jari 2 ruas + ibu jari; Sedang ke atas: empat jari 3 ruas + ibu jari 3 ruas + bantalan genggam |
+| Tekuk jari | Tiga kunci pose (terbuka 0, santai 0,4, genggam 1) dengan topologi sama, dicampur di CPU `handCurl(i, c)`; hanya titik jari yang dihitung, diperbarui tiap langkah 0,015 |
+| Pergelangan | Pivot baru `BODY.wrists` (0,29 m di bawah siku): sedikit menekuk, tertinggal dari ayun lengan (kecepatan pegas M6h), nol saat duduk dan menjangkau |
+| Per keadaan (`BODY.hand`) | Diam 0,32-0,35 dengan napas; jalan 0,3-0,46 ikut ayun; lari 0,65; udara 0,15; ambil barang membuka 0,05 lalu menutup 0,8 saat tahan E hampir selesai; pilot genggam tongkat 0,9 dan tuas 0,85 |
+| Segitiga | Hemat 440, Rendah 1.124, Sedang ke atas 2.688 (batas 450 / 1.200 / 3.000) |
+| Parameter | `CONFIG.body.hand` (rest, walk, walkSw, run, air, open, pick, gripR, gripL, tau, wristLag, wristMax) |
+
+Uji baru 5w: tekuk diam 0,32, lari 0,65, pilot 0,85, ambil barang 0,05 -> 0,80, ujung jari terjauh saat genggam 0,68-0,72x terbuka, nilai tidak valid 0. Biaya `updateBody()` 0,072 ms (batas 0,1). Tangan pilot tetap 2,5 / 2,3 cm dari tongkat / tuas. Uji Millar 130 pemeriksaan lulus.
 
