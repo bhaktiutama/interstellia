@@ -7430,12 +7430,22 @@ function makeTree(kindName, seed) {
 }
 // 12b-2: warna tajuk per pohon. aLeafC = (warna sasaran, kekuatan). Hanya piksel hijau (daun) yang diwarnai ulang,
 // batang dan ranting (cokelat/abu, merah >= hijau) tetap, jadi bisa dipakai juga untuk impostor yang berisi batang.
+// Revisi V1: palet linear dari foto (sRGB dikonversi di LEAF_PAL), kecerahan relatif fisik (albedo daun hijau atlas ~0,2:
+// warna sasaran x lum / 0,2, jadi kuning lebih terang dan merah lebih gelap seperti aslinya), variasi per daun dari warna
+// atlas (tiap daun satu isi warna acak, jadi batasnya ikut tepi daun, bukan kotak): rona lebih merah / lebih kuning,
+// kejenuhan, dan sebagian daun masih menyisakan hijau (kecuali kekuatan >= 0,99, misalnya sakura).
 const LEAF_RECOLOR = /* glsl */`
   vec3 leafRecolor(vec3 c, vec4 k) {
     if (k.a < 0.01) return c;
     float leaf = smoothstep(0.004, 0.03, c.g - max(c.r, c.b));
-    float lum = dot(c, vec3(0.3, 0.59, 0.11));
-    return mix(c, k.rgb * lum * 3.0, k.a * leaf);
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float gq = max(c.g, 1e-3);
+    float v = 0.5 + 0.5 * sin(c.r / gq * 23.0 + lum * 61.0), v2 = 0.5 + 0.5 * sin(c.b / gq * 31.0 + lum * 17.0);
+    vec3 tc = k.rgb * mix(vec3(1.06, 0.78, 0.72), vec3(0.94, 1.12, 1.15), v);   // per daun: lebih merah tua .. lebih kuning muda
+    float tl = dot(tc, vec3(0.2126, 0.7152, 0.0722));
+    tc = mix(vec3(tl), tc, 0.82 + 0.18 * v2);                          // kejenuhan bervariasi, tidak ada yang menyala penuh
+    float amt = k.a >= 0.99 ? 1.0 : k.a * mix(0.72, 1.0, v2);          // sebagian daun masih kehijauan
+    return mix(c, tc * (lum / 0.2), amt * leaf);
   }`;
 const LEAF_VS = /* glsl */`
   attribute vec3 aCn;
@@ -7443,7 +7453,7 @@ const LEAF_VS = /* glsl */`
   attribute vec4 aLeafC;
   varying vec4 vLeafC;
   varying vec2 vUv;
-  varying float vAo, vDist;
+  varying float vAo, vDist, vBack;
   varying vec3 vLight, vTint;
   void main() {
     vec3 lp = position;
@@ -7453,6 +7463,14 @@ const LEAF_VS = /* glsl */`
     vec4 wp = modelMatrix * instanceMatrix * vec4(lp, 1.0);
     vUv = uv; vAo = aAo; vLeafC = aLeafC;
     vDist = distance(wp.xyz, uEye);
+    vBack = 0.0;
+    #if !defined(DEPTH_ONLY) && !defined(BAKE)
+    {                                                               // revisi V1: dilihat dari bawah tajuk = cahaya sunline tembus daun
+      float rw = length(wp.xy); vec3 upL = rw > 1.0 ? vec3(-wp.xy / rw, 0.0) : vec3(0.0, 0.0, 1.0);
+      vec3 V = uEye - wp.xyz; V *= inversesqrt(max(dot(V, V), 1e-8));
+      vBack = smoothstep(0.05, 0.7, -dot(V, upL));
+    }
+    #endif
     float hh = hash2(ip.xy * 3.1 + ip.z);
     vTint = mix(vec3(0.9, 1.0, 0.85), vec3(1.1, 1.05, 0.8), hh);
     #ifndef DEPTH_ONLY
@@ -7475,7 +7493,7 @@ const LEAF_FS = /* glsl */`
   varying vec4 vLeafC;
   ${LEAF_RECOLOR}
   varying vec2 vUv;
-  varying float vAo, vDist;
+  varying float vAo, vDist, vBack;
   varying vec3 vLight, vTint;
   void main() {
     vec4 tx = texture2D(uLeafTex, vUv);
@@ -7483,7 +7501,12 @@ const LEAF_FS = /* glsl */`
     #ifdef DEPTH_ONLY
     gl_FragColor = vec4(0.0);
     #else
-    gl_FragColor = vec4(leafRecolor(tx.rgb * vTint, vLeafC) * vAo * vLight, 1.0);
+    vec3 lc = leafRecolor(tx.rgb * vTint, vLeafC);
+    // revisi V1: translusensi. Cahaya yang tembus diwarnai daun dua kali (lebih jenuh dan terang: hijau -> hijau kekuningan,
+    // jingga -> bara); hanya bagian daun (bukan ranting), dan ikut vLight (bayangan, malam).
+    float lfK = smoothstep(0.004, 0.03, tx.g - max(tx.r, tx.b));     // piksel daun di atlas (ranting cokelat: merah >= hijau)
+    lc *= 1.0 + vBack * lfK * 0.9 * lc / max(max(lc.r, lc.g), 1e-3);
+    gl_FragColor = vec4(lc * vAo * vLight, 1.0);
     #ifndef BAKE
     #include <colorspace_fragment>
     #include <fog_fragment>
@@ -7729,12 +7752,16 @@ await bootStep(BOOT_W[14], 'Daun dan angin...');
    - Serakan daun di tanah: tekstur 4 m per piksel dari tajuk pohon berwarna (bukan pohon bunga), dibaca shader tanah.
    ===================================================================== */
 const LEAF = { mode: 1, names: ['Hijau', 'Campur', 'Gugur'], fallUser: null, presetN: 2000 };
-const LEAF_PAL = { kuning: [1.0, 0.8, 0.06], jingga: [1.0, 0.42, 0.06], merah: [0.8, 0.1, 0.05], cokelat: [0.8, 0.46, 0.16], kuningHijau: [0.72, 0.85, 0.2], pink: [1.0, 0.5, 0.68], api: [1.0, 0.25, 0.04] };
+// Revisi V1: warna diambil dari foto daun sungguhan (sRGB 0-255), dikonversi ke linear karena dipakai langsung di shader.
+// Dulu nilai sRGB dipakai sebagai linear: kuning lemon pucat yang tampak zaitun saat redup, sakura magenta jenuh.
+const leafLin = (r, g, b) => [r, g, b].map((x) => Math.pow(x / 255, 2.2));
+const LEAF_PAL = { kuning: leafLin(232, 180, 30), jingga: leafLin(228, 112, 26), merah: leafLin(170, 38, 24), cokelat: leafLin(150, 92, 40),
+  kuningHijau: leafLin(172, 190, 62), pink: leafLin(242, 190, 208), api: leafLin(222, 128, 166) };   // pink = sakura pucat, api = sakura lebih tua
 try { const sv = JSON.parse(localStorage.getItem('cooperStation.leaf') || 'null'); if (sv) { if (sv.mode >= 0 && sv.mode < 3) LEAF.mode = sv.mode; if (sv.fall === true || sv.fall === false) LEAF.fallUser = sv.fall; } } catch (e) { /* penyimpanan tidak tersedia */ }
 function leafColorFor(t, mode) {                                     // [r, g, b, kekuatan] atau null (hijau)
   const kind = TREES.templates[t.tpl].kind, x = Math.sin(t.s * 7.123 + t.za * 3.917) * 91731.37, h = x - Math.floor(x), P = LEAF_PAL;
   const c = (col, a) => [col[0], col[1], col[2], a];
-  if (kind === 'bunga') return c(h < 0.6 ? P.pink : P.api, 0.9);
+  if (kind === 'bunga') return c(h < 0.6 ? P.pink : P.api, 1.0);   // revisi V1: bunga menutup seluruh tajuk (tanpa sisa hijau)
   if (mode === 0) return null;
   const G = mode === 2;
   if (kind === 'maple') return G || h < 0.7 ? c(h < 0.32 ? P.kuning : h < 0.56 ? P.jingga : h < 0.7 ? P.merah : P.jingga, G ? 0.95 : 0.85) : null;
