@@ -4059,7 +4059,7 @@ const BUILD_FS = /* glsl */`
       float ax4 = smoothstep(0.5, 0.9, fwx / (varW ? zr : 4.0)), ayF = smoothstep(0.5, 0.9, fwy);   // blok / lantai lebih kecil dari sekitar 2 piksel: rata-rata
       float onL = mix(mix(mix(on0, onF * onBk * qW, axR), onF * qB * qW, ax4), litB, ayF);
       float mech = code == 1.0 && H > 60.0 && mod(fi + 1.0, 14.0 + floor(vSeed * 9.0)) < 0.5 ? 1.0 : 0.0;   // lantai mesin: gelap
-      float lobby = code == 1.0 && fi < 0.5 ? 1.0 : 0.0;          // lobi menara kaca selalu terang
+      float lobby = code == 1.0 && fi < 0.5 && hg - vO.y < 12.0 ? 1.0 : 0.0;   // lobi menara kaca selalu terang (22f: tidak untuk menara di atas atap gedung rendah; menara lama di podium 8 m tetap)
       float on = mix(onL * (1.0 - mech), 1.0, lobby) * uNight;
       float far = max(ax, ay);
       float hb = hash1(vec2(blk + sdF, fi + 29.1));                  // warna per blok (tetap terlihat dari jauh)
@@ -4146,6 +4146,48 @@ const BUILD_FS = /* glsl */`
     #include <fog_fragment>
   }`;
 for (const [type, e] of BUILD_LATE) BUILD[type].push(e);           // 22: bangunan baru sesudah semua bangunan lama
+// 22f: menara kaca di atas atap gedung rendah pusat yang masih kosong, menggantikan menara kaca yang berkurang di 22b (31).
+// Tidak ada bangunan yang diubah: menara hanya ditambahkan di akhir BUILD.flat (peralatan atap gedung lain tetap), berdiri di atas atap
+// (tanpa collider, tidak masuk peta), generator acak sendiri; peralatan atapnya dibuat sesudah cerobong rumah (penanda e[11]).
+// Syarat: atap datar <= 30 m, sisi terpendek >= 16 m, kepadatan > 0,62 (pusat dan menengah padat), bukan fasilitas, tidak ada tingkat
+// atau menara lain di atas atap itu, tidak menembus gedung tetangga yang lebih tinggi, berjarak >= 6 m dari menara > 45 m lain.
+// ?kaca=0 = tanpa menara ini.
+const KACA = { on: RAGAM.on && new URLSearchParams(location.search).get('kaca') !== '0', target: 31, cand: 0, n: 0, n45: 0, list: [] };
+if (KACA.on) {
+  let sd = 22061; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647), RU = (a, b) => a + (b - a) * r();
+  const all = BUILD.flat, n0 = all.length;
+  const inSite = (s, za) => SITES.some((S) => Math.abs(wrapS(s - S.q.bs)) < S.q.bw / 2 + 2 && Math.abs(za - S.q.bz) < S.q.bd / 2 + 2);
+  const hit = (s, za, w, d, o, pad = 0) => Math.abs(wrapS(s - o[0])) < (w + o[2]) / 2 + pad && Math.abs(za - o[1]) < (d + o[3]) / 2 + pad;
+  const cands = [];
+  for (let i = 0; i < n0; i++) {
+    const e = all[i], [s, za, w, d, h, el, , st] = e, top = el + h;
+    if (el > 0.5 || top > 30 || ![0, 2, 11, 12, 13].includes(st) || Math.min(w, d) < 16) continue;
+    if (cityDensity(s, za) <= 0.62 || inSite(s, za)) continue;
+    if (all.some((o) => o !== e && o[7] !== 14 && o[5] > 0.5 && Math.abs(o[5] - top) < 1.2 && hit(s, za, w, d, o))) continue;   // atap sudah ditempati
+    cands.push(e);
+  }
+  KACA.cand = cands.length;
+  for (let i = cands.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [cands[i], cands[j]] = [cands[j], cands[i]]; }
+  for (const e of cands) {
+    if (KACA.n >= KACA.target) break;
+    const [s, za, w, d, h, el, , st] = e, top = el + h, k = RU(0.55, 0.8);
+    const tw = Math.max(12, (w - 5) * k), td = Math.max(12, (d - 5) * k);
+    if (tw > w - 4 || td > d - 4) continue;
+    const ts = s + RU(-0.5, 0.5) * (w - 4 - tw), tz = za + RU(-0.5, 0.5) * (d - 4 - td);
+    const cbd = Math.hypot(wrapS(s), za - 480), hT = cbd < 380 ? RU(60, 150) * (1 - 0.45 * cbd / 380) : RU(45, 85);
+    const el2 = top + (st === 12 || st === 13 ? 0.2 : 0.05), top2 = el2 + hT;   // gaya 12 / 13 berlis atap (puncak lis +0,15)
+    let bad = false;
+    for (let q = 0; q < all.length && !bad; q++) {
+      const o = all[q]; if (o === e || o[7] === 14) continue;
+      if (o[5] + o[4] > el2 && o[5] < top2 && hit(ts, tz, tw, td, o)) bad = true;                         // menembus gedung lain
+      else if (o[5] + o[4] > 45 && hit(ts, tz, tw, td, o, 6)) bad = true;                                  // terlalu rapat ke menara
+    }
+    if (bad) continue;
+    const col = COLS.tower[Math.floor(r() * COLS.tower.length)];
+    building('flat', ts, tz, tw, td, hT, col, el2, false, 1); BUILD.flat[BUILD.flat.length - 1][11] = 1;   // penanda menara 22f
+    KACA.n++; if (top2 > 45) KACA.n45++; KACA.list.push([+ts.toFixed(1), +tz.toFixed(1), +top.toFixed(1), +top2.toFixed(1)]);
+  }
+}
 const buildMat = new THREE.ShaderMaterial({ fog: true, side: THREE.DoubleSide,
   uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), LIGHT.uniforms, BUILD_U),
   vertexShader: BUILD_VS, fragmentShader: BUILD_FS });
@@ -4168,7 +4210,8 @@ for (const type of Object.keys(BUILD)) {
 {
   let sd = 13579; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const eq = [];                                                  // [s, za, sx, sy, sz, h, hex]
-  for (const [s, za, w, d, h, elev, col, style] of BUILD.flat) {
+  for (const [s, za, w, d, h, elev, col, style, , , , kaca] of BUILD.flat) {
+    if (kaca) continue;                                             // 22f: menara kaca di atas atap diberi peralatan sesudah cerobong (angka acak sendiri)
     if (style === 9 || style === 11 || style === 14 || w * d < 120) continue;
     const top = elev + h;
     if (style === 1 && w * d > 250) eq.push([s, za, w * 0.35, 3.5, d * 0.35, top, '#8d949b']);   // ruang mesin menara
@@ -4183,6 +4226,13 @@ for (const type of Object.keys(BUILD)) {
     if (style !== 3 || r() < 0.4) continue;
     eq.push([s + (r() < 0.5 ? -1 : 1) * w * 0.28, za + (r() - 0.5) * d * 0.3, 0.7, h * 0.55, 0.7, elev + h * 0.85, r() < 0.6 ? '#8a4a3a' : '#9a9186']);   // cerobong bata
   }
+  { let sd2 = 22062; const r2 = () => ((sd2 = (sd2 * 16807) % 2147483647) / 2147483647);   // 22f: ruang mesin + unit atap menara kaca baru (di akhir daftar)
+    for (const [s, za, w, d, h, elev, , , , , , kaca] of BUILD.flat) {
+      if (!kaca) continue;
+      const top = elev + h; eq.push([s, za, w * 0.35, 3.5, d * 0.35, top, '#8d949b']);
+      for (let q = 0, k = 1 + Math.floor(r2() * 2); q < k; q++) { const sx = 1.5 + 2.5 * r2(), sz = 1.5 + 2.5 * r2();
+        eq.push([s + (r2() - 0.5) * Math.max(0, w - sx - 3), za + (r2() - 0.5) * Math.max(0, d - sz - 3), sx, 1 + 1.2 * r2(), sz, top, r2() < 0.5 ? '#b9bdc0' : '#9da3a8']); }
+    } }
   const eqMesh = new THREE.InstancedMesh(bakeShade(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0)), new THREE.MeshBasicMaterial({ vertexColors: true }), eq.length);
   eq.forEach(([s, za, sx, sy, sz, h, hex], i) => placeAt(eqMesh, i, s, za, sx, sy, sz, h, _c.set(hex)));
   eqMesh.instanceMatrix.needsUpdate = true; eqMesh.instanceColor.needsUpdate = true; eqMesh.frustumCulled = false;
@@ -12219,7 +12269,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA };
 requestAnimationFrame(frame);
 </script>
 </body>

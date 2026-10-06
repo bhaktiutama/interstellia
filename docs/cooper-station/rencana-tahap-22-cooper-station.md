@@ -77,3 +77,20 @@ Perbaikan selama kerja: mobil parkir pertama mulai 18 m dari as arteri dan menut
 
 - Gaya New York generik (bata, batu, tangga darurat, tangki air kayu, lis atap) bukan desain film.
 - Plaza alun-alun New York, menara ikon, pasar, balai, dan fasilitas lain tidak diubah (blok fasilitas dilewati sebelum cabang pusat).
+
+## 22f: menara kaca di atas atap gedung rendah (permintaan pemilik)
+
+Tujuan: mengembalikan 31 gedung kaca yang berkurang di 22b tanpa mengubah satu pun bangunan yang sudah ada. Effort Medium, Opus 5.5, high (menyentuh `BUILD_FS`).
+
+| Aturan | Cara |
+| --- | --- |
+| Tidak mengubah bangunan lama | Menara hanya ditambahkan di akhir `BUILD.flat` (sesudah `BUILD_LATE`), generator acak sendiri, berdiri di atas atap (tanpa collider, tidak masuk peta) |
+| Peralatan atap lama tetap | Menara 22f ditandai `e[11]`, dilewati loop peralatan biasa; ruang mesin dan unit atapnya dibuat sesudah cerobong rumah dengan generator sendiri |
+| Atap yang dipakai | Atap datar puncak <= 30 m, sisi terpendek >= 16 m, gaya 0 / 2 / 11 / 12 / 13, kepadatan > 0,62, bukan fasilitas, tidak ada tingkat atau menara lain di atasnya |
+| Tidak menembus | Menara tidak memotong gedung lain yang lebih tinggi dari dasarnya dan berjarak >= 6 m dari menara > 45 m lain |
+| Lis atap | Di atas gedung bata / batu dasar menara +0,2 m (puncak lis +0,15 m) |
+| Tinggi | Rumus menara lama: dekat CBD 60-150 m x (1 - 0,45 x jarak / 380), di luar CBD 45-85 m |
+| Lobi | Lantai bawah menara kaca menyala sebagai lobi hanya bila dasarnya < 12 m dari tanah (menara lama di podium 8 m tetap) |
+| Perbandingan | `?kaca=0` = kondisi tahap 22 sebelum 22f |
+
+Hasil (sandbox): 92 atap memenuhi syarat, 31 menara dibangun (semua puncak > 45 m). Gedung kaca 77 menjadi 108 (sama dengan sebelum tahap 22), puncak > 45 m 57 menjadi 88. Dicek terhadap `?kaca=0`: 9.258 bangunan lama, 17.192 bangunan peta, 50.018 collider, dan 15.004 instance peralatan atap lama identik (hash sama).
