@@ -367,6 +367,7 @@
   }, 15000);
 </script>
 <script src="../../shared/kestrel.js"></script>
+<script src="../../shared/post.js"></script>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
 </script>
@@ -855,6 +856,7 @@ const CONFIG = {
   touchLookSens: 0.0045,
   fov: 70,
   dprMax: 2,             // batas device pixel ratio (fokus laptop dan PC)
+  wb: { k: 6500, tint: 0 },  // V0: white balance (shared/post.js); 6.500 K tint 0 = netral, identik dengan sebelumnya
   dynRes: { min: 0.5, lowFps: 50, highFps: 57, window: 2.0 },
   fogDensity: 0.00015,   // FogExp2: faktor = 1 - exp(-(d*density)^2); cukup tipis agar end cap seberang (8 km) samar terlihat
   fogColor: 0xa9b6c4,
@@ -8294,6 +8296,7 @@ const compMat = fsMat(/* glsl */`
   uniform sampler2D tHdr, tBloom, tAO, tRay, tDepth; uniform float uExp, uBloom, uAO, uUseAO, uGrain, uVig, uTime, uUseRay; uniform vec2 uRayTexel; uniform mat4 uProjInv; varying vec2 vUv;
   uniform float uDof, uFocus; uniform vec2 uTexelF;                // 12d: kedalaman bidang untuk mode foto
   uniform sampler2D tAdapt; uniform float uAdOn, uAdKey, uAdPow, uAdMin, uAdMax;   // 17c: adaptasi mata
+  uniform vec3 uWhite;                                             // V0: white balance
   float viewDist(vec2 uv) {                                        // jarak kamera ke piksel (m); langit = 6.000 m
     float d = textureLod(tDepth, uv, 0.0).r;
     vec4 v = uProjInv * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
@@ -8338,7 +8341,7 @@ const compMat = fsMat(/* glsl */`
     c += texture2D(tBloom, vUv).rgb * uBloom;
     float mAd = 1.0;
     if (uAdOn > 0.5) mAd = clamp(pow(uAdKey / max(texture2D(tAdapt, vec2(0.5)).r, 1e-4), uAdPow), uAdMin, uAdMax);
-    c = aces(c * uExp * mAd);
+    c = aces(c * uExp * mAd * uWhite);
     vec2 q = vUv - 0.5; c *= 1.0 - uVig * dot(q, q) * 2.2;
     c = toSRGB(c);
     c += (h(vUv * 1000.0 + uTime) - 0.5) * uGrain;
@@ -8347,7 +8350,8 @@ const compMat = fsMat(/* glsl */`
   uGrain: { value: 0.01 }, uVig: { value: 0.2 }, uTime: { value: 0 },
   tRay: { value: null }, tDepth: { value: null }, uUseRay: { value: 0 }, uRayTexel: { value: new THREE.Vector2() }, uProjInv: { value: new THREE.Matrix4() },
   uDof: { value: 0 }, uFocus: { value: 20 }, uTexelF: { value: new THREE.Vector2() },
-  tAdapt: { value: null }, uAdOn: { value: 0 }, uAdKey: { value: 0.2 }, uAdPow: { value: 0.45 }, uAdMin: { value: 0.6 }, uAdMax: { value: 1.8 } });
+  tAdapt: { value: null }, uAdOn: { value: 0 }, uAdKey: { value: 0.2 }, uAdPow: { value: 0.45 }, uAdMin: { value: 0.6 }, uAdMax: { value: 1.8 },
+  uWhite: { value: new THREE.Vector3(...POSTKIT.wb(CONFIG.wb.k, CONFIG.wb.tint)) } });
 // --- FXAA (versi ringkas, luma di kanal alfa) ---
 const fxaaMat = fsMat(/* glsl */`
   uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;

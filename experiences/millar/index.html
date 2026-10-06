@@ -154,6 +154,7 @@
 <pre id="err" hidden></pre>
 
 <script src="../../shared/kestrel.js"></script>
+<script src="../../shared/post.js"></script>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
 </script>
@@ -215,6 +216,8 @@ const CONFIG = {
   cloud: { h0: 1500, h1: 3500, scale: 2600 },     // lapisan awan (m)
   fogD: 30000,          // kabut di atas laut (m, e-fold)
   exposure: 0.85,
+  wb: { k: 6500, tint: 0 },                        // V0: white balance (6.500 K, tint 0 = netral, identik dengan sebelumnya)
+  dynRes: { min: 0.7, max: 1.0, step: 0.1, lowFps: 45, highFps: 57, window: 2.0 },   // V0: resolusi dinamis sebelum preset diturunkan
   views: [ { key: 'Jalan kaki', h: 0, sp: 1 }, { key: 'Drone 60 m', h: 60, sp: 18 }, { key: 'Tinggi 1,5 km', h: 1500, sp: 350 } ],
   speeds: [1, 5, 20, 60],
 };
@@ -1465,7 +1468,7 @@ const M_UP = pmat(`uniform sampler2D tSrc, tCur; uniform vec2 uPx; varying vec2 
   void main() { vec3 s = vec3(0.0);
     for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) s += texture2D(tSrc, vUv + vec2(x, y) * uPx).rgb * (x == 0 ? 2.0 : 1.0) * (y == 0 ? 2.0 : 1.0);
     gl_FragColor = vec4(texture2D(tCur, vUv).rgb + s / 16.0, 1.0); }`, { tSrc: { value: null }, tCur: { value: null }, uPx: { value: new THREE.Vector2() } });
-const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform float uExp, uBloomK, uUnder, uTime; varying vec2 vUv;
+const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform vec3 uWhite; uniform float uExp, uBloomK, uUnder, uTime; varying vec2 vUv;
   uniform float uVis, uAsp, uFog, uWet, uSeed; uniform vec2 uGlint;   // M6d visor: tingkat (0 mati), aspek, embun, basah, pola tetes, kilau (kuat, x layar)
   vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
   float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
@@ -1502,7 +1505,7 @@ const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform float uExp, uBloomK
       }
       c = mix(c, uw + vec3(0.35, 0.45, 0.45) * b, uUnder);
     }
-    c = aces(c * uExp);
+    c = aces(c * uExp * uWhite);                                      // V0: white balance di ruang linear sebelum ACES
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = mix(vec3(l), c, 0.82) * vec3(0.97, 1.0, 1.03);              // grading: agak pudar, dingin
     c = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));                      // ke ruang tampilan (sRGB didekati gamma 2,2)
@@ -1520,7 +1523,7 @@ const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform float uExp, uBloomK
       c = clamp(c, 0.0, 1.0);
     }
     gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));        // alpha = luma untuk FXAA
-  }`, { tHdr: { value: null }, tBloom: { value: null }, uExp: { value: CONFIG.exposure }, uBloomK: { value: 0.08 }, uUnder: { value: 0 }, uTime: { value: 0 },
+  }`, { tHdr: { value: null }, tBloom: { value: null }, uExp: { value: CONFIG.exposure }, uWhite: { value: new THREE.Vector3(...POSTKIT.wb(CONFIG.wb.k, CONFIG.wb.tint)) }, uBloomK: { value: 0.08 }, uUnder: { value: 0 }, uTime: { value: 0 },
   uVis: { value: 0 }, uAsp: { value: 1.7778 }, uFog: { value: 0 }, uWet: { value: 0 }, uSeed: { value: 0 }, uGlint: { value: new THREE.Vector2() } });
 const M_FINAL = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; uniform float uTime, uGrain, uVig; varying vec2 vUv;
   float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
@@ -1597,8 +1600,10 @@ function gpuFrameEnd() {
 }
 
 /* ---------------- Terapkan preset ---------------- */
+// V0: resolusi dinamis (shared/post.js), skala 0,7-1,0 dari FPS; ?dynres=0 mematikan
+const DYN = POSTKIT.dynRes(Object.assign({ on: new URLSearchParams(location.search).get('dynres') !== '0' }, CONFIG.dynRes));
 function viewSize() {
-  const P = PRESETS[PRESET.idx], pr = Math.min(window.devicePixelRatio || 1, P.dpr);
+  const P = PRESETS[PRESET.idx], pr = Math.min(window.devicePixelRatio || 1, P.dpr) * DYN.scale;
   return [Math.max(1, Math.round(innerWidth * pr)), Math.max(1, Math.round(innerHeight * pr))];
 }
 function resize() {
@@ -1629,7 +1634,8 @@ function applyPreset(i) {
 }
 function autoPreset(dt) {
   if (!PRESET.auto || !STATE.started) return;
-  PRESET.low = fps < 30 ? PRESET.low + dt : Math.max(0, PRESET.low - dt);
+  if (!PHOTO.on && DYN.update(dt, fps)) resize();                     // V0: turunkan resolusi dulu, preset hanya bila skala sudah minimum
+  PRESET.low = fps < 30 && (DYN.atMin() || !DYN.opt.on) ? PRESET.low + dt : Math.max(0, PRESET.low - dt);
   if (PRESET.low > 4 && PRESET.idx < PRESETS.length - 1) { applyPreset(PRESET.idx + 1); PRESET.low = -6; toast(t('FPS rendah: grafik diturunkan ke {p}.', { p: t(PRESETS[PRESET.idx].name) }), 3); }
 }
 
@@ -3598,7 +3604,7 @@ function updateHud(depth, dist, wob) {
     [t('Goyangan planet'), `${fmtN(wob, 2)}°`],
     [t('Tampilan'), t(CONFIG.views[P.view].key)],
     [t('Kecepatan waktu'), `${CONFIG.speeds[P.speed]}x`],
-    [t('Grafik'), t(PRESETS[PRESET.idx].name) + (PRESET.auto ? t(' (otomatis)') : '')],
+    [t('Grafik'), t(PRESETS[PRESET.idx].name) + (PRESET.auto ? t(' (otomatis)') : '') + (DYN.scale < 1 ? ` ${Math.round(DYN.scale * 100)}%` : '')],
     [t('Suasana'), t(MOODS[MOOD.idx].key)],
     [t('Suara'), !AUDIO.ok ? '-' : t(AUDIO.on ? 'Nyala' : 'Mati')],
     ['FPS', fmtN(fps)]);
@@ -3700,7 +3706,7 @@ requestAnimationFrame(frame);
 window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
   frontX, waveTop, waterAt, drawdown, seabed, chopAt, CHOP, stepPlayer, simStep, start: () => start(true), startWithCine: start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_, OCEAN, makeOcean, updateOcean,
   RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, CROWN, spawnCrown, stepCrown, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
-  SWEEP, currentAt, SPRAY, US, ZS, ARC, M_COMP, waveG, waveHz, COMMON,
+  DYN, SWEEP, currentAt, SPRAY, US, ZS, ARC, M_COMP, waveG, waveHz, COMMON,
   AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
   PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob, BODY, BODY_LEVELS, bodyMat, cycleBody, updateBody, updateMood, setMood, makeRipple, VISOR, VISOR_LEVELS, updateVisor, visorSplash, cycleVisor, postRender, GDIR, bodyPose, bodyLegs, bobDrop, fpCamera, setBodyDetail, BODY_DETAIL, skinBody, handCurl, armReach, bodySeat, legIK, flyCamera, bodyFootAt, bodyLegAt,
   FLY, boardShip, flyLand, updateFly, flyReset, placeShip,

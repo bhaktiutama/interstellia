@@ -116,6 +116,7 @@
   <div class="btns"><button type="button" id="mendAgain">Fly again</button><button type="button" id="mendExit">Exit mission</button></div></div></div>
 <pre id="err" hidden></pre>
 <script src="assets/gx01.data.js"></script>
+<script src="../../shared/post.js"></script>
 
 <script>
 'use strict';
@@ -137,7 +138,7 @@ const CONFIG = {
   maxDPR: 2,
   disk: { rIn: 3.0, rOut: 12.0, brightness: 1.0, turbulence: 0.75, speed: 1.0, opacity: 0.9 },
   physics: { film: true, doppler: true, redshift: true, spin: 0.0 },
-  post: { exposure: 1.0, bloom: 0.9, streak: 0.25, grain: 0.35, threshold: 1.0, vignette: 0.4 },
+  post: { wbK: 6500, wbTint: 0, exposure: 1.0, bloom: 0.9, streak: 0.25, grain: 0.35, threshold: 1.0, vignette: 0.4 },
   camera: { dist: 22, yaw: 0.35, pitch: 5, fov: 55, minDist: 6, maxDist: 60, autoOrbit: false, orbitSpeed: 0.035 },
   sky: { stars: 1.0, escape: 50 },
   flowPeriod: 30,          // disk texture re-seed period (sim units) to bound differential shear
@@ -484,6 +485,7 @@ const COMPOSITE_FS = COMMON + `
 in vec2 vUv; out vec4 o;
 uniform sampler2D uScene, uB0, uB1, uB2, uB3, uStreak;
 uniform float uExposure, uBloom, uStreakAmt, uGrain, uVig, uDec;
+uniform vec3 uWhite;  // V0: white balance (shared/post.js), netral = 1
 uniform vec2 uRes; uniform uint uFrame;
 // ACES filmic fit (Narkowicz 2015)
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
@@ -493,7 +495,7 @@ void main() {
           + texture(uB2, vUv).rgb * 0.22 + texture(uB3, vUv).rgb * 0.18) * uDec;
   vec3 s = texture(uStreak, vUv).rgb * uDec;
   c += b * uBloom + s * uStreakAmt * vec3(0.9, 0.95, 1.0);
-  c = aces(c * uExposure);
+  c = aces(c * uExposure * uWhite);
   vec2 q = vUv - 0.5; q.x *= uRes.x / uRes.y;
   c *= 1.0 - uVig * smoothstep(0.35, 1.15, length(q));
   c = pow(c, vec3(1.0 / 2.2));
@@ -2693,7 +2695,7 @@ function main() {
       tex(p, 'uB2', L[2].a.tex, 3); tex(p, 'uB3', L[3].a.tex, 4);
       tex(p, 'uStreak', T.streakOut.tex, 5);
       const po = CONFIG.post;
-      gl.uniform1f(p.u('uExposure'), po.exposure * AE.k); gl.uniform1f(p.u('uBloom'), po.bloom * PM.bloom);
+      gl.uniform1f(p.u('uExposure'), po.exposure * AE.k); gl.uniform3fv(p.u('uWhite'), POSTKIT.wb(po.wbK, po.wbTint)); gl.uniform1f(p.u('uBloom'), po.bloom * PM.bloom);
       gl.uniform1f(p.u('uStreakAmt'), po.streak * PM.streak); gl.uniform1f(p.u('uGrain'), po.grain * PM.grain);
       gl.uniform1f(p.u('uVig'), po.vignette * PM.vig); gl.uniform1f(p.u('uDec'), dec);
       gl.uniform2f(p.u('uRes'), canvas.width, canvas.height);
