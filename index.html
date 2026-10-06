@@ -11,7 +11,8 @@
     --cu: #d9bd62; --ga: #f3a55a; --mi: #8fd3dc; }
   * { box-sizing: border-box; }
   html, body { margin: 0; background: #000; color: var(--ink); font: 15px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
-  canvas#sky { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+  /* latar: gradasi hangat statis (dulu digambar canvas bintang; bintang dihapus karena terlihat seperti debu di layar) */
+  body { background: radial-gradient(circle 80vmax at 75% 20%, #1a1410 0%, #07080c 40%, #000 100%) fixed; }
   .lang { position: fixed; top: 14px; right: 14px; display: flex; gap: 6px; z-index: 30; }
   .lang button { font: inherit; font-size: 12px; color: var(--ink); background: rgba(8,10,14,0.8); border: 1px solid var(--line); border-radius: 99px; padding: 5px 12px; cursor: pointer; backdrop-filter: blur(6px); }
   .lang button.on { border-color: rgba(243,165,90,0.8); color: #fff; }
@@ -167,7 +168,6 @@
 </style>
 </head>
 <body>
-<canvas id="sky"></canvas>
 <div class="lang" id="lang"></div>
 <a class="gh" href="https://github.com/bhaktiutama/interstellia" target="_blank" rel="noopener"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg><span>GitHub</span></a>
 <nav class="dots" aria-label="Navigasi">
@@ -684,27 +684,6 @@
     for (const b of bgs) { const r = b.parentElement.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) continue; b.style.transform = `translateY(${(r.top * -0.1).toFixed(1)}px)`; }
   }
   if (!reduce) { addEventListener('scroll', () => { if (!pend) { pend = true; requestAnimationFrame(para); } }, { passive: true }); para(); }
-
-  // ---- latar bintang (sama dengan index.html) ----
-  const cv = document.getElementById('sky'), g = cv.getContext('2d');
-  let W = 0, H = 0, stars = [];
-  function resize() {
-    const d = Math.min(2, window.devicePixelRatio || 1);
-    W = cv.width = Math.floor(innerWidth * d); H = cv.height = Math.floor(innerHeight * d);
-    stars = Array.from({ length: Math.floor(W * H / 5000) }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.2 * d + 0.2, a: Math.random(), s: 0.2 + Math.random() }));
-  }
-  function draw(t) {
-    const grd = g.createRadialGradient(W * 0.75, H * 0.2, 0, W * 0.75, H * 0.2, Math.max(W, H) * 0.8);
-    grd.addColorStop(0, '#1a1410'); grd.addColorStop(0.4, '#07080c'); grd.addColorStop(1, '#000');
-    g.fillStyle = grd; g.fillRect(0, 0, W, H);
-    for (const s of stars) {
-      const tw = 0.55 + 0.45 * Math.sin(t * 0.001 * s.s + s.a * 6.28);
-      g.globalAlpha = tw; g.fillStyle = '#fff'; g.beginPath(); g.arc((s.x + t * 0.004 * s.s) % W, s.y, s.r, 0, 6.2832); g.fill();
-    }
-    g.globalAlpha = 1;
-    requestAnimationFrame(draw);
-  }
-  addEventListener('resize', resize); resize(); requestAnimationFrame(draw);
 </script>
 </body>
 </html>
