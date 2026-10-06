@@ -933,6 +933,8 @@ const LIGHT = { uniforms: {
   uL_SunSh: { value: null }, uL_SunShMat: { value: new THREE.Matrix4() }, uL_SunShOn: { value: 0 }, uL_SunShK: { value: new THREE.Vector3(469, 300, 2048) },
   // 18b-3: sudut pusat koordinat silinder terbuka tiap peta bayangan (lihat shUnrollP / SHU)
   uL_ShadowTh: { value: 0 }, uL_SunShTh: { value: 0 },
+  // revisi V1: peta bayangan sunline dekat (40 m, texel 2 cm) di sekitar pemain, dicampur ke peta jauh di tepinya
+  uL_SunShN: { value: null }, uL_SunShNMat: { value: new THREE.Matrix4() }, uL_SunShNOn: { value: 0 }, uL_SunShNTh: { value: 0 }, uL_SunShNK: { value: new THREE.Vector3(469, 40, 2048) },
   // 19b: lampu depan motor. Head = (posisi lampu, kekuatan 0..1), HeadDir = arah sorot, HeadG = (s, za, cos, sin arah motor) untuk kolam di tanah
   uL_Head: { value: new THREE.Vector4(0, 0, -1e5, 0) }, uL_HeadDir: { value: new THREE.Vector3(0, 0, 1) }, uL_HeadG: { value: new THREE.Vector4(0, -1e4, 1, 0) },
   // V1: detail material dekat (1 = nyala, preset Ultra dan Tinggi; ?detail=0 mematikan untuk banding)
@@ -960,7 +962,8 @@ const SH_UNROLL_VS = /* glsl */`
 const LIGHT_GLSL = /* glsl */`
   uniform float uL_R, uL_HalfL, uL_CapRingR, uL_Sunline, uL_CapI, uL_SunI, uL_ShadowOn, uL_ShadowCap;
   uniform vec3 uL_SunlineCol, uL_AmbCol, uL_CapCol, uL_SunDir, uL_SunCol;
-  uniform sampler2D uL_ShadowMap, uL_Land, uL_Cloud, uL_SunSh;
+  uniform sampler2D uL_ShadowMap, uL_Land, uL_Cloud, uL_SunSh, uL_SunShN;
+  uniform mat4 uL_SunShNMat; uniform vec3 uL_SunShNK; uniform float uL_SunShNOn, uL_SunShNTh;   // revisi V1: peta bayangan sunline dekat
   uniform mat4 uL_ShadowMat, uL_SunShMat;
   uniform vec3 uL_FarLight, uL_FarAvg, uL_FogCol, uL_CloudCol, uL_SunShK;
   uniform float uL_FogD, uL_Night, uL_Art, uL_SunShOn, uL_ShadowTh, uL_SunShTh;
@@ -1115,32 +1118,32 @@ const LIGHT_GLSL = /* glsl */`
   // atap, bukan hanya sunline yang terhalang tetapi juga ambient dari sisi seberang dan cincin lampu (interior lebih gelap).
   // Revisi V1: perbandingan kedalaman bilinear 2x2 (dulu satu texel 14,6 cm dengan step(): bayangan daun tampak kotak-kotak).
   // Peta kedalaman tetap NearestFilter, jadi tiap fetch = nilai texel persis; bobot = posisi di antara 4 pusat texel.
-  float sunShCmp(vec2 uv, float zr) {
-    float px = 1.0 / uL_SunShK.z;
-    vec2 t = uv * uL_SunShK.z - 0.5, f = fract(t), b = (floor(t) + 0.5) * px;
-    float a = step(zr, textureLod(uL_SunSh, b, 0.0).r), q = step(zr, textureLod(uL_SunSh, b + vec2(px, 0.0), 0.0).r);
-    float c = step(zr, textureLod(uL_SunSh, b + vec2(0.0, px), 0.0).r), d = step(zr, textureLod(uL_SunSh, b + vec2(px, px), 0.0).r);
+  float sunShCmp(sampler2D T, float N, vec2 uv, float zr) {
+    float px = 1.0 / N;
+    vec2 t = uv * N - 0.5, f = fract(t), b = (floor(t) + 0.5) * px;
+    float a = step(zr, textureLod(T, b, 0.0).r), q = step(zr, textureLod(T, b + vec2(px, 0.0), 0.0).r);
+    float c = step(zr, textureLod(T, b + vec2(0.0, px), 0.0).r), d = step(zr, textureLod(T, b + vec2(px, px), 0.0).r);
     return mix(mix(a, q, f.x), mix(c, d, f.x), f.y);
   }
-  float sunlineShadow(vec3 p, vec3 n, out float roof) {
+  // Satu peta bayangan sunline (jauh 300 m, atau dekat 40 m sejak revisi V1). K = (jarak near-far m, lebar peta m, piksel).
+  // dith = geser sampel PCF searah sumbu per piksel 0..1 untuk peta dekat (noise per piksel agar sampel sepanjang garis sunline
+  // tidak tampak sebagai salinan pola daun); dith < 0 = peta jauh, perilaku lama.
+  float sunShMap(sampler2D T, mat4 M, float th, vec3 K, float dith, vec3 p, vec3 n, vec3 up, out float roof) {
     roof = 0.0;
-    if (uL_SunShOn < 0.5) return 1.0;
-    float rr = length(p.xy);
-    vec3 up = rr > 1.0 ? vec3(-p.xy / rr, 0.0) : vec3(0.0, 0.0, 1.0);
-    vec3 c = (uL_SunShMat * vec4(shUnrollP(p + n * 0.25, uL_SunShTh), 1.0)).xyz * 0.5 + 0.5;   // ortografis: w = 1
+    vec3 c = (M * vec4(shUnrollP(p + n * 0.25, th), 1.0)).xyz * 0.5 + 0.5;   // ortografis: w = 1
     float e = min(min(c.x, 1.0 - c.x), min(c.y, 1.0 - c.y));
     if (e <= 0.0 || c.z <= 0.0 || c.z >= 1.0) return 1.0;
-    float bias = 0.3 / uL_SunShK.x, sr = 45.0 / uL_SunShK.y, zr = c.z - bias, bs = 0.0, bn = 0.0, fe = smoothstep(0.0, 0.08, e);
-    // 18b: atap = satu sampel pada titik yang digeser 1 m searah normal. Dinding luar keluar dari tapak gedung (bukan di
-    // bawah atap); lantai dan dinding interior tetap di bawah atap. Penghalang harus rendah (di bawah 12-40 m).
-    vec3 cr = (uL_SunShMat * vec4(shUnrollP(p + n * 1.0, uL_SunShTh), 1.0)).xyz * 0.5 + 0.5;
+    float bias = 0.3 / K.x, sr = min(45.0, 0.4 * K.y) / K.y, zr = c.z - bias, bs = 0.0, bn = 0.0, fe = smoothstep(0.0, 0.08, e);
+    // 18b: atap = titik yang digeser 1 m searah normal. Dinding luar keluar dari tapak gedung (bukan di bawah atap); lantai
+    // dan dinding interior tetap di bawah atap. Penghalang harus rendah (di bawah 12-40 m). Revisi V1: bilinear 2x2.
+    vec3 cr = (M * vec4(shUnrollP(p + n * 1.0, th), 1.0)).xyz * 0.5 + 0.5;
     float zrr = cr.z - bias;
-    {                                                                 // revisi V1: atap bilinear 2x2 (dulu satu texel: kanopi pohon kotak-kotak)
-      float px = 1.0 / uL_SunShK.z;
-      vec2 t = cr.xy * uL_SunShK.z - 0.5, f = fract(t), b = (floor(t) + 0.5) * px;
-      vec4 dq = vec4(textureLod(uL_SunSh, b, 0.0).r, textureLod(uL_SunSh, b + vec2(px, 0.0), 0.0).r,
-                     textureLod(uL_SunSh, b + vec2(0.0, px), 0.0).r, textureLod(uL_SunSh, b + vec2(px, px), 0.0).r);
-      vec4 rq = step(dq, vec4(zrr)) * (1.0 - smoothstep(12.0, 40.0, (zrr - dq) * uL_SunShK.x));
+    {
+      float px = 1.0 / K.z;
+      vec2 t = cr.xy * K.z - 0.5, f = fract(t), b = (floor(t) + 0.5) * px;
+      vec4 dq = vec4(textureLod(T, b, 0.0).r, textureLod(T, b + vec2(px, 0.0), 0.0).r,
+                     textureLod(T, b + vec2(0.0, px), 0.0).r, textureLod(T, b + vec2(px, px), 0.0).r);
+      vec4 rq = step(dq, vec4(zrr)) * (1.0 - smoothstep(12.0, 40.0, (zrr - dq) * K.x));
       roof = mix(mix(rq.x, rq.y, f.x), mix(rq.z, rq.w, f.x), f.y) * fe;
     }
     #ifdef SUNSH_CHEAP
@@ -1148,30 +1151,59 @@ const LIGHT_GLSL = /* glsl */`
     #else
     const int NB = 7, NP = 8;
     #endif
-    // revisi V1: cari penghalang di dua kolom texel tetangga (keliling), bukan satu: kolom kosong di sebelah kolom teduh
-    // dulu langsung terang penuh, jadi tepi bayangan bertangga per texel ke arah keliling
-    float cx0 = (floor(c.x * uL_SunShK.z - 0.5) + 0.5) / uL_SunShK.z;
+    // revisi V1: cari penghalang di dua kolom texel tetangga (keliling), bukan satu
+    float cx0 = (floor(c.x * K.z - 0.5) + 0.5) / K.z;
     for (int i = 0; i < NB; i++) {
       float o = i == 0 ? 0.0 : (mod(float(i), 2.0) < 0.5 ? -1.0 : 1.0) * (i < 3 ? 0.12 : i < 5 ? 0.4 : 1.0);
       if (NB == 3 && i > 0) o *= 2.5;
       for (int j = 0; j < 2; j++) {
-        float d = textureLod(uL_SunSh, vec2(cx0 + float(j) / uL_SunShK.z, c.y + o * sr), 0.0).r;
+        float d = textureLod(T, vec2(cx0 + float(j) / K.z, c.y + o * sr), 0.0).r;
         if (d < zr) { bs += d; bn += 1.0; }
       }
     }
     if (bn < 0.5) return 1.0;
-    float hb = (c.z - bs / bn) * uL_SunShK.x;                         // tinggi rata-rata penghalang di atas penerima (m)
-    float w = max(0.75 * hb, 0.25) / uL_SunShK.y, vis = 0.0, ws = 0.0;
+    float hb = (c.z - bs / bn) * K.x;                                 // tinggi rata-rata penghalang di atas penerima (m)
+    float w = max(0.75 * hb, 0.25) / K.y, vis = 0.0, ws = 0.0;
     // 18b: tiap sampel mewakili elemen garis sunline pada arah L_u; bobot Lambert terhadap normal, jadi dinding yang
     // menghadap searah sumbu hanya diuji terhadap separuh garis di depannya (separuh di belakang dinding tidak menyinari).
-    for (int k = 0; k < NP; k++) {
-      float u = (float(k) + 0.5) / float(NP) * 2.0 - 1.0;
+    // peta jauh: NP sampel bilinear tanpa geser (dith < 0); peta dekat: 16 sampel satu texel (2 cm) digeser noise per piksel
+    bool nearM = dith >= 0.0;
+    int np = nearM ? 16 : NP;
+    for (int k = 0; k < np; k++) {
+      float u = (float(k) + (nearM ? dith : 0.5)) / float(np) * 2.0 - 1.0;
       vec3 Lu = up + vec3(0.0, 0.0, 0.75 * u);
       float wt = max(dot(n, Lu), 0.0) * inversesqrt(dot(Lu, Lu)) / (1.0 + 1.7 * u * u);
-      vis += sunShCmp(c.xy + vec2((float(k - 2 * (k / 2)) - 0.5) / uL_SunShK.z, u * w), zr) * wt; ws += wt;   // revisi V1: geser +-0,5 texel bergantian (tenda 2 texel ke keliling)
+      vec2 q = c.xy + vec2(0.0, u * w);
+      vis += (nearM ? step(zr, textureLod(T, q, 0.0).r) : sunShCmp(T, K.z, q + vec2((float(k - 2 * (k / 2)) - 0.5) / K.z, 0.0), zr)) * wt; ws += wt;   // jauh: geser +-0,5 texel bergantian
     }
-    float v0 = ws > 1e-3 ? vis / ws : sunShCmp(c.xy, zr);   // dinding menghadap keliling: sampel tengah
+    float v0 = ws > 1e-3 ? vis / ws : sunShCmp(T, K.z, c.xy, zr);    // dinding menghadap keliling: sampel tengah
     return mix(1.0, v0, fe);
+  }
+  // Revisi V1: peta dekat (40 m, texel 2 cm) dipakai di dalam kotaknya, dicampur ke peta jauh (texel 14,6 cm) di tepi.
+  float sunlineShadow(vec3 p, vec3 n, out float roof) {
+    roof = 0.0;
+    if (uL_SunShOn < 0.5) return 1.0;
+    float rr = length(p.xy);
+    vec3 up = rr > 1.0 ? vec3(-p.xy / rr, 0.0) : vec3(0.0, 0.0, 1.0);
+    float kn = 0.0;
+    #ifndef SUNSH_CHEAP                                               // vegetasi (dicahayai per verteks, gl_FragCoord tidak ada): peta jauh saja
+    if (uL_SunShNOn > 0.5) {
+      vec2 cn = (uL_SunShNMat * vec4(shUnrollP(p, uL_SunShNTh), 1.0)).xy * 0.5 + 0.5;
+      kn = smoothstep(0.03, 0.2, min(min(cn.x, 1.0 - cn.x), min(cn.y, 1.0 - cn.y)));
+    }
+    #endif
+    float v = 1.0, rf = 0.0;
+    if (kn < 0.999) v = sunShMap(uL_SunSh, uL_SunShMat, uL_SunShTh, uL_SunShK, -1.0, p, n, up, rf);
+    #ifndef SUNSH_CHEAP
+    if (kn > 0.001) {
+      uvec2 iq = uvec2(gl_FragCoord.xy); uint hn = iq.x * 1597334677u ^ iq.y * 3812015801u; hn = (hn ^ (hn >> 15u)) * 2246822519u; hn ^= hn >> 13u;
+      float ig = float(hn) * (1.0 / 4294967295.0);                   // noise putih per piksel (IGN berpola arsir tanpa TAA)
+      float rn, vn = sunShMap(uL_SunShN, uL_SunShNMat, uL_SunShNTh, uL_SunShNK, ig, p, n, up, rn);
+      v = mix(v, vn, kn); rf = mix(rf, rn, kn);
+    }
+    #endif
+    roof = rf;
+    return v;
   }
   float stationShadow(vec3 p) {
     vec4 sc = uL_ShadowMat * vec4(shUnrollP(p, uL_ShadowTh), 1.0);
@@ -6411,10 +6443,41 @@ const sunShCam = new THREE.OrthographicCamera(-SUNSH.ext, SUNSH.ext, SUNSH.ext, 
 sunShCam.layers.set(1);
 LIGHT.uniforms.uL_SunSh.value = sunShRT.depthTexture;
 LIGHT.uniforms.uL_SunShK.value.set(SUNSH.far - 1, 2 * SUNSH.ext, SUNSH.size);
+// revisi V1: peta dekat. Kamera sama arah dan jarak dengan peta jauh, hanya kotaknya 40 m (texel 2 cm, celah daun terlihat).
+// Digambar di dalam kurung shpBegin/shpEnd peta jauh (kotak dekat ada di dalam kotak jauh, jadi pilihan objeknya cukup).
+SUNSH.near = { on: true, size: 2048, ext: 20 };
+const sunShNRT = new THREE.WebGLRenderTarget(SUNSH.near.size, SUNSH.near.size, { depthBuffer: true });
+sunShNRT.depthTexture = new THREE.DepthTexture(SUNSH.near.size, SUNSH.near.size);
+const sunShNCam = new THREE.OrthographicCamera(-SUNSH.near.ext, SUNSH.near.ext, SUNSH.near.ext, -SUNSH.near.ext, 1, SUNSH.far);
+sunShNCam.layers.set(1);
+LIGHT.uniforms.uL_SunShN.value = sunShNRT.depthTexture;
+LIGHT.uniforms.uL_SunShNK.value.set(SUNSH.far - 1, 2 * SUNSH.near.ext, SUNSH.near.size);
+const _sspN = new THREE.Vector3();
+function sunShadowNear() {
+  const U = LIGHT.uniforms, N = SUNSH.near;
+  if (!N.on) { U.uL_SunShNOn.value = 0; return; }
+  const tx = 2 * N.ext / N.size;
+  const sS = Math.round(player.theta * R / tx) * tx, zS = Math.round(player.za / tx) * tx, th = sS / R;
+  groundPoint(th, zS, 0, _sspN);
+  const cx = Math.cos(th), cy = Math.sin(th);
+  sunShNCam.position.set(_sspN.x - cx * SUNSH.H, _sspN.y - cy * SUNSH.H, _sspN.z);
+  sunShNCam.up.set(0, 0, 1); sunShNCam.lookAt(_sspN); sunShNCam.updateMatrixWorld();
+  U.uL_SunShNMat.value.multiplyMatrices(sunShNCam.projectionMatrix, sunShNCam.matrixWorldInverse);
+  U.uL_SunShNTh.value = th; SHU.uShU.value.set(th, 1, R, 0); SHU.uShViewInv.value.copy(sunShNCam.matrixWorld);   // 18b-3: unroll di sudut peta dekat
+  scene.overrideMaterial = depthMat;
+  renderer.setRenderTarget(sunShNRT); renderer.clear(); renderer.render(scene, sunShNCam);
+  scene.overrideMaterial = null;
+  if (ALPHA_CASTERS.length) {
+    for (const m of ALPHA_CASTERS) { m.userData.mainMat = m.material; m.material = m.userData.depthMat; }
+    sunShNCam.layers.set(2); renderer.render(scene, sunShNCam); sunShNCam.layers.set(1);
+    for (const m of ALPHA_CASTERS) m.material = m.userData.mainMat;
+  }
+  U.uL_SunShNOn.value = 1;
+}
 const _ssp = new THREE.Vector3();
 function sunShadowPass() {
   const U = LIGHT.uniforms;
-  if (!SHADOW.enabled || !SUNSH.on || ext.active || U.uL_Sunline.value < 0.15 || !['ground', 'air', 'tram', 'tour'].includes(player.state)) { U.uL_SunShOn.value = 0; return; }
+  if (!SHADOW.enabled || !SUNSH.on || ext.active || U.uL_Sunline.value < 0.15 || !['ground', 'air', 'tram', 'tour'].includes(player.state)) { U.uL_SunShOn.value = 0; U.uL_SunShNOn.value = 0; return; }
   const tx = 2 * SUNSH.ext / SUNSH.size;
   const sS = Math.round(player.theta * R / tx) * tx, zS = Math.round(player.za / tx) * tx, th = sS / R;
   groundPoint(th, zS, 0, _ssp);
@@ -6433,6 +6496,7 @@ function sunShadowPass() {
     sunShCam.layers.set(2); renderer.render(scene, sunShCam); sunShCam.layers.set(1);
     for (const m of ALPHA_CASTERS) m.material = m.userData.mainMat;
   }
+  sunShadowNear();                                                 // revisi V1: peta dekat 40 m
   shpEnd();
   renderer.setRenderTarget(null);
 }
