@@ -935,6 +935,8 @@ const LIGHT = { uniforms: {
   uL_ShadowTh: { value: 0 }, uL_SunShTh: { value: 0 },
   // 19b: lampu depan motor. Head = (posisi lampu, kekuatan 0..1), HeadDir = arah sorot, HeadG = (s, za, cos, sin arah motor) untuk kolam di tanah
   uL_Head: { value: new THREE.Vector4(0, 0, -1e5, 0) }, uL_HeadDir: { value: new THREE.Vector3(0, 0, 1) }, uL_HeadG: { value: new THREE.Vector4(0, -1e4, 1, 0) },
+  // V1: detail material dekat (1 = nyala, preset Ultra dan Tinggi; ?detail=0 mematikan untuk banding)
+  uL_Detail: { value: 0 },
 } };
 // 18b-3: peta bayangan dirender dalam koordinat silinder terbuka: tiap titik dipindah ke bidang singgung di sudut th0 dengan
 // busur (di jari-jari R) dan jarak dari sumbu tetap. Kolom peta = arah atas lokal di mana pun, arah cahaya cincin cap sama
@@ -1186,6 +1188,45 @@ const LIGHT_GLSL = /* glsl */`
     }
     return col;
   }
+  // ---- V1: detail material prosedural (tanpa tekstur dari luar) ----
+  // Noise nilai + turunan analitik. Hash integer: koordinat negatif dimasker positif (konversi int -> uint aman).
+  uniform float uL_Detail;
+  float mdHash(vec2 p) {
+    uvec2 q = uvec2((ivec2(floor(p)) + 65536) & ivec2(0x7fffffff));
+    uint n = q.x * 1597334677u ^ q.y * 3812015801u;
+    n = (n ^ (n >> 15u)) * 2246822519u; n ^= n >> 13u;
+    return float(n) * (1.0 / 4294967295.0);
+  }
+  vec3 mdNoiseD(vec2 p) {                                                   // x = nilai 0..1, yz = turunan terhadap p
+    vec2 i = floor(p), f = p - i, u = f * f * (3.0 - 2.0 * f), du = 6.0 * f * (1.0 - f);
+    float a = mdHash(i), b = mdHash(i + vec2(1.0, 0.0)), c = mdHash(i + vec2(0.0, 1.0)), d = mdHash(i + vec2(1.0, 1.0));
+    float k = a - b - c + d;
+    return vec3(a + (b - a) * u.x + (c - a) * u.y + k * u.x * u.y, du * vec2(b - a + k * u.y, c - a + k * u.x));
+  }
+  // Triplanar di koordinat dunia: kembali (kekasaran relatif -1..1, kotor 0..1), n dibelokkan tonjolan halus.
+  // amt = kekuatan per material, fp = ukuran satu piksel di permukaan (m): tonjolan halus hilang sebelum berkedip.
+  vec2 matDetail(vec3 p, inout vec3 n, float amt, float fp) {
+    if (uL_Detail < 0.5 || amt < 0.01) return vec2(0.0);
+    vec3 dv = p - cameraPosition; float d2 = dot(dv, dv);
+    if (d2 > 3600.0) return vec2(0.0);                                      // > 60 m: tidak terlihat, tidak dihitung
+    float fade = amt * (1.0 - smoothstep(400.0, 3600.0, d2));               // pudar 20-60 m
+    vec3 w = n * n; w *= w; w /= (w.x + w.y + w.z);                         // jumlah >= 1/3 untuk n satuan (tanpa bagi nol)
+    float fineK = 1.0 - smoothstep(0.008, 0.025, fp), midK = 1.0 - smoothstep(0.03, 0.09, fp);
+    vec3 g = vec3(0.0); float r = 0.0, gr = 0.0;
+    for (int k = 0; k < 3; k++) {
+      vec2 q = k == 0 ? p.yz : k == 1 ? p.xz : p.xy;
+      vec3 c = mdNoiseD(q * 1.6 + float(k) * 17.0);                         // petak 0,6 m: licin / kasar
+      vec3 e = mdNoiseD(q * 7.0 + float(k) * 31.0);                         // noda 14 cm
+      vec3 f = mdNoiseD(q * 40.0 + float(k) * 57.0);                        // tonjolan 2,5 cm (cat kulit jeruk, logam tergores)
+      vec2 s = f.yz * (40.0 * 0.0008) * fineK + e.yz * (7.0 * 0.002) * midK; // kemiringan tonjolan
+      vec3 sw = k == 0 ? vec3(0.0, s) : k == 1 ? vec3(s.x, 0.0, s.y) : vec3(s, 0.0);
+      float wk = k == 0 ? w.x : k == 1 ? w.y : w.z;
+      g += sw * wk; r += (c.x * 2.0 - 1.0) * wk; gr += smoothstep(0.55, 0.85, 0.6 * e.x + 0.4 * c.x) * wk;
+    }
+    vec3 nb = n - (g - dot(g, n) * n) * fade;
+    n = nb * inversesqrt(max(dot(nb, nb), 1e-8));
+    return vec2(r, gr) * fade;
+  }
 `;
 const CABIN_LIGHT = { uCabin: { value: new THREE.Color(0, 0, 0) } };   // 15a: lampu kabin trem malam (material userData.cabin)
 // 17b: kilap dan Fresnel untuk material dasar yang ditandai specMat() (cat, logam, kaca, air). uSpec = (kekasaran, F0, logam).
@@ -1196,13 +1237,14 @@ const CABIN_LIGHT = { uCabin: { value: new THREE.Color(0, 0, 0) } };   // 15a: l
 // Sisi penonton dari arah kamera terhadap normal, bukan gl_FrontFacing: lintasan BackSide three.js (transparan DoubleSide)
 // membalik urutan muka, sehingga gl_FrontFacing true juga dari dalam (dulu: cosV 0, Fresnel 1, kaca pejal memantulkan silinder).
 const SPEC_GLSL = (glass) => `{
+  float rS = clamp(uSpec.x * (1.0 + 0.45 * mdD.x) + 0.15 * mdD.y, 0.02, 1.0);   // V1: kekasaran bervariasi (mdD = 0: sama dengan uSpec.x)
   vec3 Vv = cameraPosition - vLitWorld; Vv *= inversesqrt(max(dot(Vv, Vv), 1e-8));
   ${glass === 2 ? 'bool inS = dot(litN, Vv) < 0.0; vec3 nS = inS ? -litN : litN;' : 'vec3 nS = litN;'}
   float cosV = clamp(dot(nS, Vv), 0.0, 1.0), om = 1.0 - cosV;
-  float Fr = uSpec.y + (1.0 - uSpec.y) * om * om * om * om * om * (1.0 - 0.7 * uSpec.x);
+  float Fr = uSpec.y + (1.0 - uSpec.y) * om * om * om * om * om * (1.0 - 0.7 * rS);
   vec3 envS;
   ${glass === 2 ? 'if (inS) envS = vec3(0.89, 0.85, 0.74) * (stationLight(vLitWorld, nS) + nightLight(vLitWorld, nS)) * 0.35; else' : ''}
-  envS = farEnv(vLitWorld, reflect(-Vv, nS), uSpec.x, 1.0 - uSpec.x);
+  envS = farEnv(vLitWorld, reflect(-Vv, nS), rS, 1.0 - rS);
   float mx = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
   vec3 tintS = mix(vec3(1.0), diffuseColor.rgb / max(mx, 1e-3), uSpec.z);
   float kS = mix(Fr, 0.5 + 0.5 * Fr, uSpec.z);
@@ -1230,7 +1272,7 @@ function patchLit(mat) {
         vec3 wn = mat3(modelMatrix) * ln; vLitNormal = wn * inversesqrt(max(dot(wn, wn), 1e-12));   // normal nol tetap nol (tanpa NaN)
       }`);
     sh.fragmentShader = (noTram ? '#define NO_TRAM_LIGHT\n' : '') + 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + LIGHT_GLSL +
-      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\noutgoingLight *= stationLight(vLitWorld, litN) + nightLight(vLitWorld, litN);\n' + (cabin ? 'outgoingLight += diffuseColor.rgb * uCabin;\n' : '') + (sp ? SPEC_GLSL(glass) : '') + '#include <opaque_fragment>');
+      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\n' + (sp ? 'vec2 mdD = vec2(0.0);\n' : '') + (sp && !glass ? 'mdD = matDetail(vLitWorld, litN, smoothstep(0.1, 0.3, uSpec.x), 0.0012 * length(vLitWorld - cameraPosition)); outgoingLight *= 1.0 - 0.12 * mdD.y;   // V1: detail material (kaca, air, krom tanpa detail)\n' : '') + 'outgoingLight *= stationLight(vLitWorld, litN) + nightLight(vLitWorld, litN);\n' + (cabin ? 'outgoingLight += diffuseColor.rgb * uCabin;\n' : '') + (sp ? SPEC_GLSL(glass) : '') + '#include <opaque_fragment>');
     if (cabin) sh.fragmentShader = 'uniform vec3 uCabin;\n' + sh.fragmentShader;
     if (sp) sh.fragmentShader = 'uniform vec3 uSpec;\n' + sh.fragmentShader;
   };
@@ -1839,6 +1881,7 @@ const groundMat = new THREE.ShaderMaterial({
 
       // ---- jalan dan ladang dari dekat ----
       float detail = 1.0 - smoothstep(1.2, 3.0, fp);
+      vec2 mdG = vec2(0.0); float mdRough = 0.8, mdK = 0.0;           // V1: kemiringan tonjolan (s, za), kekasaran, kekuatan kilap kering
       if (detail > 0.0) {
         // aspal: bintik agregat + tambalan, marka putih
         float spk = hash2(P * 18.0) - 0.5;
@@ -1862,6 +1905,14 @@ const groundMat = new THREE.ShaderMaterial({
         vec2 tf = abs(fract(P / 3.0 + 0.5) - 0.5) * 3.0;
         float joint = max(lineAA(tf.x, 0.03, fp), lineAA(tf.y, 0.03, fp));
         col = mix(col, col * mix(tv, 0.72, joint) * (1.0 + 0.05 * spk * (1.0 - smoothstep(0.02, 0.08, fp))), concM * detail);
+        if (uL_Detail > 0.5) {                                        // V1: aspal dan beton: tonjolan agregat, bagian aus lebih licin, noda
+          mdK = (asphM + concM * 0.7) * detail;
+          vec3 nA = mdNoiseD(P * 22.0 + 5.0), nB = mdNoiseD(P * 5.0 + 19.0), nC = mdNoiseD(P * 0.35 + 3.0);
+          float fineK = 1.0 - smoothstep(0.01, 0.03, fp), midK = 1.0 - smoothstep(0.04, 0.12, fp);
+          mdG = mdK * (nA.yz * (22.0 * 0.0016) * fineK + nB.yz * (5.0 * 0.008) * midK);
+          mdRough = mix(0.9, 0.55, smoothstep(0.45, 0.85, nC.x)) * (1.0 - 0.06 * joint);
+          col *= 1.0 - 0.1 * mdK * smoothstep(0.5, 0.85, 0.55 * nB.x + 0.45 * nC.x);
+        }
         // jalan tanah ladang: kerikil + dua alur roda
         float ruts = max(lineAA(abs(dS) - 1.0, 0.28, fp), 0.0);
         col = mix(col, col * (0.92 + 0.16 * hash2(P * 9.0) * (1.0 - smoothstep(0.03, 0.12, fp))) * (1.0 - 0.2 * ruts), dirtM * detail);
@@ -1956,6 +2007,14 @@ const groundMat = new THREE.ShaderMaterial({
       float cshadow = textureLod(uCloudTex, uv, 0.0).r;           // bayangan awan (sunline terhalang sebagian)
       light -= uL_SunlineCol * uL_Sunline * uCloudK * cshadow;
       col *= max(light, vec3(0.0));
+      if (mdK > 0.01) {                                           // V1: kilap kering aspal dan beton (F0 0,04), terlihat saat dilihat miring
+        vec3 tS = vec3(-up.y, up.x, 0.0), nD = nrm - tS * mdG.x - vec3(0.0, 0.0, mdG.y);
+        nD *= inversesqrt(max(dot(nD, nD), 1e-8));
+        vec3 V = cameraPosition - vWorld; V *= inversesqrt(max(dot(V, V), 1e-8));
+        float om = 1.0 - clamp(dot(V, nD), 0.0, 1.0), sm = (1.0 - mdRough) * (1.0 - mdRough);   // permukaan kasar: Fresnel miring sangat diredam
+        float F = 0.04 * (0.4 + sm) + 0.96 * om * om * om * om * om * sm;
+        col += farEnv(vWorld, reflect(-V, nD), mdRough, 1.0 - mdRough) * F * 0.5 * mdK * (1.0 - wetL);
+      }
       if (uWet > 0.01 && waterM < 0.5) {                          // 12c revisi: pantulan Fresnel (kuat saat dilihat miring), lampu jalan, riak hujan
         vec3 V = cameraPosition - vWorld; float vl = length(V); V = vl > 1e-4 ? V / vl : up;
         float cosT = clamp(dot(V, up), 0.0, 1.0), F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
@@ -8755,6 +8814,9 @@ const PRESETS = [
 ];
 const PRESET = { idx: 0, auto: true, low: 0 };
 const PRESET_HOOKS = [];
+// V1: detail material dekat hanya di Ultra dan Tinggi (Hemat / M1 tidak berubah); ?detail=0 mematikan untuk banding
+const MATDET = { off: new URLSearchParams(location.search).get('detail') === '0' };
+PRESET_HOOKS.push((i) => { LIGHT.uniforms.uL_Detail.value = !MATDET.off && i <= 1 ? 1 : 0; });
 function applyPreset(i) {
   PRESET.idx = i; const P = PRESETS[i];
   CONFIG.dprMax = P.dpr; applyPixelRatio();
