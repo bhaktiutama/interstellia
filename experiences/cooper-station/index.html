@@ -3112,10 +3112,19 @@ const GEO = {
   }),
 };
 const BUILD = { gable: [], gablez: [], gambrel: [], hip: [], flat: [], silo: [] };   // [s, za, w, d, h, elev, colorHex, gaya, depan]
+// 22: keragaman kota. Generator acak sendiri (urutan acak kota lama tidak bergeser). Bangunan baru dicatat di BUILD_LATE (RAGAM.late)
+// dan baru masuk BUILD sesudah semua bangunan lama, jadi urutan instance dan peralatan atap gedung lama tetap. ?ragam=0 = kota sebelum 22.
+const RAGAM = { on: new URLSearchParams(location.search).get('ragam') !== '0', blocks: 0, lots: 0, setback: 0, restyle: 0, cornice: 0, late: false,
+  faces: [] };                                                       // 22c: muka depan gedung bata { s, za, w, d, h, front, p1, p2 }
+const BUILD_LATE = [];
+let sdRagam = 20261006;
+const r22 = () => ((sdRagam = (sdRagam * 16807) % 2147483647) / 2147483647);
+const U22 = (a, b) => a + (b - a) * r22(), P22 = (arr) => arr[Math.floor(r22() * arr.length)];
 const houseList = [];                                            // semua bangunan untuk peta dan uji
 // gaya fasad: 0 kantor/plester, 1 menara kaca, 2 apartemen berbalkon, 3 rumah, 4 gudang/industri, 5 lumbung, 6 silo/tangki,
-// 7 gereja, 8 sekolah/pasar, 9 garasi, 10 hanggar/terminal, 11 podium toko. depan: 0 tidak ada, 1 sisi -za, 2 sisi +za
-function building(type, s, za, w, d, h, color, elev = 0, collider = true, style = -1, front = 0) {
+// 7 gereja, 8 sekolah/pasar, 9 garasi, 10 hanggar/terminal, 11 podium toko, 12 bata klasik (22a), 13 batu (22a), 14 lis atap (22a).
+// depan: 0 tidak ada, 1 sisi -za, 2 sisi +za
+function building(type, s, za, w, d, h, color, elev = 0, collider = true, style = -1, front = 0, p1 = 0, p2 = 0) {
   if (inBallpark(s, za, 2)) return;                                  // sel lapangan baseball dikosongkan
   if (style < 0) {
     if (type === 'silo') style = 6;
@@ -3128,7 +3137,8 @@ function building(type, s, za, w, d, h, color, elev = 0, collider = true, style 
     else if (COLS.house.includes(color)) style = 9;
     else style = 0;
   }
-  BUILD[type].push([s, za, w, d, h, elev, color, style, front]);
+  const e = [s, za, w, d, h, elev, color, style, front, p1, p2];   // 22c: p1, p2 = parameter gaya 0..1 (dikirim di pecahan aStyle)
+  if (RAGAM.late) BUILD_LATE.push([type, e]); else BUILD[type].push(e);
   if (elev === 0) houseList.push([s, za, w, d, h, type]);
   if (collider && elev === 0) addCollider(s, za, w / 2, d / 2);
 }
@@ -3434,6 +3444,81 @@ function buildSite(site) {
     site.hall = { s: bs, za: bz };
   }
 }
+// --- 22a-22b: keragaman kota pusat --------------------------------------
+// Palet sRGB: bata merah-cokelat, batu kapur / terakota, lis (batu terang, logam bercat gelap)
+const RAGAM_COL = {
+  brick: ['#8c4a37', '#9a573f', '#7b3e2d', '#a0654a', '#6f4434', '#b07a58', '#874f3c', '#c19a76'],
+  stone: ['#cdbfa5', '#d8ccb4', '#bfae92', '#a89c88', '#c9b79a', '#e0d6c2', '#b9a587'],
+  trim: ['#ddd5c4', '#5b5650', '#8f8a80', '#e8e2d6', '#3f4a44'],
+};
+function ragamCornice(s, za, w, d, top) {                          // lis atap menonjol 0,45 m (gaya 14), puncak 0,15 m di atas atap
+  const was = RAGAM.late; RAGAM.late = true;
+  building('flat', s, za, w + 0.9, d + 0.9, 0.7, P22(RAGAM_COL.trim), top - 0.55, false, 14);
+  RAGAM.late = was; RAGAM.cornice++;
+}
+// menara: kaca seperti dulu, atau (35% menara > 45 m) batu bertingkat mundur (gaya 13). Tingkat dasar tetap di urutan lama (lebar,
+// dalam, dan puncak + elev sama, jadi angka acak peralatan atap sama); tingkat atas dan lis masuk BUILD_LATE. Puncak tetap sama.
+function ragamTower(s, za, w, d, h, col, elev) {
+  if (!RAGAM.on || h < 45 || r22() >= 0.35) { building('flat', s, za, w, d, h, col, elev); return; }
+  const stone = P22(RAGAM_COL.stone), h1 = h * U22(0.45, 0.6), h2 = (h - h1) * U22(0.55, 0.7), h3 = h - h1 - h2, p1 = r22();
+  building('flat', s, za, w, d, h1, stone, elev, true, 13, 0, p1);
+  RAGAM.late = true;
+  building('flat', s, za, w * 0.78, d * 0.78, h2, stone, elev + h1, false, 13, 0, p1);
+  building('flat', s, za, w * 0.56, d * 0.56, h3, stone, elev + h1 + h2, false, 13, 0, p1);
+  RAGAM.late = false;
+  ragamCornice(s, za, w, d, elev + h1); ragamCornice(s, za, w * 0.78, d * 0.78, elev + h1 + h2); ragamCornice(s, za, w * 0.56, d * 0.56, elev + h);
+  RAGAM.setback++;
+}
+// 22b dinding jalan: kavling sempit (6-26 m) menempel di tepi blok mengelilingi menara (core). Muka jalan lokal tepat di tepi blok
+// (14 m dinding ke dinding), muka arteri mundur 3,6 m agar kafe trotoar (18,6 m dari as arteri) dan pejalan kaki tetap muat.
+// art = [tepi s0, s1, z0, z1 berbatasan arteri]. Kavling dalam ke core disambung 0,6 m (tanpa muka sebidang). false = blok terlalu kecil.
+function ragamWall(q, art, core, cbdK) {
+  const SB = 3.6, S0 = q.s0 + (art[0] ? SB : 0), S1 = q.s1 - (art[1] ? SB : 0), Z0 = q.z0 + (art[2] ? SB : 0), Z1 = q.z1 - (art[3] ? SB : 0);
+  if (S1 - S0 < 26 || Z1 - Z0 < 26) return false;
+  const lotW = () => { const k = r22(); return k < 0.55 ? U22(6, 10) : k < 0.88 ? U22(10, 16) : U22(16, 26); };
+  let prev = '';
+  const lot = (cs, cz, w, d, front) => {
+    if (w < 3.5 || d < 4 || !clearOf(cs, cz, w, d, 1)) return false;
+    const k = r22();
+    let fl = Math.round(U22(3, 6) + cbdK * U22(0, 8)); if (r22() < 0.08) fl += Math.round(U22(5, 10));   // sebagian kecil jauh lebih tinggi
+    const st = k < 0.5 ? 12 : k < 0.68 ? 13 : k < 0.84 ? 2 : k < 0.94 ? 0 : 11;
+    let col = st === 12 ? P22(RAGAM_COL.brick) : st === 13 ? P22(RAGAM_COL.stone) : P22(COLS.mid);
+    if (st + col === prev) col = st === 12 ? P22(RAGAM_COL.brick) : st === 13 ? P22(RAGAM_COL.stone) : P22(COLS.mid);   // tetangga jarang kembar
+    prev = st + col;
+    const h = st === 12 ? 4.2 + (fl - 1) * 3.2 + 1.2 : st === 13 ? 5.0 + (fl - 1) * 3.6 + 1.2 : st === 11 ? 4.6 + 3.6 * (Math.min(fl, 2) - 1) + 0.6 : st === 2 ? fl * 3.2 + 0.6 : 4.4 + (fl - 1) * 3.4;
+    const p1 = r22(), p2 = r22();
+    building('flat', cs, cz, w, d, h, col, 0, true, st, front, p1, p2);
+    if (st === 12 || st === 13) ragamCornice(cs, cz, w, d, h);
+    if (st === 12) RAGAM.faces.push({ s: cs, za: cz, w, d, h, front, p1, p2 });
+    RAGAM.lots++; return true;
+  };
+  RAGAM.late = true;
+  const corner = {};
+  for (const [zE, dir, front] of [[Z0, 1, 1], [Z1, -1, 2]]) {       // tepi sepanjang s (muka -za di Z0, +za di Z1), lebar penuh termasuk sudut
+    let s = S0, first = true;
+    while (s < S1 - 0.5) {
+      let w = lotW(); if (S1 - s - w < 5) w = S1 - s;
+      let dep = Math.min(U22(10, 16), (Z1 - Z0) / 2 + 1);
+      if (core && s + w > core.s0 && s < core.s1) dep = Math.min(dep, (dir > 0 ? core.z0 - Z0 : Z1 - core.z1) + 0.6);
+      const ok = lot(s + w / 2, zE + dir * dep / 2, w, dep, front);
+      if (first) corner[front + 'a'] = ok ? dep : 0;
+      if (s + w >= S1 - 0.5) corner[front + 'b'] = ok ? dep : 0;
+      s += w; first = false;
+    }
+  }
+  for (const [sE, dir, front, ca, cb] of [[S0, 1, 3, corner['1a'], corner['2a']], [S1, -1, 4, corner['1b'], corner['2b']]]) {   // tepi sepanjang za, di antara sudut
+    const za1 = Z1 - (cb || 0); let z = Z0 + (ca || 0);
+    while (z < za1 - 0.5) {
+      let w = lotW(); if (za1 - z - w < 5) w = za1 - z;
+      let dep = Math.min(U22(10, 16), (S1 - S0) / 2 + 1);
+      if (core && z + w > core.z0 && z < core.z1) dep = Math.min(dep, (dir > 0 ? core.s0 - S0 : S1 - core.s1) + 0.6);
+      lot(sE + dir * dep / 2, z + w / 2, dep, w, front);
+      z += w;
+    }
+  }
+  RAGAM.late = false; RAGAM.blocks++;
+  return true;
+}
 for (const c of cityCells) {
   const { sCuts, zCuts } = c.grid;
   for (let a = 0; a < sCuts.length - 1; a++) for (let b = 0; b < zCuts.length - 1; b++) {
@@ -3447,15 +3532,24 @@ for (const c of cityCells) {
       if (cbd < 380 || rnd() < 0.4) {                               // podium + menara
         const w = bw * U(0.7, 0.9), dd = bd * U(0.7, 0.9);
         if (!clearOf(bs, bz, w, dd)) continue;
-        const col = pick(COLS.tower);
-        building('flat', bs, bz, w, dd, U(7, 10), pick(COLS.mid), 0, true, 11);
+        const col = pick(COLS.tower), ph = U(7, 10), pc = pick(COLS.mid);   // urutan angka acak sama dengan sebelum 22
         const hT = cbd < 380 ? U(60, 150) * (1 - 0.45 * cbd / 380) : U(22, 40) + 38 * t * U(0.5, 1);
-        building('flat', bs + U(-3, 3), bz + U(-3, 3), w * U(0.45, 0.65), dd * U(0.45, 0.65), hT, col, 8);
+        const ts = bs + U(-3, 3), tz = bz + U(-3, 3), tw = w * U(0.45, 0.65), td = dd * U(0.45, 0.65);
+        // 22b: 70% blok menjadi dinding jalan (kavling bata, batu, apartemen) mengelilingi menara yang kini berdiri dari tanah
+        // (puncak sama); sisanya podium plaza seperti dulu
+        const core = { s0: ts - tw / 2, s1: ts + tw / 2, z0: tz - td / 2, z1: tz + td / 2 };
+        if (RAGAM.on && r22() < 0.7 && ragamWall({ s0, s1, z0, z1 }, [a === 0, a === sCuts.length - 2, b === 0, b === zCuts.length - 2], core, Math.max(0, 1 - cbd / 600)))
+          ragamTower(ts, tz, tw, td, hT + 8, col, 0);
+        else { building('flat', bs, bz, w, dd, ph, pc, 0, true, 11); ragamTower(ts, tz, tw, td, hT, col, 8); }
       } else {                                                    // 2-3 gedung berjajar
         const k = rnd() < 0.5 ? 2 : 3, piece = bd / k;
         for (let q = 0; q < k; q++) {
           const w = bw * U(0.7, 0.95), dd = piece - U(3, 6), zz = z0 + piece * (q + 0.5);
-          if (clearOf(bs, zz, w, dd)) building('flat', bs, zz, w, dd, U(14, 30) + 25 * t * rnd(), pick(rnd() < 0.5 ? COLS.tower : COLS.mid));
+          if (clearOf(bs, zz, w, dd)) {
+            const hh = U(14, 30) + 25 * t * rnd(), cc = pick(rnd() < 0.5 ? COLS.tower : COLS.mid);
+            if (RAGAM.on && r22() < 0.35) { building('flat', bs, zz, w, dd, hh, P22(RAGAM_COL.stone), 0, true, 13, 0, r22()); ragamCornice(bs, zz, w, dd, hh); RAGAM.restyle++; }   // 22b: kantor batu
+            else building('flat', bs, zz, w, dd, hh, cc);
+          }
         }
       }
     } else if (cls === 'menengah') {                              // deret gedung 3-7 lantai di dua sisi blok, halaman di tengah
@@ -3464,7 +3558,15 @@ for (const c of cityCells) {
         while (s < s1 - 10) {
           const w = Math.min(s1 - s, U(14, 26)), dd = U(12, 18);
           const cs = s + w / 2, cz = zz + dir * dd / 2;
-          if (w > 8 && clearOf(cs, cz, w, dd)) building('flat', cs, cz, w, dd, U(8, 22), pick(COLS.mid), 0, true, 2, dir === 1 ? 1 : 2);
+          if (w > 8 && clearOf(cs, cz, w, dd)) {
+            const hh = U(8, 22), cc = pick(COLS.mid), fr = dir === 1 ? 1 : 2;
+            if (RAGAM.on && r22() < 0.4) {                          // 22b: deret bata (walk-up) dengan toko dan lis, jumlah lantai sama
+              const h12 = 4.2 + (Math.max(2, Math.round((hh - 3.6) / 3.2) + 1) - 1) * 3.2 + 1.2;
+              const p1 = r22(), p2 = r22();
+              building('flat', cs, cz, w, dd, h12, P22(RAGAM_COL.brick), 0, true, 12, fr, p1, p2); ragamCornice(cs, cz, w, dd, h12); RAGAM.restyle++;
+              RAGAM.faces.push({ s: cs, za: cz, w, d: dd, h: h12, front: fr, p1, p2 });
+            } else building('flat', cs, cz, w, dd, hh, cc, 0, true, 2, fr);
+          }
           s += w + U(2, 6);
         }
       }
@@ -3652,12 +3754,15 @@ const BUILD_FS = /* glsl */`
     return (1.0 - smoothstep(w - fw, w + fw, d)) * (1.0 - smoothstep(period * 0.25, period * 0.6, fw));
   }
   void main() {
-    float code = floor(vStyle.x + 0.5), front = floor(vStyle.y + 0.5);
+    float code = floor(vStyle.x + 0.001), front = floor(vStyle.y + 0.001);   // 22c: bilangan bulat = gaya / depan, pecahan / 0,99 = p1 / p2
+    float sp1 = fract(vStyle.x) / 0.99, sp2 = fract(vStyle.y) / 0.99;
     vec3 n = normalize(vNo);
     vec3 N = normalize(vNw);
     vec3 V = normalize(cameraPosition - vW);
     float F = pow(1.0 - clamp(abs(dot(N, V)), 0.0, 1.0), 4.0);
     if (n.y < -0.9) { gl_FragColor = vec4(vec3(0.05), 1.0); return; }   // 20b: muka bawah keluar sebelum cahaya dihitung
+    float hg = 1000.0 - length(vW.xy);                                // 22a: tinggi titik di atas tanah kota (R = 1.000 m)
+    bool upper = hg - vO.y > 2.0;                                     // 22a: instance tidak berdiri di tanah (tingkat atas menara batu)
     vec3 light = stationLight(vW, N) + nightLight(vW, N);             // 17e: lampu jalan malam juga menerangi gedung
     vec3 sky = vec3(0.0);                                             // 17d: pantulan (farEnv), 20b: dihitung hanya bila ada kaca (lihat di bawah)
     vec3 col; vec3 emit = vec3(0.0);
@@ -3672,7 +3777,7 @@ const BUILD_FS = /* glsl */`
         rc = vec3(0.44, 0.44, 0.43) * g;
         rc = mix(rc, vec3(0.62, 0.61, 0.58), band(e, -1.0, 0.45, fwidth(e)));
         if (code == 1.0) rc *= 0.8;
-        if (vScale.y > 90.0) {                                    // 21c: lampu penanda merah berkedip di sudut atap gedung > 90 m (30 kedip per menit)
+        if ((code == 13.0 ? hg : vScale.y) > 90.0) {              // 21c: lampu penanda merah berkedip di sudut atap gedung > 90 m (30 kedip per menit); 22a: tingkat batu memakai tinggi dunia
           float e2 = length(vec2(vScale.x * 0.5 - abs(vO.x), vScale.z * 0.5 - abs(vO.z)));
           float rB = max(0.6, 2.5 * length(fwidth(vO.xz)));       // minimal sekitar 2 piksel agar tetap terlihat dari jauh
           emit = vec3(1.0, 0.06, 0.03) * 8.0 * uNight * step(0.55, fract(uTime * 0.5 + vSeed * 7.0)) * (1.0 - smoothstep(rB * 0.6, rB, e2));
@@ -3721,12 +3826,20 @@ const BUILD_FS = /* glsl */`
       else if (code == 8.0) { fh = 3.8; bay = 3.2; wx0 = 0.1; wx1 = 0.9; wy0 = 0.3; wy1 = 0.85; mat = 4.0; litP = 0.3; }
       else if (code == 9.0) { fh = H; bay = W; mat = 1.0; }
       else if (code == 11.0) { fh = 3.6; bay = 2.8; groundH = 4.6; litP = 0.4; }
+      else if (code == 12.0) {                                     // 22a: bata klasik (walk-up): jendela tegak 1,0-1,3 m, ambang batu, deret toko
+        float ww = 1.0 + 0.3 * sp2;                                // 22c: sama dengan RAGAM_DET di JS
+        fh = 3.2; bay = 2.5 + 0.9 * sp1; wx0 = 0.5 - 0.5 * ww / bay; wx1 = 0.5 + 0.5 * ww / bay; wy0 = 0.2; wy1 = 0.8;
+        groundH = 4.2; mat = 4.0; litP = 0.45;
+      } else if (code == 13.0) {                                   // 22a: batu (kantor lama, menara bertingkat): pilar tegak, spandrel gelap
+        fh = 3.6; bay = 1.6 + 0.7 * sp1; wx0 = 0.18; wx1 = 0.82; wy0 = 0.16; wy1 = 0.84;
+        groundH = upper ? 0.0 : 5.0; mat = 6.0; litP = 0.4;
+      } else if (code == 14.0) { fh = H; bay = W; mat = 7.0; }     // 22a: lis atap
       else { groundH = H > 12.0 ? 4.4 : 0.0; }
       // 21d: gedung kantor tinggi (gaya 0 dan 1) tidak lagi seragam. Jarak mullion, tinggi lantai, proporsi kaca, warna kaca dan
       // rangka dipilih per gedung dari vSeed; satu ruangan di balik kaca selebar rwT meter (beberapa bay, sampai satu lantai penuh).
       // 21e: juga gaya 2 (deretan menengah / apartemen) dan 11 (podium)
       bool varW = code == 0.0 || code == 1.0 || code == 2.0 || code == 11.0;
-      bool offI = code == 0.0 || code == 1.0 || code == 11.0;         // 21e: isi ruangan kantor (gaya 2 = hunian)
+      bool offI = code == 0.0 || code == 1.0 || code == 11.0 || code == 13.0;   // 21e: isi ruangan kantor (gaya 2 = hunian); 22a: batu = kantor
       float mulW = 0.0, rwT = 1.0, openF = 0.0;                   // lebar mullion (bagian bay), lebar ruangan target (m), 1 = lantai terbuka penuh
       vec3 tintH = vec3(1.0), frameCol = vec3(0.55, 0.55, 0.53);
       if (varW) {
@@ -3772,14 +3885,33 @@ const BUILD_FS = /* glsl */`
         float kf = floor(hash1(vec2(vSeed * 31.0, 6.3)) * 4.0);    // warna rangka: gelap, perak, perunggu, putih
         frameCol = kf < 1.0 ? vec3(0.2, 0.22, 0.24) : kf < 2.0 ? vec3(0.62, 0.64, 0.66) : kf < 3.0 ? vec3(0.28, 0.2, 0.14) : vec3(0.78, 0.78, 0.76);
       }
+      if (code == 12.0 || code == 13.0) {                         // 22a: rangka jendela: putih, hitam, hijau tua, cokelat, batu
+        float kf = floor(hash1(vec2(vSeed * 31.0, 6.3)) * 5.0);
+        frameCol = kf < 1.0 ? vec3(0.62, 0.61, 0.58) : kf < 2.0 ? vec3(0.02) : kf < 3.0 ? vec3(0.02, 0.06, 0.035) : kf < 4.0 ? vec3(0.08, 0.04, 0.025) : vec3(0.5, 0.47, 0.4);
+      }
       // bahan dinding
       vec3 wall = base;
       float grain = 0.93 + 0.1 * vn(vec2(u, y) * 1.3) + 0.04 * vn(vec2(u, y) * 9.0);
       if (mat == 1.0) wall *= 1.0 - 0.22 * lines(y, 0.2, 0.012, fwY);
       else if (mat == 2.0) wall *= 1.0 - 0.25 * lines(u, 0.25, 0.04, fwU) - 0.1 * lines(u + 0.125, 0.25, 0.03, fwU);
       else if (mat == 3.0) wall *= (1.0 - 0.3 * lines(u, 0.3, 0.012, fwU)) * (0.9 + 0.2 * hash1(vec2(floor(u / 0.3), 3.0)));
+      else if (mat == 4.0 && code == 12.0) {                       // 22a: bata per buah (warna acak, rata bila lebih kecil dari piksel), nat terang, noda turun
+        float r = floor(y / 0.075), bxi = floor((u + mod(r, 2.0) * 0.11) / 0.22), fb = smoothstep(0.015, 0.05, max(fwU, fwY));
+        wall *= mix(0.82 + 0.36 * hash1(vec2(bxi, r)), 1.0, fb);
+        float nat = max(lines(y, 0.075, 0.006, fwY), lines(u + mod(r, 2.0) * 0.11, 0.22, 0.006, fwU));
+        wall = mix(wall, vec3(0.4, 0.38, 0.34), 0.45 * nat);
+        wall *= 0.86 + 0.14 * vn(vec2(u * 0.35 + vSeed * 9.0, y * 0.04));
+      }
       else if (mat == 4.0) { float r = floor(y / 0.075); wall *= (1.0 - 0.3 * lines(y, 0.075, 0.006, fwY)) * (1.0 - 0.3 * lines(u + mod(r, 2.0) * 0.11, 0.22, 0.006, fwU)); }
       else if (mat == 5.0) wall = mix(vec3(0.05, 0.07, 0.09), base * 0.35, 0.5);
+      else if (mat == 6.0) {                                      // 22a: batu potong: sambungan datar tiap 0,55 m, tegak tiap 1,1 m berselang
+        float r = floor(y / 0.55), bxi = floor((u + mod(r, 2.0) * 0.55) / 1.1);
+        wall *= (1.0 - 0.18 * lines(y, 0.55, 0.008, fwY)) * (1.0 - 0.15 * lines(u + mod(r, 2.0) * 0.55, 1.1, 0.008, fwU));
+        wall *= mix(0.93 + 0.14 * hash1(vec2(bxi, r)), 1.0, smoothstep(0.08, 0.3, max(fwU, fwY)));
+      } else if (mat == 7.0) {                                    // 22a: lis: profil terang di atas, gigi (dentil) di tengah, bayangan di bawah
+        float tl = y / max(H, 1e-3);
+        wall *= mix(0.5, 1.12, smoothstep(0.05, 0.45, tl)) * (1.0 - 0.4 * lines(u, 0.3, 0.05, fwU) * band(tl, 0.3, 0.6, fwY / max(H, 1e-3)));
+      }
       wall *= grain;
       if (code == 6.0) wall *= 1.0 - 0.3 * lines(y, 0.8, 0.05, fwY);   // cincin silo
       // grid jendela
@@ -3791,7 +3923,8 @@ const BUILD_FS = /* glsl */`
       float ax = smoothstep(0.12, 0.35, fwx), ay = smoothstep(0.12, 0.35, fwy);
       float detail = 1.0 - max(ax, ay);
       float winM = 0.0, frameM = 0.0;
-      bool hasWin = code != 5.0 && code != 6.0 && code != 9.0 && !gableEnd && yy > 0.0 && y < H - 0.5;
+      bool hasWin = code != 5.0 && code != 6.0 && code != 9.0 && code != 14.0 && !gableEnd && yy > 0.0 && y < H - 0.5;
+      if (code == 12.0 || code == 13.0) hasWin = hasWin && fi < floor((H - 1.2 - groundH) / fh);   // 22a: hanya lantai utuh di bawah pita lis
       if (code == 4.0 || code == 10.0) {                          // gudang: jendela pita tinggi
         hasWin = y > H - 2.6 && y < H - 1.0;
         fy = (y - (H - 2.6)) / 1.6; wy0 = 0.0; wy1 = 1.0; wx0 = 0.08; wx1 = 0.92; fwy = fwY / 1.6;
@@ -3802,17 +3935,51 @@ const BUILD_FS = /* glsl */`
         frameM = max(0.0, band(fx, wx0 - 0.04, wx1 + 0.04, fwx) * band(fy, wy0 - 0.04, wy1 + 0.04, fwy) - winM) * detail;
         if (code == 3.0 || code == 7.0) winM *= 1.0 - 0.8 * max(lines(fx, 0.5, 0.006, fwx), lines(fy, 0.5, 0.006, fwy));   // kisi jendela
         if (mulW > 0.0) winM *= 1.0 - 0.7 * lines(fx, 1.0, mulW, fwx);                    // mullion (21d: lebar per gedung)
+        if (code == 12.0) {                                       // 22a: ambang atas dan bawah batu, palang tengah jendela sorong
+          vec3 trimC = vec3(0.55, 0.5, 0.42);
+          float lint = band(fx, wx0 - 0.035, wx1 + 0.035, fwx) * band(fy, wy1, wy1 + 0.06, fwy);
+          float sill = band(fx, wx0 - 0.05, wx1 + 0.05, fwx) * band(fy, wy0 - 0.03, wy0, fwy);
+          wall = mix(wall, trimC, max(lint, sill) * detail);
+          float mid = (wy0 + wy1) * 0.5, mb = band(fy, mid - 0.012, mid + 0.012, fwy) * band(fx, wx0, wx1, fwx) * detail;
+          frameM = max(frameM, mb); winM *= 1.0 - mb;
+        } else if (code == 13.0) {                                // 22a: spandrel gelap di antara jendela bertumpuk: garis tegak terbaca dari jauh
+          float spS = mix(band(fx, wx0, wx1, fwx), wx1 - wx0, ax) * (1.0 - mix(band(fy, wy0, wy1, fwy), wy1 - wy0, ay));
+          wall = mix(wall, base * 0.5, spS * 0.8);
+        }
       }
       // 21d: satu ruangan = rm bay berurutan (rm = 1 untuk gaya lain, hasil identik dengan sebelumnya); rb = nomor ruangan sepanjang muka
       float bayE = W / nB, rm = varW ? clamp(floor((openF > 0.5 ? 1e4 : rwT) / bayE + 0.5), 1.0, nB) : 1.0;
       float rb = floor(bi / rm);
       float avgWin = hasWin ? (wx1 - wx0) * (wy1 - wy0) : 0.0;
       // lantai dasar: etalase kaca / pintu masuk
-      float shopM = 0.0;
-      if (groundH > 0.0 && y < groundH) {
+      float shopM = 0.0, neon = 0.0;
+      vec3 neonC = vec3(0.0);
+      if (code == 12.0 && y < groundH) {
+        // 22a: deret toko: modul 3,2-5 m per gedung, pintu di kiri / kanan, papan nama berwarna per toko dengan huruf, kaki etalase gelap
+        float nS = max(1.0, floor(W / (3.2 + 1.8 * fract(sp1 * 7.31)) + 0.5)), ui = (u / W + 0.5) * nS, si = floor(ui), sfx = fract(ui), fws = fwU * nS / W;
+        float hs = hash1(vec2(si + vSeed * 31.0, fz ? 4.0 : 8.0)), hb2 = hash1(vec2(si, vSeed * 7.0 + 1.0));
+        float drM = band(sfx, hs < 0.5 ? 0.07 : 0.71, hs < 0.5 ? 0.29 : 0.93, fws) * band(y, 0.02, 2.4, fwY);
+        shopM = band(y, 0.55, groundH - 1.25, fwY) * band(sfx, 0.07, 0.93, fws) * (1.0 - drM);
+        vec3 signC = hb2 < 0.2 ? vec3(0.02, 0.1, 0.05) : hb2 < 0.4 ? vec3(0.35, 0.03, 0.02) : hb2 < 0.55 ? vec3(0.02, 0.03, 0.12) : hb2 < 0.7 ? vec3(0.02) : hb2 < 0.85 ? vec3(0.5, 0.42, 0.28) : vec3(0.3, 0.12, 0.02);
+        float board = band(y, groundH - 1.1, groundH - 0.3, fwY) * band(sfx, 0.03, 0.97, fws);
+        float gu = u / 0.3, glyph = band(fract(gu), 0.15, 0.85, fwU / 0.3) * step(0.35, hash1(vec2(floor(gu), si + 3.0)));
+        glyph = mix(glyph, 0.45, smoothstep(0.15, 0.4, fwU / 0.3)) * band(sfx, 0.2, 0.8, fws) * band(y, groundH - 0.9, groundH - 0.5, fwY);
+        vec3 glyphC = hb2 < 0.7 ? vec3(0.85, 0.8, 0.6) : vec3(0.03);
+        wall = mix(wall, vec3(0.03, 0.03, 0.035), band(y, 0.0, 0.55, fwY) * band(sfx, 0.07, 0.93, fws));
+        wall = mix(wall, mix(signC, glyphC, glyph), board);
+        wall = mix(wall, vec3(0.06, 0.045, 0.035), drM);
+        neon = board * glyph * step(hb2, 0.7) * step(0.5, hash1(vec2(si, vSeed * 3.0 + 17.0)));   // setengah papan berhuruf terang menyala malam
+        neonC = hash1(vec2(si, 23.0)) < 0.7 ? vec3(1.0, 0.85, 0.6) : vec3(1.0, 0.3, 0.25);
+      }
+      if (code != 12.0 && groundH > 0.0 && y < groundH) {
         float sfx = fract(u / 2.6 + 0.5);
         shopM = band(y, 0.15, groundH - 0.9, fwY) * band(sfx, 0.06, 0.94, fwU / 2.6);
         wall = mix(wall, vec3(0.16, 0.16, 0.17), band(y, groundH - 0.8, groundH - 0.3, fwY));   // pita kanopi / papan nama
+      }
+      if (code == 12.0 || code == 13.0) {                         // 22a: pita batu di bawah lis dan di atas toko
+        vec3 beltC = code == 12.0 ? vec3(0.55, 0.5, 0.42) : base * 1.08;
+        wall = mix(wall, beltC, band(y, H - 1.2, H - 0.95, fwY));
+        if (groundH > 0.0) wall = mix(wall, beltC, band(y, groundH - 0.22, groundH + 0.05, fwY));
       }
       // pintu
       float doorM = 0.0;
@@ -3855,7 +4022,7 @@ const BUILD_FS = /* glsl */`
         vec3 Rd = reflect(-V, N) + upR * tilt;
         vec3 envF = farEnv(vW, Rd, 0.08, 0.9);
         float rn = dot(Rd, N);
-        if ((code == 0.0 || code == 1.0 || code == 2.0 || code == 8.0 || code == 11.0) && rn > 0.02) {
+        if ((code == 0.0 || code == 1.0 || code == 2.0 || code == 8.0 || code == 11.0 || code == 12.0 || code == 13.0) && rn > 0.02) {
           float WC = 28.0, tc = WC / max(rn, 0.12);
           vec3 hp = vW + Rd * tc;                                    // titik kena di muka seberang (dunia)
           float yHit = y + dot(Rd, upR) * tc;                        // tinggi di atas tanah
@@ -3878,7 +4045,7 @@ const BUILD_FS = /* glsl */`
       // 21c: nyala bertingkat: lantai > blok 4 bay (satu kantor / unit) > jendela, peluang qF x qB x qW = litB. Dari jauh dirata-ratakan
       // per tingkat (jendela dulu, lalu blok, lalu lantai), jadi pola lantai terang dan gelap tetap terlihat (dulu: semua jendela
       // menyala tepat litP, muka gedung terang rata dan tampak putih setelah bloom dan adaptasi mata)
-      bool office = code == 0.0 || code == 1.0 || code == 8.0;
+      bool office = code == 0.0 || code == 1.0 || code == 8.0 || code == 13.0;
       float litB = clamp(litP * (office ? uLitT.x : uLitT.y) * (0.3 + 1.4 * hash1(vec2(vSeed * 41.0, 3.7))), 0.0, 0.95);   // per gedung 0,3-1,7 x
       float lq = log2(max(litB, 1e-4)), qF = exp2(0.4 * lq), qB = exp2(0.35 * lq), qW = exp2(0.25 * lq);
       // 21d: pada gedung kantor tinggi "jendela" = satu ruangan (rm bay) dan "blok" = dua ruangan; gaya lain tetap 1 bay dan 4 bay
@@ -3960,7 +4127,7 @@ const BUILD_FS = /* glsl */`
           glass = mix(glass, glassI, kI);
         }
       }
-      vec3 frameC = code == 3.0 || code == 7.0 ? vec3(0.88, 0.87, 0.84) : varW ? frameCol : vec3(0.55, 0.55, 0.53);   // 21d: warna rangka per gedung
+      vec3 frameC = code == 3.0 || code == 7.0 ? vec3(0.88, 0.87, 0.84) : (varW || code == 12.0 || code == 13.0) ? frameCol : vec3(0.55, 0.55, 0.53);   // 21d: warna rangka per gedung
       vec3 wallLit = wall * light;
       col = mix(mix(wallLit, frameC * light, frameM), glass, max(winM, shopM));
       emit = (warm * on * max(winM * (1.0 - kI), shopM * 0.8) * 1.6 +   // 14c: jendela dekat menyala lewat ruangannya
@@ -3970,13 +4137,15 @@ const BUILD_FS = /* glsl */`
         vec3 cc = hc < 0.8 ? vec3(1.0, 0.95, 0.88) : hc < 0.9 ? vec3(0.35, 0.55, 1.0) : vec3(0.7, 0.45, 1.0);   // 1 dari 5 berwarna
         emit += cc * 1.1 * uNight * (1.0 - kc) * (1.0 - kc);
       }
-      col *= mix(0.65, 1.0, smoothstep(0.0, 1.2, y));             // AO dekat tanah
+      emit += neonC * neon * uNight * 2.0;                       // 22a: huruf papan toko menyala
+      if (code != 14.0) col *= mix(0.65, 1.0, smoothstep(0.0, 1.2, y));   // AO dekat tanah (bukan lis atap)
       col += emit;
     }
     gl_FragColor = vec4(col, 1.0);
     #include <colorspace_fragment>
     #include <fog_fragment>
   }`;
+for (const [type, e] of BUILD_LATE) BUILD[type].push(e);           // 22: bangunan baru sesudah semua bangunan lama
 const buildMat = new THREE.ShaderMaterial({ fog: true, side: THREE.DoubleSide,
   uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), LIGHT.uniforms, BUILD_U),
   vertexShader: BUILD_VS, fragmentShader: BUILD_FS });
@@ -3985,7 +4154,7 @@ for (const type of Object.keys(BUILD)) {
   const list = BUILD[type];
   const geo = GEO[type].clone();
   const st = new Float32Array(Math.max(1, list.length) * 2);
-  list.forEach((b, i) => { st[i * 2] = b[7]; st[i * 2 + 1] = b[8]; });
+  list.forEach((b, i) => { st[i * 2] = b[7] + 0.99 * (b[9] || 0); st[i * 2 + 1] = b[8] + 0.99 * (b[10] || 0); });   // 22c: pecahan = p1, p2
   geo.setAttribute('aStyle', new THREE.InstancedBufferAttribute(st, 2));
   const mesh = new THREE.InstancedMesh(geo, buildMat, Math.max(1, list.length));
   list.forEach(([s, za, w, d, h, elev, col], i) => placeAt(mesh, i, s, za, w, h, d, elev, _c.set(col)));
@@ -4000,7 +4169,7 @@ for (const type of Object.keys(BUILD)) {
   let sd = 13579; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const eq = [];                                                  // [s, za, sx, sy, sz, h, hex]
   for (const [s, za, w, d, h, elev, col, style] of BUILD.flat) {
-    if (style === 9 || style === 11 || w * d < 120) continue;
+    if (style === 9 || style === 11 || style === 14 || w * d < 120) continue;
     const top = elev + h;
     if (style === 1 && w * d > 250) eq.push([s, za, w * 0.35, 3.5, d * 0.35, top, '#8d949b']);   // ruang mesin menara
     const k = 1 + Math.floor(r() * 3);
@@ -4008,7 +4177,7 @@ for (const type of Object.keys(BUILD)) {
       const sx = 1.5 + 2.5 * r(), sz = 1.5 + 2.5 * r();
       eq.push([s + (r() - 0.5) * Math.max(0, w - sx - 3), za + (r() - 0.5) * Math.max(0, d - sz - 3), sx, 1 + 1.2 * r(), sz, top, r() < 0.5 ? '#b9bdc0' : '#9da3a8']);
     }
-    if (style === 2 && r() < 0.25) eq.push([s + w * 0.25, za, 2.6, 3.2, 2.6, top, '#6d5a47']);     // tangki air kayu
+    if ((style === 2 || style === 12) && r() < 0.25) eq.push([s + w * 0.25, za, 2.6, 3.2, 2.6, top, '#6d5a47']);     // tangki air kayu (22: juga bata)
   }
   for (const type of ['gable', 'hip']) for (const [s, za, w, d, h, elev, col, style] of BUILD[type]) {
     if (style !== 3 || r() < 0.4) continue;
@@ -9189,6 +9358,136 @@ const FURN = { kinds: {}, lastS: 1e9, lastZ: 1e9, total: 0, sigMeta: [], glow: {
   }
   FURN.signalLampMat = signalLampMat; FURN.GEO = GEO; FURN.benchList = list.bench;   // 12b-3: bangku untuk orang duduk
 }
+// 22c: detail 3D muka depan gedung bata (gaya 12): kanopi kain per modul toko, tangga darurat besi, AC jendela, papan nama menonjol.
+// Jarak jendela, jumlah lantai, dan modul toko dihitung dengan rumus yang sama dengan BUILD_FS (p1, p2 per gedung). Generator acak
+// sendiri. Dikirim ke GPU dalam radius lewat FURN.kinds (updateFurniture()), jadi tidak ada loop baru tiap frame. Semua ikut bayangan
+// (lapisan 1 dipasang di traverse patchLit seperti perabot).
+const RAGAM_DET = { count: {} };
+{
+  let sd = 22030; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const g = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
+  const IRON = [0.06, 0.065, 0.07], FW = 5.0, FH = 3.2;            // modul tangga darurat 5 m (diskalakan ke 2 bay), satu lantai 3,2 m
+  // satu lantai tangga darurat, menghadap +z (dinding di z = 0), lantai di y = 0. dir +1/-1 = arah tangga naik, 0 = lantai teratas
+  const fire = (dir) => {
+    const P = [{ geo: g(FW, 0.05, 1.2, 0, 0, 0.62), color: IRON }];                                   // pelat lantai
+    for (const y of [0.5, 0.98]) P.push({ geo: g(FW, 0.04, 0.04, 0, y, 1.2), color: IRON });          // pagar depan
+    for (const x of [-FW / 2, FW / 2]) {
+      P.push({ geo: g(0.05, 1.0, 0.05, x, 0.5, 1.2), color: IRON });                                // tiang sudut
+      for (const y of [0.5, 0.98]) P.push({ geo: g(0.04, 0.04, 1.2, x, y, 0.62), color: IRON });     // pagar samping
+    }
+    for (let q = -FW / 2 + 0.1; q < FW / 2 - 0.05; q += 0.14) P.push({ geo: g(0.014, 0.94, 0.014, q, 0.5, 1.2), color: IRON });   // jeruji
+    for (const x of [-FW / 2 + 0.3, FW / 2 - 0.3]) P.push({ geo: g(0.06, 0.06, 1.0, x, -0.08, 0.6), color: IRON });                // siku penyangga
+    if (dir) {                                                      // tangga 55 derajat ke lantai berikutnya, di setengah luar pelat
+      const run = 2.2, L = Math.hypot(run, FH), a = Math.atan2(FH, run), x0 = -dir * 1.6;
+      for (const z of [0.6, 1.1]) P.push({ geo: g(L, 0.12, 0.04, 0, 0, 0).rotateZ(dir * a).translate(x0 + dir * run / 2, FH / 2, z), color: IRON });
+      for (let k = 1; k < 12; k++) P.push({ geo: g(0.24, 0.025, 0.5, x0 + dir * run * k / 12, FH * k / 12, 0.85), color: IRON });
+    }
+    return mergeSimple(P);
+  };
+  const ladder = mergeSimple([...[-0.22, 0.22].map((x) => ({ geo: g(0.04, 2.2, 0.04, x, -1.1, 1.05), color: IRON })),
+    ...[0.2, 0.5, 0.8, 1.1, 1.4, 1.7, 2.0].map((y) => ({ geo: g(0.44, 0.03, 0.03, 0, -y, 1.05), color: IRON }))]);
+  const ac = mergeSimple([{ geo: g(0.66, 0.42, 0.5, 0, 0.21, 0.15), color: [0.62, 0.6, 0.55] },
+    { geo: g(0.56, 0.3, 0.02, 0, 0.22, 0.41), color: [0.3, 0.3, 0.29] }, { geo: g(0.7, 0.03, 0.3, 0, -0.02, 0.2), color: [0.2, 0.2, 0.2] }]);
+  const slope = Math.atan2(0.55, 1.1);                              // kanopi kain 1 m (diskalakan x): miring 1,1 m keluar, turun 0,55 m, rumbai 0,28 m
+  const awning = mergeSimple([{ geo: g(1, 0.04, Math.hypot(1.1, 0.55), 0, 0, 0).rotateX(slope).translate(0, -0.275, 0.55), color: [1, 1, 1] },
+    { geo: g(1, 0.28, 0.03, 0, -0.69, 1.1), color: [0.85, 0.85, 0.85] }]);
+  const blade = mergeSimple([{ geo: g(0.1, 1.5, 0.75, 0, 0.75, 0.62), color: [1, 1, 1] }, { geo: g(0.04, 0.04, 0.3, 0, 1.4, 0.15), color: IRON },
+    { geo: g(0.04, 0.04, 0.3, 0, 0.1, 0.15), color: IRON }]);
+  const GEO = { fireA: fire(1), fireB: fire(-1), fireT: fire(0), ladder, ac, awning, blade };
+  const RANGE = { fireA: 170, fireB: 170, fireT: 170, ladder: 120, ac: 110, awning: 220, blade: 180 };
+  const AWN = ['#24452f', '#6e1f1c', '#1f2c4a', '#1a1a1a', '#8a6a2c', '#4a2a4f', '#2f5d5a', '#b0442e'], SIGN = ['#e8d9b0', '#c8352a', '#1f4f8a', '#f0c23a', '#2d6b3f', '#f2f2ee'];
+  const list = {}; for (const k of Object.keys(GEO)) list[k] = [];   // [s, za, y, sudut, skala x, warna]
+  for (const F of RAGAM.faces) {
+    const along = F.front <= 2, W = along ? F.w : F.d;
+    const fs = F.front === 3 ? -1 : F.front === 4 ? 1 : 0, fz = F.front === 1 ? -1 : F.front === 2 ? 1 : 0, ang = Math.atan2(fs, fz);
+    // titik di muka dalam kerangka pusat gedung (seperti dinding gedung; kerangka di titik itu sendiri miring t / R terhadap dinding)
+    const put = (kind, t, y, sx = 1, col = null) => { const lx = along ? t : fs * F.w / 2, lz = along ? fz * F.d / 2 : t; list[kind].push([F.s, F.za, lx, y, lz, ang, sx, col]); };
+    // rumus BUILD_FS gaya 12
+    const bay = 2.5 + 0.9 * F.p1, gH = 4.2, nB = Math.max(1, Math.floor(W / bay + 0.5)), bayE = W / nB, nF = Math.floor((F.h - 1.2 - gH) / FH);
+    const cx = (i) => ((i + 0.5) / nB - 0.5) * W;
+    const nS = Math.max(1, Math.floor(W / (3.2 + 1.8 * ((F.p1 * 7.31) % 1)) + 0.5));
+    if (r() < 0.65) { const c = AWN[Math.floor(r() * AWN.length)];   // kanopi: satu warna per gedung, sebagian modul tanpa kanopi
+      for (let i = 0; i < nS; i++) if (r() < 0.85) put('awning', ((i + 0.5) / nS - 0.5) * W, gH - 1.2, W / nS * 0.86, c); }
+    if (r() < 0.3 && W > 5) put('blade', (r() < 0.5 ? -1 : 1) * (W / 2 - 0.55), gH + 0.25, 1, SIGN[Math.floor(r() * SIGN.length)]);
+    let f0 = -9;
+    if (nF >= 2 && nB >= 2 && r() < 0.55) {                         // tangga darurat di depan dua jendela bersebelahan
+      f0 = Math.floor(r() * (nB - 1)); const t = (cx(f0) + cx(f0 + 1)) / 2, sx = (2 * bayE - 0.4) / FW;
+      for (let fi = 0; fi < nF; fi++) put(fi === nF - 1 ? 'fireT' : fi % 2 ? 'fireB' : 'fireA', t, gH + fi * FH, sx);
+      put('ladder', t + (sx * FW / 2 - 0.6), gH, 1);
+    }
+    for (let fi = 0; fi < nF; fi++) for (let i = 0; i < nB; i++)
+      if (i !== f0 && i !== f0 + 1 && r() < 0.16) put('ac', cx(i), gH + fi * FH + 0.2 * FH);   // AC di ambang bawah jendela
+  }
+  const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), tr = new THREE.Matrix4(), _cc = new THREE.Color();
+  for (const [kind, geo] of Object.entries(GEO)) {
+    const items = list[kind], n = items.length; RAGAM_DET.count[kind] = n; if (!n) continue;
+    const tinted = kind === 'awning' || kind === 'blade';
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true }), n);
+    const mats = new Float32Array(n * 16), ps = new Float32Array(n), pz = new Float32Array(n);
+    const cols = tinted ? new Float32Array(n * 3) : null;
+    items.forEach(([s, za, lx, y, lz, a, sx, col], i) => {
+      surfaceMatrix(m4, s / R, za, 0); m4.multiply(tr.makeTranslation(lx, y, lz)).multiply(rot.makeRotationY(a)).scale(_v1.set(sx, 1, 1));
+      m4.toArray(mats, i * 16); ps[i] = s + lx; pz[i] = za + lz;
+      if (tinted) { _cc.set(col); cols[i * 3] = _cc.r; cols[i * 3 + 1] = _cc.g; cols[i * 3 + 2] = _cc.b; }
+    });
+    mesh.count = 0; mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (tinted) { mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage); }
+    scene.add(mesh);
+    FURN.kinds['r22' + kind] = { mesh, mats, ps, pz, n, range: RANGE[kind], idx: tinted ? new Int32Array(n) : null, cols };
+  }
+}
+// 22d: mobil parkir di kedua tepi jalan lokal sel pusat dan menengah (jalan lokal tanpa lalu lintas). Statis, berkolider, generator
+// acak sendiri. Tidak di simpang (9 m dari as jalan silang, 12 m dari tepi arteri), air, Skyway, boulevard, cincin, lapangan baseball. Dua mesh (cat dengan
+// warna per mobil, kaca/roda/lampu tanpa bayangan) berbagi matriks, dikirim dalam radius lewat FURN.kinds.
+const PARKED = { n: 0, on: RAGAM.on };
+if (PARKED.on) {
+  let sd = 22040; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const g = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
+  const PAINT = ['#e8e8e6', '#1d1f22', '#8c9196', '#9a1c1c', '#1f3a66', '#c9c3b5', '#2f5a3a', '#d8a23a', '#5a6470', '#f2f2f0'];   // sama dengan TRAFFIC
+  const paintGeo = mergeSimple([{ geo: g(1.78, 0.62, 4.4, 0, 0.62, 0), color: [1, 1, 1] }, { geo: g(1.62, 0.05, 2.3, 0, 1.47, -0.25), color: [1, 1, 1] }]);
+  const trimGeo = mergeSimple([{ geo: g(1.6, 0.5, 2.28, 0, 1.19, -0.25), color: [0.03, 0.04, 0.05] },
+    ...[-1.35, 1.35].map((z) => ({ geo: g(1.86, 0.6, 0.62, 0, 0.3, z), color: [0.02, 0.02, 0.02] })),
+    { geo: g(1.55, 0.16, 0.05, 0, 0.78, 2.215), color: [0.8, 0.8, 0.75] }, { geo: g(1.5, 0.12, 0.04, 0, 0.8, -2.21), color: [0.35, 0.02, 0.02] }]);
+  const bad = (s, za) => inWater(s, za, 3) || inRiver(s, za, 3) || nearRing(za, 14) || inBallpark(s, za, 4)
+    || Math.abs(wrapS(s - SKY_S)) < 55 || Math.abs(wrapS(s - TRAM.s)) < ROAD.boulevard / 2 + 4;
+  const artHalf = (x) => (Math.abs(wrapS(x - TRAM.s)) < 1 ? ROAD.boulevard : ROAD.art) / 2;
+  const LAT = ROAD.local / 2 - 1.1, items = [];                     // as mobil 3,9 m dari as jalan (tepi trotoar 5 m)
+  const run = (alongZ, fix, a, b, cuts) => {
+    for (const side of [-1, 1]) for (let p = a + r() * 4; p < b;) {
+      const L = 5.4 + r() * 1.6, park = r() < 0.8, lat = LAT + (r() - 0.5) * 0.3, yaw = (r() - 0.5) * 0.06, col = Math.floor(r() * PAINT.length);
+      if (park && !cuts.some((c) => Math.abs(p - c) < 9)) {
+        const s = alongZ ? fix + side * lat : p, za = alongZ ? p : fix + side * lat;
+        if (!bad(s, za)) items.push([modS(s), za, (alongZ ? (side > 0 ? 0 : Math.PI) : (side > 0 ? Math.PI / 2 : -Math.PI / 2)) + yaw, col, alongZ]);
+      }
+      p += L;
+    }
+  };
+  for (const c of cityCells) {
+    if (c.cls !== 'pusat' && c.cls !== 'menengah') continue;
+    const { sCuts, zCuts } = c.grid;
+    // mulai 12 m dari tepi arteri: mulut jalan lokal bebas (kafe trotoar 18,6 m dari as arteri tetap muat, urutan acaknya tidak bergeser)
+    for (let m = 1; m < sCuts.length - 1; m++) run(true, sCuts[m], c.z0 + ROAD.art / 2 + 12, c.z0 + ART_Z - ROAD.art / 2 - 12, zCuts.slice(1, -1));
+    for (let m = 1; m < zCuts.length - 1; m++) run(false, zCuts[m], c.s0 + artHalf(c.s0) + 12, c.s0 + ART - artHalf(c.s0 + ART) - 12, sCuts.slice(1, -1));
+  }
+  const n = items.length, mats = new Float32Array(n * 16), ps = new Float32Array(n), pz = new Float32Array(n), cols = new Float32Array(n * 3);
+  const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), cc = new THREE.Color();
+  items.forEach(([s, za, a, ci, alongZ], i) => {
+    surfaceMatrix(m4, s / R, za, groundH(s, za)); m4.multiply(rot.makeRotationY(a)); m4.toArray(mats, i * 16); ps[i] = s; pz[i] = za;
+    cc.set(PAINT[ci]); cols[i * 3] = cc.r; cols[i * 3 + 1] = cc.g; cols[i * 3 + 2] = cc.b;
+    addCollider(s, za, alongZ ? 0.95 : 2.25, alongZ ? 2.25 : 0.95);
+  });
+  for (const [kind, geo, mat] of [['r22carP', paintGeo, specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.3, 0.05)],
+    ['r22carT', trimGeo, specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.08, 0.05)]]) {
+    if (!n) break;
+    const mesh = new THREE.InstancedMesh(geo, mat, n), tinted = kind === 'r22carP';
+    mesh.count = 0; mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (tinted) mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    else mesh.userData.noShadow = true;                              // kaca, roda, lampu: tanpa bayangan (badan sudah cukup)
+    scene.add(mesh);
+    FURN.kinds[kind] = { mesh, mats, ps, pz, n, range: 260, idx: null, cols: tinted ? cols : null };
+  }
+  PARKED.n = n;
+}
 // 12b-1: perlintasan trem. Tiap perlintasan: 4 tiang (tanda silang + lampu merah kedip ganda menghadap jalan),
 // palang merah-putih di 2 tiang sisi masuk (menutup lajur yang menuju rel), garis henti putih di depan palang.
 const XVIS = { lastT: 0 };
@@ -9261,9 +9560,11 @@ function updateFurniture() {
       for (let i = 0; i < K.n; i++) {
         const ds = wrapS(K.ps[i] - s), dz = K.pz[i] - za;
         if (ds * ds + dz * dz > r2) continue;
-        arr.set(K.mats.subarray(i * 16, i * 16 + 16), c * 16); if (K.idx) K.idx[c] = i; c++;
+        arr.set(K.mats.subarray(i * 16, i * 16 + 16), c * 16); if (K.idx) K.idx[c] = i;
+        if (K.cols) K.mesh.instanceColor.array.set(K.cols.subarray(i * 3, i * 3 + 3), c * 3);   // 22c: warna kanopi / papan nama
+        c++;
       }
-      K.mesh.count = c; K.mesh.instanceMatrix.needsUpdate = true;
+      K.mesh.count = c; K.mesh.instanceMatrix.needsUpdate = true; if (K.cols) K.mesh.instanceColor.needsUpdate = true;
     }
   }
   // 12b-1: lampu lalu lintas merah-kuning-hijau, fase sama dengan yang dipakai simulasi mobil (sigState)
@@ -10268,6 +10569,24 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     const p = Object.assign({ pose: 0, s, za, hd: 0, elev: 0, ph: visRnd() * TAU }, look(false, visRnd)); PEDS.list.push(p); visitor(p, VIS.rect);
     Object.assign(p, { u, st: 'loop', tm: q < 4 ? 2 * q : 20 + 100 * visRnd(), dir: visRnd() < 0.5 ? 1 : -1 });
     VIS.fount.push(p);
+  }
+  // 22d: trotoar jalan lokal sel pusat dan menengah: bolak-balik pada potongan 30-150 m di dalam sel (tanpa menyeberang arteri),
+  // dicek tiap 1 m bebas collider (hidran di sudut simpang memotong potongan). Ditambahkan terakhir, jadi orang lain tidak berubah.
+  if (RAGAM.on) for (const c of cityCells) {
+    if (c.cls !== 'pusat' && c.cls !== 'menengah') continue;
+    const { sCuts, zCuts } = c.grid, LW = ROAD.local / 2 + 0.75;
+    const lane = (alongZ, fix, a, b) => {
+      for (const side of [-1, 1]) {
+        const x = fix + side * (LW + (r() - 0.5) * 0.5), n = Math.round(cityDensity(alongZ ? x : (a + b) / 2, alongZ ? (a + b) / 2 : x) * 12 * (0.6 + 0.8 * r()));
+        for (let q = 0; q < n; q++) {
+          const L = Math.min(b - a, 30 + r() * 120), a0 = a + r() * (b - a - L), b0 = a0 + L;
+          let good = true; for (let u = a0; good && u <= b0; u += 1) if (!(alongZ ? ok(x, u) : ok(u, x))) good = false;
+          if (good) walker({ kind: alongZ ? 'z' : 's', fix: x, a: a0, b: b0, u: a0 + r() * L, cross: [] });
+        }
+      }
+    };
+    for (let m = 1; m < sCuts.length - 1; m++) lane(true, sCuts[m], c.z0 + ROAD.art / 2 + 5, c.z0 + ART_Z - ROAD.art / 2 - 5);
+    for (let m = 1; m < zCuts.length - 1; m++) lane(false, zCuts[m], c.s0 + ROAD.art / 2 + 5, c.s0 + ART - ROAD.art / 2 - 5);
   }
   for (const p of PEDS.list) { p.lt = -20; p.isNear = false; if (p.kind === 'z') p.s = p.fix; if (p.kind === 's') p.za = p.fix; p.s = p.s ?? 0; p.za = p.za ?? 0; p.hd = p.hd ?? 0; p.pose = p.pose ?? 0; }
 }
@@ -11900,7 +12219,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED };
 requestAnimationFrame(frame);
 </script>
 </body>
