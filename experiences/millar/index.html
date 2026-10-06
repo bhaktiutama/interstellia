@@ -1703,18 +1703,24 @@ placeShip(...SHIP.home);
 const shipU = { ...U, uWater: { value: 0 }, uMatte: { value: 1 }, uGDirL: { value: GDIR } };
 const CK = window.KESTREL.buildCockpitV5(THREE), COCKPIT = { group: null, stick: null, throttle: null, screens: {}, drawT: 0, sx: 0, sy: 0 };
 const shipMat = new THREE.ShaderMaterial({
-  uniforms: shipU, defines: { NW: 1, NM: 1 }, side: THREE.DoubleSide,
+  uniforms: shipU, defines: { NW: 1, NM: 1, KS_PANEL: 1, KS_PS: '1.0' }, side: THREE.DoubleSide,
   vertexShader: LOG_VS + COMMON + /* glsl */`
     attribute vec3 color; varying vec3 vC, vN, vR, vW;
+    #ifdef KS_PANEL
+    varying vec3 vKsP, vKsN, vKsX, vKsY, vKsZ;
+    #endif
     void main() {
       vec4 w = modelMatrix * vec4(position, 1.0);
       vN = mat3(modelMatrix) * normal; vC = color; vW = w.xyz;
+      #ifdef KS_PANEL
+      vKsP = position; vKsN = normal; vKsX = modelMatrix[0].xyz; vKsY = modelMatrix[1].xyz; vKsZ = modelMatrix[2].xyz;
+      #endif
       w.y -= curveDrop(w.xyz);
       vR = w.xyz - uCam;
       gl_Position = projectionMatrix * viewMatrix * w;
       #include <logdepthbuf_vertex>
     }`,
-  fragmentShader: LOG_FS + COMMON + /* glsl */`
+  fragmentShader: LOG_FS + COMMON + '#ifdef KS_PANEL\nvarying vec3 vKsP, vKsN, vKsX, vKsY, vKsZ;\n' + window.KESTREL.PANEL_GLSL + '\n#endif\n' + /* glsl */`
     uniform float uWater, uMatte; uniform vec3 uGDirL; varying vec3 vC, vN, vR, vW;
     void main() {
       #include <logdepthbuf_fragment>
@@ -1725,6 +1731,16 @@ const shipMat = new THREE.ShaderMaterial({
       float win = step(0.035, vC.b - vC.r) * step(vC.g, 0.1);          // kaca kokpit (warna gelap bernada biru): mengilap
       float wet = 1.0 - smoothstep(0.0, 0.6, vW.y - uWater);           // dekat dan di bawah muka air: basah
       alb *= 1.0 - 0.35 * wet;
+      #ifdef KS_PANEL
+      mat3 Mk = mat3(vKsX, vKsY, vKsZ);                                // V2: detail panel KS-07 (alur, paku keling, tutup akses)
+      if (win < 0.5) {
+        vec3 kn = vKsN * inversesqrt(max(dot(vKsN, vKsN), 1e-12));
+        if (dot(Mk * kn, n) < 0.0) kn = -kn;
+        vec4 kp = ksPanel(vKsP, kn, length(fwidth(vKsP)), KS_PS);
+        vec3 nd = n + Mk * (kp.xyz - kn); n = nd * inversesqrt(max(dot(nd, nd), 1e-12));
+        alb *= 1.0 - 0.55 * kp.w;
+      }
+      #endif
       float nv = clamp(dot(n, V), 0.0, 1.0);
       vec3 R = reflect(-V, n); R.y = abs(R.y) * 0.9 + 0.1 * R.y; R = normalize(R + vec3(0.0, 1e-3, 0.0));
       vec3 env = skyL(R);
@@ -1734,6 +1750,9 @@ const shipMat = new THREE.ShaderMaterial({
       // cahaya langsung piringan Gargantua (hangat) dengan bayangan; ambien sedikit dikurangi agar terang rata-rata tetap
       float shd = shadowAt(vW + n * 0.1, 0.15), ndl = max(dot(n, uGDirL), 0.0);
       vec3 dirL = uAmb * vec3(1.08, 0.97, 0.86) * ndl * uShK * shd;
+      #ifdef KS_COCK
+      dirL = uAmb * vec3(1.08, 0.97, 0.86) * ndl * uShK * 1.8 * ksCanopy(vKsP, transpose(Mk) * uGDirL);   // V2: cahaya piringan masuk lewat kaca kanopi
+      #endif
       vec3 c = alb * (sky * 1.25 * (1.0 - 0.3 * uShK) + dirL * 1.3) + mix(uAmb, env, gloss) * F * mix(0.6, 1.0, gloss) * mix(1.0, 0.45, uMatte * (1.0 - win));
       #ifdef INTERIOR
       c *= 0.45 + 0.35 * max(n.y, 0.0);                                // kokpit: ruang tertutup, cahaya hanya lewat kaca atas
@@ -1745,7 +1764,8 @@ const shipMat = new THREE.ShaderMaterial({
 });
 // kaca kanopi satu sisi (dari dalam tembus pandang) dan pelapis kokpit (shader sama, uniform sama)
 const shipGlassMat = new THREE.ShaderMaterial({ uniforms: shipU, defines: { NW: 1, NM: 1 }, side: THREE.FrontSide, vertexShader: shipMat.vertexShader, fragmentShader: shipMat.fragmentShader });
-const cockMat = new THREE.ShaderMaterial({ uniforms: shipU, defines: { NW: 1, NM: 1, INTERIOR: 1 }, side: THREE.DoubleSide, vertexShader: shipMat.vertexShader, fragmentShader: shipMat.fragmentShader });
+const cockMat = new THREE.ShaderMaterial({ uniforms: shipU, defines: { NW: 1, NM: 1, INTERIOR: 1, KS_PANEL: 1, KS_PS: '0.55', KS_COCK: 1 }, side: THREE.DoubleSide, vertexShader: shipMat.vertexShader, fragmentShader: shipMat.fragmentShader });
+const cockPartMat = new THREE.ShaderMaterial({ uniforms: shipU, defines: { NW: 1, NM: 1, INTERIOR: 1 }, side: THREE.DoubleSide, vertexShader: shipMat.vertexShader, fragmentShader: shipMat.fragmentShader });   // tongkat dan tuas gas (bergerak: tanpa panel)
 {
   const g = new THREE.Group();
   const navMat = (r, gg, b) => new THREE.MeshBasicMaterial({ color: new THREE.Color(r, gg, b) });
@@ -1761,8 +1781,8 @@ const cockMat = new THREE.ShaderMaterial({ uniforms: shipU, defines: { NW: 1, NM
   // kokpit satu kursi (KESTREL.buildCockpitV5): hanya tampil di pandangan kokpit (V)
   const ck = new THREE.Group(); ck.visible = false;
   ck.add(new THREE.Mesh(CK.geo, cockMat));
-  COCKPIT.stick = new THREE.Mesh(CK.stick, cockMat); COCKPIT.stick.position.set(...CK.stickAt); COCKPIT.stick.rotation.order = 'YXZ';
-  COCKPIT.throttle = new THREE.Mesh(CK.throttle, cockMat); COCKPIT.throttle.position.set(...CK.throttleAt);
+  COCKPIT.stick = new THREE.Mesh(CK.stick, cockPartMat); COCKPIT.stick.position.set(...CK.stickAt); COCKPIT.stick.rotation.order = 'YXZ';
+  COCKPIT.throttle = new THREE.Mesh(CK.throttle, cockPartMat); COCKPIT.throttle.position.set(...CK.throttleAt);
   ck.add(COCKPIT.stick, COCKPIT.throttle);
   for (const S of CK.screens) {
     const cv = document.createElement('canvas'); cv.width = 256; cv.height = Math.round(256 * S.h / S.w);
@@ -3015,7 +3035,7 @@ function updateMission(dt, sdt) {
    puncak) dan wahana di atas air; tertelan bila air gelombang lebih tinggi dari perut wahana. */
 CONFIG.fly = { climb: 40, climbBoost: 65, sink: 18, fwd: 60, fwdBoost: 130, acc: 14, vacc: 22, yawRate: 0.9, spool: 2, gearUp: 6,
   landH: 4, landV: 6, camDist: 20, camUp: 5, passU: 300 };
-const FLY = { on: false, landed: true, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, yawV: 0, pitch: 0, roll: 0, spool: 0, thr: 0,
+const FLY = { on: false, landed: true, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, yawV: 0, pitch: 0, roll: 0, spool: 0, thr: 0, head: [0, 0, 0], pv: [0, 0, 0],
   lookY: 0, lookP: -0.15, lookT: 9, view: 0, water: 0, passed: false, sprayT: 0 };
 function flyReset() {
   FLY.on = false; FLY.passed = false; placeShip(...SHIP.home);
@@ -3023,7 +3043,7 @@ function flyReset() {
 }
 function boardShip() {
   Object.assign(FLY, { on: true, landed: true, x: SHIP.x, y: SHIP.y, z: SHIP.z, vx: 0, vy: 0, vz: 0, yaw: SHIP.yaw, yawV: 0, pitch: 0, roll: 0, spool: 0, thr: 0,
-    lookY: 0, lookP: -0.15, lookT: 9, view: 0, passed: false });
+    lookY: 0, lookP: -0.15, lookT: 9, view: 0, passed: false, head: [0, 0, 0], pv: [0, 0, 0] });
   toggleRadar(false);
   toast(t('Di kokpit KS-07. R naik, F turun, W/S maju/mundur, A/D belok, Shift cepat, V kamera, E mendarat.'), 6);
   tone2(220, 440, 0.6, 0.15, 0);
@@ -3062,6 +3082,12 @@ function updateFly(dt) {
   FLY.yaw += FLY.yawV * dt;
   FLY.vx = fx * vf + rx * vs; FLY.vz = fz * vf + rz * vs;
   FLY.x += FLY.vx * dt; FLY.z += FLY.vz * dt; FLY.y += FLY.vy * dt;
+  { // V2: kepala pilot terdorong berlawanan percepatan (ruang wahana: x kanan, y atas, z belakang; 6 mm per m/s2, maks 8 cm, pegas 0,15 s)
+    const id = 1 / Math.max(dt, 1e-3), ax = (FLY.vx - FLY.pv[0]) * id, ay = (FLY.vy - FLY.pv[1]) * id, az = (FLY.vz - FLY.pv[2]) * id, H = FLY.head;
+    const T = [-(ax * rx + az * rz) * 0.006, -ay * 0.006, (ax * fx + az * fz) * 0.006], L = Math.hypot(...T), k = 1 - Math.exp(-dt / 0.15);
+    for (let i = 0; i < 3; i++) H[i] += (T[i] * (L > 0.08 ? 0.08 / L : 1) - H[i]) * k;
+    FLY.pv[0] = FLY.vx; FLY.pv[1] = FLY.vy; FLY.pv[2] = FLY.vz;
+  }
   // tidak menembus laut biasa: kaki di dasar saat mendarat, perut di atas air saat terbang rendah (air gelombang tidak menahan: tertelan)
   const floor = calm + (FLY.landed ? SHIP.padDrop : 0.9);
   if (!inWave && FLY.y < floor) { FLY.y = floor; FLY.vy = Math.max(0, FLY.vy); }
@@ -3168,7 +3194,8 @@ function flyCamera() {
   COCKPIT.group.visible = FLY.view === 1;
   if (FLY.view === 1) {                                 // kokpit: mata pilot di kursi, ikut sikap wahana penuh (angguk, guling)
     const M = SHIP.mesh; M.updateMatrix();
-    camera.position.set(...CK.eye).applyMatrix4(M.matrix);
+    const H = FLY.head, vib = 0.0015 * FLY.thr, tt = performance.now() * 0.061;   // V2: kepala ikut percepatan, getar halus mesin
+    camera.position.set(CK.eye[0] + H[0] + vib * Math.sin(tt), CK.eye[1] + H[1] + vib * Math.sin(tt * 1.37 + 2), CK.eye[2] + H[2]).applyMatrix4(M.matrix);
     _ckE.set(cp + 0.12, FLY.lookY, 0, 'YXZ'); camera.quaternion.copy(M.quaternion).multiply(_ckQ.setFromEuler(_ckE));
     cockpitUpdate();
     return;

@@ -5964,6 +5964,7 @@ window.addEventListener('mousemove', (e) => {
   } else if (dragging) { look(e.clientX - lastX, e.clientY - lastY, CONFIG.lookSens); lastX = e.clientX; lastY = e.clientY; }
 });
 canvas.addEventListener('wheel', (e) => {
+  if (ext.active && ext.flight && PORT.view === 'chase') { e.preventDefault(); PORT.chaseD = Math.max(12, Math.min(90, PORT.chaseD * Math.exp(e.deltaY * 0.001))); return; }   // V2: jarak kamera belakang
   if (!ext.active || ext.flight) return;
   e.preventDefault();
   ext.distT = Math.max(1500, Math.min(60000, ext.distT * Math.exp(e.deltaY * 0.001)));
@@ -9647,6 +9648,11 @@ const PORT = {
   look: { yaw: 0, pitch: 0 }, brake: false, boost: false, t: 0, from: null, pod: { z: 0, dir: -1, v: 0 },
   eye: new THREE.Vector3(SHUTTLE_EYE[0], SHUTTLE_EYE[1], SHUTTLE_EYE[2]), A_MAIN: 8, A_RCS: 3, board: 0,
   trip: false, thr: 0, rcs: 0, turn: 0,                             // 12a: perjalanan otomatis dari gerbang B1; nilai untuk suara mesin/RCS
+  // V2 handling: laju putar ruang wahana w (x angguk, y geleng, z guling) dengan percepatan sudut terbatas (pendorong RCS),
+  // tongkat maya dari mouse (kembali ke tengah sendiri), mesin utama naik-turun bertahap (spool), boost menyala bertahap,
+  // percepatan ruang wahana acc untuk kepala pilot (terdorong ke kursi) dan kamera belakang yang lentur
+  w: new THREE.Vector3(), stk: { x: 0, y: 0 }, eng: 0, boostK: 1, lat: new THREE.Vector3(), acc: new THREE.Vector3(), head: new THREE.Vector3(),
+  W_MAX: 0.8, W_ROLL: 1.0, A_ANG: 1.6, chaseD: 34, chaseQ: new THREE.Quaternion(), chaseInit: false,
 };
 PORT.zHubPod = -HALF_L + HUB.zaMin - 1; PORT.zDockPod = PORT.ringZ + 15;
 const DOCK = new THREE.Group(); scene.add(DOCK);                   // kerangka inersia (despun)
@@ -9687,9 +9693,41 @@ const NAV = { red: new THREE.MeshBasicMaterial({ color: 0xff2a20 }), green: new 
 // sumbu supaya punggung menempel ujung tabung sandar berth (v1 lama 24 m lebih tinggi). v1 tetap ada di modul (KESTREL.build).
 const SHUTTLE = window.KESTREL.buildV5(THREE), SHUTTLE_CK = window.KESTREL.buildCockpitV5(THREE), SHUTTLE_UP = 0.62;
 const shipGlassMat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 90, specular: 0x6a7684 });   // kaca satu sisi: dari dalam tembus pandang
+/* V2: lambung dan kokpit KS-07 memakai material PBR + detail panel prosedural (KESTREL.PANEL_GLSL: alur sambungan, paku keling,
+   tutup akses, lembaran tidak rata). Rongga alur sedikit lebih gelap dan kasar. Kokpit: cahaya lampu sorot dermaga hanya masuk
+   lewat kaca kanopi (ksCanopy, palang kaca ikut membayangi), ditambah lampu kabin redup dan pendar layar MFD.
+   Kokpit memakai ruang grup COCKPIT (uniform uKsW / uKsInv) supaya tongkat dan tuas gas ikut ruang yang sama. */
+const KS_U = { uKsW: { value: new THREE.Matrix4() }, uKsInv: { value: new THREE.Matrix4() }, uKsScr: { value: 1 } };
+function ksPanelMat(opt, cock) {
+  const m = new THREE.MeshStandardMaterial(opt);
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, KS_U);
+    const vs = cock
+      ? `{ mat4 M = uKsInv * modelMatrix; vKsP = (M * vec4(position, 1.0)).xyz; vKsN = mat3(M) * normal;
+          mat3 A = mat3(viewMatrix) * mat3(uKsW); vKsX = A[0]; vKsY = A[1]; vKsZ = A[2]; }`
+      : 'vKsP = position; vKsN = normal; vKsX = normalMatrix[0]; vKsY = normalMatrix[1]; vKsZ = normalMatrix[2];';
+    sh.vertexShader = 'varying vec3 vKsP, vKsN, vKsX, vKsY, vKsZ;\nuniform mat4 uKsW, uKsInv;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n' + vs);
+    let fs = 'varying vec3 vKsP, vKsN, vKsX, vKsY, vKsZ;\nuniform float uKsScr;\n' + window.KESTREL.PANEL_GLSL + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+      vec3 ksN = vKsN * inversesqrt(max(dot(vKsN, vKsN), 1e-12)) * faceDirection;
+      vec4 ksP = ksPanel(vKsP, ksN, length(fwidth(vKsP)), ${cock ? '0.55' : '1.0'});
+      { vec3 nd = normal + mat3(vKsX, vKsY, vKsZ) * (ksP.xyz - ksN); normal = nd * inversesqrt(max(dot(nd, nd), 1e-12)); }
+      diffuseColor.rgb *= 1.0 - 0.55 * ksP.w; roughnessFactor = min(1.0, roughnessFactor + 0.2 * ksP.w);`);
+    if (cock) fs = fs
+      .replace('getDirectionalLightInfo( directionalLight, directLight );', `getDirectionalLightInfo( directionalLight, directLight );
+        directLight.color *= ksCanopy(vKsP, vec3(dot(vKsX, directLight.direction), dot(vKsY, directLight.direction), dot(vKsZ, directLight.direction)));`)
+      .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
+        { vec3 ds = vec3(0.0, 0.09, -2.36) - vKsP; float d2 = dot(ds, ds);   // pendar 3 layar MFD dan lampu kabin redup dari atas
+          float fs = max(dot(ksN, ds * inversesqrt(max(d2, 1e-6))), 0.0) * 0.5 + 0.15;
+          reflectedLight.indirectDiffuse += diffuseColor.rgb * (vec3(0.25, 0.55, 0.5) * uKsScr * fs * 0.35 / (1.0 + 6.0 * d2) + vec3(0.085, 0.08, 0.075) * (0.55 + 0.45 * max(ksN.y, 0.0))); }`);
+    sh.fragmentShader = fs;
+  };
+  m.customProgramCacheKey = () => cock ? 'ksCock' : 'ksHull';
+  return m;
+}
+const shipHullMat = ksPanelMat({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.72, metalness: 0.15 }, false);
 function makeShuttle() {
   const g = new THREE.Group(), body = new THREE.Group(); body.position.y = SHUTTLE_UP; g.add(body);
-  const hull = new THREE.Mesh(SHUTTLE.geo, litMat2), glass = new THREE.Mesh(SHUTTLE.glass, shipGlassMat);
+  const hull = new THREE.Mesh(SHUTTLE.geo, shipHullMat), glass = new THREE.Mesh(SHUTTLE.glass, shipGlassMat);
   const glowMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
   const lamp = (p, sz, mat) => new THREE.Mesh(bx(sz, sz, sz, ...p), mat);
   body.add(hull, glass, lamp(SHUTTLE.nav.red, 0.16, NAV.red), lamp(SHUTTLE.nav.green, 0.16, NAV.green), lamp(SHUTTLE.nav.strobe, 0.18, NAV.strobe));
@@ -9768,13 +9806,13 @@ for (const s of Object.values(SHIPS)) { s.matrixAutoUpdate = false; DOCK.add(s);
 // kokpit (hanya terlihat saat pandangan kokpit)
 const COCKPIT = new THREE.Group();
 {   // M3e: kokpit v5 (KESTREL.buildCockpitV5): 3 layar MFD (kiri data sandar, tengah penunjuk arah berth, kanan stasiun dan mode)
-  // lampu kabin: warna titik dikali cahaya sederhana dari atas-belakang (material tanpa cahaya seperti kokpit lama; dermaga di bayangan)
-  const cabin = (geo) => { const g = geo.clone(), n = g.attributes.normal.array, c = g.attributes.color.array;
-    for (let i = 0; i < c.length; i += 3) { const k = 0.5 * (0.55 + 0.45 * Math.max(0, n[i + 1]) + 0.2 * Math.max(0, n[i + 2])); c[i] *= k; c[i + 1] *= k; c[i + 2] *= k; } return g; };
-  const cm = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }), CK = SHUTTLE_CK;
-  const stick = new THREE.Mesh(cabin(CK.stick), cm), thr = new THREE.Mesh(cabin(CK.throttle), cm);
-  stick.position.set(...CK.stickAt); thr.position.set(...CK.throttleAt);
-  COCKPIT.add(new THREE.Mesh(cabin(CK.geo), cm), stick, thr);
+  // V2: material PBR dengan detail panel; cahaya dermaga hanya lewat kaca kanopi, lampu kabin redup dan pendar layar (ksPanelMat)
+  const cm = ksPanelMat({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.05 }, true), CK = SHUTTLE_CK;
+  const ksSpace = () => { COCKPIT.updateWorldMatrix(true, false); KS_U.uKsW.value.copy(COCKPIT.matrixWorld); KS_U.uKsInv.value.copy(COCKPIT.matrixWorld).invert(); };
+  const stick = new THREE.Mesh(CK.stick, cm), thr = new THREE.Mesh(CK.throttle, cm), shell = new THREE.Mesh(CK.geo, cm);
+  for (const o of [shell, stick, thr]) o.onBeforeRender = ksSpace;
+  stick.position.set(...CK.stickAt); thr.position.set(...CK.throttleAt); stick.rotation.order = 'YXZ';
+  COCKPIT.add(shell, stick, thr);
   const screens = {};
   for (const S of CK.screens) {
     const cv = document.createElement('canvas'); cv.width = 256; cv.height = Math.round(256 * S.h / S.w);
@@ -10032,12 +10070,12 @@ function portKey(code) {
   if (code === 'KeyX') { PORT.brake = !PORT.brake; return true; }
   return ['KeyZ', 'KeyC', 'KeyR', 'KeyF', 'KeyB', 'KeyG', 'KeyT', 'KeyO', 'Space'].includes(code);
 }
-const _qa = new THREE.Quaternion(), _va = new THREE.Vector3(), _vb = new THREE.Vector3();
+const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _va = new THREE.Vector3(), _vb = new THREE.Vector3();
 function portMouse(dx, dy) {
-  if (PORT.mode === 'fly' && PORT.view === 'cockpit' || PORT.mode === 'fly' && PORT.view === 'chase') {   // mouse = arah hidung
-    _qa.setFromAxisAngle(_va.set(0, 1, 0), -dx * 0.0022); PORT.q.multiply(_qa);
-    _qa.setFromAxisAngle(_va.set(1, 0, 0), -dy * 0.0022); PORT.q.multiply(_qa); PORT.q.normalize();
-    PORT.turn = Math.min(1, PORT.turn + (Math.abs(dx) + Math.abs(dy)) * 0.02);
+  if (PORT.mode === 'fly' && PORT.view === 'cockpit' || PORT.mode === 'fly' && PORT.view === 'chase') {   // mouse = tongkat maya: perintah laju putar hidung
+    // V2: dulu mouse memutar hidung langsung. Kini menggeser tongkat maya (kembali ke tengah 4/s); laju putar mengikuti tongkat
+    // dengan percepatan sudut RCS terbatas, jadi hidung mulai dan berhenti berputar halus. Gerak mouse tetap terasa sama cepat.
+    PORT.stk.x = Math.max(-1, Math.min(1, PORT.stk.x + dx * 0.011)); PORT.stk.y = Math.max(-1, Math.min(1, PORT.stk.y + dy * 0.011));
   } else {                                                           // sandar: melihat sekeliling kokpit
     PORT.look.yaw = Math.max(-2.4, Math.min(2.4, PORT.look.yaw - dx * 0.003));
     PORT.look.pitch = Math.max(-1.2, Math.min(1.3, PORT.look.pitch - dy * 0.003));
@@ -10054,11 +10092,12 @@ function stepPort(dt) {
   if (player.state === 'pod') stepPod(dt);
   let thr = 0, rcs = 0;
   PORT.turn *= Math.exp(-8 * dt);
+  if (PORT.mode !== 'fly') PORT.acc.set(0, 0, 0);
   if (PORT.mode === 'undock') {
     PORT.t += dt; const e = Math.min(1, PORT.t / 5), k = e * e * (3 - 2 * e);
     const a = PORT.berthAng[0]; PORT.p.copy(BERTH_P[0].p).add(_va.set(Math.cos(a), Math.sin(a), 0).multiplyScalar(15 * k));
     rcs = e < 0.9 ? 0.6 : 0;
-    if (e >= 1) { PORT.mode = 'fly'; PORT.v.set(0, 0, 0); PORT.view = PORT.view || 'cockpit'; setLabText('Kendali manual. W/S dorong, mouse arah, Z/C guling, Shift boost, X rem, E sandar saat dekat.'); }
+    if (e >= 1) { PORT.mode = 'fly'; PORT.v.set(0, 0, 0); PORT.w.set(0, 0, 0); PORT.lat.set(0, 0, 0); PORT.stk.x = PORT.stk.y = 0; PORT.eng = 0; PORT.boostK = 1; PORT.view = PORT.view || 'cockpit'; setLabText('Kendali manual. W/S dorong, mouse arah, Z/C guling, Shift boost, X rem, E sandar saat dekat.'); }
   } else if (PORT.mode === 'autodock') {
     const F = PORT.from; PORT.t += dt; const u = Math.min(1, PORT.t / F.T), T = F.T;
     const h00 = 2 * u ** 3 - 3 * u * u + 1, h10 = u ** 3 - 2 * u * u + u, h01 = -2 * u ** 3 + 3 * u * u;   // Hermite: kecepatan awal dijaga, berhenti di berth
@@ -10070,13 +10109,26 @@ function stepPort(dt) {
     const f = (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) - (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
     const sx = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0), sy = (keys.has('KeyR') || keys.has('Space') ? 1 : 0) - (keys.has('KeyF') ? 1 : 0);
     const roll = (keys.has('KeyC') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyZ') || keys.has('ArrowLeft') ? 1 : 0);
-    const boost = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 10 : 1;
-    if (roll) { _qa.setFromAxisAngle(_va.set(0, 0, 1), -roll * 0.9 * dt); PORT.q.multiply(_qa).normalize(); }
-    _va.set(sx * PORT.A_RCS, sy * PORT.A_RCS, -f * PORT.A_MAIN * boost).applyQuaternion(PORT.q);
+    const boostOn = keys.has('ShiftLeft') || keys.has('ShiftRight');
+    // sikap: laju putar sasaran dari tongkat maya (mouse) dan Z/C, dikejar dengan percepatan sudut terbatas (RCS)
+    const ks = Math.exp(-4 * dt); PORT.stk.x *= ks; PORT.stk.y *= ks;
+    const wx = -PORT.stk.y * PORT.W_MAX, wy = -PORT.stk.x * PORT.W_MAX, wz = -roll * PORT.W_ROLL, dA = PORT.A_ANG * dt;
+    const ex = wx - PORT.w.x, ey = wy - PORT.w.y, ez = wz - PORT.w.z;
+    PORT.w.x += Math.max(-dA, Math.min(dA, ex)); PORT.w.y += Math.max(-dA, Math.min(dA, ey)); PORT.w.z += Math.max(-dA, Math.min(dA, ez));
+    const wl = PORT.w.length();
+    if (wl > 1e-6) { _qa.setFromAxisAngle(_vb.copy(PORT.w).divideScalar(wl), wl * dt); PORT.q.multiply(_qa).normalize(); }
+    PORT.turn = Math.min(1, (Math.abs(ex) + Math.abs(ey) + Math.abs(ez)) / (PORT.A_ANG * 0.25));   // RCS menyala selama mengejar laju sasaran
+    // mesin utama: naik 0,35 s, turun 0,2 s; boost (Shift) 10x menyala bertahap 1,2 s. Mundur (S) dengan RCS depan 1,5 x A_RCS.
+    const eT = Math.max(0, f); PORT.eng += (eT - PORT.eng) * (1 - Math.exp(-dt / (eT > PORT.eng ? 0.35 : 0.2)));
+    PORT.boostK += ((boostOn && f > 0 ? 10 : 1) - PORT.boostK) * (1 - Math.exp(-dt / (boostOn ? 1.2 : 0.3)));
+    PORT.lat.x += (sx - PORT.lat.x) * (1 - Math.exp(-dt / 0.08)); PORT.lat.y += (sy - PORT.lat.y) * (1 - Math.exp(-dt / 0.08));
+    PORT.lat.z += ((f < 0 ? 1 : 0) - PORT.lat.z) * (1 - Math.exp(-dt / 0.08));
+    _va.set(PORT.lat.x * PORT.A_RCS, PORT.lat.y * PORT.A_RCS, -PORT.eng * PORT.A_MAIN * PORT.boostK + PORT.lat.z * PORT.A_RCS * 1.5).applyQuaternion(PORT.q);
     if (PORT.brake) { const sp = PORT.v.length(), a = Math.min(sp / dt, PORT.A_MAIN * 3); if (sp > 1e-4) _va.addScaledVector(PORT.v, -a / sp); if (sp < 0.05) PORT.brake = false; }
     PORT.v.addScaledVector(_va, dt); PORT.p.addScaledVector(PORT.v, dt);
-    thr = Math.max(0, f) * (boost > 1 ? 1 : 0.55) + (PORT.brake ? 0.4 : 0);
-    rcs = Math.min(1, Math.abs(sx) + Math.abs(sy) + 0.7 * Math.abs(roll) + (f < 0 ? 0.8 : 0) + PORT.turn + (PORT.brake ? 0.3 : 0));   // S = mundur pakai RCS
+    PORT.acc.copy(_va).applyQuaternion(_qb.copy(PORT.q).invert());   // percepatan di ruang wahana (untuk kepala dan kamera)
+    thr = PORT.eng * (PORT.boostK > 1.5 ? 0.55 + 0.45 * (PORT.boostK - 1) / 9 : 0.55) + (PORT.brake ? 0.4 : 0);
+    rcs = Math.min(1, Math.abs(PORT.lat.x) + Math.abs(PORT.lat.y) + 0.8 * PORT.lat.z + PORT.turn + (PORT.brake ? 0.3 : 0));
     // jangan menembus stasiun: silinder + kerah end cap, batang dermaga
     const r = Math.hypot(PORT.p.x, PORT.p.y), RC = R_OUT + HULL.collarT + 12, ZC = HALF_L + HULL.collarOut + 12;
     if (Math.abs(PORT.p.z) < ZC && r < RC) {
@@ -10092,13 +10144,23 @@ const _camQ = new THREE.Quaternion(), _eul = new THREE.Euler(0, 0, 0, 'YXZ');
 function updateFlightCamera(dt) {
   scene.rotation.z = OMEGA * clock.sim;
   updateCrawlers(dt);                                               // 20a: dt nyata
+  // V2: kepala pilot terdorong berlawanan percepatan (6 mm per m/s2, paling jauh 9 cm, pegas 0,15 s) dan bergetar halus
+  // saat mesin dan boost menyala; kamera belakang menyusul sikap wahana dengan pegas (bukan kaku) dan tertinggal saat dipercepat
+  const kh = 1 - Math.exp(-dt / 0.15), H = PORT.head;
+  _vb.copy(PORT.acc).multiplyScalar(-0.006); if (_vb.length() > 0.09) _vb.setLength(0.09);
+  H.lerp(_vb, kh);
+  const vib = PORT.mode === 'fly' ? 0.0012 * PORT.eng * Math.sqrt(PORT.boostK) + 0.0006 * PORT.turn : 0, tt = performance.now() * 0.061;
   if (PORT.view === 'cockpit') {
-    _eul.set(PORT.mode === 'fly' ? 0 : PORT.look.pitch, PORT.mode === 'fly' ? 0 : PORT.look.yaw, 0);
-    camera.position.copy(PORT.eye).applyQuaternion(PORT.q).add(PORT.p);
+    _eul.set(PORT.mode === 'fly' ? vib * 0.6 * Math.sin(tt * 1.7) : PORT.look.pitch, PORT.mode === 'fly' ? vib * 0.6 * Math.sin(tt * 1.3 + 1) : PORT.look.yaw, 0);
+    camera.position.copy(_va.copy(PORT.eye).add(H).add(_vb.set(vib * Math.sin(tt), vib * Math.sin(tt * 1.37 + 2), 0))).applyQuaternion(PORT.q).add(PORT.p);
     camera.quaternion.copy(PORT.q).multiply(_camQ.setFromEuler(_eul));
+    PORT.chaseInit = false;
   } else {
-    camera.position.copy(_va.set(0, 7, 34).applyQuaternion(PORT.q).add(PORT.p));
-    camera.quaternion.copy(PORT.q).multiply(_camQ.setFromAxisAngle(_vb.set(1, 0, 0), -0.12));
+    if (!PORT.chaseInit || PORT.mode !== 'fly') { PORT.chaseQ.copy(PORT.q); PORT.chaseInit = true; }
+    else PORT.chaseQ.slerp(PORT.q, 1 - Math.exp(-dt / 0.25));
+    const d = PORT.chaseD;
+    camera.position.copy(_va.set(0, 7 * d / 34, d).add(_vb.copy(H).multiplyScalar(12)).applyQuaternion(PORT.chaseQ).add(PORT.p));
+    camera.quaternion.copy(PORT.chaseQ).multiply(_camQ.setFromAxisAngle(_vb.set(1, 0, 0), -0.12));
   }
 }
 function updatePortVisual() {
@@ -10120,7 +10182,10 @@ function drawCockpitScreen() {                                    // 12a, M3e: k
   const D = dockData(), r = PORT.p.length(), fmt = (x) => x < 1000 ? `${x.toFixed(0)} m` : `${(x / 1000).toFixed(2)} km`;
   const ok = PORT.mode === 'fly' && portCanDock(), far = PORT.mode === 'fly' && D.dist < 400 && D.sp >= 30;
   const GRN = '#6ff0c8', AMB = '#f2c14e', RED = '#ff5040';
-  stick.rotation.set(-0.2 * Math.min(1, PORT.rcs), 0, 0); thr.rotation.x = 0.35 - 0.8 * PORT.thr;
+  // V2: tongkat samping mengikuti perintah (angguk maju-mundur, geleng memuntir, guling miring), tuas gas mengikuti mesin
+  const fl = PORT.mode === 'fly', rl = fl ? ((keys.has('KeyC') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyZ') || keys.has('ArrowLeft') ? 1 : 0)) : 0;
+  stick.rotation.set(fl ? 0.3 * PORT.stk.y : 0, fl ? -0.35 * PORT.stk.x : 0, -0.25 * rl);
+  thr.rotation.x = 0.35 - 0.8 * (fl ? PORT.eng * (0.6 + 0.4 * (PORT.boostK - 1) / 9) : PORT.thr);
   { // kiri: jarak, kecepatan, laju mendekat, geser samping, batang kecepatan dengan batas 30 m/s
     const { g, cv, tex } = SC.kiri, w = cv.width, h = cv.height;
     g.fillStyle = '#041014'; g.fillRect(0, 0, w, h); g.font = 'bold 17px ui-monospace, monospace'; g.textAlign = 'left'; g.fillStyle = GRN;
@@ -10139,6 +10204,16 @@ function drawCockpitScreen() {                                    // 12a, M3e: k
     const ang = Math.atan2(Math.hypot(D.lx, D.ly), -D.lz), k = Math.min(1, ang / (Math.PI / 2)), hh = Math.hypot(D.lx, D.ly) || 1;
     const behind = D.lz > 0, px = cx + (behind ? 1 : k) * rad * D.lx / hh, py = cy - (behind ? 1 : k) * rad * D.ly / hh;
     g.fillStyle = behind ? RED : ok ? '#7dff9a' : AMB; g.beginPath(); g.arc(px, py, 7, 0, TAU); g.fill();
+    // V2: penanda arah gerak (prograde: lingkaran bersirip; retrograde: silang bila bergerak mundur) di skala sudut yang sama
+    const vb = _va.copy(PORT.v).applyQuaternion(_qb.copy(PORT.q).invert()), vs = vb.length();
+    if (vs > 0.3) {
+      const vh = Math.hypot(vb.x, vb.y) || 1, back = vb.z > 0, kv = Math.min(1, Math.atan2(vh, Math.abs(vb.z)) / (Math.PI / 2));
+      const qx = cx + kv * rad * vb.x / vh * (back ? -1 : 1), qy = cy - kv * rad * vb.y / vh * (back ? -1 : 1);
+      g.strokeStyle = back ? AMB : '#e8eef2'; g.lineWidth = 2; g.beginPath();
+      if (back) { g.moveTo(qx - 6, qy - 6); g.lineTo(qx + 6, qy + 6); g.moveTo(qx + 6, qy - 6); g.lineTo(qx - 6, qy + 6); }
+      else { g.arc(qx, qy, 6, 0, TAU); g.moveTo(qx - 13, qy); g.lineTo(qx - 6, qy); g.moveTo(qx + 6, qy); g.lineTo(qx + 13, qy); g.moveTo(qx, qy - 6); g.lineTo(qx, qy - 12); }
+      g.stroke();
+    }
     g.font = 'bold 15px ui-monospace, monospace'; g.textAlign = 'left'; g.fillStyle = GRN; g.fillText(`BERTH 1 · ${fmt(D.dist)}`, 6, 16);
     tex.needsUpdate = true;
   }
