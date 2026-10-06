@@ -1113,6 +1113,15 @@ const LIGHT_GLSL = /* glsl */`
   }
   // roof (keluaran): 0..1, seberapa tertutup oleh atap dekat di atas kepala (penghalang rendah di atas penerima). Di bawah
   // atap, bukan hanya sunline yang terhalang tetapi juga ambient dari sisi seberang dan cincin lampu (interior lebih gelap).
+  // Revisi V1: perbandingan kedalaman bilinear 2x2 (dulu satu texel 14,6 cm dengan step(): bayangan daun tampak kotak-kotak).
+  // Peta kedalaman tetap NearestFilter, jadi tiap fetch = nilai texel persis; bobot = posisi di antara 4 pusat texel.
+  float sunShCmp(vec2 uv, float zr) {
+    float px = 1.0 / uL_SunShK.z;
+    vec2 t = uv * uL_SunShK.z - 0.5, f = fract(t), b = (floor(t) + 0.5) * px;
+    float a = step(zr, textureLod(uL_SunSh, b, 0.0).r), q = step(zr, textureLod(uL_SunSh, b + vec2(px, 0.0), 0.0).r);
+    float c = step(zr, textureLod(uL_SunSh, b + vec2(0.0, px), 0.0).r), d = step(zr, textureLod(uL_SunSh, b + vec2(px, px), 0.0).r);
+    return mix(mix(a, q, f.x), mix(c, d, f.x), f.y);
+  }
   float sunlineShadow(vec3 p, vec3 n, out float roof) {
     roof = 0.0;
     if (uL_SunShOn < 0.5) return 1.0;
@@ -1147,9 +1156,9 @@ const LIGHT_GLSL = /* glsl */`
       float u = (float(k) + 0.5) / float(NP) * 2.0 - 1.0;
       vec3 Lu = up + vec3(0.0, 0.0, 0.75 * u);
       float wt = max(dot(n, Lu), 0.0) * inversesqrt(dot(Lu, Lu)) / (1.0 + 1.7 * u * u);
-      vis += step(zr, textureLod(uL_SunSh, c.xy + vec2(0.0, u * w), 0.0).r) * wt; ws += wt;
+      vis += sunShCmp(c.xy + vec2(0.0, u * w), zr) * wt; ws += wt;
     }
-    float v0 = ws > 1e-3 ? vis / ws : step(zr, textureLod(uL_SunSh, c.xy, 0.0).r);   // dinding menghadap keliling: sampel tengah
+    float v0 = ws > 1e-3 ? vis / ws : sunShCmp(c.xy, zr);   // dinding menghadap keliling: sampel tengah
     return mix(1.0, v0, fe);
   }
   float stationShadow(vec3 p) {
