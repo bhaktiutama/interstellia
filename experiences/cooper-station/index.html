@@ -1793,6 +1793,12 @@ const groundMat = new THREE.ShaderMaterial({
       return mix(mix(hash2(i), hash2(i + vec2(1, 0)), u.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), u.x), u.y);
     }
     float fbm2(vec2 p) { return 0.62 * vnoise(p) + 0.38 * vnoise(p * 2.31 + 17.0); }
+    // V1 revisi: butir halus pengganti hash per sel (dulu kotak-kotak 5-11 cm terlihat dari dekat). Dua oktaf noise nilai,
+    // oktaf kedua diputar 37 derajat agar kisi tidak sejajar; rata-rata 0,5, kontras dinaikkan mendekati hash lama.
+    float grainN(vec2 p) {
+      vec2 q = mat2(0.8, -0.6, 0.6, 0.8) * p * 2.17 + 7.3;
+      return clamp(0.5 + 1.7 * (0.55 * vnoise(p) + 0.45 * vnoise(q) - 0.5), 0.0, 1.0);
+    }
     ${MEADOW_GLSL}
     ${SIDEWALK_GLSL}
     // garis dengan anti-alias: pusat c, setengah lebar hw, jejak piksel fp
@@ -1884,7 +1890,7 @@ const groundMat = new THREE.ShaderMaterial({
       vec2 mdG = vec2(0.0); float mdRough = 0.8, mdK = 0.0;           // V1: kemiringan tonjolan (s, za), kekasaran, kekuatan kilap kering
       if (detail > 0.0) {
         // aspal: bintik agregat + tambalan, marka putih
-        float spk = hash2(P * 18.0) - 0.5;
+        float spk = grainN(P * 18.0) - 0.5;
         float asph = 1.0 + (0.10 * spk) * (1.0 - smoothstep(0.02, 0.08, fp)) + 0.06 * (vnoise(P / 2.5) - 0.5);
         float mark = 0.0;
         if (!blvd && za > 150.0 && za < 3200.0 && abs(dS) < 13.0 && !(abs(dZ) < 13.0 && za > uCityZ.x - 13.0 && za < uCityZ.y + 13.0))
@@ -1915,9 +1921,9 @@ const groundMat = new THREE.ShaderMaterial({
         }
         // jalan tanah ladang: kerikil + dua alur roda
         float ruts = max(lineAA(abs(dS) - 1.0, 0.28, fp), 0.0);
-        col = mix(col, col * (0.92 + 0.16 * hash2(P * 9.0) * (1.0 - smoothstep(0.03, 0.12, fp))) * (1.0 - 0.2 * ruts), dirtM * detail);
+        col = mix(col, col * (0.92 + 0.16 * grainN(P * 9.0) * (1.0 - smoothstep(0.03, 0.12, fp))) * (1.0 - 0.2 * ruts), dirtM * detail);
         // rumput: tekstur halus dua skala
-        float gN = vnoise(P * 3.3) * 0.6 + hash2(P * 11.0) * 0.4 * (1.0 - smoothstep(0.03, 0.1, fp));
+        float gN = vnoise(P * 3.3) * 0.6 + grainN(P * 11.0) * 0.4 * (1.0 - smoothstep(0.03, 0.1, fp));
         col *= mix(1.0, 0.86 + 0.28 * gN, vegM * (1.0 - fieldM) * detail);
         // baris tanaman: arah dari data petak, jarak 0,7 sampai 1,6 m
         if (fieldM > 0.0) {
@@ -1938,7 +1944,7 @@ const groundMat = new THREE.ShaderMaterial({
           float tr = abs(fract(u / 18.0) - 0.5) * 18.0;
           fcol *= 1.0 - 0.25 * max(lineAA(tr - 0.9, 0.22, fp), lineAA(tr + 0.9, 0.22, fp));
           // di bawah jagung 3D: tanah lembap + serasah daun
-          if (corn) fcol = mix(fcol, vec3(0.13, 0.10, 0.065) * (0.7 + 0.6 * vnoise(P * 2.3)) + vec3(0.05, 0.05, 0.02) * hash2(P * 7.0), 1.0 - smoothstep(uCornR * 0.85, uCornR, eyeDist));
+          if (corn) fcol = mix(fcol, vec3(0.13, 0.10, 0.065) * (0.7 + 0.6 * vnoise(P * 2.3)) + vec3(0.05, 0.05, 0.02) * grainN(P * 7.0), 1.0 - smoothstep(uCornR * 0.85, uCornR, eyeDist));
           col = mix(col, fcol, fieldM * detail);
         }
       }
