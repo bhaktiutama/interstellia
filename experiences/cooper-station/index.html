@@ -1134,18 +1134,30 @@ const LIGHT_GLSL = /* glsl */`
     // 18b: atap = satu sampel pada titik yang digeser 1 m searah normal. Dinding luar keluar dari tapak gedung (bukan di
     // bawah atap); lantai dan dinding interior tetap di bawah atap. Penghalang harus rendah (di bawah 12-40 m).
     vec3 cr = (uL_SunShMat * vec4(shUnrollP(p + n * 1.0, uL_SunShTh), 1.0)).xyz * 0.5 + 0.5;
-    float dr = textureLod(uL_SunSh, cr.xy, 0.0).r, zrr = cr.z - bias;
-    if (dr < zrr) roof = (1.0 - smoothstep(12.0, 40.0, (zrr - dr) * uL_SunShK.x)) * fe;
+    float zrr = cr.z - bias;
+    {                                                                 // revisi V1: atap bilinear 2x2 (dulu satu texel: kanopi pohon kotak-kotak)
+      float px = 1.0 / uL_SunShK.z;
+      vec2 t = cr.xy * uL_SunShK.z - 0.5, f = fract(t), b = (floor(t) + 0.5) * px;
+      vec4 dq = vec4(textureLod(uL_SunSh, b, 0.0).r, textureLod(uL_SunSh, b + vec2(px, 0.0), 0.0).r,
+                     textureLod(uL_SunSh, b + vec2(0.0, px), 0.0).r, textureLod(uL_SunSh, b + vec2(px, px), 0.0).r);
+      vec4 rq = step(dq, vec4(zrr)) * (1.0 - smoothstep(12.0, 40.0, (zrr - dq) * uL_SunShK.x));
+      roof = mix(mix(rq.x, rq.y, f.x), mix(rq.z, rq.w, f.x), f.y) * fe;
+    }
     #ifdef SUNSH_CHEAP
     const int NB = 3, NP = 3;
     #else
     const int NB = 7, NP = 8;
     #endif
+    // revisi V1: cari penghalang di dua kolom texel tetangga (keliling), bukan satu: kolom kosong di sebelah kolom teduh
+    // dulu langsung terang penuh, jadi tepi bayangan bertangga per texel ke arah keliling
+    float cx0 = (floor(c.x * uL_SunShK.z - 0.5) + 0.5) / uL_SunShK.z;
     for (int i = 0; i < NB; i++) {
       float o = i == 0 ? 0.0 : (mod(float(i), 2.0) < 0.5 ? -1.0 : 1.0) * (i < 3 ? 0.12 : i < 5 ? 0.4 : 1.0);
       if (NB == 3 && i > 0) o *= 2.5;
-      float d = textureLod(uL_SunSh, c.xy + vec2(0.0, o * sr), 0.0).r;
-      if (d < zr) { bs += d; bn += 1.0; }
+      for (int j = 0; j < 2; j++) {
+        float d = textureLod(uL_SunSh, vec2(cx0 + float(j) / uL_SunShK.z, c.y + o * sr), 0.0).r;
+        if (d < zr) { bs += d; bn += 1.0; }
+      }
     }
     if (bn < 0.5) return 1.0;
     float hb = (c.z - bs / bn) * uL_SunShK.x;                         // tinggi rata-rata penghalang di atas penerima (m)
@@ -1156,7 +1168,7 @@ const LIGHT_GLSL = /* glsl */`
       float u = (float(k) + 0.5) / float(NP) * 2.0 - 1.0;
       vec3 Lu = up + vec3(0.0, 0.0, 0.75 * u);
       float wt = max(dot(n, Lu), 0.0) * inversesqrt(dot(Lu, Lu)) / (1.0 + 1.7 * u * u);
-      vis += sunShCmp(c.xy + vec2(0.0, u * w), zr) * wt; ws += wt;
+      vis += sunShCmp(c.xy + vec2((float(k - 2 * (k / 2)) - 0.5) / uL_SunShK.z, u * w), zr) * wt; ws += wt;   // revisi V1: geser +-0,5 texel bergantian (tenda 2 texel ke keliling)
     }
     float v0 = ws > 1e-3 ? vis / ws : sunShCmp(c.xy, zr);   // dinding menghadap keliling: sampel tengah
     return mix(1.0, v0, fe);
