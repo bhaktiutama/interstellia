@@ -374,7 +374,7 @@ const U = {   // uniform bersama material permukaan (objek uniform dipakai bersa
   // bayangan dari cahaya Gargantua (SHD): peta kedalaman ortografik di sekitar pemain; uShK = kuat cahaya langsung (0 = mati)
   uShTex: { value: null }, uShM: { value: new THREE.Matrix4() }, uShK: { value: 0 }, uShPx: { value: 1 / 1024 }, uShSoft: { value: 1.5 }, uShD: { value: 1 / 319 },
   // V4 atmosfer: M1 puncak ombak tembus cahaya (uSssK, arah cahaya uSssL = Gargantua), M2 buih menua jadi renda (uLaceK); 0 = mati (Rendah, Hemat, ?v4=0)
-  uSssK: { value: 0 }, uSssL: { value: GDIR }, uLaceK: { value: 0 },
+  uSssK: { value: 0 }, uSssL: { value: GDIR }, uLaceK: { value: 0 }, uSaltK: { value: 0 },   // M3: kabut garam di permukaan
 };
 const V4 = { off: new URLSearchParams(location.search).get('v4') === '0' };
 
@@ -412,7 +412,7 @@ const COMMON = /* glsl */`
 uniform float uT, uR, uWX, uWH, uLean, uFogD, uPix, uChopK;
 uniform vec3 uCam, uAmb, uScat, uAbs, uBed, uFoamC;
 uniform samplerCube uSky; uniform mat3 uWob;
-uniform float uSssK, uLaceK; uniform vec3 uSssL;
+uniform float uSssK, uLaceK, uSaltK; uniform vec3 uSssL;
 float seaCrest = 0.0;                                   // V4 M1: 0..1 puncak ombak tipis (diisi shader laut dekat sebelum seaShadeS; lainnya 0)
 uniform vec4 uWA[16], uWB[16], uMA[12], uMB[12];
 float frontX(float z) { return uWX + 2500.0 * sin(z * 4.0e-5 + 1.3) + 900.0 * sin(z * 1.7e-4); }
@@ -503,7 +503,15 @@ vec3 seaShadeS(vec3 r, vec3 n, float depth, float foam, vec2 P, float caust, flo
   }
   c = mix(c, uFoamC * uAmb * mix(1.0, lit, 0.7), clamp(foam, 0.0, 1.0));
   vec3 hd = normalize(vec3(-V.x, 0.02, -V.z));
-  return mix(c, skyL(hd), 1.0 - exp(-dist / uFogD));
+  // V4 M3: kabut garam di atas permukaan: lebih rapat saat ombak angin kuat (keadaan laut) dan dalam 600 m dari gelombang
+  // raksasa (semburan), warnanya lebih putih (butir garam menghamburkan cahaya sekitar). 0 = kabut lama persis
+  float fd = uFogD; vec3 fc = skyL(hd);
+  if (uSaltK > 0.0) {
+    float wn = exp(-abs(P.x - frontX(P.y)) / 600.0);
+    fd /= 1.0 + uSaltK * (0.35 * uChopK + 1.2 * wn);
+    fc = mix(fc, uAmb * vec3(0.92, 0.95, 0.97), 0.25 * uSaltK);
+  }
+  return mix(c, fc, 1.0 - exp(-dist / fd));
 }
 vec3 seaShade(vec3 r, vec3 n, float depth, float foam, vec2 P, float caust) { return seaShadeS(r, n, depth, foam, P, caust, 1.0); }
 `;
@@ -1665,6 +1673,7 @@ function applyPreset(i) {
   makeShadow(SHD_SIZE[i] || 0);
   setBodyDetail(BODY_DETAIL[i]);
   U.uSssK.value = U.uLaceK.value = !V4.off && i <= 2 ? 1 : 0;                  // V4 M1, M2: Ultra, Tinggi, Sedang
+  U.uSaltK.value = !V4.off && i <= 1 ? 1 : 0;                                    // V4 M3: Ultra, Tinggi
   makeSkyCube(P.cube);
   makeGCube(P);
   resize();
