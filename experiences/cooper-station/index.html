@@ -344,7 +344,8 @@
     </table>
     <table data-pane="kamera">
         <tr class="desk-only"><td>V</td><td>Kamera luar: seret / WASD putar, scroll / + - zoom, C orbit otomatis, 1-4 fokus</td></tr>
-        <tr class="desk-only"><td>F · Y</td><td>Mode foto (jam, sudut pandang, fokus dan blur, eksposur, simpan PNG dengan Enter) · tur sinematik dengan penjelasan fisika (Y atau Esc = berhenti)</td></tr>
+        <tr class="desk-only"><td>F · Y</td><td>Kamera rangefinder (F; tombolnya di bawah) atau Foto bebas dari panel kamera (jam, sudut pandang, fokus dan blur, eksposur, simpan PNG dengan Enter) · tur sinematik dengan penjelasan fisika (Y atau Esc = berhenti)</td></tr>
+      <tbody id="camHelpRows" class="desk-only"></tbody>
     </table>
     <table data-pane="waktu">
         <tr class="desk-only"><td>[ · ] · Z</td><td>Jam stasiun mundur / maju 1 jam · kecepatan waktu (1 menit = 1 jam, 10 s, 1 s, berhenti)</td></tr>
@@ -628,6 +629,7 @@ Object.assign(I18N.en, {
   "Cuaca (N)": "Weather (N)",
   "Simpan PNG (Enter)": "Save PNG (Enter)",
   "Kamera rangefinder": "Rangefinder camera",
+  "Kamera rangefinder (F; tombolnya di bawah) atau Foto bebas dari panel kamera (jam, sudut pandang, fokus dan blur, eksposur, simpan PNG dengan Enter) · tur sinematik dengan penjelasan fisika (Y atau Esc = berhenti)": "Rangefinder camera (F; keys below) or Free photo from the camera panel (time, field of view, focus and blur, exposure, Enter saves PNG) · cinematic tour with physics notes (Y or Esc stops)",
   "Kamera rangefinder hanya bisa dipakai saat berjalan, di trem, lift, kapsul, atau hub (bukan di motor, shuttle, atau kamera luar).": "The rangefinder camera works on foot, in the tram, lift, pod or hub (not on the motorbike, in the shuttle or the outside camera).",
   "Tersimpan": "Saved",
   "{n} derajat": "{n} degrees",
@@ -3860,7 +3862,7 @@ building('gambrel', COOPER.s - 32, COOPER.za + 24, 16, 12, 9, '#8e3b2f', 0, true
 // Detail digambar di shader dari koordinat dinding (meter): lantai, jendela, kusen, pintu, etalase, balkon,
 // papan kayu / seng / bata, genteng / seng atap, kerikil atap datar. Detail memudar otomatis ke warna rata-rata
 // saat pola lebih kecil dari beberapa piksel (LOD di shader, tanpa geometri tambahan). Malam: sebagian jendela menyala.
-const BUILD_U = { uNight: { value: 0 }, uInterior: { value: 1 },   // 14c: 1 = ruangan maya di balik jendela
+const BUILD_U = { uNight: { value: 0 }, uInterior: { value: 1 }, uLodK: { value: 1 },   // 14c: 1 = ruangan maya di balik jendela; K10: faktor zoom lensa
   uLitT: { value: new THREE.Vector2(1, 1) }, uTime: groundMat.uniforms.uTime };   // 21c: faktor nyala jendela per jam (x kantor, y hunian), kedip lampu atap
 const BUILD_VS = /* glsl */`
   #include <fog_pars_vertex>
@@ -3892,7 +3894,7 @@ const BUILD_VS = /* glsl */`
   }`;
 const BUILD_FS = /* glsl */`
   #include <fog_pars_fragment>
-  uniform float uNight, uInterior, uTime;
+  uniform float uNight, uInterior, uTime, uLodK;
   uniform vec2 uLitT;
   varying vec3 vO, vNo, vW, vNw;
   varying vec3 vDirO;
@@ -4275,7 +4277,7 @@ const BUILD_FS = /* glsl */`
           room = mix(room, cloth * (dot(light, vec3(0.333)) * 0.45 + warm * onR * 0.7), curtain);
           // revisi 14c: kaca di depan ruangan. Pantulan lingkungan (langit + siluet gedung seberang) ikut bergeser dengan kamera,
           // makin kuat dengan jarak: dekat ruangan jelas dengan kilap tipis, jauh didominasi pantulan
-          float dist = length(vW - cameraPosition), gK = varW ? smoothstep(15.0, 60.0, dist) : smoothstep(12.0, 70.0, dist);   // 21d: kantor memantul lebih cepat
+          float dist = length(vW - cameraPosition) / max(uLodK, 1.0), gK = varW ? smoothstep(15.0, 60.0, dist) : smoothstep(12.0, 70.0, dist);   // 21d: kantor memantul lebih cepat; K10: jarak tampak (dibagi zoom lensa)
           vec3 env = sky;                                              // 21e: satu model pantulan (ngarai kota di atas) untuk kaca dekat dan jauh
           float refK = min(0.95, mix(0.10 + 0.5 * F, 0.55 + 0.4 * F, gK) * (code == 1.0 ? 1.15 : 1.0));
           vec3 glassI = room * vec3(0.9, 0.96, 1.0) * (1.0 - refK * mix(1.0, 0.6, onR)) + env * refK;   // lampu menyala sedikit tembus (21e: kilau diagonal dihapus)
@@ -7376,7 +7378,7 @@ const VU = {
   uCloudK: groundMat.uniforms.uCloudK, uFieldZ: groundMat.uniforms.uFieldZ,
   uHeightTex: { value: heightTex },
   uHM: { value: new THREE.Vector4(1 / (2 * TER.ds), 1 / (2 * TER.dz), TER.NS, TER.NZ) },
-  uEye: { value: new THREE.Vector3() }, uEyeSZ: { value: new THREE.Vector2() },
+  uEye: { value: new THREE.Vector3() }, uEyeSZ: { value: new THREE.Vector2() }, uLodC: { value: new THREE.Vector3() },   // K10: pusat LOD pohon (mata, atau digeser ke arah bidikan lensa panjang)
   uYard: { value: new THREE.Vector4(COOPER.s - 70, COOPER.za - 45, COOPER.s + 90, COOPER.za + 60) },
   uHouse: { value: new THREE.Vector4(...YARD_OBST[0]) },
   uFieldRect: { value: new THREE.Vector4(BALLPARK.s0, BALLPARK.z0, BALLPARK.s1, BALLPARK.z1) }, uHome: { value: new THREE.Vector2(FIELD.s, FIELD.za) },
@@ -7394,7 +7396,7 @@ const VEG_COMMON = /* glsl */`
   #define texture2D texture
   #endif
   uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex, uHeightTex;
-  uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uLodD, uLodF, uMeadowOn;
+  uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uLodD, uLodF, uMeadowOn; uniform vec3 uLodC;
   uniform vec4 uForest;
   uniform vec2 uWindSlow, uGustOff;                               // 14b revisi: angin halus dan geseran hembusan
   uniform vec2 uFieldZ, uEyeSZ;
@@ -8075,7 +8077,7 @@ const IMP_VS = /* glsl */`
     vec3 C = vec3(modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0));
     float cs = atan(C.y, C.x) * uR; if (cs < 0.0) cs += 6.28318530718 * uR;
     float cz = C.z + uHalfL, lodHere = (cs > uForest.x && cs < uForest.z && cz > uForest.y && cz < uForest.w) ? min(uLodD, uLodF) : uLodD;   // 14a: pohon hutan
-    if (distance(C, uEye) < lodHere - 2.0) { ${CLIP_AWAY} }         // dekat: digambar sebagai mesh penuh
+    if (distance(C, uLodC) < lodHere - 2.0) { ${CLIP_AWAY} }         // dekat: digambar sebagai mesh penuh
     vec3 Y = mat3(modelMatrix) * vec3(instanceMatrix[1]); float sc = length(Y); Y /= sc;
     vec3 toC = uEye - C; toC -= Y * dot(toC, Y);
     if (dot(toC, toC) < 1e-6) toC = vec3(1e-3, 0.0, 0.0);           // 12b: kamera tepat di atas pohon -> cross nol -> NaN
@@ -8294,7 +8296,7 @@ const OCT_VS = /* glsl */`
     vec3 C = vec3(M * vec4(0.0, 0.0, 0.0, 1.0));
     float cs = atan(C.y, C.x) * uR; if (cs < 0.0) cs += 6.28318530718 * uR;
     float cz = C.z + uHalfL, lodHere = (cs > uForest.x && cs < uForest.z && cz > uForest.y && cz < uForest.w) ? min(uLodD, uLodF) : uLodD;
-    if (distance(C, uEye) < lodHere - 2.0) { ${CLIP_AWAY} }
+    if (distance(C, uLodC) < lodHere - 2.0) { ${CLIP_AWAY} }
     mat3 R3 = mat3(M); float sc = length(R3[1]); R3 /= sc;
     vec3 Cc = C + R3[1] * uOct.y * sc, toE = uEye - Cc;
     vec3 dl = transpose(R3) * toE; dl.y = max(dl.y, 0.0);
@@ -8373,7 +8375,9 @@ function octStep() {                                               // tiap frame
 }
 const _tm = new THREE.Matrix4(), _tr = new THREE.Matrix4(), _ts = new THREE.Vector3(), NO_TINT = [0, 0, 0, 0];
 function updateTreeLOD(eyeS, eyeZ, eyeH) {
-  const lod = TREES.lodD, lod2 = lod * lod, lodF = Math.min(lod, TREES.forestLod), lodF2 = lodF * lodF, cnt = TREES.templates.map(() => 0), nCS = Math.ceil(CIRC / TREES.cell);
+  const L0 = lodShift(TREES.lodD); eyeS = modS(eyeS + L0.ds); eyeZ += L0.dz;   // K10: lensa panjang = pusat ke arah bidikan, radius x (k + 1) / 2
+  lodCenterWorld(L0, VU.uLodC.value);
+  const lod = L0.r, lod2 = lod * lod, lodF = Math.min(lod, lodShift(Math.min(TREES.lodD, TREES.forestLod)).r), lodF2 = lodF * lodF, cnt = TREES.templates.map(() => 0), nCS = Math.ceil(CIRC / TREES.cell);
   const cs = Math.floor(eyeS / TREES.cell), cz = Math.floor(eyeZ / TREES.cell), n = Math.ceil(lod / TREES.cell);
   if (eyeH < 400) for (let a = -n; a <= n; a++) for (let b = -n; b <= n; b++) {
     const arr = TREES.grid.get((((cs + a) % nCS) + nCS) % nCS * 1000 + cz + b);
@@ -8592,6 +8596,7 @@ function updateReal() {
   const p = camera.position;
   const eyeS = modS(Math.atan2(p.y, p.x) * R), eyeZ = p.z + HALF_L, eyeH = R - Math.hypot(p.x, p.y);
   VU.uEye.value.copy(p); VU.uEyeSZ.value.set(eyeS, eyeZ);
+  if (LODK.k === 1) VU.uLodC.value.copy(p);                          // K10: tanpa zoom = pusat LOD tetap mata (perilaku lama)
   const near = eyeH < 200;
   for (const m of [GRASS.near, GRASS.far, CORN.near, CORN.mid]) m.visible = near;
   if (near) {
@@ -8611,8 +8616,8 @@ function updateReal() {
     MEADOW.mid.material.uniforms.uCenter.value.set(Math.floor(eyeS / 0.85), Math.floor(eyeZ / 0.85));
   }
   updateFallSources();                             // 12b-2
-  if (Math.hypot(wrapS(eyeS - TREES.lastS), eyeZ - TREES.lastZ, eyeH - TREES.lastD) > 1.5) {
-    TREES.lastS = eyeS; TREES.lastZ = eyeZ; TREES.lastD = eyeH;
+  if (LODK.ver !== TREES.lodVer || Math.hypot(wrapS(eyeS - TREES.lastS), eyeZ - TREES.lastZ, eyeH - TREES.lastD) > 1.5) {
+    TREES.lastS = eyeS; TREES.lastZ = eyeZ; TREES.lastD = eyeH; TREES.lodVer = LODK.ver;
     updateTreeLOD(eyeS, eyeZ, eyeH);
   }
 }
@@ -9119,6 +9124,25 @@ const POST_R = {};
   POST_R.lum = [0, 1].map(() => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, generateMipmaps: false }));   // 17c
   POST_R.ssr = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, generateMipmaps: false });   // 22a
   POST_R.w = 0; POST_R.h = 0;
+}
+/* K10: LOD mengikuti bidikan kamera. k = tan(FOV biasa / 2) / tan(FOV lensa / 2) saat live view atau tangkap (jendela bidik = 1),
+   dibatasi per preset. Pusat LOD digeser ke arah bidikan sejauh r (k - 1) / 2 dan radius jadi r (k + 1) / 2: di belakang tetap r,
+   di depan r k (benda di jarak d tampak sebesar d / k). ver naik tiap perubahan agar daftar instance dihitung ulang. */
+const LODK = { k: 1, fs: 0, fz: 0, ver: 0, kMax: [3, 2.5, 2, 1.5, 1.25] };
+function lodShift(r) { const e = (LODK.k - 1) * r / 2; return { ds: LODK.fs * e, dz: LODK.fz * e, r: r * (LODK.k + 1) / 2, e }; }
+function lodCenterWorld(L0, out) {                                   // titik pusat LOD di dunia (geser kamera searah tangen permukaan)
+  const p = camera.position, th = Math.atan2(p.y, p.x);
+  return out.set(p.x - Math.sin(th) * L0.ds, p.y + Math.cos(th) * L0.ds, p.z + L0.dz);
+}
+function lodSet(k, instant) {                                         // dipanggil kamera tiap frame; k = 1 mengembalikan perilaku lama persis
+  const kk = Math.max(1, Math.min(LODK.kMax[PRESET.idx] || 1.25, k)), nk = instant ? kk : LODK.k + (kk - LODK.k) * 0.15;
+  const f = _v3.set(0, 0, -1).applyQuaternion(camera.quaternion), th = Math.atan2(camera.position.y, camera.position.x);
+  let fs = -Math.sin(th) * f.x + Math.cos(th) * f.y, fz = f.z; const L = Math.hypot(fs, fz);
+  if (L > 0.1) { fs /= L; fz /= L; } else fs = fz = 0;
+  const kq = Math.abs(nk - 1) < 0.02 ? 1 : Math.round(nk * 20) / 20;
+  const ch = kq !== LODK.k || (kq > 1 && (Math.abs(fs - LODK.fs) > 0.15 || Math.abs(fz - LODK.fz) > 0.15));
+  if (ch) { LODK.k = kq; if (kq > 1) { LODK.fs = fs; LODK.fz = fz; } else LODK.fs = LODK.fz = 0; LODK.ver++; }
+  BUILD_U.uLodK.value = LODK.k;
 }
 // K: kamera rangefinder: target akumulasi foto (float bila bisa dicampur aditif), matriks frame lalu (blur video)
 const CAMX = { final: false, ex: 0, ey: 0, prevVP: new THREE.Matrix4(), pos: new THREE.Vector3(), q: new THREE.Quaternion(), w: 1, n: 0,
@@ -10596,12 +10620,13 @@ function updateCrossingVisual() {
 }
 function updateFurniture() {
   const s = player.theta * R, za = player.za, T = clock.sim;
-  if (Math.abs(wrapS(s - FURN.lastS)) >= 20 || Math.abs(za - FURN.lastZ) >= 20) {       // LOD: kirim instance dalam radius tiap 20 m berpindah
-    FURN.lastS = s; FURN.lastZ = za;
+  if (LODK.ver !== FURN.lodVer || Math.abs(wrapS(s - FURN.lastS)) >= 20 || Math.abs(za - FURN.lastZ) >= 20) {       // LOD: kirim instance dalam radius tiap 20 m berpindah (K10: atau lensa berubah)
+    FURN.lastS = s; FURN.lastZ = za; FURN.lodVer = LODK.ver;
     for (const K of Object.values(FURN.kinds)) {
-      const arr = K.mesh.instanceMatrix.array, r2 = K.range * K.range; let c = 0;
+      const L0 = lodShift(K.range), cs = s + L0.ds, cz = za + L0.dz;   // K10
+      const arr = K.mesh.instanceMatrix.array, r2 = L0.r * L0.r; let c = 0;
       for (let i = 0; i < K.n; i++) {
-        const ds = wrapS(K.ps[i] - s), dz = K.pz[i] - za;
+        const ds = wrapS(K.ps[i] - cs), dz = K.pz[i] - cz;
         if (ds * ds + dz * dz > r2) continue;
         arr.set(K.mats.subarray(i * 16, i * 16 + 16), c * 16); if (K.idx) K.idx[c] = i;
         if (K.cols) K.mesh.instanceColor.array.set(K.cols.subarray(i * 3, i * 3 + 3), c * 3);   // 22c: warna kanopi / papan nama
@@ -12045,20 +12070,20 @@ function stepPeds(dt, t = clock.sim) {
 function updatePeds() {                                                 // pilih orang dalam radius, tulis atribut instance
   const g = PEDS.mesh.geometry;
   if (ext.active || !PEDS.user || !PEDS.dens) { g.instanceCount = PEDS.n = PEDS.umbMesh.geometry.instanceCount = 0; return; }
-  const eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, R2 = PEDS.radius * PEDS.radius, h = clock.hour, f = PEDS.dens * PEDS.user;
+  const L0 = lodShift(PEDS.radius), eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, cS = eS + L0.ds, cZ = eZ + L0.dz, R2 = L0.r * L0.r, h = clock.hour, f = PEDS.dens * PEDS.user;   // K10: pusat dan radius ikut lensa
   const now = performance.now();
-  if (now > PEDS.nearAt || Math.hypot(wrapS(eS - PEDS.nearS), eZ - PEDS.nearZ) > 30) {   // daftar orang dekat, tiap 0,5 s
-    PEDS.nearAt = now + 500; PEDS.nearS = eS; PEDS.nearZ = eZ; PEDS.near.length = 0;
-    const RN = PEDS.radius + 60;
-    for (const p of PEDS.list) { p.isNear = Math.abs(wrapS(p.s - eS)) < RN && Math.abs(p.za - eZ) < RN; if (p.isNear) PEDS.near.push(p); }
+  if (now > PEDS.nearAt || LODK.ver !== PEDS.lodVer || Math.hypot(wrapS(cS - PEDS.nearS), cZ - PEDS.nearZ) > 30) {   // daftar orang dekat, tiap 0,5 s
+    PEDS.nearAt = now + 500; PEDS.nearS = cS; PEDS.nearZ = cZ; PEDS.near.length = 0; PEDS.lodVer = LODK.ver;
+    const RN = L0.r + 60;
+    for (const p of PEDS.list) { p.isNear = Math.abs(wrapS(p.s - cS)) < RN && Math.abs(p.za - cZ) < RN; if (p.isNear) PEDS.near.push(p); }
   }
   const act = [pedAct(h, 0) * f, pedAct(h, 1) * f, pedAct(h, 2) * f];
   const P = g.attributes.aP.array, I = g.attributes.aI.array, J = g.attributes.aJ.array; let n = 0;
   const UG = PEDS.umbMesh.geometry, BP = UG.attributes.bP.array, BJ = UG.attributes.bJ.array, am = 1 - 0.4 * PEDS.hk; let nu = 0;   // 23f
   for (const p of PEDS.near) {
     if (p.thr >= act[p.zone] * (p.wk && !p.roof ? am : 1)) continue;   // 23f: hujan deras = pejalan kaki berkurang 40%
-    const ds = wrapS(p.s - eS), dz = p.za - eZ;
-    if (ds * ds + dz * dz > R2) continue;
+    const ds = wrapS(p.s - eS), dz = p.za - eZ, qs = wrapS(p.s - cS), qz = p.za - cZ;
+    if (qs * qs + qz * qz > R2) continue;
     const o = n * 4;
     P[o] = eS + ds; P[o + 1] = p.za; P[o + 2] = p.hd; P[o + 3] = p.ph;
     I[o] = p.shirt; I[o + 1] = p.pants; I[o + 2] = p.skin; I[o + 3] = p.pose;
@@ -13772,6 +13797,11 @@ on('phWeather', () => { cycleWeather(); syncPhotoUI(); });
 on('phSave', () => savePhoto());
 on('photoClose', () => togglePhoto(false));
 on('phCam', () => { togglePhoto(false); togglePhoto(true, 'kamera'); });   // K
+function camHelpFill() {                                             // K: daftar tombol kamera di tab bantuan Kamera dan foto (teks dari CAMKIT, dua bahasa)
+  const el = document.getElementById('camHelpRows'); if (!el) return;
+  el.innerHTML = `<tr><td colspan="2"><b>${CAMKIT.helpHead(LANG.cur)}</b></td></tr>` + CAMKIT.helpRows(LANG.cur).map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+}
+camHelpFill(); LANG.hooks.push(camHelpFill);
 on('labPhoto', () => togglePhoto(true));
 on('btnPhoto', () => togglePhoto());
 function updatePhoto() {                                             // tiap frame saat mode foto: jam di panel ikut berjalan
@@ -13819,7 +13849,8 @@ function camOff() {                                                  // semua un
   const C = compMat.uniforms; C.uCamE.value.set(0, 1, 0, 0); C.uCamL.value.set(0, 0, 0, 0); C.uCamR.value.set(0, 0, 0, 0); C.uCamM.value.set(0, 0, 0, 0);
   CAMKIT.U.E = [0, 1, 0, 0]; CAMKIT.U.L = [0, 0, 0, 0]; CAMKIT.U.R = [0, 0, 0, 0]; CAMKIT.U.M = [0, 0, 0, 0];
 }
-function camLeave() { CAMKIT.leave(); camOff(); CAMX.final = false; TAA.valid = false; }
+function camLeave() { CAMKIT.leave(); camOff(); CAMX.final = false; TAA.valid = false; lodSet(1, true); }
+const camZoomK = (V) => (V.live ? Math.tan(CONFIG.fov * DEG / 2) / Math.tan(V.vfov * DEG / 2) : 1);   // K10
 function camSetFov(f) {
   if (Math.abs(camera.fov - f) > 1e-5) { camera.fov = farCam.fov = f; camera.updateProjectionMatrix(); farCam.updateProjectionMatrix(); }
 }
@@ -13842,6 +13873,7 @@ function camFrame() {                                                // tiap fra
   renderer.getDrawingBufferSize(_dbs);
   const V = CAMKIT.view(_dbs.x, _dbs.y, false);
   camSetFov(V.vfov);
+  lodSet(camZoomK(V), false);                                        // K10: LOD mengikuti lensa (live view)
   camOffset(V.eye[0], V.eye[1]); CAMX.ex = V.eye[0]; CAMX.ey = V.eye[1];   // live view: dari lensa (kanan bawah jendela bidik)
   camUniforms(_dbs.x, _dbs.y);
   CAMKIT.tick(); camMeter();
@@ -13862,6 +13894,8 @@ function camCapture(dtReal) {                                        // subframe
     renderer.setClearColor(0x000000, 0); renderer.clear(true, false, false); renderer.setClearColor(_kCC, ca);
     CAMX.n = 0; CAMX.w = CAMX.float ? 1 : 1 / (P.bulb ? 120 : P.N);   // half float: bobot kecil agar jumlah tidak kehilangan presisi
     camOffset(-CAMX.ex, -CAMX.ey);                                   // kembali ke mata (jendela bidik); camSub menambah offset lensa
+    lodSet(camZoomK(CAMKIT.view(W, H, true)), true);                 // K10: LOD penuh untuk lensa ini sebelum subframe pertama
+    updateTreeLOD(VU.uEyeSZ.value.x, VU.uEyeSZ.value.y, R - Math.hypot(camera.position.x, camera.position.y)); FURN.lodVer = -1; updateFurniture(); updatePeds();
     CAMX.pos.copy(camera.position); CAMX.q.copy(camera.quaternion);
     TAA.act = false; TAA.valid = false;
   }

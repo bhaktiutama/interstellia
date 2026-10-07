@@ -21,6 +21,7 @@ Per 7 Oktober 2026 · Status: K1-K9 dikerjakan (lihat Status implementasi), menu
 | K7 | Selesai | Millar: kedalaman dibuat di semua preset selama mode kamera, visor mati (sama dengan mode foto) |
 | K8 | Selesai | Gargantua: bukaan = kemiringan arah sinar (adegan di tak hingga), wahana tidak punya DOF sendiri, Enter = rana (tanpa kunci kursor) |
 | K9 | Selesai | `docs/app/tombol.md`, `CLAUDE.md`, `FEATS` / `KEYS` menu utama, teks kamera dua bahasa di `CAMKIT` |
+| K10 | Selesai (Copper) | LOD mengikuti bidikan lensa, badan kamera belakang di live view, tepi lembut jendela bidik, daftar tombol kamera di bantuan ketiga experience |
 
 Kalibrasi yang dipakai (nilai awal, belum diukur):
 
@@ -269,6 +270,21 @@ Rencana ini disusun satu tingkat di atas tahap terberat (K4 High). Tahap berurut
 ## K9. Mekanis (Low)
 
 Teks HUD, panel, bantuan, toast lewat `t()` (Copper, Millar) dan kamus `ID` / `txt()` (Gargantua); `tools/uji_bahasa.py` lulus; tabel F dan tombol lokal kamera di `docs/app/tombol.md`; baris `shared/camera.js` dan `tools/uji_kamera.py` di `CLAUDE.md`; fitur "Kamera rangefinder" di `FEATS` dan `KEYS` menu utama.
+
+## K10. LOD mengikuti bidikan, badan kamera, tepi lembut, bantuan (Medium, shader High)
+
+Permintaan pemilik sesudah K1-K9: detail LOD diperluas sesuai bidikan, badan kamera belakang (acuan foto kamera rangefinder digital; desain orisinal tanpa merek), tepi lembut di jendela bidik, daftar tombol kamera di bantuan.
+
+| Bagian | Isi |
+| --- | --- |
+| Faktor zoom | k = tan(FOV biasa / 2) / tan(FOV lensa / 2) saat live view atau tangkap; jendela bidik k = 1. Batas per preset `LODK.kMax` = 3 / 2,5 / 2 / 1,5 / 1,25 (Ultra ke Hemat); berubah halus 15% per frame, saat tangkap langsung |
+| Arah bidikan | Pusat LOD digeser ke depan r (k - 1) / 2, radius r (k + 1) / 2: di belakang tetap r, di depan r x k. Contoh 90 mm layar penuh (bidang vertikal 15,2 derajat) dari FOV 70 derajat: k = 5,25, dibatasi 3 di Ultra; dengan badan kamera layar lebih kecil, k = 3,18 pada layar 16:9 |
+| Yang ikut | Pohon (mesh vs impostor; shader memakai pusat `uLodC`), perabot dan detail kota `FURN`, pejalan kaki `PEDS`, pudar ruangan dan pantulan kaca jendela (`BUILD_U.uLodK`: jarak dibagi k) |
+| Tidak ikut | Rumput, jagung, rumput bukit (paling mahal), detail material `LIGHT_GLSL` (berisiko di M1), bayangan dekat |
+| k = 1 | Perilaku lama: `uLodC` = mata tiap frame, radius dan pusat sama dengan sebelumnya |
+| Badan kamera | Live view foto: layar 3:2 di tengah, badan di sekeliling (pelat atas, dial dan dudukan lampu kilat, kulit bertekstur, okuler kiri atas, PLAY / FN / MENU, tombol arah, roda jempol, kait tali). Bidang lensa dipetakan ke layar belakang; foto dan video tetap bingkai penuh. Panel: Badan kamera nyala / mati |
+| Tepi lembut | Masker okuler 14 lapis bertumpuk, gradien sekitar 3% lebar jendela |
+| Bantuan | `CAMKIT.helpRows()` / `helpHead()` dipakai di tab Kamera dan foto Copper, bantuan Millar, bantuan Gargantua; petunjuk "? tombol kamera" di pojok layar kamera. Perbaikan: `#camHelp` dan `#camTouch` memakai `display: flex` yang mengalahkan atribut `hidden` (bisa tampil terus); kini `[hidden]` dipaksa `display: none` |
 
 ## File dan fungsi yang disentuh
 
