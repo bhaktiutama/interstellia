@@ -7813,7 +7813,8 @@ function cornCardGeo() {
 const CORN_CARD_VS = /* glsl */`
   attribute vec2 aCell;
   uniform vec2 uCenter;
-  uniform float uNearR, uMidR;
+  uniform float uNearR, uMidR, uCornCap;
+  uniform vec2 uCornC;
   varying vec2 vUv;
   varying float vFade, vT;
   varying vec3 vLight;
@@ -7824,7 +7825,7 @@ const CORN_CARD_VS = /* glsl */`
     vec2 P = vec2((idx.x + 0.5) * 0.76, (idx.y + stagger) * 2.0);
     float d = distance(P, uEyeSZ);
     vFade = smoothstep(uNearR - 2.5, uNearR, d);
-    float shrink = 1.0 - smoothstep(uMidR - 12.0, uMidR, d);
+    float shrink = 1.0 - smoothstep(uMidR - 12.0, uMidR, uCornCap > 0.5 ? distance(P, uCornC) : d);   // K10: saat foto, pusat digeser ke bidikan
     if (vFade < 0.01 || shrink < 0.01 || !isCorn(P) || !isCorn(P + vec2(0.0, 1.0)) || !isCorn(P - vec2(0.0, 1.0))) { ${CLIP_AWAY} }
     float H = (2.2 + 0.4 * h3) * (0.92 + 0.16 * vnoise(P / 18.0)) * shrink;
     vec3 up, tS;
@@ -7861,13 +7862,13 @@ const CORN_CARD_FS = /* glsl */`
   }`;
 const CORN = {};
 {
-  const nearCells = sortedCells(0.76, 0.25, 12), cardCells = sortedCells(0.76, 2.0, 90);
+  const nearCells = sortedCells(0.76, 0.25, 12), cardCells = sortedCells(0.76, 2.0, 270);   // K10: grid sampai 270 m untuk foto lensa panjang; biasa dibatasi countFor(cornMid)
   const cornU = { uCenter: { value: new THREE.Vector2() }, uNearR: { value: 12 } };
   const nearGeo = instGeo(cornPlantGeo(), nearCells.cells);
   CORN.near = new THREE.Mesh(nearGeo, vegMaterial({ vertex: CORN_NEAR_VS, fragment: CORN_NEAR_FS, uniforms: cornU }));
   castAlpha(CORN.near, vegMaterial({ vertex: CORN_NEAR_VS, fragment: CORN_NEAR_FS, uniforms: cornU, depth: true }));
   CORN.near.userData.cells = nearCells;
-  const cardU = { uCenter: { value: new THREE.Vector2() }, uNearR: cornU.uNearR, uMidR: { value: 90 }, uCornTex: { value: cornTex } };
+  const cardU = { uCenter: { value: new THREE.Vector2() }, uNearR: cornU.uNearR, uMidR: { value: 90 }, uCornCap: { value: 0 }, uCornC: { value: new THREE.Vector2() }, uCornTex: { value: cornTex } };
   CORN.mid = new THREE.Mesh(instGeo(cornCardGeo(), cardCells.cells), vegMaterial({ vertex: CORN_CARD_VS, fragment: CORN_CARD_FS, uniforms: cardU }));
   castAlpha(CORN.mid, vegMaterial({ vertex: CORN_CARD_VS, fragment: CORN_CARD_FS, uniforms: cardU, depth: true }));
   CORN.mid.userData.cells = cardCells;
@@ -8570,6 +8571,23 @@ function cornGate(eyeS, eyeZ) {
   CORN.active = fieldList.some((f) => f.corn && Math.abs(wrapS(eyeS - (f.s0 + f.s1) / 2)) - (f.s1 - f.s0) / 2 < reach && Math.abs(eyeZ - (f.z0 + f.z1) / 2) - (f.z1 - f.z0) / 2 < reach);
   CORN.near.geometry.instanceCount = CORN.active ? CORN.nearN : 0;
   CORN.mid.geometry.instanceCount = CORN.active ? CORN.midN : 0;
+}
+// K10 pilihan A: hanya saat tangkap foto (dunia beku), kartu jagung diperluas ke arah bidikan seperti pohon; live view tetap
+function cornCapture(on) {
+  const Q = VEG_Q[vegQ], u = CORN.mid.material.uniforms;
+  if (!on || LODK.k <= 1 || !CORN.mid.visible) {
+    if (u.uCornCap.value === 0) return;
+    u.uCornCap.value = 0; u.uMidR.value = Q.cornMid; groundMat.uniforms.uCornR.value = Q.cornMid;
+    CORN.gateS = 1e9; cornGate(CORN.lastEyeS ?? 1e9, CORN.lastEyeZ ?? 1e9); return;
+  }
+  const L = lodShift(Q.cornMid), r = Math.min(L.r, 268), cS = VU.uEyeSZ.value.x + L.ds, cZ = VU.uEyeSZ.value.y + L.dz;
+  u.uCornCap.value = 1; u.uCornC.value.set(cS, cZ); u.uMidR.value = r;
+  u.uCenter.value.set(Math.floor(cS / 0.76), Math.floor(cZ / 2.0));
+  groundMat.uniforms.uCornR.value = r + L.e;                          // tanah jagung sampai tepi jauh lingkaran baru
+  const act = fieldList.some((f) => f.corn && Math.abs(wrapS(cS - (f.s0 + f.s1) / 2)) - (f.s1 - f.s0) / 2 < r + 20 && Math.abs(cZ - (f.z0 + f.z1) / 2) - (f.z1 - f.z0) / 2 < r + 20);
+  CORN.mid.geometry.instanceCount = act ? CORN.mid.userData.cells.countFor(r) : 0;
+  CORN.near.geometry.instanceCount = CORN.active ? CORN.nearN : 0;
+  CORN.gateS = 1e9;                                                  // cornGate berikutnya menghitung ulang
 }
 function applyVegQuality() {
   const Q = VEG_Q[vegQ];
@@ -13851,7 +13869,7 @@ function camOff() {                                                  // semua un
   const C = compMat.uniforms; C.uCamE.value.set(0, 1, 0, 0); C.uCamL.value.set(0, 0, 0, 0); C.uCamR.value.set(0, 0, 0, 0); C.uCamM.value.set(0, 0, 0, 0);
   CAMKIT.U.E = [0, 1, 0, 0]; CAMKIT.U.L = [0, 0, 0, 0]; CAMKIT.U.R = [0, 0, 0, 0]; CAMKIT.U.M = [0, 0, 0, 0];
 }
-function camLeave() { CAMKIT.leave(); camOff(); camRestoreRes(); CAMX.final = false; TAA.valid = false; lodSet(1, true); }
+function camLeave() { CAMKIT.leave(); camOff(); cornCapture(false); camRestoreRes(); CAMX.final = false; TAA.valid = false; lodSet(1, true); }
 const camZoomK = (V) => (V.live ? Math.tan(CONFIG.fov * DEG / 2) / Math.tan(V.vfov * DEG / 2) : 1);   // K10
 function camSetFov(f) {
   if (Math.abs(camera.fov - f) > 1e-5) { camera.fov = farCam.fov = f; camera.updateProjectionMatrix(); farCam.updateProjectionMatrix(); }
@@ -13903,6 +13921,7 @@ function camCapture(dtReal) {                                        // subframe
     camOffset(-CAMX.ex, -CAMX.ey);                                   // kembali ke mata (jendela bidik); camSub menambah offset lensa
     lodSet(camZoomK(CAMKIT.view(W, H, true)), true);                 // K10: LOD penuh untuk lensa ini sebelum subframe pertama
     updateTreeLOD(VU.uEyeSZ.value.x, VU.uEyeSZ.value.y, R - Math.hypot(camera.position.x, camera.position.y)); FURN.lodVer = -1; updateFurniture(); updatePeds();
+    cornCapture(true);
     CAMX.pos.copy(camera.position); CAMX.q.copy(camera.quaternion);
     TAA.act = false; TAA.valid = false;
   }
@@ -13911,6 +13930,7 @@ function camCapture(dtReal) {                                        // subframe
     if (s.dt > 0) {                                                  // dunia maju (rana lambat / B): gerak kendaraan, orang, awan, pemain
       worldStep(s.dt); updateTraffic(); updateFurniture();
       if (!camAllowed()) { P.done = true; break; }
+      cornCapture(true);
       CAMX.pos.copy(camera.position); CAMX.q.copy(camera.quaternion);
       shadowPass(); sunShadowPass();
     }
@@ -13950,6 +13970,7 @@ function camFinish(W, H) {
   postEnd();
   CAMX.final = false;
   CAMKIT.finish(canvas);
+  cornCapture(false);
   camRestoreRes();
   camera.position.copy(CAMX.pos); camera.quaternion.copy(CAMX.q); camera.updateMatrixWorld();
   TAA.valid = false;
