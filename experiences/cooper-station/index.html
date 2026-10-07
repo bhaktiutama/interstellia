@@ -8572,7 +8572,7 @@ const aoBlurMat = fsMat(/* glsl */`
     gl_FragColor = vec4(vec3(s / 16.0), 1.0); }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
 /* --- V3: GTAO (Ground Truth Ambient Occlusion, Jimenez dkk. 2016), setengah resolusi ---
    Per piksel: DIRS irisan (arah layar diputar noise per piksel), tiap irisan STEPS langkah ke dua sisi mencari sudut horizon
-   tertinggi dalam radius 2,5 m (bobot jarak memudar ke horizon terendah), lalu integral kosinus busur yang terlihat di sekitar
+   tertinggi dalam radius 2 m (bobot jarak, elevasi, dan benda tipis memudar ke horizon terendah), lalu integral kosinus busur yang terlihat di sekitar
    normal terproyeksi (rumus tertutup a(h) = (-cos(2h - n) + cos n + 2h sin n) / 4). Hasil r = visibilitas 0..1, g = jarak pandang.
    Aman M1: acos / sqrt hanya untuk nilai yang dijepit, normalize hanya untuk vektor yang dijaga tidak nol. Pudar 80-200 m. */
 const GTAO_FS = /* glsl */`
@@ -8613,9 +8613,16 @@ const GTAO_FS = /* glsl */`
         vec2 o = dir.xy * rUv * t * vec2(uTexel.x / uTexel.y, 1.0);    // rUv dalam satuan tinggi layar
         vec3 sA = vpos(vUv + o) - P, sB = vpos(vUv - o) - P;
         float lA = dot(sA, sA), lB = dot(sB, sB);
-        float wA = 1.0 - smoothstep(0.45 * R2, R2, lA), wB = 1.0 - smoothstep(0.45 * R2, R2, lB);
-        c1 = max(c1, mix(lo1, dot(sA, V) * inversesqrt(max(lA, 1e-8)), wA));
-        c0 = max(c0, mix(lo0, dot(sB, V) * inversesqrt(max(lB, 1e-8)), wB));
+        // bobot: jarak (memudar 0,3-1 R), elevasi di atas bidang singgung (lantai datar jauh: galat kuantisasi kedalaman tidak jadi
+        // garis-garis) dan benda tipis di depan titik (orang, tiang: tidak dianggap tembok tebal yang menggelapkan lantai lebar)
+        float iA = inversesqrt(max(lA, 1e-8)), iB = inversesqrt(max(lB, 1e-8));
+        float wA = (1.0 - smoothstep(0.3 * R2, R2, lA)) * smoothstep(0.03, 0.12, dot(sA, N) * iA) * (1.0 - 0.6 * smoothstep(0.5, 1.5, dot(sA, V)));
+        float wB = (1.0 - smoothstep(0.3 * R2, R2, lB)) * smoothstep(0.03, 0.12, dot(sB, N) * iB) * (1.0 - 0.6 * smoothstep(0.5, 1.5, dot(sB, V)));
+        vec2 uA = vUv + o, uB = vUv - o;                              // sampel di luar layar: tidak ada data (tepi tidak diulang jadi garis)
+        wA *= step(0.0, uA.x) * step(uA.x, 1.0) * step(0.0, uA.y) * step(uA.y, 1.0);
+        wB *= step(0.0, uB.x) * step(uB.x, 1.0) * step(0.0, uB.y) * step(uB.y, 1.0);
+        c1 = max(c1, mix(lo1, dot(sA, V) * iA, wA));
+        c0 = max(c0, mix(lo0, dot(sB, V) * iB, wB));
       }
       float h1 = n + min(acosC(c1) - n, 1.5707963), h0 = n + max(-acosC(c0) - n, -1.5707963);
       float cn = cos(n), sn = sin(n);
@@ -8624,7 +8631,7 @@ const GTAO_FS = /* glsl */`
     vis = clamp(vis / float(DIRS), 0.0, 1.0);
     gl_FragColor = vec4(mix(1.0, vis, fade), dist, 0.0, 1.0);
   }`;
-const gtaoU = () => ({ tDepth: { value: null }, uProjInv: { value: new THREE.Matrix4() }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 2.5 }, uPxR: { value: 1 } });
+const gtaoU = () => ({ tDepth: { value: null }, uProjInv: { value: new THREE.Matrix4() }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 2.0 }, uPxR: { value: 1 } });
 const GTAO_MATS = [null, fsMat(GTAO_FS, gtaoU()), fsMat(GTAO_FS, gtaoU())];   // [1] Tinggi: 2 x 4, [2] Ultra: 3 x 6
 GTAO_MATS[1].defines = { DIRS: 2, STEPS: 4 }; GTAO_MATS[2].defines = { DIRS: 3, STEPS: 6 };
 // penghalus 4x4 sadar kedalaman: bobot turun bila jarak pandang tetangga berbeda > 5%, tidak membuat halo di tepi siluet
