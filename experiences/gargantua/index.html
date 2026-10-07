@@ -123,6 +123,7 @@
 /* =====================================================================
    CONFIG: every tunable parameter lives here
    ===================================================================== */
+const V4OFF = new URLSearchParams(location.search).get('v4') === '0';   // V4: ?v4=0 = tampilan sebelum V4 (banding)
 const CONFIG = {
   quality: 'medium',
   presets: {
@@ -185,6 +186,9 @@ uniform float uStepK, uEscape;
 uniform float uRin, uRout, uDiskBright, uTurb, uOpacity, uFlowPeriod;
 uniform float uFilm, uDoppler, uRedshift, uSpin;
 uniform float uStars;
+uniform float uV4;                 // V4 atmosfer: G1 turbulensi bertingkat, G2 bintang HDR + pembesaran lensa (0 = mati, ?v4=0 / kualitas Rendah)
+float gSkyPix = 0.0, gMu = 1.0;    // G2: sudut langit per piksel setelah lensa, pembesaran titik cahaya
+vec3 gDx = vec3(0.0), gDy = vec3(0.0);   // G2: perubahan arah langit per piksel (Jacobian lensa)
 uniform float uEnc;
 // G2: kamera wahana jatuh (uFall = 1). uObsV = kecepatan wahana di kerangka rain (pengamat jatuh dari diam di tak hingga),
 // uObsG = Lorentz gamma-nya, uBeta = sqrt(rs / r) di posisi kamera. uFall = 0: perilaku lama persis.
@@ -288,9 +292,26 @@ vec4 shadeDisk(vec3 hit, vec3 vel, float r) {
   float edgeOut = 1.0 - smoothstep(uRout - 0.35 * (uRout - uRin), uRout, r);
 
   float pat  = diskDensity(r, phi, uTime);
-  float dens = mix(1.0, pow(pat, 1.5) * 2.6, uTurb);
+  float spot = 0.0;
+  if (uV4 > 0.5) {
+    // V4 G1: (1) gelombang kepadatan dua lengan berpola tetap (kecepatan pola = rotasi Kepler di 1,8 rIn), samar;
+    // (2) titik panas: gumpalan ikut rotasi Kepler setempat, memanjang searah orbit, hidup sekitar 1,5 orbit (menyala lalu
+    // padam) sebelum geseran rotasi meregangkannya. Satu sel per 1/24 putaran x 0,12 log r; pusat gumpalan acak di dalam sel.
+    float om = sqrt(M / (r * r * r)), omP = sqrt(M / pow(1.8 * uRin, 3.0));
+    float arm = cos(2.0 * (phi - omP * uTime) - 4.0 * log(r / uRin));
+    pat = clamp(pat * (1.0 + 0.22 * arm), 0.0, 1.0);
+    float lr = log(r / uRin) / 0.12, ir = floor(lr);
+    float omc = sqrt(M / pow(uRin * exp((ir + 0.5) * 0.12), 3.0));            // satu laju per pita: gumpalan tidak tersobek tepi pita
+    float pc = (phi - omc * uTime) / 6.2831853 * 24.0, ip = floor(pc);
+    vec3 hs = hash33(vec3(ir, mod(ip, 24.0), 5.0));
+    float life = 1.5 * 6.2831853 / omc, ph = fract(uTime / life + hs.z);
+    float pulse = smoothstep(0.0, 0.25, ph) * (1.0 - smoothstep(0.55, 1.0, ph)) * step(0.55, hs.x);
+    vec2 dd = vec2((lr - ir - 0.25 - 0.5 * hs.y) / 0.16, (pc - ip - 0.25 - 0.5 * fract(hs.y * 7.13)) / 0.4);
+    spot = pulse * exp(-dot(dd, dd));
+  }
+  float dens = mix(1.0, pow(pat, 1.5) * 2.6, uTurb) + spot * 0.6;
   float alpha = clamp(dens * uOpacity, 0.0, 1.0) * edgeIn * edgeOut;
-  float I = uDiskBright * (0.05 + 2.2 * pow(Tn, 3.0)) * mix(1.0, pow(pat * 1.7, 2.0), uTurb);
+  float I = uDiskBright * (0.05 + 2.2 * pow(Tn, 3.0)) * mix(1.0, pow(pat * 1.7, 2.0), uTurb) * (1.0 + 2.2 * spot);
 
   // Gravitational redshift between emitter at r and observer at camera radius: g = sqrt(1-rs/r)/sqrt(1-rs/rc)
   float rc = length(uCamPos);
@@ -332,13 +353,27 @@ vec3 starLayer(vec3 d, float scale, float density, float seed, float bright) {
   vec3 h2 = hash33(cell + seed + 71.0);
   vec3 sp = normalize(cell + 0.2 + 0.6 * h2) * scale;
   float dist = length(p - sp);
-  float sig = uPixAngle * scale * 0.85;           // ~1 pixel, in cell units
+  float sig = (uV4 > 0.5 ? gSkyPix : uPixAngle) * scale * 0.85;   // ~1 pixel, in cell units (V4: lebar rata-rata cakupan piksel di langit setelah lensa)
   float fade = smoothstep(0.35, 0.12, sig);        // layer too dense for this resolution: fade out
   if (fade <= 0.0) return vec3(0.0);
   sig = min(sig, 0.15);
   float mag = fade * bright * (0.2 + 9.0 * pow(h.y, 16.0));
+  // V4 G2: sebaran fluks seperti langit nyata (banyak redup, sedikit sangat terang: P(F > f) ~ f^-1,5, rata-rata sama dengan
+  // rumus lama), lalu dikali pembesaran lensa: titik cahaya di dekat cincin Einstein lebih terang (fluks dikali mu)
+  if (uV4 > 0.5) mag = fade * bright * min(0.24 * pow(max(h.y, 1e-3), -0.667), 24.0) * gMu;
   float core = exp(-dist * dist / (sig * sig));
   float glow = 0.015 * sig / (dist + sig) * step(0.93, h.y);
+  if (uV4 > 0.5) {
+    // V4 G2: jarak bintang diukur dalam piksel lewat Jacobian lensa (cakupan piksel di langit memanjang di dekat cincin Einstein,
+    // jadi uji bulat di langit melewatkan bintang). Selesaikan offset = a gDx + b gDy (kuadrat terkecil 2x2).
+    vec3 o = (p - sp) / scale;
+    float g00 = dot(gDx, gDx), g01 = dot(gDx, gDy), g11 = dot(gDy, gDy), det = g00 * g11 - g01 * g01;
+    if (det < 1e-24) return vec3(0.0);
+    float r0 = dot(o, gDx), r1 = dot(o, gDy);
+    float a = (g11 * r0 - g01 * r1) / det, b = (g00 * r1 - g01 * r0) / det, pd2 = a * a + b * b;
+    core = exp(-pd2 / 0.72);
+    glow = 0.015 / (sqrt(pd2) + 1.0) * step(0.93, h.y);
+  }
   vec3 tint = mix(vec3(1.0), blackbody(3200.0 + 9000.0 * h.z), 0.55);
   return tint * mag * (core + glow);
 }
@@ -382,6 +417,7 @@ void main() {
   }
   vec3 L = cross(pos, vel);
   float h2 = dot(L, L);              // conserved (specific angular momentum)^2
+  float om0 = length(cross(dFdx(vel), dFdy(vel)));   // V4 G2: sudut ruang per piksel sebelum lensa (setelah aberasi bila jatuh)
 
   vec3 col = vec3(0.0);
   float trans = 1.0;
@@ -419,6 +455,11 @@ void main() {
     if (rn < RS && (uFall < 0.5 || dot(pos, vel) < 0.0 || rn < 2e-3)) { state = 1; break; }   // captured by the horizon
 
     if (rn > uEscape && dot(pos, vel) > 0.0) { state = 2; break; }  // escaped to infinity
+  }
+  { // V4 G2: sudut ruang langit yang tercakup satu piksel setelah lensa; pembesaran = sebelum / sesudah (dijepit: kaustik)
+    vec3 nd = vel / max(length(vel), 1e-6);
+    float om = max(length(cross(dFdx(nd), dFdy(nd))), 1e-14);
+    gSkyPix = sqrt(om); gMu = clamp(om0 / om, 0.05, 30.0); gDx = dFdx(nd); gDy = dFdy(nd);
   }
   // out of steps while clearly outbound: remaining bending is small, treat as escaped
   if (state == 0 && length(pos) > 4.0 && dot(pos, vel) > 0.0) state = 2;
@@ -2638,6 +2679,7 @@ function main() {
       gl.uniform1f(p.u('uRedshift'), ph.redshift ? 1 : 0);
       gl.uniform1f(p.u('uSpin'), ph.spin);
       gl.uniform1f(p.u('uStars'), CONFIG.sky.stars);
+      gl.uniform1f(p.u('uV4'), !V4OFF && CONFIG.quality !== 'low' ? 1 : 0);
       gl.uniform1f(p.u('uEnc'), enc);
     });
 
