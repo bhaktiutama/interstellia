@@ -260,6 +260,7 @@
         <button id="labPost" type="button">Efek layar: Tinggi (P)</button>
         <button id="labRays" type="button">Sunrays: nyala</button>
         <button id="labAdapt" type="button">Adaptasi mata: nyala</button>
+        <button id="labSsr" type="button">Pantulan air: nyala</button>
         <button id="labLeaf" type="button">Suasana daun: Campur</button>
         <button id="labFall" type="button">Daun jatuh: nyala</button>
         <button id="labPeds" type="button">Pejalan kaki: nyala</button>
@@ -701,6 +702,8 @@ Object.assign(I18N.en, {
   "Efek layar: {m} (P)": "Screen effects: {m} (P)",
   "Adaptasi mata: nyala": "Eye adaptation: on",
   "Adaptasi mata: {s}": "Eye adaptation: {s}",
+  "Pantulan air: nyala": "Water reflections: on",
+  "Pantulan air: {s}": "Water reflections: {s}",
   " (butuh efek layar)": " (needs screen effects)",
   "Dek pandang menara (175 m)": "Tower observation deck (175 m)",
   "Naik ke dek pandang menara ({h} m)": "Go up to the tower observation deck ({h} m)",
@@ -939,6 +942,8 @@ const LIGHT = { uniforms: {
   uL_Head: { value: new THREE.Vector4(0, 0, -1e5, 0) }, uL_HeadDir: { value: new THREE.Vector3(0, 0, 1) }, uL_HeadG: { value: new THREE.Vector4(0, -1e4, 1, 0) },
   // V1: detail material dekat (1 = nyala, preset Ultra dan Tinggi; ?detail=0 mematikan untuk banding)
   uL_Detail: { value: 0 },
+  // 23a: pantulan ruang layar (salinan frame sebelumnya: rgb HDR, a = kedalaman pandang; VP frame itu; K.x aktif)
+  uL_Ssr: { value: null }, uL_SsrVP: { value: new THREE.Matrix4() }, uL_SsrK: { value: new THREE.Vector4(0, 0, 0, 0) },
 } };
 // 18b-3: peta bayangan dirender dalam koordinat silinder terbuka: tiap titik dipindah ke bidang singgung di sudut th0 dengan
 // busur (di jari-jari R) dan jarak dari sumbu tetap. Kolom peta = arah atas lokal di mana pun, arah cahaya cincin cap sama
@@ -1025,6 +1030,38 @@ const LIGHT_GLSL = /* glsl */`
       }
     }
     return col;
+  }
+  // 23a: pantulan ruang layar. Sumber = frame sebelumnya (uL_Ssr: rgb HDR sebelum post, a = jarak pandang -z; uL_SsrVP =
+  // proyeksi x view frame itu, jadi gerak kamera tidak menggeser pantulan objek diam). Sinar dari P searah Rd dipantau di dunia
+  // dengan langkah membesar (0,3 m x 1,3^i, sampai sekitar 320 m); kena = titik sinar berada di belakang permukaan yang terlihat
+  // dalam tebal tertentu, lalu dipersempit 5 kali bagi dua. Tidak kena, keluar layar, atau menuju kamera = fb (farEnv lama),
+  // tepi layar dipudarkan. Aman NaN: c.w >= 0,2 sebelum dibagi; warna dibatasi.
+  uniform sampler2D uL_Ssr; uniform mat4 uL_SsrVP; uniform vec4 uL_SsrK;
+  vec3 ssrRefl(vec3 P, vec3 Rd, vec3 fb) {
+    if (uL_SsrK.x < 0.5) return fb;
+    float st = 0.3, tPrev = 0.0;
+    float t = st * (0.5 + fract(sin(dot(P.xy + P.z, vec2(12.9898, 78.233))) * 43758.5453));
+    for (int i = 0; i < 22; i++) {
+      vec4 c = uL_SsrVP * vec4(P + Rd * t, 1.0);
+      if (c.w < 0.2) return fb;
+      vec2 uv = c.xy / c.w * 0.5 + 0.5;
+      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return fb;
+      float dz = c.w - textureLod(uL_Ssr, uv, 0.0).a;
+      if (dz > 0.0 && dz < st * 1.5 + 0.15 + 0.02 * c.w) {
+        float a = tPrev, b = t;
+        for (int k = 0; k < 5; k++) {
+          float m = 0.5 * (a + b); vec4 cm = uL_SsrVP * vec4(P + Rd * m, 1.0);
+          vec2 um = cm.xy / max(cm.w, 0.2) * 0.5 + 0.5;
+          if (cm.w - textureLod(uL_Ssr, um, 0.0).a > 0.0) { b = m; uv = um; } else a = m;
+        }
+        vec3 col = min(textureLod(uL_Ssr, uv, 0.0).rgb, vec3(40.0));
+        vec2 e = min(uv, 1.0 - uv);
+        float conf = smoothstep(0.0, 0.07, min(e.x, e.y)) * (1.0 - smoothstep(14.0, 21.0, float(i)));
+        return mix(fb, col, conf);
+      }
+      tPrev = t; t += st; st *= 1.3;
+    }
+    return fb;
   }
   // 17e: kolam cahaya lampu jalan dan trem (salinan lampPool / tramPool di shader tanah; ubah keduanya bersama)
   float lampPoolL(float s, float za) {
@@ -1296,7 +1333,7 @@ const CABIN_LIGHT = { uCabin: { value: new THREE.Color(0, 0, 0) } };   // 15a: l
 // redup (plester x cahaya setempat x 0,35), bukan seluruh silinder, dan alpha paling tinggi 0,35, jadi luar tetap jelas.
 // Sisi penonton dari arah kamera terhadap normal, bukan gl_FrontFacing: lintasan BackSide three.js (transparan DoubleSide)
 // membalik urutan muka, sehingga gl_FrontFacing true juga dari dalam (dulu: cosV 0, Fresnel 1, kaca pejal memantulkan silinder).
-const SPEC_GLSL = (glass) => `{
+const SPEC_GLSL = (glass, ssr) => `{
   float rS = clamp(uSpec.x * (1.0 + 0.45 * mdD.x) + 0.15 * mdD.y, 0.02, 1.0);   // V1: kekasaran bervariasi (mdD = 0: sama dengan uSpec.x)
   vec3 Vv = cameraPosition - vLitWorld; Vv *= inversesqrt(max(dot(Vv, Vv), 1e-8));
   ${glass === 2 ? 'bool inS = dot(litN, Vv) < 0.0; vec3 nS = inS ? -litN : litN;' : 'vec3 nS = litN;'}
@@ -1304,7 +1341,7 @@ const SPEC_GLSL = (glass) => `{
   float Fr = uSpec.y + (1.0 - uSpec.y) * om * om * om * om * om * (1.0 - 0.7 * rS);
   vec3 envS;
   ${glass === 2 ? 'if (inS) envS = vec3(0.89, 0.85, 0.74) * (stationLight(vLitWorld, nS) + nightLight(vLitWorld, nS)) * 0.35; else' : ''}
-  envS = farEnv(vLitWorld, reflect(-Vv, nS), rS, 1.0 - rS);
+  { vec3 RdS = reflect(-Vv, nS); envS = farEnv(vLitWorld, RdS, rS, 1.0 - rS);${ssr ? ' envS = ssrRefl(vLitWorld, RdS, envS);' : ''} }   // 23a: ssr = air (kolam air mancur)
   float mx = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
   vec3 tintS = mix(vec3(1.0), diffuseColor.rgb / max(mx, 1e-3), uSpec.z);
   float kS = mix(Fr, 0.5 + 0.5 * Fr, uSpec.z);
@@ -1316,7 +1353,7 @@ function specMat(m, r, f0 = 0.04, metal = 0, glass = false) { m.userData.spec = 
 function patchLit(mat) {
   if (mat.userData.lit) return;
   mat.userData.lit = true;
-  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = sp && sp.glass ? (sp.glass === 2 ? 2 : 1) : 0, noTram = !!mat.userData.noTramLight;   // 20a: trem tidak disinari cahayanya sendiri
+  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = sp && sp.glass ? (sp.glass === 2 ? 2 : 1) : 0, noTram = !!mat.userData.noTramLight, ssr = !!(sp && sp.ssr);   // 20a: trem tidak disinari cahayanya sendiri
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, LIGHT.uniforms);
     if (cabin) Object.assign(sh.uniforms, CABIN_LIGHT);
@@ -1332,11 +1369,11 @@ function patchLit(mat) {
         vec3 wn = mat3(modelMatrix) * ln; vLitNormal = wn * inversesqrt(max(dot(wn, wn), 1e-12));   // normal nol tetap nol (tanpa NaN)
       }`);
     sh.fragmentShader = (noTram ? '#define NO_TRAM_LIGHT\n' : '') + 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + LIGHT_GLSL +
-      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\n' + (sp ? 'vec2 mdD = vec2(0.0);\n' : '') + (sp && !glass ? 'mdD = matDetail(vLitWorld, litN, smoothstep(0.1, 0.3, uSpec.x), 0.0012 * length(vLitWorld - cameraPosition)); outgoingLight *= 1.0 - 0.12 * mdD.y;   // V1: detail material (kaca, air, krom tanpa detail)\n' : '') + 'outgoingLight *= stationLight(vLitWorld, litN) + nightLight(vLitWorld, litN);\n' + (cabin ? 'outgoingLight += diffuseColor.rgb * uCabin;\n' : '') + (sp ? SPEC_GLSL(glass) : '') + '#include <opaque_fragment>');
+      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\n' + (sp ? 'vec2 mdD = vec2(0.0);\n' : '') + (sp && !glass ? 'mdD = matDetail(vLitWorld, litN, smoothstep(0.1, 0.3, uSpec.x), 0.0012 * length(vLitWorld - cameraPosition)); outgoingLight *= 1.0 - 0.12 * mdD.y;   // V1: detail material (kaca, air, krom tanpa detail)\n' : '') + 'outgoingLight *= stationLight(vLitWorld, litN) + nightLight(vLitWorld, litN);\n' + (cabin ? 'outgoingLight += diffuseColor.rgb * uCabin;\n' : '') + (sp ? SPEC_GLSL(glass, ssr) : '') + '#include <opaque_fragment>');
     if (cabin) sh.fragmentShader = 'uniform vec3 uCabin;\n' + sh.fragmentShader;
     if (sp) sh.fragmentShader = 'uniform vec3 uSpec;\n' + sh.fragmentShader;
   };
-  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass === 2 ? 'Win' : glass ? 'Glass' : 'Spec') : '') + (noTram ? 'NoTram' : '');
+  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass === 2 ? 'Win' : glass ? 'Glass' : 'Spec') : '') + (ssr ? 'Ssr' : '') + (noTram ? 'NoTram' : '');
   mat.needsUpdate = true;
 }
 
@@ -2084,7 +2121,8 @@ const groundMat = new THREE.ShaderMaterial({
       if (uWet > 0.01 && waterM < 0.5) {                          // 12c revisi: pantulan Fresnel (kuat saat dilihat miring), lampu jalan, riak hujan
         vec3 V = cameraPosition - vWorld; float vl = length(V); V = vl > 1e-4 ? V / vl : up;
         float cosT = clamp(dot(V, up), 0.0, 1.0), F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
-        vec3 refl = farEnv(vWorld, reflect(-V, up), 0.15, 0.7) + vec3(1.0, 0.72, 0.42) * 2.2 * uNight * lampPoolL(s, za);   // 17d
+        vec3 Rp = reflect(-V, up);
+        vec3 refl = (puddle > 0.01 ? ssrRefl(vWorld, Rp, farEnv(vWorld, Rp, 0.15, 0.7)) : farEnv(vWorld, Rp, 0.15, 0.7)) + vec3(1.0, 0.72, 0.42) * 2.2 * uNight * lampPoolL(s, za);   // 17d
         if (uL_Head.w > 0.01) refl += vec3(1.0, 0.94, 0.84) * 1.2 * uL_Head.w * headPoolL(s, za);   // 19b: aspal basah berkilau di sorot motor
         float ring = 0.0;
         if (puddle > 0.01 && uRainNow > 0.05) {                   // riak tetes hujan: cincin melebar di sel 0,5 m
@@ -2118,7 +2156,7 @@ const groundMat = new THREE.ShaderMaterial({
         float F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);
         vec3 deep = vec3(0.012, 0.045, 0.07) * light * 2.2;
         vec3 Rf = reflect(-V, N);
-        vec3 sky = farEnv(vWorld, Rf, 0.1, 0.0);                     // 17d: daratan seberang (kilau sunline dihitung terpisah di bawah)
+        vec3 sky = ssrRefl(vWorld, Rf, farEnv(vWorld, Rf, 0.1, 0.0));   // 17d: daratan seberang; 22a: gedung dan pohon dekat dari layar
         float g = dot(normalize(Rf.xy + vec2(1e-5)), up.xy) * step(0.0, dot(Rf, up));
         float glint = pow(max(g, 0.0), 900.0) * 6.0 + pow(max(g, 0.0), 40.0) * 0.25;
         vec3 wcol = mix(deep, sky, F) + uL_SunlineCol * uL_Sunline * glint * (0.3 + F);
@@ -6155,6 +6193,7 @@ on('labShip', () => portBoard());
 on('labVeg', () => cycleVegQuality());
 on('labPost', () => cyclePost());
 on('labAdapt', () => toggleAdapt());                                // 17c
+on('labSsr', () => toggleSsr());                                    // 22a
 on('labPreset', () => cyclePreset());
 on('labSound', () => toggleSound());
 on('labMusic', () => { startAudio(); cycleMusic(); });
@@ -8653,8 +8692,11 @@ const POST_R = {};
   POST_R.ray = new THREE.WebGLRenderTarget(4, 4, hf);                // tahap 11b: sunrays setengah resolusi
   POST_R.lamp = new THREE.WebGLRenderTarget(4, 4, hf);               // V4 C2: cahaya lampu di udara, setengah resolusi
   POST_R.lum = [0, 1].map(() => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, generateMipmaps: false }));   // 17c
+  POST_R.ssr = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, generateMipmaps: false });   // 22a
   POST_R.w = 0; POST_R.h = 0;
 }
+const SSR = { on: true, ready: false };                              // 23a: pantulan ruang layar (butuh efek layar)
+LIGHT.uniforms.uL_Ssr.value = POST_R.ssr.texture;
 const fsScene = new THREE.Scene(), fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); fsQuad.frustumCulled = false; fsScene.add(fsQuad);
 const FS_VS = /* glsl */`varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
@@ -9067,6 +9109,21 @@ const compMat = fsMat(/* glsl */`
   tLamp: { value: null }, uUseLamp: { value: 0 },
   tBloomW: { value: null }, tBloomA: { value: null }, tDirt: { value: null }, uDirt: { value: 0 }, uDirtAsp: { value: 1 },
   uMist: { value: 0 }, uMistH: { value: ATMO.mistH }, uR: { value: CONFIG.R }, uHalfL: { value: HALF_L }, uMistCol: { value: new THREE.Vector3() }, uCamWorld: { value: new THREE.Matrix4() } });
+// 23a: salinan setengah resolusi untuk pantulan ruang layar frame berikutnya: rgb HDR (dibatasi, NaN jadi 0), a = jarak pandang -z
+const ssrCopyMat = fsMat(/* glsl */`
+  uniform sampler2D tHdr, tDepth; uniform mat4 uProjInv; varying vec2 vUv;
+  void main() {
+    vec3 c = textureLod(tHdr, vUv, 0.0).rgb;
+    c = vec3(c.r == c.r ? c.r : 0.0, c.g == c.g ? c.g : 0.0, c.b == c.b ? c.b : 0.0);
+    float d = textureLod(tDepth, vUv, 0.0).r;
+    vec4 v = uProjInv * vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
+    float z = d >= 0.99999 ? 60000.0 : clamp(-v.z / v.w, 0.0, 60000.0);
+    gl_FragColor = vec4(clamp(c, 0.0, 64.0), z);
+  }`, { tHdr: { value: null }, tDepth: { value: null }, uProjInv: { value: new THREE.Matrix4() } });
+function toggleSsr() {
+  SSR.on = !SSR.on;
+  uiLabel('labSsr', () => t('Pantulan air: {s}', { s: t(SSR.on ? 'nyala' : 'mati') }));
+}
 // --- FXAA (versi ringkas, luma di kanal alfa) ---
 const fxaaMat = fsMat(/* glsl */`
   uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
@@ -9127,7 +9184,8 @@ function taaEnd() {                                                  // sesudah 
 }
 const _dbs = new THREE.Vector2();
 function postBegin() {                                            // dipanggil sebelum render scene
-  if (POST.mode === 2) { ATMO.gate = false; return false; }          // V4: tanpa efek layar, kabut pagi kembali rata di material
+  LIGHT.uniforms.uL_SsrK.value.x = SSR.on && SSR.ready && POST.mode !== 2 && !ext.active ? 1 : 0;   // 23a: pakai salinan frame lalu
+  if (POST.mode === 2) { ATMO.gate = false; SSR.ready = false; return false; }          // V4: tanpa efek layar, kabut pagi kembali rata di material
   renderer.getDrawingBufferSize(_dbs);
   const w = Math.max(4, Math.floor(_dbs.x)), h = Math.max(4, Math.floor(_dbs.y));
   if (w !== POST_R.w || h !== POST_R.h) {
@@ -9139,6 +9197,7 @@ function postBegin() {                                            // dipanggil s
     POST_R.ray.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
     POST_R.lamp.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
     for (const t of TAA.hist) t.setSize(w, h); TAA.valid = false;   // V5
+    POST_R.ssr.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1)); SSR.ready = false;   // 23a
   }
   renderer.setRenderTarget(POST_R.hdr);
   return true;
@@ -9146,6 +9205,11 @@ function postBegin() {                                            // dipanggil s
 function postEnd() {
   // V3: AO juga di kokpit dan kamera belakang shuttle (ext.flight); kamera luar stasiun (V, ribuan m) tetap tanpa AO
   const R0 = POST_R, useAO = POST.mode === 0 && (!ext.active || ext.flight), gtao = !POST.ssao;
+  if (SSR.on && !ext.active) {                                     // 23a: salin frame ini untuk pantulan frame berikutnya
+    const U = ssrCopyMat.uniforms; U.tHdr.value = R0.hdr.texture; U.tDepth.value = R0.hdr.depthTexture; U.uProjInv.value.copy(camera.projectionMatrixInverse);
+    fsPass(ssrCopyMat, R0.ssr);
+    LIGHT.uniforms.uL_SsrVP.value.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); SSR.ready = true;
+  } else SSR.ready = false;
   if (useAO && gtao) {
     const M = GTAO_MATS[POST.aoQ || 1], U = M.uniforms;   // P = Tinggi di preset Sedang ke bawah: GTAO ringan
     U.tDepth.value = R0.hdr.depthTexture; U.uProjInv.value.copy(camera.projectionMatrixInverse);
@@ -11672,6 +11736,7 @@ RAIN.presetN = [12000, 9000, 6000, 3000, 1500][PRESET.idx];
     { geo: new THREE.BoxGeometry(0.9, 1.1, 0.12).translate(0, 0.55, 5.6), color: [0.3, 0.32, 0.34] },   // plakat di sisi +za
   ]), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }));
   const water = new THREE.Mesh(new THREE.CircleGeometry(4.2, 40).rotateX(-Math.PI / 2).translate(0, 0.42, 0), specMat(new THREE.MeshBasicMaterial({ color: 0x3f6f86 }), 0.05, 0.02));
+  water.material.userData.spec.ssr = true;                           // 23a: kolam memantulkan gedung dan pohon di sekitar
   G.add(basin, water); scene.add(G);
   addCollider(modS(S), Z, 4.6, 4.6);
   FOUNT.plaque = { s: S, za: Z + 6.4 };
@@ -12743,7 +12808,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, ATMO, TAA, OCT };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, ATMO, TAA, OCT };
 requestAnimationFrame(frame);
 </script>
 </body>
