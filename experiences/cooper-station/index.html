@@ -702,6 +702,8 @@ Object.assign(I18N.en, {
   "Efek layar: {m} (P)": "Screen effects: {m} (P)",
   "Adaptasi mata: nyala": "Eye adaptation: on",
   "Adaptasi mata: {s}": "Eye adaptation: {s}",
+  "berenang": "swimming",
+  "mengarung": "wading",
   "Pantulan air: nyala": "Water reflections: on",
   "Pantulan air: {s}": "Water reflections: {s}",
   " (butuh efek layar)": " (needs screen effects)",
@@ -1871,6 +1873,7 @@ const groundMat = new THREE.ShaderMaterial({
     uniform vec3 uWind;
     uniform vec2 uGustOff;
     uniform float uMeadowOn, uMeadowR;
+    uniform vec4 uSwimP;                                           // 23e: pemain di air (s, za, kuat, berenang)
     varying vec3 vPos;
     varying vec3 vWorld;
     #ifdef TERRAIN
@@ -2193,6 +2196,11 @@ const groundMat = new THREE.ShaderMaterial({
           float w = sqrt(9.81 * k);
           float amp = 0.022 * ampK * rough * (1.0 - smoothstep(0.15 * L, 0.5 * L, fp));
           grad += amp * d * cos(k * dot(d, Pf) - w * uTime + fi * 2.9);
+        }
+        if (uSwimP.z > 0.01) {                                      // 23e: riak melingkar di sekitar pemain yang mengarung / berenang
+          vec2 dP = vec2(s - uSwimP.x, za - uSwimP.y); dP.x -= 2.0 * PI * uR * floor(dP.x / (2.0 * PI * uR) + 0.5);
+          float rr = length(dP);
+          if (rr > 1e-3 && rr < 12.0) grad += dP / rr * 0.09 * uSwimP.z * exp(-rr * 0.45) * cos(rr * 5.0 - uTime * 6.0);
         }
         vec3 N = normalize(up - tS * grad.x - tZ * grad.y);
         vec3 V = normalize(cameraPosition - vWorld);
@@ -5214,15 +5222,35 @@ function syncFromPos(p) {                    // posisi kerangka stasiun -> (thet
   player.h = Math.max(0, R - Math.hypot(p.x, p.y));
 }
 
+// 23e: air yang bisa dimasuki pemain. Sungai: permukaan = mesh alur (groundH0, -RIVER.depth; naik ke akuaduk Skyway), dalam
+// bertambah 0,35 m per m dari tepi air sampai 2,5 m. Danau: permukaan 0, dalam sampai 3 m. Di atas dek jembatan bukan air.
+// Hasil { surf, depth } atau null. Dalam < 1,25 m = mengarung (kaki di dasar, mata turun), lebih = berenang (mata 0,25 m di atas air).
+function waterAt(s, za) {
+  if (Math.abs(za - riverZ(s)) < RIVER.width / 2 + 2 && !bridgeAt(s, za)) {
+    const sl = (riverZ(s + 1) - riverZ(s - 1)) / 2, dd = Math.abs(za - riverZ(s)) / Math.sqrt(1 + sl * sl);
+    if (dd < RIVER.width / 2) return { surf: groundH0(s, za), depth: Math.min(2.5, (RIVER.width / 2 - dd) * 0.35) };
+  }
+  for (const L of LAKES) {
+    const q = Math.hypot(wrapS(s - L.s) / L.rs, (za - L.za) / L.rz);
+    if (q < 1) return { surf: 0, depth: Math.min(3, (1 - q) * Math.min(L.rs, L.rz) * 0.15) };
+  }
+  return null;
+}
+const SWIM = { depth: 1.25, wadeK: 0.45, speed: 1.1, fast: 1.7 };   // 23e
 function stepGround(dt) {
   if (ext.active) { player.vA = player.vT = 0; return; }           // WASD dipakai kamera luar
   const [f, s, len] = readMoveInput();
-  const speed = input.turbo ? CONFIG.turbo : (input.run || keys.has('ShiftLeft') || keys.has('ShiftRight')) ? CONFIG.run : CONFIG.walk;
+  const W0 = player.deck ? null : waterAt(player.theta * R, player.za), fastIn = input.run || keys.has('ShiftLeft') || keys.has('ShiftRight');
+  let speed = input.turbo ? CONFIG.turbo : fastIn ? CONFIG.run : CONFIG.walk;
   player.mode = input.turbo ? 'turbo (debug)' : speed === CONFIG.run ? 'lari' : 'jalan';
+  if (W0 && !input.turbo) {                                       // 23e: air menahan langkah, berenang lebih lambat lagi
+    if (W0.depth > SWIM.depth) { speed = fastIn ? SWIM.fast : SWIM.speed; player.mode = 'berenang'; }
+    else if (W0.depth > 0.15) { speed *= 1 - (1 - SWIM.wadeK) * W0.depth / SWIM.depth; player.mode = 'mengarung'; }
+  }
   const ch = Math.cos(player.heading), sh = Math.sin(player.heading);
   player.vA = len ? (f * ch + s * sh) * speed : 0;          // forward = (cos, sin), right = (sin, -cos) di bidang (a, t)
   player.vT = len ? (f * sh - s * ch) * speed : 0;
-  if (!len) return;
+  if (!len) { waterH(); return; }
   const prevTheta = player.theta, prevZa = player.za;
   const zaNew = Math.min(CONFIG.L - 1.0, Math.max(1.0, player.za + player.vA * dt));
   const dT = player.vT * dt;
@@ -5231,8 +5259,16 @@ function stepGround(dt) {
   player.theta = (player.theta + dT / R + TAU) % TAU;
   if (player.deck) { deckClamp(); player.h = DECK.h; return; }      // 18b: di dek pandang: di dalam pagar, tidak menembus rumah lift
   collide(0.35);
-  if (inWater(player.theta * R, player.za, 0.3)) { player.theta = prevTheta; player.za = prevZa; }   // tidak bisa berjalan di air
-  player.h = groundH(player.theta * R, player.za);                  // ikut kontur bukit (0 di luar area uji)
+  waterH();                                                         // 23e: tanah, lereng tebing, atau air (dulu: air = penghalang)
+}
+function waterH() {                                                // 23e: tinggi badan pemain di darat atau di air
+  if (player.deck) return;
+  const s = player.theta * R, W = waterAt(s, player.za);
+  player.swim = !!W && W.depth > SWIM.depth;
+  player.wade = W ? Math.min(W.depth, SWIM.depth) : 0;
+  player.h = W ? (player.swim ? W.surf - (CONFIG.eye - 0.25) : W.surf - W.depth) : groundH(s, player.za);
+  const U = groundMat.uniforms.uSwimP.value;                        // riak di sekitar pemain (shader air)
+  U.set(s, player.za, W ? Math.min(1, 0.25 + Math.hypot(player.vA, player.vT) * 0.6) : 0, player.swim ? 1 : 0);
 }
 // --- 19b: motor -----------------------------------------------------------------------------------------------------
 // W gas, S rem (hampir berhenti: mundur pelan), A/D belok, Shift mode sport (100 km/h), O = gas terus (cruise).
@@ -5410,7 +5446,7 @@ function goDeck() {                                                // lokasi lan
 }
 
 function jump() {
-  if (player.state !== 'ground') return;
+  if (player.state !== 'ground' || player.swim) return;             // 23e: tidak melompat dari air
   if (MOTO.on) { motoHorn(); return; }                              // 19b: tombol Lompat di layar sentuh = klakson
   groundPoint(player.theta, player.za, player.h, _v1);
   upAt(player.theta, _v2).multiplyScalar(PHYS.jump);
@@ -5920,7 +5956,7 @@ const _m = new THREE.Matrix4(), _eye = new THREE.Vector3();
 function headBob(dt) {
   const B = BOB, L = PHOTO.on || TOUR.on ? 0 : B.level;
   const ground = player.state === 'ground' && !ext.active && !MOTO.on;
-  const v = ground ? Math.hypot(player.vA, player.vT) : 0, walking = ground && v > 0.05 && !input.turbo;
+  const v = ground ? Math.hypot(player.vA, player.vT) : 0, walking = ground && v > 0.05 && !input.turbo && !player.swim;   // 23e: berenang tanpa langkah
   const dd = player.distance - B.lastDist; B.lastDist = player.distance;
   if (walking && dd > 0 && dd < 5) {
     const p0 = B.phase; B.phase += dd / (v > 3 ? 1.3 : 0.72);
@@ -5940,6 +5976,11 @@ function headBob(dt) {
   B.ox = a * (0.012 + 0.006 * k) * sw;
   B.roll = a * (0.35 + 0.4 * k) * DEG * sw;
   B.pitch = -a * (0.12 + 0.28 * k) * DEG * Math.cos(ph) + still * 0.12 * DEG * Math.sin(TAU * 0.23 * B.t - 0.8) + B.y * 0.25;
+  if (player.swim && ground) {                                      // 23e: berenang: naik turun kayuhan dan ombak, guling pelan
+    const sw = L * (0.6 + 0.4 * Math.min(1, v));
+    B.oy = sw * (0.035 * Math.sin(TAU * 0.42 * B.t) + 0.02 * Math.sin(TAU * 1.1 * B.t * Math.min(1, 0.3 + v)));
+    B.roll = sw * 1.4 * DEG * Math.sin(TAU * 0.31 * B.t); B.ox = 0; B.pitch = sw * 0.8 * DEG * Math.sin(TAU * 0.42 * B.t + 1.2);
+  }
 }
 // 19b: kamera di motor. Basis dari motor (arah, lereng, 0,65 x miring motor, guncangan), lalu pandangan kepala (look, pitch).
 // Posisi mata = titik di atas jok dalam kerangka motor penuh (ikut miring), + suspensi dan guncangan jalan.
@@ -7294,6 +7335,7 @@ const VU = {
   uWind: { value: new THREE.Vector3(1.2, 0.4, 0.4) },
   uCropT: groundMat.uniforms.uCropT,
 };
+groundMat.uniforms.uSwimP = { value: new THREE.Vector4(0, 0, 0, 0) };   // 23e
 groundMat.uniforms.uWind = VU.uWind; groundMat.uniforms.uGustOff = VU.uGustOff; groundMat.uniforms.uMeadowOn = VU.uMeadowOn; groundMat.uniforms.uMeadowR = { value: 70 };   // 14b
 const VEG_COMMON = /* glsl */`
   #ifndef texture2D
@@ -13195,7 +13237,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, ATMO, TAA, OCT };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, ATMO, TAA, OCT };
 requestAnimationFrame(frame);
 </script>
 </body>
