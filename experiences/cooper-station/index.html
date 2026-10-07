@@ -1028,24 +1028,30 @@ const LIGHT_GLSL = /* glsl */`
   }
   // 17e: kolam cahaya lampu jalan dan trem (salinan lampPool / tramPool di shader tanah; ubah keduanya bersama)
   float lampPoolL(float s, float za) {
+    // Revisi: kedua sisi jalan dijumlahkan dan batas jarak 30 m (dulu satu sisi dipilih dari tanda dS dan dipotong 12 m dari
+    // garis lampu: terang melompat di garis tengah jalan dan di 12 m, tampak sebagai garis lurus memanjang di jalan raya saat malam)
     const float SP = 45.0, OFF = 13.5, RR = 81.0, CIRC = 6283.185307;
     float pool = 0.0, sp = s < 0.0 ? s + CIRC : s, skyS = CIRC * 0.5;
-    if (za > 140.0 && za < 2610.0) {
+    if (za > 110.0 && za < 2640.0) {
       float kS = floor(sp / uL_Art + 0.5), dS = sp - kS * uL_Art, km = mod(kS, 26.0);
       bool bl = km < 0.5 || km > 25.5;
       float offK = bl ? 21.5 : OFF;
-      if (abs(km - 13.0) > 0.5 && abs(abs(dS) - offK) < 12.0) {
-        float side = sign(dS), ph = side > 0.0 ? 0.0 : SP * 0.5;
+      if (abs(km - 13.0) > 0.5) for (int i = 0; i < 2; i++) {
+        float side = i == 0 ? 1.0 : -1.0, d = dS - side * offK;
+        if (abs(d) > 30.0) continue;
+        float ph = side > 0.0 ? 0.0 : SP * 0.5;
         float zl = 150.0 + ph + floor((za - 150.0 - ph) / SP + 0.5) * SP;
         float dz = abs(zl - floor(zl / 250.0 + 0.5) * 250.0);
-        if (dz >= 16.0 && zl >= 150.0 && zl < 2600.0) pool += exp(-((abs(dS) - offK) * (abs(dS) - offK) + (za - zl) * (za - zl)) / RR);
+        if (dz >= 16.0 && zl >= 150.0 && zl < 2600.0) pool += exp(-(d * d + (za - zl) * (za - zl)) / RR);
       }
       float kZ = floor(za / 250.0 + 0.5), dZ = za - kZ * 250.0;
-      if (kZ >= 1.0 && kZ <= 10.0 && abs(kZ - 4.0) > 0.5 && abs(kZ - 8.0) > 0.5 && abs(abs(dZ) - OFF) < 12.0) {
-        float side = sign(dZ), ph = side > 0.0 ? 0.0 : SP * 0.5;
+      if (kZ >= 1.0 && kZ <= 10.0 && abs(kZ - 4.0) > 0.5 && abs(kZ - 8.0) > 0.5) for (int i = 0; i < 2; i++) {
+        float side = i == 0 ? 1.0 : -1.0, d = dZ - side * OFF;
+        if (abs(d) > 30.0) continue;
+        float ph = side > 0.0 ? 0.0 : SP * 0.5;
         float sl = ph + floor((sp - ph) / SP + 0.5) * SP;
         float dsA = abs(sl - floor(sl / uL_Art + 0.5) * uL_Art), dsk = abs(mod(sl - skyS + CIRC * 1.5, CIRC) - CIRC * 0.5);
-        if (dsA >= 16.0 && dsk >= 40.0) pool += exp(-((abs(dZ) - OFF) * (abs(dZ) - OFF) + (sp - sl) * (sp - sl)) / RR);
+        if (dsA >= 16.0 && dsk >= 40.0) pool += exp(-(d * d + (sp - sl) * (sp - sl)) / RR);
       }
     }
     float kR = floor(za / 1000.0 + 0.5);
