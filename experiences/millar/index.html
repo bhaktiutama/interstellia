@@ -378,11 +378,11 @@ const U = {   // uniform bersama material permukaan (objek uniform dipakai bersa
 };
 const V4 = { off: new URLSearchParams(location.search).get('v4') === '0' };
 // V5 penghalus (hanya Ultra): TAA (shader bersama POSTKIT.TAA_FS, sama dengan Copper; kilau matahari di ombak dan tepi
-// wahana tidak berkedip; MSAA tetap) dan noda lensa yang menyala oleh bloom lebar. ?v5=0 = sebelum V5; ?taa=0 / ?dirt=0
+// wahana tidak berkedip; MSAA tetap). ?v5=0 = sebelum V5; ?taa=0. Noda lensa tidak dipakai: langit mendung terang merata
+// membuat noda tampak di seluruh layar, dan pemain berhelm (visor sudah punya tetes air dan embun sendiri)
 const V5 = { off: new URLSearchParams(location.search).get('v5') === '0' };
 const TAA = { off: V5.off || new URLSearchParams(location.search).get('taa') === '0', act: false, valid: false, i: 0, hist: [], cur: 0,
   prevVP: new THREE.Matrix4(), P: new THREE.Matrix4(), PI: new THREE.Matrix4() };
-const DIRT = { off: V5.off || new URLSearchParams(location.search).get('dirt') === '0', k: 0.06 };
 
 /* ---------------- Ombak angin (Gerstner): data gelombang, dinormalisasi per preset ---------------- */
 function rng(seed) { return () => { seed = (seed + 0x6D2B79F5) | 0; let x = Math.imul(seed ^ (seed >>> 15), 1 | seed); x = (x + Math.imul(x ^ (x >>> 7), 61 | x)) ^ x; return ((x ^ (x >>> 14)) >>> 0) / 4294967296; }; }
@@ -1522,7 +1522,6 @@ const M_UP = pmat(`uniform sampler2D tSrc, tCur; uniform vec2 uPx; varying vec2 
     for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) s += texture2D(tSrc, vUv + vec2(x, y) * uPx).rgb * (x == 0 ? 2.0 : 1.0) * (y == 0 ? 2.0 : 1.0);
     gl_FragColor = vec4(texture2D(tCur, vUv).rgb + s / 16.0, 1.0); }`, { tSrc: { value: null }, tCur: { value: null }, uPx: { value: new THREE.Vector2() } });
 const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform vec3 uWhite; uniform float uExp, uBloomK, uUnder, uTime; varying vec2 vUv;
-  uniform sampler2D tBloomW, tDirt; uniform float uDirt;                // V5 noda lensa
   uniform float uVis, uAsp, uFog, uWet, uSeed; uniform vec2 uGlint;   // M6d visor: tingkat (0 mati), aspek, embun, basah, pola tetes, kilau (kuat, x layar)
   vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
   float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
@@ -1543,7 +1542,6 @@ const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform vec3 uWhite; unifor
     }
     vec3 c = texture2D(tHdr, uv).rgb; if (any(isnan(c))) c = vec3(0.0);
     c = clamp(c, 0.0, 64.0) + texture2D(tBloom, vUv).rgb * uBloomK;   // jepit juga Inf
-    if (uDirt > 0.0) c += texture2D(tBloomW, vUv).rgb * texture2D(tDirt, vec2((vUv.x - 0.5) * uAsp + 0.5, vUv.y)).r * uDirt;   // V5
     c = c * dSh + dSp;
     if (uUnder > 0.0) {                                               // R4: di dalam gelombang: hijau-abu gelap, terang ke atas, gelembung naik
       float l = dot(c, vec3(0.3, 0.5, 0.2));
@@ -1579,8 +1577,7 @@ const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform vec3 uWhite; unifor
     }
     gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));        // alpha = luma untuk FXAA
   }`, { tHdr: { value: null }, tBloom: { value: null }, uExp: { value: CONFIG.exposure }, uWhite: { value: new THREE.Vector3(...POSTKIT.wb(CONFIG.wb.k, CONFIG.wb.tint)) }, uBloomK: { value: 0.08 }, uUnder: { value: 0 }, uTime: { value: 0 },
-  uVis: { value: 0 }, uAsp: { value: 1.7778 }, uFog: { value: 0 }, uWet: { value: 0 }, uSeed: { value: 0 }, uGlint: { value: new THREE.Vector2() },
-  tBloomW: { value: null }, tDirt: { value: POSTKIT.lensDirt(THREE) }, uDirt: { value: 0 } });
+  uVis: { value: 0 }, uAsp: { value: 1.7778 }, uFog: { value: 0 }, uWet: { value: 0 }, uSeed: { value: 0 }, uGlint: { value: new THREE.Vector2() } });
 const M_FINAL = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; uniform float uTime, uGrain, uVig, uTaa; varying vec2 vUv;
   float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
   vec3 fxaa() {
@@ -1653,8 +1650,6 @@ function postRender(time) {
     }
   }
   M_COMP.uniforms.uBloomK.value = 0.08 * PM.bloom; M_FINAL.uniforms.uGrain.value = PRESETS[PRESET.idx].grain * PM.grain; M_FINAL.uniforms.uVig.value = PM.vig;
-  M_COMP.uniforms.tBloomW.value = (Up[Math.min(2, Up.length - 1)] || src).texture;   // V5: noda lensa dari bloom lebar
-  M_COMP.uniforms.uDirt.value = DIRT.off || PRESET.idx > 0 || PM.bloom === 0 ? 0 : DIRT.k;
   M_COMP.uniforms.tHdr.value = POST.hdr.texture; M_COMP.uniforms.tBloom.value = src.texture; pass(M_COMP, POST.ldr);
   let fin = POST.ldr;
   if (TAA.act) {                                                      // V5: TAA sesudah tone map, sebelum vinyet dan butiran

@@ -8982,7 +8982,7 @@ const compMat = fsMat(/* glsl */`
     return s / ws;
   }
   uniform sampler2D tLamp; uniform float uUseLamp;               // V4 C2
-  uniform sampler2D tBloomW, tDirt; uniform float uDirt, uDirtAsp;   // V5 lens dirt
+  uniform sampler2D tBloomW, tBloomA, tDirt; uniform float uDirt, uDirtAsp;   // V5 lens dirt
   vec3 lampUp() {                                                  // upsample sadar kedalaman (seperti rays)
     float dist = viewDist(vUv); vec2 tx = 1.0 / vec2(textureSize(tLamp, 0));
     vec3 s = vec3(0.0); float ws = 0.0;
@@ -9044,9 +9044,11 @@ const compMat = fsMat(/* glsl */`
     if (uUseRay > 0.5) c = max(c + rays(), vec3(0.0));
     if (uUseLamp > 0.5) c += lampUp();
     c += texture2D(tBloom, vUv).rgb * uBloom;
-    if (uDirt > 0.0) {                                               // V5: noda lensa menyala oleh cahaya terang di dekatnya (bloom lebar)
-      vec2 du = vec2((vUv.x - 0.5) * uDirtAsp + 0.5, vUv.y);
-      c += texture2D(tBloomW, vUv).rgb * texture2D(tDirt, du).r * uDirt;
+    if (uDirt > 0.0) {                                               // V5: noda lensa menyala hanya dekat sumber yang jauh lebih terang
+      vec2 du = vec2((vUv.x - 0.5) * uDirtAsp + 0.5, vUv.y);         // dari sekitarnya (bloom lebar dibanding bloom paling kabur):
+      vec3 bw = texture2D(tBloomW, vUv).rgb;                          // siang terang merata tidak menyalakan noda
+      float lw = dot(bw, vec3(0.2126, 0.7152, 0.0722)), la = dot(texture2D(tBloomA, vUv).rgb, vec3(0.2126, 0.7152, 0.0722));
+      c += bw * texture2D(tDirt, du).r * uDirt * smoothstep(3.0, 8.0, lw / max(la, 1e-3));
     }
     float mAd = 1.0;
     if (uAdOn > 0.5) mAd = clamp(pow(uAdKey / max(texture2D(tAdapt, vec2(0.5)).r, 1e-4), uAdPow), uAdMin, uAdMax);
@@ -9062,7 +9064,7 @@ const compMat = fsMat(/* glsl */`
   tAdapt: { value: null }, uAdOn: { value: 0 }, uAdKey: { value: 0.2 }, uAdPow: { value: 0.45 }, uAdMin: { value: 0.6 }, uAdMax: { value: 1.8 },
   uWhite: { value: new THREE.Vector3(...POSTKIT.wb(CONFIG.wb.k, CONFIG.wb.tint)) },
   tLamp: { value: null }, uUseLamp: { value: 0 },
-  tBloomW: { value: null }, tDirt: { value: null }, uDirt: { value: 0 }, uDirtAsp: { value: 1 },
+  tBloomW: { value: null }, tBloomA: { value: null }, tDirt: { value: null }, uDirt: { value: 0 }, uDirtAsp: { value: 1 },
   uMist: { value: 0 }, uMistH: { value: ATMO.mistH }, uR: { value: CONFIG.R }, uHalfL: { value: HALF_L }, uMistCol: { value: new THREE.Vector3() }, uCamWorld: { value: new THREE.Matrix4() } });
 // --- FXAA (versi ringkas, luma di kanal alfa) ---
 const fxaaMat = fsMat(/* glsl */`
@@ -9213,7 +9215,7 @@ function postEnd() {
   C.uTexelF.value.set(R0.h / 1080 / R0.w, 1 / 1080);                 // radius blur skala 1080p
   C.tHdr.value = R0.hdr.texture; C.tBloom.value = R0.up[0].texture; C.tAO.value = R0.ao[1].texture; C.uUseAO.value = useAO ? 1 : 0; C.uGtao.value = gtao ? 1 : 0; C.uAoView.value = POST.view ? 1 : 0;
   C.uExp.value = POST.exposure; C.uBloom.value = POST.bloom / 6; C.uAO.value = gtao ? POST.aoG : POST.ao; C.uGrain.value = POST.grain; C.uVig.value = POST.vignette; C.uTime.value = (clock.sim % 100);
-  C.tBloomW.value = R0.up[2].texture; C.tDirt.value = LENS.tex; C.uDirt.value = LENS.off || PRESET.idx > 0 ? 0 : LENS.k; C.uDirtAsp.value = R0.w / R0.h;   // V5 lens dirt
+  C.tBloomW.value = R0.up[2].texture; C.tBloomA.value = R0.down[5].texture; C.tDirt.value = LENS.tex; C.uDirt.value = LENS.off || PRESET.idx > 0 ? 0 : LENS.k; C.uDirtAsp.value = R0.w / R0.h;   // V5 lens dirt
   if (TAA.act) {                                                     // V5: TAA menggantikan FXAA, butiran di pass akhir
     C.uGrain.value = 0;
     fsPass(compMat, R0.ldr);
