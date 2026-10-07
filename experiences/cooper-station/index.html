@@ -8671,23 +8671,58 @@ function updateCrossings() {
     XING.closed[j] = d < XING.clear || (toward && (d - XING.clear) / Math.max(tram.v, 2) < XING.eta);
   });
 }
+// 24d: jenis bodi mobil (lalu lintas dan parkir). Geometri sedan diubah per bagian (part) dengan angka yang sama di carRemap (JS,
+// mobil parkir) dan CAR_VS (GLSL, lalu lintas). h setengah panjang, bt atas bodi, c0 / c1 kabin belakang / depan, ct atap,
+// af / ar poros depan / belakang, ws skala roda (juga jarak bodi ke tanah), wx skala lebar, p peluang.
+// Bagian: 0 bodi, 1 kabin, 2 roda depan, 3 roda belakang, 4 lampu depan, 5 lampu belakang, 6 dinding bak pickup, 7 lampu atap taksi
+const CAR_TYPES = [
+  { name: 'sedan', h: 2.2, bt: 0.93, c0: -1.4, c1: 0.9, ct: 1.45, af: 1.35, ar: 1.35, ws: 1, wx: 1, p: 0.34 },
+  { name: 'hatchback', h: 2.0, bt: 0.93, c0: -1.78, c1: 0.55, ct: 1.48, af: 1.25, ar: 1.3, ws: 1, wx: 0.98, p: 0.22 },
+  { name: 'suv', h: 2.3, bt: 1.08, c0: -2.05, c1: 0.8, ct: 1.8, af: 1.45, ar: 1.45, ws: 1.18, wx: 1.05, p: 0.18 },
+  { name: 'van', h: 2.5, bt: 1.0, c0: -2.42, c1: 1.35, ct: 2.08, af: 1.6, ar: 1.7, ws: 1.05, wx: 1.08, p: 0.08 },
+  { name: 'pickup', h: 2.65, bt: 1.0, c0: -0.45, c1: 0.95, ct: 1.78, af: 1.75, ar: 1.8, ws: 1.15, wx: 1.06, p: 0.08 },
+  { name: 'taxi', h: 2.2, bt: 0.93, c0: -1.4, c1: 0.9, ct: 1.45, af: 1.35, ar: 1.35, ws: 1, wx: 1, p: 0.10 },
+];
+const CAR_TAXI = '#e9b10e';                                          // 24d: cat taksi
+const CAR_EXTRA = [                                                  // 24d: bagian tambahan (ukuran, pusat; sudah dalam ukuran jenisnya)
+  [6, 0.08, 0.32, 2.05, 0.9, 1.16, -1.6], [6, 0.08, 0.32, 2.05, -0.9, 1.16, -1.6], [6, 1.72, 0.32, 0.08, 0, 1.16, -2.6],   // bak pickup
+  [7, 0.5, 0.16, 0.22, 0, 1.53, -0.3],                                // lampu atap taksi
+];
+// 24d: titik geometri sedan (x, y, z) bagian part -> jenis t; null = bagian tidak dipakai jenis ini. Sedan dan taksi tidak diubah
+function carRemap(t, part, x, y, z) {
+  if (part === 6) return t === 4 ? [x, y, z] : null;
+  if (part === 7) return t === 5 ? [x, y, z] : null;
+  if (t === 0 || t === 5) return [x, y, z];
+  const T = CAR_TYPES[t], b0 = 0.31 * T.ws, yb = b0 + (y - 0.31) * (T.bt - b0) / 0.62;
+  x *= T.wx;
+  if (part === 0) return [x, yb, z * T.h / 2.2];
+  if (part === 1) return [x, T.bt + (y - 0.93) * (T.ct - T.bt) / 0.52, T.c0 + (z + 1.4) * (T.c1 - T.c0) / 2.3];
+  if (part === 2) return [x, y * T.ws, T.af + (z - 1.35) * T.ws];
+  if (part === 3) return [x, y * T.ws, -T.ar + (z + 1.35) * T.ws];
+  if (part === 4) return [x, yb, z + T.h - 2.2];
+  return [x, yb, z - T.h + 2.2];
+}
+// 24d: jenis dari angka acak u (0..1) menurut peluang p
+function carPick(u) { let a = 0; for (let t = 0; t < CAR_TYPES.length; t++) { a += CAR_TYPES[t].p; if (u < a) return t; } return 0; }
 const TRAFFIC = {};
 {
   // --- geometri mobil (sedan/hatchback 4,4 m): bodi dicat, kabin kaca gelap, roda, lampu ---
   const pos = [], nrm = [], kind = [];                              // kind: 0 cat, 1 kaca, 2 hitam, 3 lampu depan, 4 lampu belakang, 5 krom
-  const idx = [];
+  const idx = [], parts = []; let part = 0;                          // 24d: parts = bagian per titik (lihat CAR_TYPES)
   const addBox = (sx, sy, sz, x, y, z, k, kTop = k) => {                // kotak ber-indeks: 24 titik
     const g = new THREE.BoxGeometry(sx, sy, sz); g.translate(x, y, z);
     const p = g.attributes.position.array, n = g.attributes.normal.array, v0 = pos.length / 3;
-    for (let i = 0; i < p.length / 3; i++) { pos.push(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); nrm.push(n[i * 3], n[i * 3 + 1], n[i * 3 + 2]); kind.push(n[i * 3 + 1] > 0.9 ? kTop : k); }
+    for (let i = 0; i < p.length / 3; i++) { pos.push(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]); nrm.push(n[i * 3], n[i * 3 + 1], n[i * 3 + 2]); kind.push(n[i * 3 + 1] > 0.9 ? kTop : k); parts.push(part); }
     for (const q of g.index.array) idx.push(v0 + q);
   };
   addBox(1.78, 0.62, 4.4, 0, 0.62, 0, 0);                            // bodi
-  addBox(1.62, 0.52, 2.3, 0, 1.19, -0.25, 1, 0);                     // kabin (atap dicat)
-  for (const wz of [-1.35, 1.35]) addBox(1.86, 0.6, 0.62, 0, 0.3, wz, 2);   // pasangan roda (satu kotak per poros)
-  addBox(1.55, 0.16, 0.05, 0, 0.78, 2.215, 3); addBox(1.5, 0.12, 0.04, 0, 0.8, -2.21, 4);   // lampu depan / belakang (revisi 16: depan sedikit lebih besar)
+  part = 1; addBox(1.62, 0.52, 2.3, 0, 1.19, -0.25, 1, 0);           // kabin (atap dicat)
+  for (const wz of [-1.35, 1.35]) { part = wz < 0 ? 3 : 2; addBox(1.86, 0.6, 0.62, 0, 0.3, wz, 2); }   // pasangan roda (satu kotak per poros)
+  part = 4; addBox(1.55, 0.16, 0.05, 0, 0.78, 2.215, 3); part = 5; addBox(1.5, 0.12, 0.04, 0, 0.8, -2.21, 4);   // lampu depan / belakang (revisi 16: depan sedikit lebih besar)
+  for (const [pt, sx, sy, sz, x, y, z] of CAR_EXTRA) { part = pt; addBox(sx, sy, sz, x, y, z, pt === 6 ? 0 : 5); }   // 24d: bak pickup (cat), lampu atap taksi
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3)); g.setAttribute('aKind', new THREE.Float32BufferAttribute(kind, 1)); g.setIndex(idx);
+  g.setAttribute('aPart', new THREE.Float32BufferAttribute(parts, 1));
   // --- jalur ---
   let sd = 24680; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const lanes = [], moves = [], paints = [];
@@ -8717,21 +8752,48 @@ const TRAFFIC = {};
     add(1, k * 250, lat, dir, SKY_S + 30, CIRC, lat < 5 ? 130 : 230);   // 13c: satu keliling penuh lewat jembatan Skyway
   // cincin struktur bukan jalan: tidak ada mobil di atasnya
   const n = lanes.length / 4, ig = new THREE.InstancedBufferGeometry();
+  // 24d: jenis bodi per mobil dari generator sendiri (urutan acak warna, lajur, kecepatan tetap); taksi dicat kuning
+  let sd24 = 24404; const r24 = () => ((sd24 = (sd24 * 16807) % 2147483647) / 2147483647);
+  const bodies = new Float32Array(n), taxiC = new THREE.Color(CAR_TAXI);
+  for (let i = 0; i < n; i++) { bodies[i] = carPick(r24()); if (bodies[i] === 5) { paints[i * 3] = taxiC.r; paints[i * 3 + 1] = taxiC.g; paints[i * 3 + 2] = taxiC.b; } }
   ig.index = g.index; for (const k of Object.keys(g.attributes)) ig.setAttribute(k, g.attributes[k]);
   ig.setAttribute('aLane', new THREE.InstancedBufferAttribute(new Float32Array(lanes), 4));
   ig.setAttribute('aMove', new THREE.InstancedBufferAttribute(new Float32Array(moves), 4));
   ig.setAttribute('aPaint', new THREE.InstancedBufferAttribute(new Float32Array(paints), 3));
+  ig.setAttribute('aBody', new THREE.InstancedBufferAttribute(bodies, 1));   // 24d
   ig.instanceCount = n;
+  const f3 = (v) => v.toFixed(3), CT = CAR_TYPES;                    // 24d: tabel jenis untuk CAR_VS (angka sama dengan carRemap)
+  const CT_GLSL = `const vec4 CT_A[${CT.length}] = vec4[${CT.length}](${CT.map((T) => `vec4(${[T.h, T.bt, T.c0, T.c1].map(f3)})`)});
+    const vec4 CT_B[${CT.length}] = vec4[${CT.length}](${CT.map((T) => `vec4(${[T.ct, T.af, T.ar, T.ws].map(f3)})`)});
+    const float CT_W[${CT.length}] = float[${CT.length}](${CT.map((T) => f3(T.wx))});`;
   const CAR_VS = /* glsl */`
     attribute vec4 aLane, aMove;
     attribute vec3 aSim;                                                  // 12b: posisi sepanjang lajur, rem, tampil (dari simulasi CPU)
     attribute vec3 aPaint;
     attribute float aKind;
+    attribute float aPart, aBody;                                         // 24d: bagian (per titik), jenis bodi (per mobil)
     uniform float uNight, uTraffic;
     varying vec3 vCol;
     varying vec2 vBm;                                                     // sorot lampu: (lateral, jarak dari bumper) m
+    ${CT_GLSL}
     void main() {
       vBm = position.xz;
+      // 24d: bentuk per jenis (sama dengan carRemap); sedan (0) dan taksi (5) tidak diubah, bagian yang tidak dipakai jadi satu titik
+      vec3 q = position;
+      int bt = int(aBody + 0.5);
+      if (aKind > 5.5) q.z += CT_A[bt].x - 2.2;                           // sorot mulai di bumper depan jenis ini (vBm tetap)
+      else if ((aPart > 5.5 && aPart < 6.5 && bt != 4) || (aPart > 6.5 && bt != 5)) q = vec3(0.0, 0.5, 0.0);
+      else if (bt > 0 && bt < 5 && aPart < 5.5) {
+        vec4 A = CT_A[bt], B = CT_B[bt];
+        float b0 = 0.31 * B.w, yb = b0 + (q.y - 0.31) * (A.y - b0) / 0.62;
+        q.x *= CT_W[bt];
+        if (aPart < 0.5) q = vec3(q.x, yb, q.z * A.x / 2.2);
+        else if (aPart < 1.5) q = vec3(q.x, A.y + (q.y - 0.93) * (B.x - A.y) / 0.52, A.z + (q.z + 1.4) * (A.w - A.z) / 2.3);
+        else if (aPart < 2.5) q = vec3(q.x, q.y * B.w, B.y + (q.z - 1.35) * B.w);
+        else if (aPart < 3.5) q = vec3(q.x, q.y * B.w, -B.z + (q.z + 1.35) * B.w);
+        else if (aPart < 4.5) q = vec3(q.x, yb, q.z + A.x - 2.2);
+        else q = vec3(q.x, yb, q.z - A.x + 2.2);
+      }
       if (aSim.z < 0.5) { ${CLIP_AWAY} }
       float dir = aLane.w, lat = aLane.z * dir;
       float p = aSim.x;
@@ -8744,8 +8806,8 @@ const TRAFFIC = {};
       vec3 base = groundFrame(P, 0.0, up, tS);
       vec3 F = tS * fw2.x + vec3(0.0, 0.0, fw2.y);
       vec3 Rt = cross(up, F);
-      vec3 p3 = base + Rt * position.x + up * position.y + F * position.z;
-      if (aKind > 5.5) { float cS = dot(Rt * position.x + F * position.z, tS); p3 += up * cS * cS / (2.0 * uR); }   // sorot: ikut lengkung lantai
+      vec3 p3 = base + Rt * q.x + up * q.y + F * q.z;
+      if (aKind > 5.5) { float cS = dot(Rt * q.x + F * q.z, tS); p3 += up * cS * cS / (2.0 * uR); }   // sorot: ikut lengkung lantai
       #ifndef DEPTH_ONLY
       vec3 n = normalize(Rt * normal.x + up * normal.y + F * normal.z);
       vec3 L = vegLight(p3, n, P, 1.0);
@@ -8758,6 +8820,7 @@ const TRAFFIC = {};
       }
       if (aKind > 2.5 && aKind < 3.5) vCol += vec3(1.0, 0.92, 0.75) * (0.3 + 4.0 * uNight);
       if (aKind > 3.5 && aKind < 4.5) vCol += vec3(1.0, 0.05, 0.03) * (0.2 + 2.0 * uNight + 2.5 * aSim.y);   // lampu rem
+      if (aPart > 6.5) vCol = vec3(0.85, 0.8, 0.55) * L + vec3(1.0, 0.8, 0.35) * (0.05 + 1.6 * uNight);   // 24d: lampu atap taksi menyala malam
       if (aKind > 5.5) vCol = vec3(1.0, 0.86, 0.64) * uNight * 0.16;   // revisi 16: sorot lampu depan di aspal (aditif; bentuk di BEAM_FS). Perbaikan: 0,55 -> 0,16 = cahaya x albedo aspal (dulu putih jenuh)
       #endif
       vec4 mvPosition = modelViewMatrix * vec4(p3, 1.0);
@@ -8788,7 +8851,8 @@ const TRAFFIC = {};
     const bg = new THREE.InstancedBufferGeometry(); bg.setIndex(bi);
     bg.setAttribute('position', new THREE.Float32BufferAttribute(bp, 3)); bg.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(bp.length / 3).fill([0, 1, 0]).flat(), 3));
     bg.setAttribute('aKind', new THREE.Float32BufferAttribute(bk, 1));
-    for (const k of ['aLane', 'aMove', 'aPaint']) bg.setAttribute(k, ig.attributes[k]);
+    bg.setAttribute('aPart', new THREE.Float32BufferAttribute(new Float32Array(bk.length), 1));   // 24d
+    for (const k of ['aLane', 'aMove', 'aPaint', 'aBody']) bg.setAttribute(k, ig.attributes[k]);
     bg.instanceCount = n;
     const BEAM_FS = /* glsl */`
       varying vec3 vCol;
@@ -8816,7 +8880,7 @@ const TRAFFIC = {};
     const [type, line, lat, dir] = lanes.slice(i * 4, i * 4 + 4), [p0, v0, seg0, L] = moves.slice(i * 4, i * 4 + 4);
     const key = `${type}|${line}|${lat}|${dir}`; let ln = LN.get(key);
     if (!ln) { ln = { type, line, lat, dir, seg0, L, cars: [], stops: [] }; LN.set(key, ln); }
-    const c = { i, u: p0, v: v0, v0, brake: 0, on: true, ln }; ln.cars.push(c); cars.push(c);
+    const c = { i, u: p0, v: v0, v0, brake: 0, on: true, ln, body: bodies[i], len: 2 * CAR_TYPES[bodies[i]].h + 0.6 }; ln.cars.push(c); cars.push(c);   // 24d: len = panjang + 0,6 m (sedan 5,0 = IDM.len)
   }
   for (const ln of LN.values()) {
     ln.cars.sort((a, b) => a.u - b.u);                                  // urutan tetap (tidak ada menyalip), berputar
@@ -8882,7 +8946,7 @@ const TRAFFIC = {};
 }
 // 12b-1: langkah simulasi mobil (IDM). Penghalang: mobil di depan pada lajur yang sama, dan garis henti bila lampu
 // merah/kuning (kuning: tetap jalan bila tidak bisa berhenti nyaman) atau perlintasan trem tertutup.
-const IDM = { a: 1.4, b: 2.2, s0: 2.0, T: 1.3, len: 5.0, look: 160 };
+const IDM = { a: 1.4, b: 2.2, s0: 2.0, T: 1.3, len: 5.0, look: 160 };   // 24d: len = bawaan; jarak pakai c.len mobil depan dan mobil sendiri (dari pusat ke pusat)
 function stepTraffic(dt, t = clock.sim) {
   if (dt <= 0) return;
   const frac = TRAFFIC.U.uTraffic.value, A = IDM, sq = 2 * Math.sqrt(A.a * A.b);
@@ -8897,7 +8961,7 @@ function stepTraffic(dt, t = clock.sim) {
       const ob = (gap, vl, s0) => { const g = Math.max(gap, 0.05), ss = s0 + Math.max(0, c.v * A.T + c.v * (c.v - vl) / sq); return -A.a * (ss / g) * (ss / g); };
       let lead = null; for (let q = 1; q < N; q++) { const o = C[(j + q) % N]; if (o.on) { lead = o; break; } }
       let add = 0;
-      if (lead) { const gap = ((lead.u - c.u + L) % L) - A.len; if (gap < A.look) add = Math.min(add, ob(gap, lead.v, A.s0)); }
+      if (lead) { const gap = ((lead.u - c.u + L) % L) - ((lead.len || A.len) + (c.len || A.len)) / 2; if (gap < A.look) add = Math.min(add, ob(gap, lead.v, A.s0)); }
       const NS = ln.stops.length;
       if (NS) {
         let st = ln.stops[c.si], ds = (st.u - c.u + L) % L;
@@ -10232,10 +10296,20 @@ if (PARKED.on) {
   let sd = 22040; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const g = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
   const PAINT = ['#e8e8e6', '#1d1f22', '#8c9196', '#9a1c1c', '#1f3a66', '#c9c3b5', '#2f5a3a', '#d8a23a', '#5a6470', '#f2f2f0'];   // sama dengan TRAFFIC
-  const paintGeo = mergeSimple([{ geo: g(1.78, 0.62, 4.4, 0, 0.62, 0), color: [1, 1, 1] }, { geo: g(1.62, 0.05, 2.3, 0, 1.47, -0.25), color: [1, 1, 1] }]);
-  const trimGeo = mergeSimple([{ geo: g(1.6, 0.5, 2.28, 0, 1.19, -0.25), color: [0.03, 0.04, 0.05] },
-    ...[-1.35, 1.35].map((z) => ({ geo: g(1.86, 0.6, 0.62, 0, 0.3, z), color: [0.02, 0.02, 0.02] })),
-    { geo: g(1.55, 0.16, 0.05, 0, 0.78, 2.215), color: [0.8, 0.8, 0.75] }, { geo: g(1.5, 0.12, 0.04, 0, 0.8, -2.21), color: [0.35, 0.02, 0.02] }]);
+  // 24d: satu pasang geometri per jenis bodi (carRemap pada sudut kotak sedan); sedan dan taksi memakai kotak lama persis,
+  // taksi berbagi geometri cat sedan, lampu atap taksi di geometri pelengkapnya
+  const gb = (t, part, sx, sy, sz, x, y, z) => {
+    if (part < 6 && (t === 0 || t === 5)) return g(sx, sy, sz, x, y, z);
+    const a = carRemap(t, part, x - sx / 2, y - sy / 2, z - sz / 2), b = carRemap(t, part, x + sx / 2, y + sy / 2, z + sz / 2);
+    return a && g(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), Math.abs(b[2] - a[2]), (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+  };
+  const geoSet = (t, list) => mergeSimple(list.map(([part, color, ...d]) => ({ geo: gb(t, part, ...d), color })).filter((o) => o.geo));
+  const W = [1, 1, 1], extra = (pt, color) => CAR_EXTRA.filter((e) => e[0] === pt).map((e) => [pt, color, ...e.slice(1)]);
+  const paintGeos = CAR_TYPES.map((T, t) => geoSet(t, [[0, W, 1.78, 0.62, 4.4, 0, 0.62, 0], [1, W, 1.62, 0.05, 2.3, 0, 1.47, -0.25], ...extra(6, W)]));
+  const trimGeos = CAR_TYPES.map((T, t) => geoSet(t, [[1, [0.03, 0.04, 0.05], 1.6, 0.5, 2.28, 0, 1.19, -0.25],
+    ...[-1.35, 1.35].map((z) => [z < 0 ? 3 : 2, [0.02, 0.02, 0.02], 1.86, 0.6, 0.62, 0, 0.3, z]),
+    [4, [0.8, 0.8, 0.75], 1.55, 0.16, 0.05, 0, 0.78, 2.215], [5, [0.35, 0.02, 0.02], 1.5, 0.12, 0.04, 0, 0.8, -2.21], ...extra(7, [0.9, 0.82, 0.5])]));
+  let sd24 = 22404; const r24 = () => ((sd24 = (sd24 * 16807) % 2147483647) / 2147483647);   // 24d: jenis bodi, generator sendiri
   const bad = (s, za) => inWater(s, za, 3) || inRiver(s, za, 3) || nearRing(za, 14) || inBallpark(s, za, 4)
     || Math.abs(wrapS(s - SKY_S)) < 55 || Math.abs(wrapS(s - TRAM.s)) < ROAD.boulevard / 2 + 4;
   const artHalf = (x) => (Math.abs(wrapS(x - TRAM.s)) < 1 ? ROAD.boulevard : ROAD.art) / 2;
@@ -10245,7 +10319,7 @@ if (PARKED.on) {
       const L = 5.4 + r() * 1.6, park = r() < 0.8, lat = LAT + (r() - 0.5) * 0.3, yaw = (r() - 0.5) * 0.06, col = Math.floor(r() * PAINT.length);
       if (park && !cuts.some((c) => Math.abs(p - c) < 9)) {
         const s = alongZ ? fix + side * lat : p, za = alongZ ? p : fix + side * lat;
-        if (!bad(s, za)) items.push([modS(s), za, (alongZ ? (side > 0 ? 0 : Math.PI) : (side > 0 ? Math.PI / 2 : -Math.PI / 2)) + yaw, col, alongZ]);
+        if (!bad(s, za)) items.push([modS(s), za, (alongZ ? (side > 0 ? 0 : Math.PI) : (side > 0 ? Math.PI / 2 : -Math.PI / 2)) + yaw, col, alongZ, carPick(r24())]);
       }
       p += L;
     }
@@ -10259,22 +10333,31 @@ if (PARKED.on) {
   }
   const n = items.length, mats = new Float32Array(n * 16), ps = new Float32Array(n), pz = new Float32Array(n), cols = new Float32Array(n * 3);
   const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), cc = new THREE.Color();
-  items.forEach(([s, za, a, ci, alongZ], i) => {
+  items.forEach(([s, za, a, ci, alongZ, t], i) => {
     surfaceMatrix(m4, s / R, za, groundH(s, za)); m4.multiply(rot.makeRotationY(a)); m4.toArray(mats, i * 16); ps[i] = s; pz[i] = za;
-    cc.set(PAINT[ci]); cols[i * 3] = cc.r; cols[i * 3 + 1] = cc.g; cols[i * 3 + 2] = cc.b;
-    addCollider(s, za, alongZ ? 0.95 : 2.25, alongZ ? 2.25 : 0.95);
+    cc.set(t === 5 ? CAR_TAXI : PAINT[ci]); cols[i * 3] = cc.r; cols[i * 3 + 1] = cc.g; cols[i * 3 + 2] = cc.b;
+    const hl = CAR_TYPES[t].h + 0.05, hw = 0.95 * CAR_TYPES[t].wx;     // 24d: kolider ikut panjang dan lebar jenis (sedan tetap 2,25 x 0,95)
+    addCollider(s, za, alongZ ? hw : hl, alongZ ? hl : hw);
   });
-  for (const [kind, geo, mat] of [['r22carP', paintGeo, specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.3, 0.05)],
-    ['r22carT', trimGeo, specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.08, 0.05)]]) {
-    if (!n) break;
-    const mesh = new THREE.InstancedMesh(geo, mat, n), tinted = kind === 'r22carP';
+  // 24d: instance dipisah per jenis (cat: sedan + taksi satu mesh; pelengkap: tiap jenis). Nama lama r22carP / r22carT = sedan
+  const pick = (f) => { const ix = items.map((it, i) => i).filter((i) => f(items[i][5])), m = ix.length, o = { n: m, mats: new Float32Array(m * 16), ps: new Float32Array(m), pz: new Float32Array(m), cols: new Float32Array(m * 3) };
+    ix.forEach((i, j) => { o.mats.set(mats.subarray(i * 16, i * 16 + 16), j * 16); o.ps[j] = ps[i]; o.pz[j] = pz[i]; o.cols.set(cols.subarray(i * 3, i * 3 + 3), j * 3); }); return o; };
+  const paintMat = specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.3, 0.05), trimMat = specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.08, 0.05);
+  const sets = [];
+  CAR_TYPES.forEach((T, t) => {
+    if (t !== 5) sets.push([t ? 'r24carP' + t : 'r22carP', paintGeos[t], paintMat, true, pick((u) => u === t || (t === 0 && u === 5))]);
+    sets.push([t ? 'r24carT' + t : 'r22carT', trimGeos[t], trimMat, false, pick((u) => u === t)]);
+  });
+  for (const [kind, geo, mat, tinted, o] of sets) {
+    if (!o.n) continue;
+    const mesh = new THREE.InstancedMesh(geo, mat, o.n);
     mesh.count = 0; mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    if (tinted) mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    if (tinted) mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(o.n * 3), 3).setUsage(THREE.DynamicDrawUsage);
     else mesh.userData.noShadow = true;                              // kaca, roda, lampu: tanpa bayangan (badan sudah cukup)
     scene.add(mesh);
-    FURN.kinds[kind] = { mesh, mats, ps, pz, n, range: 260, idx: null, cols: tinted ? cols : null };
+    FURN.kinds[kind] = { mesh, mats: o.mats, ps: o.ps, pz: o.pz, n: o.n, range: 260, idx: null, cols: tinted ? o.cols : null };
   }
-  PARKED.n = n;
+  PARKED.n = n; PARKED.types = CAR_TYPES.map((T, t) => items.filter((it) => it[5] === t).length);   // 24d: jumlah per jenis
 }
 // 12b-1: perlintasan trem. Tiap perlintasan: 4 tiang (tanda silang + lampu merah kedip ganda menghadap jalan),
 // palang merah-putih di 2 tiang sisi masuk (menutup lajur yang menuju rel), garis henti putih di depan palang.
@@ -13325,7 +13408,7 @@ const SHP = { on: true, margin: 16, redo: 12, stat: [], cars: null, ref: [[0, 1e
     const mk = () => new THREE.InstancedBufferAttribute(new Float32Array(mesh.instanceMatrix.array.length), 16);
     SHP.stat.push({ mesh, C, n, src: mesh.instanceMatrix, cnt: mesh.count, attr: [mk(), mk()], k: [0, 0], vis: true });
   }
-  const ig = TRAFFIC.cars.geometry, dyn = ['aLane', 'aMove', 'aPaint', 'aSim'];
+  const ig = TRAFFIC.cars.geometry, dyn = ['aLane', 'aMove', 'aPaint', 'aBody', 'aSim'];   // 24d: aBody
   const mkG = () => {
     const g = new THREE.InstancedBufferGeometry(); g.index = ig.index;
     for (const k of Object.keys(ig.attributes)) if (!dyn.includes(k)) g.setAttribute(k, ig.attributes[k]);
