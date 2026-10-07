@@ -261,9 +261,9 @@
     const c = cur(), A = K.A, base = Math.max(4, Math.min(64, (A.quality && A.quality()) || 16));
     const moving = c.bulb || c.t >= 1 / 500;
     // sampel bukaan cukup agar piringan blur tidak tampak sebagai salinan bertumpuk: diameter CoC terbesar (px foto) di
-    // latar tak hingga atau benda 1,5 m, sekitar 0,15 x D^2 sampel (jarak antar sampel ~2,3 px, Halton), paling banyak 8x dasar (maks 512)
+    // latar tak hingga atau benda 3 m, sekitar 0,15 x D^2 sampel (jarak antar sampel ~2,3 px, Halton), paling banyak 8x dasar (maks 512)
     const fm = c.f / 1000, iv = Math.max(0, Math.min(1 / c.minF, K.st.invS)), pH = (A.photoH && A.photoH()) || A.canvas.height || 1080;
-    const cocK = fm * fm / (c.N * Math.max(1e-3, 1 - fm * iv)) * pH / 0.024, D = cocK * Math.max(iv, 1 / 1.5 - iv);
+    const cocK = fm * fm / (c.N * Math.max(1e-3, 1 - fm * iv)) * pH / 0.024, D = cocK * Math.max(iv, 1 / 3 - iv);
     const nAp = Math.round(Math.max(base, Math.min(base * 8, 512, 0.15 * D * D)));
     const N = c.bulb ? Infinity : Math.max(nAp, moving ? Math.min(256, Math.round(c.t * 120)) : 0);
     const ph = [0, 1, 2, 3].map(() => Math.random() * 6.2832);
