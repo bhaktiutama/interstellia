@@ -34,9 +34,11 @@ Hasil uji asap di sandbox (Chromium + SwiftShader, 640 x 360; bukan ukuran FPS):
 
 | Experience | Masuk | Foto live view | Foto 1/4 s | Video | Keluar | Error halaman |
 | --- | --- | --- | --- | --- | --- | --- |
-| Copper (preset Hemat, 8 subframe) | ya | 177.910 byte | lihat uji ulang | lihat uji ulang | ya | tidak ada |
+| Copper (preset Hemat, 8 subframe) | ya | 302.088 byte | 23.683 byte (mode M, sengaja terlalu terang) | mp4 145.791 byte (9 s) | ya | tidak ada |
 | Millar (Hemat) | ya | 285.009 byte | 60.013 byte | mp4 438.766 byte (9 s) | ya | tidak ada |
 | Gargantua | ya | 420.120 byte | 201.486 byte | mp4 41.826 byte (9 s) | ya | tidak ada |
+
+Perbaikan saat uji: di Copper komposit foto akhir semula langsung ke kanvas dengan alpha = luma, sehingga warna dibagi alpha oleh browser (foto sangat terang); kini lewat pass akhir beralpha 1 (rata-rata kecerahan sama dengan live view: 133,4 vs 133,6 dari 255).
 
 Penyimpangan dari rencana: shuttle sandar di Copper belum termasuk tempat yang boleh memakai kamera (`ext.active` = mode shuttle); Copper Ultra dengan 32 subframe terlalu lambat untuk diuji di SwiftShader (tidak mewakili GPU sungguhan).
 
