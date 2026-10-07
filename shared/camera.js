@@ -256,11 +256,16 @@
     if (K.st.video) { K.rec ? K.recStop() : K.recStart(); return; }
     K.armed = true; click(0);
   };
-  K.shutterRelease = function () { if (K.cap && K.cap.bulb && !K.cap.done) K.cap.release = true; };
+  K.shutterRelease = function () { if (K.cap && K.cap.bulb && !K.cap.done) { K.cap.release = true; if (!K.cap.clicked) { K.cap.clicked = true; click(1); } } };
   function plan() {
     const c = cur(), A = K.A, base = Math.max(4, Math.min(64, (A.quality && A.quality()) || 16));
     const moving = c.bulb || c.t >= 1 / 500;
-    const N = c.bulb ? Infinity : moving ? Math.max(base, Math.min(256, Math.round(c.t * 120))) : base;
+    // sampel bukaan cukup agar piringan blur tidak tampak sebagai salinan bertumpuk: diameter CoC terbesar (px foto) di
+    // latar tak hingga atau benda 1,5 m, sekitar 0,3 x D^2 sampel, paling banyak 8x dasar (maks 512)
+    const fm = c.f / 1000, iv = Math.max(0, Math.min(1 / c.minF, K.st.invS)), pH = (A.photoH && A.photoH()) || A.canvas.height || 1080;
+    const cocK = fm * fm / (c.N * Math.max(1e-3, 1 - fm * iv)) * pH / 0.024, D = cocK * Math.max(iv, 1 / 1.5 - iv);
+    const nAp = Math.round(Math.max(base, Math.min(base * 8, 512, 0.3 * D * D)));
+    const N = c.bulb ? Infinity : Math.max(nAp, moving ? Math.min(256, Math.round(c.t * 120)) : 0);
     const ph = [0, 1, 2, 3].map(() => Math.random() * 6.2832);
     const shakeK = K.st.tripod || !K.st.shake ? 0 : 1;
     return { c, N, i: 0, bulb: c.bulb, t: c.t, dt: c.bulb ? 0 : moving ? c.t / N : 0, moving, elapsed: 0, release: false, done: false,
@@ -274,6 +279,8 @@
       try { const g = freezeEl.getContext('2d'); freezeEl.width = canvas.width; freezeEl.height = canvas.height; g.drawImage(canvas, 0, 0); freezeEl.hidden = false; } catch (e) { /* abaikan */ }
       K.seed = (Math.random() * 997) | 0;
       K.cap = plan();
+      // bunyi tutup rana tepat sesudah waktu rana nyata; olah subframe berlanjut sesudahnya (B: saat tombol dilepas)
+      if (!K.cap.bulb) { const P = K.cap; P.clicked = true; setTimeout(() => click(1), Math.max(70, Math.min(30000, P.t * 1000))); }
     }
   };
   // Subframe berikut: offset Halton (piksel), bukaan (m, basis kamera), getar (rad), dt dunia sebelum subframe ini
@@ -298,7 +305,7 @@
   K.finish = function (canvas) {
     const P = K.cap; K.cap = null; K.unfreeze = true;
     if (P.bulb) P.t = Math.max(1 / 30, P.elapsed);
-    click(1);
+    if (!P.clicked) click(1);
     const r = frameRect(canvas.width, canvas.height), cv = document.createElement('canvas');
     cv.width = Math.round(r.w); cv.height = Math.round(r.h);
     cv.getContext('2d').drawImage(canvas, Math.round(r.x), Math.round(r.y), cv.width, cv.height, 0, 0, cv.width, cv.height);
