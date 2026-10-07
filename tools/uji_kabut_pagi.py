@@ -17,7 +17,7 @@ UJI = r"""
   const at = (h, ov) => {   // keadaan kabut pada jam h (cuaca dibekukan)
     S.WEATHER.cover = ov ? 1 : 0; S.WEATHER.ov = ov ? 1 : 0; S.clock.hour = h; S.updateLighting();
     const c = S.scene.fog.color, U = S.LIGHT.uniforms;
-    return { d: S.scene.fog.density, c: [c.r, c.g, c.b], far: U.uL_FarAvg.value.toArray(), fogD: U.uL_FogD.value };
+    return { d: S.scene.fog.density, c: [c.r, c.g, c.b], far: U.uL_FarAvg.value.toArray(), fogD: U.uL_FogD.value, mist: S.ATMO ? S.ATMO.mist : 0 };
   };
   const base = S.CONFIG.fogDensity, hrs = [4.0, 5.0, 6.0, 6.6, 7.2, 8.0, 9.0, 9.6, 12.0], v = {};
   for (const h of hrs) { v[h] = at(h, false); info.push(`jam ${h}: kerapatan ${(v[h].d / base).toFixed(2)} x dasar, warna ${v[h].c.map((x) => x.toFixed(3)).join(' ')}`); }
@@ -26,7 +26,7 @@ UJI = r"""
   // V4: di Ultra / Tinggi (ATMO.gate) kabut pagi menjadi lapisan menempel tanah di compMat; kabut rata material hanya +1x (puncak 2x)
   const pk = S.ATMO && S.ATMO.gate ? 2 : 5;
   out[`puncak 6,0-7,2 sekitar ${pk}x (${(v[6.6].d / base).toFixed(2)})` + (pk === 2 ? ', V4 lapisan kabut tanah aktif' : '')] = Math.abs(v[6.6].d / base - pk) < 0.05 && Math.abs(v[7.2].d / base - pk) < 0.05;
-  if (pk === 2) out[`V4: kabut tanah jam 6,6 penuh (ATMO.mist ${S.ATMO.mist.toFixed(2)})`] = S.ATMO.mist > 0.95;
+  if (pk === 2) out[`V4: kabut tanah jam 6,6 penuh (ATMO.mist ${v[6.6].mist.toFixed(2)})`] = v[6.6].mist > 0.95;
   out[`menipis 8,0 -> 9,0 -> 9,6 (${(v[8].d / base).toFixed(2)} ${(v[9].d / base).toFixed(2)} ${(v[9.6].d / base).toFixed(2)})`] = v[8].d > v[9].d && v[9].d > base && Math.abs(v[9.6].d - base) < 1e-9;
   out['farEnv memakai kerapatan yang sama (uL_FogD)'] = Math.abs(v[6.6].fogD - v[6.6].d) < 1e-12;
   const lum = (a) => 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2], sat = (a) => Math.max(...a) - Math.min(...a);
