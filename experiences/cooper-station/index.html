@@ -1084,6 +1084,7 @@ const LIGHT_GLSL = /* glsl */`
     if (al < -3.0 || al > 55.0 || abs(lat) > 20.0) return 0.0;
     float w = 0.8 + 0.3 * max(al, 0.0);
     float beam = exp(-lat * lat / (w * w)) * smoothstep(0.6, 4.0, al) * (1.0 - smoothstep(20.0, 48.0, al)) / (1.0 + 0.05 * max(al, 0.0));
+    beam *= 1.0 - smoothstep(12.0, 20.0, abs(lat));                   // perbaikan: tanpa ini terpotong lurus di 20 m (terlihat di aspal basah)
     float spill = exp(-((al - 1.8) * (al - 1.8) + lat * lat) / 5.0);
     return 1.7 * beam + 0.2 * spill;
   }
@@ -7926,6 +7927,7 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
     const bBark = new THREE.Mesh(T.barkGeo, new THREE.MeshBasicMaterial({ map: barkTex, vertexColors: true }));
     const bLeaf = new THREE.InstancedMesh(T.leafGeo, vegMaterial({ vertex: LEAF_VS, fragment: LEAF_FS, uniforms: leafU, defines: { BAKE: '' } }), 1);
     bLeaf.setMatrixAt(0, new THREE.Matrix4()); bs.add(bBark, bLeaf);
+    T.bakeS = bs;                                                   // V5: dipakai lagi untuk impostor oktahedral
     const cam = new THREE.OrthographicCamera(-size / 2, size / 2, size - 0.4, -0.4, 0.1, 200);
     cam.position.set(0, 0, 60); cam.lookAt(0, 0, 0);
     renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(bs, cam);
@@ -7947,6 +7949,109 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
     T.bark.layers.enable(1);
     T.leaf.userData.noLight = true; T.imp.userData.noLight = true;
   });
+}
+/* V5: impostor pohon oktahedral (hanya Ultra). Impostor lama = satu gambar dari samping yang berputar di sumbu batang: dari atas
+   (pohon di seberang silinder, dari dek menara, dari bukit) tampak sebagai lembaran tipis. Kini tiap template dipanggang dari 8 x 8
+   arah di belahan atas (pemetaan hemi-oktahedral) ke atlas 1024 px; di layar, quad menghadap kamera dan tiga gambar arah terdekat
+   dicampur (bobot segitiga). UV tiap gambar dihitung dari perpotongan sinar pandang dengan bidang gambar itu (paralaks benar),
+   jadi tajuk tidak bergeser saat berpindah gambar. Dipanggang bertahap satu template per frame saat Ultra pertama kali dipakai. */
+const OCT = { N: 8, cell: 128, off: ['v5', 'imp'].some((k) => new URLSearchParams(location.search).get(k) === '0'), next: 0, want: false };
+const OCT_GLSL = /* glsl */`
+  vec3 octDec(vec2 g) { vec3 d = vec3(0.5 * (g.x + g.y), 0.0, 0.5 * (g.x - g.y)); d.y = 1.0 - abs(d.x) - abs(d.z); return normalize(d); }
+  vec2 octEnc(vec3 d) { d.y = max(d.y, 0.0); d /= abs(d.x) + abs(d.y) + abs(d.z); return vec2(d.x + d.z, d.x - d.z); }
+  void octBasis(vec3 d, out vec3 r, out vec3 u) { vec3 up = abs(d.y) > 0.999 ? vec3(0.0, 0.0, -1.0) : vec3(0.0, 1.0, 0.0); r = normalize(cross(up, d)); u = cross(d, r); }`;
+const OCT_VS = /* glsl */`
+  uniform vec3 uOct;                                               // N, tinggi pusat (m lokal), sisi gambar (m lokal)
+  attribute vec4 aLeafC;
+  varying vec4 vLeafC, vF0, vF1, vF2;
+  varying vec3 vWt, vLight;
+  ${OCT_GLSL}
+  vec4 frameUV(vec2 ck, vec3 P, vec3 dl) {                         // titik quad P -> uv di gambar arah ck (sinar pandang memotong bidangnya)
+    vec3 dk = octDec(ck / (uOct.x - 1.0) * 2.0 - 1.0), rk, uk; octBasis(dk, rk, uk);
+    vec3 hit = P - dl * dot(P, dk) / max(dot(dl, dk), 0.2);
+    return vec4(dot(hit, rk) / uOct.z + 0.5, dot(hit, uk) / uOct.z + 0.5, ck);
+  }
+  void main() {
+    mat4 M = modelMatrix * instanceMatrix;
+    vec3 C = vec3(M * vec4(0.0, 0.0, 0.0, 1.0));
+    float cs = atan(C.y, C.x) * uR; if (cs < 0.0) cs += 6.28318530718 * uR;
+    float cz = C.z + uHalfL, lodHere = (cs > uForest.x && cs < uForest.z && cz > uForest.y && cz < uForest.w) ? min(uLodD, uLodF) : uLodD;
+    if (distance(C, uEye) < lodHere - 2.0) { ${CLIP_AWAY} }
+    mat3 R3 = mat3(M); float sc = length(R3[1]); R3 /= sc;
+    vec3 Cc = C + R3[1] * uOct.y * sc, toE = uEye - Cc;
+    vec3 dl = transpose(R3) * toE; dl.y = max(dl.y, 0.0);
+    dl = dot(dl, dl) > 1e-8 ? normalize(dl) : vec3(1.0, 0.0, 0.0);
+    vec3 r, u; octBasis(dl, r, u);
+    vec3 P = (r * position.x + u * position.y) * uOct.z;
+    vec2 g = (octEnc(dl) * 0.5 + 0.5) * (uOct.x - 1.0), f = clamp(floor(g), 0.0, uOct.x - 2.0), t = g - f;
+    if (t.x + t.y < 1.0) { vF0 = frameUV(f, P, dl); vF1 = frameUV(f + vec2(1.0, 0.0), P, dl); vF2 = frameUV(f + vec2(0.0, 1.0), P, dl); vWt = vec3(1.0 - t.x - t.y, t.x, t.y); }
+    else { vF0 = frameUV(f + 1.0, P, dl); vF1 = frameUV(f + vec2(1.0, 0.0), P, dl); vF2 = frameUV(f + vec2(0.0, 1.0), P, dl); vWt = vec3(t.x + t.y - 1.0, 1.0 - t.y, 1.0 - t.x); }
+    vec3 p = Cc + R3 * P * sc;
+    #ifndef DEPTH_ONLY
+    float a = atan(C.y, C.x); vec3 Y = R3[1], toC = toE - Y * dot(toE, Y);
+    vLight = vegLight(C + Y * uOct.y * 1.2 * sc, normalize(Y + (dot(toC, toC) > 1e-6 ? normalize(toC) : vec3(0.0)) * 0.6), vec2(a * uR, C.z + uHalfL), 0.0);
+    #endif
+    vLeafC = aLeafC;
+    vec4 mvPosition = viewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+    #ifndef DEPTH_ONLY
+    #include <fog_vertex>
+    #endif
+  }`;
+const OCT_FS = /* glsl */`
+  uniform sampler2D uImpTex;
+  uniform vec3 uOct;
+  varying vec4 vLeafC, vF0, vF1, vF2;
+  varying vec3 vWt, vLight;
+  ${LEAF_RECOLOR}
+  vec4 octSamp(vec4 f) {
+    if (f.x < 0.0 || f.y < 0.0 || f.x > 1.0 || f.y > 1.0) return vec4(0.0);
+    float e = 0.5 / ${OCT.cell}.0;
+    return texture2D(uImpTex, (f.zw + clamp(f.xy, e, 1.0 - e)) / uOct.x);
+  }
+  void main() {
+    vec4 tx = octSamp(vF0) * vWt.x + octSamp(vF1) * vWt.y + octSamp(vF2) * vWt.z;
+    if (tx.a < 0.5) discard;
+    gl_FragColor = vec4(leafRecolor(tx.rgb / max(tx.a, 0.5), vLeafC) * vLight, 1.0);
+    #include <colorspace_fragment>
+    #include <fog_fragment>
+  }`;
+function octBake(T, ti) {                                          // panggang 8 x 8 arah satu template, lalu buat mesh instance-nya
+  const N = OCT.N, C = OCT.cell, W = N * C;
+  const Rb = Math.hypot(T.height * 0.5, T.halfW) + 0.4, S = 2 * Rb, cy = T.height * 0.5;
+  const rt = new THREE.WebGLRenderTarget(W, W, { depthBuffer: true });
+  rt.texture.generateMipmaps = false; rt.texture.minFilter = THREE.LinearMipmapLinearFilter;
+  const cam = new THREE.OrthographicCamera(-S / 2, S / 2, S / 2, -S / 2, 0.1, 200), d = new THREE.Vector3(), cc = new THREE.Vector3(0, cy, 0);
+  const cc0 = new THREE.Color(); renderer.getClearColor(cc0); const ca0 = renderer.getClearAlpha();
+  renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear();
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const gx = i / (N - 1) * 2 - 1, gy = j / (N - 1) * 2 - 1;      // sama dengan octDec di shader
+    d.set(0.5 * (gx + gy), 0, 0.5 * (gx - gy)); d.y = 1 - Math.abs(d.x) - Math.abs(d.z); d.normalize();
+    cam.up.set(0, 1, 0); if (Math.abs(d.y) > 0.999) cam.up.set(0, 0, -1);
+    cam.position.copy(d).multiplyScalar(60).add(cc); cam.lookAt(cc); cam.updateMatrixWorld();
+    rt.viewport.set(i * C, j * C, C, C);
+    if (i === N - 1 && j === N - 1) rt.texture.generateMipmaps = true;   // mip dibuat sekali setelah gambar terakhir
+    renderer.setRenderTarget(rt); renderer.render(T.bakeS, cam);
+  }
+  rt.viewport.set(0, 0, W, W);
+  renderer.setRenderTarget(null); renderer.setClearColor(cc0, ca0);
+  const geo = new THREE.PlaneGeometry(1, 1);
+  geo.setAttribute('aLeafC', T.imp.geometry.attributes.aLeafC);    // warna daun per pohon sama dengan impostor lama (applyLeafMode)
+  const n = T.imp.count;
+  T.oct = new THREE.InstancedMesh(geo, vegMaterial({ vertex: OCT_VS, fragment: OCT_FS,
+    uniforms: { uImpTex: { value: rt.texture }, uOct: { value: new THREE.Vector3(N, cy, S) } } }), Math.max(1, n));
+  const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), sv = new THREE.Vector3();
+  for (const t of TREES.list) if (t.tpl === ti) {
+    surfaceMatrix(m4, t.s / R, t.za, t.h); m4.multiply(rot.makeRotationY(t.rot)).scale(sv.set(t.sc, t.sc, t.sc));
+    T.oct.setMatrixAt(t.imp, m4);
+  }
+  T.oct.count = n; T.oct.instanceMatrix.needsUpdate = true; T.oct.frustumCulled = false; T.oct.userData.noLight = true;
+  T.oct.visible = false; realGroup.add(T.oct);
+}
+function octStep() {                                               // tiap frame: panggang bertahap, tukar impostor lama / baru
+  OCT.want = !OCT.off && PRESET.idx === 0;
+  if (OCT.want && OCT.next < TREES.templates.length) { const ti = OCT.next++; octBake(TREES.templates[ti], ti); }
+  for (const T of TREES.templates) if (T.oct) { T.oct.visible = OCT.want; T.imp.visible = !OCT.want; }
 }
 const _tm = new THREE.Matrix4(), _tr = new THREE.Matrix4(), _ts = new THREE.Vector3(), NO_TINT = [0, 0, 0, 0];
 function updateTreeLOD(eyeS, eyeZ, eyeH) {
@@ -8323,7 +8428,9 @@ const TRAFFIC = {};
     attribute float aKind;
     uniform float uNight, uTraffic;
     varying vec3 vCol;
+    varying vec2 vBm;                                                     // sorot lampu: (lateral, jarak dari bumper) m
     void main() {
+      vBm = position.xz;
       if (aSim.z < 0.5) { ${CLIP_AWAY} }
       float dir = aLane.w, lat = aLane.z * dir;
       float p = aSim.x;
@@ -8337,6 +8444,7 @@ const TRAFFIC = {};
       vec3 F = tS * fw2.x + vec3(0.0, 0.0, fw2.y);
       vec3 Rt = cross(up, F);
       vec3 p3 = base + Rt * position.x + up * position.y + F * position.z;
+      if (aKind > 5.5) { float cS = dot(Rt * position.x + F * position.z, tS); p3 += up * cS * cS / (2.0 * uR); }   // sorot: ikut lengkung lantai
       #ifndef DEPTH_ONLY
       vec3 n = normalize(Rt * normal.x + up * normal.y + F * normal.z);
       vec3 L = vegLight(p3, n, P, 1.0);
@@ -8349,7 +8457,7 @@ const TRAFFIC = {};
       }
       if (aKind > 2.5 && aKind < 3.5) vCol += vec3(1.0, 0.92, 0.75) * (0.3 + 4.0 * uNight);
       if (aKind > 3.5 && aKind < 4.5) vCol += vec3(1.0, 0.05, 0.03) * (0.2 + 2.0 * uNight + 2.5 * aSim.y);   // lampu rem
-      if (aKind > 5.5) vCol = vec3(1.0, 0.86, 0.64) * uNight * (aKind - 6.0) * 0.55;   // revisi 16: sorot lampu depan di aspal (aditif)
+      if (aKind > 5.5) vCol = vec3(1.0, 0.86, 0.64) * uNight * 0.16;   // revisi 16: sorot lampu depan di aspal (aditif; bentuk di BEAM_FS). Perbaikan: 0,55 -> 0,16 = cahaya x albedo aspal (dulu putih jenuh)
       #endif
       vec4 mvPosition = modelViewMatrix * vec4(p3, 1.0);
       gl_Position = projectionMatrix * mvPosition;
@@ -8369,9 +8477,13 @@ const TRAFFIC = {};
   castAlpha(TRAFFIC.cars, vegMaterial({ vertex: CAR_VS, fragment: CAR_FS, uniforms: carU, depth: true, side: THREE.FrontSide }));   // 17f: mobil membuat bayangan
   { // revisi 16: sorot lampu depan di aspal, mesh kedua dengan atribut instance yang sama (posisi dari simulasi yang sama)
     const bp = [], bk = [], bi = [];
-    const V = [[-0.85, 2.3, 0.55], [0, 2.3, 1.0], [0.85, 2.3, 0.55], [-1.6, 7.5, 0.18], [0, 7.5, 0.4], [1.6, 7.5, 0.18], [-2.3, 14, 0], [0, 14, 0], [2.3, 14, 0]];
-    for (const [x, z, f] of V) { bp.push(x, 0.05, z); bk.push(6 + f); }
-    for (const r0 of [0, 3]) for (const c0 of [0, 1]) { const a = r0 + c0, b = a + 1, c = a + 3, d = a + 4; bi.push(a, c, b, b, c, d); }
+    // perbaikan: dulu trapesium 9 titik dengan warna per titik (tepi tajam). Kini satu kotak lebar, bentuk dihitung per piksel di
+    // BEAM_FS dari koordinat lokal: dua lampu berjarak 1,3 m, sebaran Gauss melebar ke depan, terang turun dengan jarak
+    // grid 5 x 10: di lajur keliling lantai silinder melengkung naik (0,18 m dalam 19 m), kotak datar masuk ke bawah aspal
+    // dan terpotong lurus; tiap titik diangkat mengikuti lengkung di CAR_VS
+    const NX = 5, NZ = 10;
+    for (let j = 0; j < NZ; j++) for (let i = 0; i < NX; i++) { const z = 1.6 + 17.4 * j / (NZ - 1), x = (i / (NX - 1) * 2 - 1) * (1.6 + 0.2414 * (z - 1.6)); bp.push(x, 0.05, z); bk.push(7); }
+    for (let j = 0; j < NZ - 1; j++) for (let i = 0; i < NX - 1; i++) { const a = j * NX + i, b = a + 1, c = a + NX, d = c + 1; bi.push(a, c, b, b, c, d); }
     const bg = new THREE.InstancedBufferGeometry(); bg.setIndex(bi);
     bg.setAttribute('position', new THREE.Float32BufferAttribute(bp, 3)); bg.setAttribute('normal', new THREE.Float32BufferAttribute(new Array(bp.length / 3).fill([0, 1, 0]).flat(), 3));
     bg.setAttribute('aKind', new THREE.Float32BufferAttribute(bk, 1));
@@ -8379,7 +8491,13 @@ const TRAFFIC = {};
     bg.instanceCount = n;
     const BEAM_FS = /* glsl */`
       varying vec3 vCol;
-      void main() { gl_FragColor = vec4(vCol, 1.0);
+      varying vec2 vBm;
+      void main() {
+        float x = vBm.x, z = vBm.y, w = 0.35 + 0.07 * z;
+        float lat = exp(-(x - 0.65) * (x - 0.65) / (w * w)) + exp(-(x + 0.65) * (x + 0.65) / (w * w));
+        float al = smoothstep(1.6, 4.5, z) * (1.0 - smoothstep(8.0, 18.5, z)) * 3.0 / (2.0 + 0.25 * z);   // mulai di depan bumper, pudar 8-18 m
+        float edge = 1.0 - smoothstep(0.5, 1.0, abs(x) / (1.6 + 0.2414 * (z - 1.6)));                   // tidak pernah menyentuh tepi kotak
+        gl_FragColor = vec4(vCol * min(lat, 1.0) * al * edge, 1.0);
         #include <colorspace_fragment>
       }`;
     const bm = vegMaterial({ vertex: CAR_VS, fragment: BEAM_FS, uniforms: carU, side: THREE.DoubleSide });
@@ -8788,7 +8906,13 @@ const lampFogMat = fsMat('uniform mat4 uProjInvL, uCamWorldL; uniform sampler2D 
       if (uL_Tram.w > 0.01 && h < 6.0) e += vec3(1.0, 0.9, 0.75) * uL_Tram.w * tramPoolL(s, za) * (1.0 - smoothstep(2.0, 5.0, h));
       if (uL_Head.w > 0.01) {
         vec3 q = p - uL_Head.xyz; float q2 = dot(q, q);
-        if (q2 > 0.04 && q2 < 3600.0) e += vec3(1.0, 0.94, 0.84) * uL_Head.w * smoothstep(0.87, 0.975, dot(q * inversesqrt(q2), uL_HeadDir)) * 70.0 / (q2 + 6.0);
+        // perbaikan: fungsi fase Henyey-Greenstein (g 0,6). Pengendara melihat searah sorot, jadi hanya hamburan balik (sekitar 0,16x
+        // isotropik) yang sampai ke mata; dulu isotropik dan saat hujan seluruh pandangan depan tertutup kabut putih
+        if (q2 > 0.25 && q2 < 3600.0) {
+          vec3 qn = q * inversesqrt(q2);
+          float cs = dot(qn, -dir), ph = 0.64 / pow(1.36 - 1.2 * cs, 1.5);
+          e += vec3(1.0, 0.94, 0.84) * uL_Head.w * smoothstep(0.87, 0.975, dot(qn, uL_HeadDir)) * min(ph, 4.0) * 70.0 / (q2 + 6.0);
+        }
       }
       acc += e * dt;
     }
@@ -8858,6 +8982,7 @@ const compMat = fsMat(/* glsl */`
     return s / ws;
   }
   uniform sampler2D tLamp; uniform float uUseLamp;               // V4 C2
+  uniform sampler2D tBloomW, tDirt; uniform float uDirt, uDirtAsp;   // V5 lens dirt
   vec3 lampUp() {                                                  // upsample sadar kedalaman (seperti rays)
     float dist = viewDist(vUv); vec2 tx = 1.0 / vec2(textureSize(tLamp, 0));
     vec3 s = vec3(0.0); float ws = 0.0;
@@ -8919,6 +9044,10 @@ const compMat = fsMat(/* glsl */`
     if (uUseRay > 0.5) c = max(c + rays(), vec3(0.0));
     if (uUseLamp > 0.5) c += lampUp();
     c += texture2D(tBloom, vUv).rgb * uBloom;
+    if (uDirt > 0.0) {                                               // V5: noda lensa menyala oleh cahaya terang di dekatnya (bloom lebar)
+      vec2 du = vec2((vUv.x - 0.5) * uDirtAsp + 0.5, vUv.y);
+      c += texture2D(tBloomW, vUv).rgb * texture2D(tDirt, du).r * uDirt;
+    }
     float mAd = 1.0;
     if (uAdOn > 0.5) mAd = clamp(pow(uAdKey / max(texture2D(tAdapt, vec2(0.5)).r, 1e-4), uAdPow), uAdMin, uAdMax);
     c = aces(c * uExp * mAd * uWhite);
@@ -8933,6 +9062,7 @@ const compMat = fsMat(/* glsl */`
   tAdapt: { value: null }, uAdOn: { value: 0 }, uAdKey: { value: 0.2 }, uAdPow: { value: 0.45 }, uAdMin: { value: 0.6 }, uAdMax: { value: 1.8 },
   uWhite: { value: new THREE.Vector3(...POSTKIT.wb(CONFIG.wb.k, CONFIG.wb.tint)) },
   tLamp: { value: null }, uUseLamp: { value: 0 },
+  tBloomW: { value: null }, tDirt: { value: null }, uDirt: { value: 0 }, uDirtAsp: { value: 1 },
   uMist: { value: 0 }, uMistH: { value: ATMO.mistH }, uR: { value: CONFIG.R }, uHalfL: { value: HALF_L }, uMistCol: { value: new THREE.Vector3() }, uCamWorld: { value: new THREE.Matrix4() } });
 // --- FXAA (versi ringkas, luma di kanal alfa) ---
 const fxaaMat = fsMat(/* glsl */`
@@ -8950,6 +9080,48 @@ const fxaaMat = fsMat(/* glsl */`
     float lB = dot(b, vec3(0.299, 0.587, 0.114));
     gl_FragColor = vec4((lB < lMin || lB > lMax) ? a : b, 1.0);
   }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
+/* V5 penghalus. TAA (hanya Ultra, di dalam stasiun, efek layar Tinggi): proyeksi digeser sub-piksel tiap frame (Halton 2,3,
+   8 sampel), hasil komposit dicampur dengan riwayat yang diproyeksikan ulang dari kedalaman (kamera bergerak = piksel tetap
+   menempel di dunia), riwayat dijepit ke sebaran 3x3 tetangga di YCoCg (mobil dan orang yang bergerak tidak berbayang). Menggantikan
+   FXAA: tepi gedung, kabel, pagar, dan daun tidak berkedip. Butiran film dipindah ke pass akhir agar tidak ikut dirata-rata.
+   Lens dirt: noda dan debu prosedural di lensa yang menyala oleh bloom lebar (hanya terlihat dekat sumber terang).
+   ?v5=0 = sebelum V5; ?taa=0 / ?dirt=0 / ?imp=0 per fitur. */
+const V5 = { off: new URLSearchParams(location.search).get('v5') === '0' };
+const TAA = { off: V5.off || new URLSearchParams(location.search).get('taa') === '0', act: false, valid: false, i: 0, jx: 0, jy: 0,
+  hist: [0, 1].map(() => new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, generateMipmaps: false })),
+  cur: 0, prevVP: new THREE.Matrix4(), P: new THREE.Matrix4(), PI: new THREE.Matrix4() };
+const LENS = { off: V5.off || new URLSearchParams(location.search).get('dirt') === '0', k: 0.08 };   // k relatif terhadap bloom (uBloom 0,083)
+const halton = POSTKIT.halton;
+LENS.tex = POSTKIT.lensDirt(THREE);
+const taaMat = fsMat(POSTKIT.TAA_FS, { tCur: { value: null }, tHist: { value: null }, tDepth: { value: null }, uProjInv: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
+  uPrevVP: { value: new THREE.Matrix4() }, uTexel: { value: new THREE.Vector2() }, uValid: { value: 0 } });
+const taaOutMat = fsMat(/* glsl */`                                   // pass akhir: pertajam ringan (TAA sedikit melembutkan) + butiran
+  uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uGrain, uTime, uSharp; varying vec2 vUv;
+  float h(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+  void main() {
+    vec3 c = textureLod(tSrc, vUv, 0.0).rgb;
+    vec3 n = textureLod(tSrc, vUv + vec2(uTexel.x, 0.0), 0.0).rgb + textureLod(tSrc, vUv - vec2(uTexel.x, 0.0), 0.0).rgb
+           + textureLod(tSrc, vUv + vec2(0.0, uTexel.y), 0.0).rgb + textureLod(tSrc, vUv - vec2(0.0, uTexel.y), 0.0).rgb;
+    c = clamp(c + (c - 0.25 * n) * uSharp, 0.0, 1.0);
+    c += (h(vUv * 1000.0 + uTime) - 0.5) * uGrain;
+    gl_FragColor = vec4(c, 1.0);
+  }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uGrain: { value: 0 }, uTime: { value: 0 }, uSharp: { value: 0.22 } });
+function taaBegin() {                                                // sebelum render scene: geser proyeksi bila TAA aktif
+  const act = !TAA.off && PRESET.idx === 0 && POST.mode === 0 && !ext.active;
+  if (act !== TAA.act) { TAA.act = act; TAA.valid = false; }
+  TAA.P.copy(camera.projectionMatrix); TAA.PI.copy(camera.projectionMatrixInverse);
+  if (!act) return;
+  renderer.getDrawingBufferSize(_dbs);
+  TAA.i = (TAA.i + 1) % 8; TAA.jx = halton(TAA.i + 1, 2) - 0.5; TAA.jy = halton(TAA.i + 1, 3) - 0.5;
+  const e = camera.projectionMatrix.elements;
+  e[8] += 2 * TAA.jx / _dbs.x; e[9] += 2 * TAA.jy / _dbs.y;
+  camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+}
+function taaEnd() {                                                  // sesudah post: kembalikan proyeksi, simpan VP frame ini (tanpa geser)
+  if (!TAA.act) return;
+  camera.projectionMatrix.copy(TAA.P); camera.projectionMatrixInverse.copy(TAA.PI);
+  TAA.prevVP.multiplyMatrices(TAA.P, camera.matrixWorldInverse);
+}
 const _dbs = new THREE.Vector2();
 function postBegin() {                                            // dipanggil sebelum render scene
   if (POST.mode === 2) { ATMO.gate = false; return false; }          // V4: tanpa efek layar, kabut pagi kembali rata di material
@@ -8963,6 +9135,7 @@ function postBegin() {                                            // dipanggil s
     POST_R.up.forEach((t, i) => t.setSize(Math.max(2, w >> (i + 1)), Math.max(2, h >> (i + 1))));
     POST_R.ray.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
     POST_R.lamp.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
+    for (const t of TAA.hist) t.setSize(w, h); TAA.valid = false;   // V5
   }
   renderer.setRenderTarget(POST_R.hdr);
   return true;
@@ -9040,6 +9213,19 @@ function postEnd() {
   C.uTexelF.value.set(R0.h / 1080 / R0.w, 1 / 1080);                 // radius blur skala 1080p
   C.tHdr.value = R0.hdr.texture; C.tBloom.value = R0.up[0].texture; C.tAO.value = R0.ao[1].texture; C.uUseAO.value = useAO ? 1 : 0; C.uGtao.value = gtao ? 1 : 0; C.uAoView.value = POST.view ? 1 : 0;
   C.uExp.value = POST.exposure; C.uBloom.value = POST.bloom / 6; C.uAO.value = gtao ? POST.aoG : POST.ao; C.uGrain.value = POST.grain; C.uVig.value = POST.vignette; C.uTime.value = (clock.sim % 100);
+  C.tBloomW.value = R0.up[2].texture; C.tDirt.value = LENS.tex; C.uDirt.value = LENS.off || PRESET.idx > 0 ? 0 : LENS.k; C.uDirtAsp.value = R0.w / R0.h;   // V5 lens dirt
+  if (TAA.act) {                                                     // V5: TAA menggantikan FXAA, butiran di pass akhir
+    C.uGrain.value = 0;
+    fsPass(compMat, R0.ldr);
+    const U = taaMat.uniforms, hw = TAA.hist[TAA.cur], hr = TAA.hist[1 - TAA.cur];
+    U.tCur.value = R0.ldr.texture; U.tHist.value = hr.texture; U.tDepth.value = R0.hdr.depthTexture;
+    U.uProjInv.value.copy(camera.projectionMatrixInverse); U.uCamWorld.value.copy(camera.matrixWorld); U.uPrevVP.value.copy(TAA.prevVP);
+    U.uTexel.value.set(1 / R0.w, 1 / R0.h); U.uValid.value = TAA.valid ? 1 : 0;
+    fsPass(taaMat, hw); TAA.valid = true; TAA.cur = 1 - TAA.cur;
+    const O = taaOutMat.uniforms; O.tSrc.value = hw.texture; O.uTexel.value.set(1 / R0.w, 1 / R0.h); O.uGrain.value = POST.grain; O.uTime.value = clock.sim % 100;
+    fsPass(taaOutMat, null);
+    return;
+  }
   fsPass(compMat, R0.ldr);
   fxaaMat.uniforms.tSrc.value = R0.ldr.texture; fxaaMat.uniforms.uTexel.value.set(1 / R0.w, 1 / R0.h);
   fsPass(fxaaMat, null);
@@ -12502,17 +12688,19 @@ function frame(now) {
   groundMat.uniforms.uTime.value = clock.sim % 3600;
   renderer.info.reset();
   GPUT.on = !!GPUT.ext && !hud.classList.contains('compact');       // 20a: ukur GPU hanya saat HUD lengkap
+  octStep();                                       // V5: impostor pohon oktahedral (Ultra)
   gpuBegin('sh');
   shadowPass();
   sunShadowPass();                                 // 17f
   gpuEnd(); gpuBegin('sc');
   const post = postBegin();                        // tahap 9: render ke target HDR bila efek layar aktif
+  if (post) taaBegin(); else TAA.act = false;     // V5: geser sub-piksel
   renderer.clear();
   renderer.render(farScene, farCam);
   renderer.clearDepth();
   renderer.render(scene, camera);
   gpuEnd(); gpuBegin('po');
-  if (post) postEnd();
+  if (post) { postEnd(); taaEnd(); }
   gpuEnd(); gpuFrameEnd();
   updateAudio(dt);
   updateTraffic();
