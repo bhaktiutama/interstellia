@@ -11769,29 +11769,53 @@ RAIN.presetN = [12000, 9000, 6000, 3000, 1500][PRESET.idx];
   // tetes semburan: lintasan analitik di kerangka berputar (pendekatan orde pertama omega), x = searah putaran (+s)
   const jets = [[0, 0, 10, 0.9]];                                    // [dx, dz, v0, tinggi nosel]
   for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; jets.push([Math.sin(a) * 2.6, Math.cos(a) * 2.6, 6, 0.45]); }
-  const N = 3600, per = N / jets.length, aJ = new Float32Array(N * 4);
-  for (let i = 0; i < N; i++) { const j = jets[Math.floor(i / per)]; aJ.set([j[0], j[1], j[2], (i % per) / per], i * 4); }
-  const base = new THREE.PlaneGeometry(0.06, 0.06), g = new THREE.InstancedBufferGeometry();
-  g.index = base.index; g.setAttribute('position', base.attributes.position); g.setAttribute('aJet', new THREE.InstancedBufferAttribute(aJ, 4)); g.instanceCount = N;
+  // 23c: uniform bersama semua bagian air mancur (pusat, omega; tinggi tanah pusat kolam), RNG sendiri agar dunia lain tetap sama
+  const UF = { value: new THREE.Vector3(S, Z, OMEGA) }, UFH = { value: FOUNT.h };
+  let fsd = 777; const frnd = () => ((fsd = (fsd * 16807) % 2147483647) / 2147483647);
+  const WL = 0.42, GG = 9.81;                                        // 23c: permukaan air di atas tanah kolam, g di shader
+  const N = 3600, per = N / jets.length, aJ = new Float32Array(N * 4), aRd = new Float32Array(N * 4);
+  for (let i = 0; i < N; i++) { const j = jets[Math.floor(i / per)]; aJ.set([j[0], j[1], j[2], (i % per) / per], i * 4); aRd.set([frnd(), frnd(), frnd(), frnd()], i * 4); }
+  const base = new THREE.PlaneGeometry(1, 1), g = new THREE.InstancedBufferGeometry();   // 23c: quad satuan, ukuran di shader
+  g.index = base.index; g.setAttribute('position', base.attributes.position); g.setAttribute('aJet', new THREE.InstancedBufferAttribute(aJ, 4));
+  g.setAttribute('aRnd', new THREE.InstancedBufferAttribute(aRd, 4)); g.instanceCount = N;
+  // 23c: sprite memanjang searah kecepatan, selalu menghadap kamera (aman NaN: semua pembagian dijaga)
+  const STREAK_GLSL = /* glsl */`
+    vec3 streakQuad(vec3 base, vec3 V, vec3 up, vec3 tS, float sz, float k, out float thin, out float dE) {
+      vec3 toE = uEye - base; dE = length(toE); toE = dE > 1e-4 ? toE / dE : up;
+      vec3 vp = V - toE * dot(V, toE); float sp = length(vp);
+      vec3 ax = sp > 1e-3 ? vp / sp : up;
+      vec3 sd = cross(ax, toE); float sl = length(sd); sd = sl > 1e-4 ? sd / sl : tS;
+      ax = cross(toE, sd);                                         // tegak lurus pandangan (satuan)
+      float len = sz + sp * k; thin = sz / len;
+      return base + sd * position.x * sz + ax * position.y * len;
+    }`;
   const VS = /* glsl */`
     attribute vec4 aJet;                                           // dx, dz, v0, fase
+    attribute vec4 aRnd;                                           // 23c: ukuran, sudut sebaran, jarak sebaran, cadangan
     uniform vec3 uF;                                               // s, za pusat, omega
+    uniform float uFh;                                             // 23c: tinggi tanah pusat kolam
     varying float vA;
     varying vec3 vL;
+    varying vec2 vUv;
+    ${STREAK_GLSL}
     void main() {
-      float v0 = aJet.z, g = 9.81, om = uF.z, T = 2.0 * v0 / g;
+      float v0 = aJet.z, g = 9.81, om = uF.z;
       float ph = aJet.w, noz = v0 > 8.0 ? 0.9 : 0.45;                // tinggi nosel
+      float dw = max(noz - ${WL.toFixed(2)}, 0.0);
+      float T = (v0 + sqrt(v0 * v0 + 2.0 * g * dw)) / g;             // 23c: sampai tinggi kembali ke permukaan air
       float t = fract(ph + uTime / T) * T;
       float hh = v0 * t - 0.5 * g * t * t;                          // tinggi
       float xs = om * (v0 * t * t - g * t * t * t / 3.0);           // Coriolis: bergeser searah putaran
-      float jit = (fract(ph * 97.3) - 0.5) * 0.12;
-      vec2 P = uF.xy + vec2(aJet.x + xs + jit, aJet.y + (fract(ph * 51.7) - 0.5) * 0.12);
-      vec3 up, tS; vec3 base = groundFrame(P, noz + max(hh, 0.0), up, tS);
+      float vz = v0 - g * t, vx = om * (2.0 * v0 * t - g * t * t);  // 23c: turunan lintasan
+      float u = t / T, spr = 0.012 + (v0 > 8.0 ? 0.25 : 0.14) * u * (0.4 + 0.6 * u);   // 23c: rapat di nosel, menyebar ke bawah
+      float a = aRnd.y * 2.0 * PI, rr = spr * sqrt(aRnd.z);
+      vec2 P = uF.xy + vec2(aJet.x + xs + cos(a) * rr, aJet.y + sin(a) * rr);
+      vec3 up, tS; vec3 base = groundFrame(P, noz + hh + uFh - terrainH(P), up, tS);
       if (distance(base, uEye) > 250.0) { ${CLIP_AWAY} }
-      vec3 toE = normalize(uEye - base + vec3(1e-4)), sd = cross(up, toE);
-      sd = dot(sd, sd) > 1e-8 ? normalize(sd) : tS;
-      vec3 p = base + sd * position.x + up * position.y;
-      vA = 0.55;
+      float sz = 0.03 + 0.06 * aRnd.x, thin, dE;
+      vec3 p = streakQuad(base, tS * vx + up * vz, up, tS, sz, 0.012, thin, dE);
+      vUv = position.xy * 2.0;
+      vA = 0.62 * mix(1.0, thin, 0.6) * smoothstep(0.0, 0.03, u);
       #ifndef DEPTH_ONLY
       vL = vegLight(base, up, P, 0.5);                              // air ikut terang siang, redup malam
       #endif
@@ -11801,16 +11825,194 @@ RAIN.presetN = [12000, 9000, 6000, 3000, 1500][PRESET.idx];
       #include <fog_vertex>
       #endif
     }`;
+  // 23c: tetes bulat lembut (alfa jatuh ke tepi), inti sedikit lebih terang
   const FS = /* glsl */`
     varying float vA;
     varying vec3 vL;
-    void main() { gl_FragColor = vec4(vec3(0.62, 0.7, 0.76) * vL, vA);
+    varying vec2 vUv;
+    void main() { float r2 = dot(vUv, vUv), a = vA * (1.0 - smoothstep(0.2, 1.0, r2));
+      if (a < 0.004) discard;
+      gl_FragColor = vec4(vec3(0.62, 0.7, 0.76) * vL * (0.9 + 0.35 * (1.0 - min(r2, 1.0))), a);
       #include <fog_fragment>
     }`;
-  const mat = vegMaterial({ vertex: VS, fragment: FS, uniforms: { uF: { value: new THREE.Vector3(S, Z, OMEGA) } } });
+  const mat = vegMaterial({ vertex: VS, fragment: FS, uniforms: { uF: UF, uFh: UFH } });
   mat.transparent = true; mat.depthWrite = false;
   FOUNT.mesh = new THREE.Mesh(g, mat); FOUNT.mesh.frustumCulled = false; FOUNT.mesh.userData.noLight = true;
   realGroup.add(FOUNT.mesh);
+  // 23c: titik jatuh tiap pancuran (rumus xs yang sama saat tinggi kembali ke permukaan air), lokal terhadap pusat (x = +s, z = +za)
+  FOUNT.land = jets.map(([dx, dz, v0, noz]) => {
+    const tE = (v0 + Math.sqrt(v0 * v0 + 2 * GG * Math.max(noz - WL, 0))) / GG, xs = OMEGA * (v0 * tE * tE - GG * tE * tE * tE / 3);
+    const x = dx + xs, rl = Math.hypot(x, dz), rim = rl > 3.9 && rl < 4.8;   // dekat tepi: percik dari bibir kolam
+    const rc = rim ? Math.min(4.55, Math.max(4.25, rl)) / rl : 1;
+    return { x: x * rc, z: dz * rc, y: rim ? 0.55 : WL, spread: 0.012 + (v0 > 8 ? 0.25 : 0.14), big: v0 > 8 };
+  });
+  // 23c: percik di titik jatuh (GPU, waktu dari uTime): parabola pendek 0,1-0,4 m, umur 0,3-0,6 s
+  {
+    const cnt = FOUNT.land.map((l) => l.big ? 280 : 95), NS = cnt.reduce((a, b) => a + b, 0);
+    const aS = new Float32Array(NS * 4), aR = new Float32Array(NS * 4); let k = 0;
+    FOUNT.land.forEach((l, li) => { for (let i = 0; i < cnt[li]; i++, k++) {
+      const hm = l.big ? 0.15 + 0.25 * frnd() : 0.1 + 0.15 * frnd();       // tinggi puncak; umur = 2 sqrt(2 h / g) = 0,29-0,57 s
+      aS.set([l.x, l.z, l.y, l.spread], k * 4);
+      aR.set([hm, (l.big ? 0.25 + 0.65 * frnd() : 0.15 + 0.45 * frnd()), 0.018 + 0.03 * frnd(), frnd()], k * 4);
+    } });
+    const sg = new THREE.InstancedBufferGeometry();
+    sg.index = base.index; sg.setAttribute('position', base.attributes.position);
+    sg.setAttribute('aS', new THREE.InstancedBufferAttribute(aS, 4)); sg.setAttribute('aR', new THREE.InstancedBufferAttribute(aR, 4)); sg.instanceCount = NS;
+    const SVS = /* glsl */`
+      attribute vec4 aS;                                           // x, z lokal titik jatuh, tinggi dasar (air / bibir), radius sebaran
+      attribute vec4 aR;                                           // tinggi puncak, laju datar, ukuran, fase
+      uniform vec3 uF;
+      uniform float uFh;
+      varying float vA;
+      varying vec3 vL;
+      varying vec2 vUv;
+      ${STREAK_GLSL}
+      void main() {
+        float g = 9.81, vz0 = sqrt(2.0 * g * max(aR.x, 0.01)), L = 2.0 * vz0 / g;
+        float c = uTime / L + aR.w, n = floor(c), t = fract(c) * L, id = float(gl_InstanceID);
+        float h1 = hash2(vec2(id, n)), h2 = hash2(vec2(id + 4096.0, n)), h3 = hash2(vec2(id + 8192.0, n));
+        float a = h1 * 2.0 * PI, b = a + (h3 - 0.5) * 2.4;          // arah condong keluar dari pusat jatuh
+        vec2 o = vec2(cos(a), sin(a)), dir = vec2(cos(b), sin(b));
+        vec2 hp = aS.xy + o * aS.w * sqrt(h2) + dir * aR.y * t;
+        vec2 P = uF.xy + hp;
+        float y = aS.z + vz0 * t - 0.5 * g * t * t;
+        vec3 up, tS; vec3 base = groundFrame(P, y + uFh - terrainH(P), up, tS);
+        if (distance(base, uEye) > 250.0) { ${CLIP_AWAY} }
+        vec3 V = tS * (dir.x * aR.y) + vec3(0.0, 0.0, dir.y * aR.y) + up * (vz0 - g * t);
+        float thin, dE;
+        vec3 p = streakQuad(base, V, up, tS, aR.z, 0.012, thin, dE);
+        vUv = position.xy * 2.0;
+        vA = 0.7 * mix(1.0, thin, 0.5) * (1.0 - smoothstep(0.55, 1.0, t / L));
+        #ifndef DEPTH_ONLY
+        vL = vegLight(base, up, P, 0.5);
+        #endif
+        vec4 mvPosition = viewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        #ifndef DEPTH_ONLY
+        #include <fog_vertex>
+        #endif
+      }`;
+    const SFS = /* glsl */`
+      varying float vA;
+      varying vec3 vL;
+      varying vec2 vUv;
+      void main() { float r2 = dot(vUv, vUv), a = vA * (1.0 - smoothstep(0.15, 1.0, r2));
+        if (a < 0.004) discard;
+        gl_FragColor = vec4(vec3(0.74, 0.8, 0.85) * vL, a);
+        #include <fog_fragment>
+      }`;
+    const sm = vegMaterial({ vertex: SVS, fragment: SFS, uniforms: { uF: UF, uFh: UFH } });
+    sm.transparent = true; sm.depthWrite = false;
+    FOUNT.splash = new THREE.Mesh(sg, sm); FOUNT.splash.frustumCulled = false; FOUNT.splash.userData.noLight = true;
+    realGroup.add(FOUNT.splash);
+  }
+  // 23c: cincin riak di titik jatuh: satu cakram datar tipis di atas water (grup G, ikut surfaceMatrix)
+  {
+    const RIP = FOUNT.land.filter((l) => l.y < 0.5).map((l) => new THREE.Vector4(l.x, l.z, l.big ? 1.1 : 0.6, l.spread));
+    while (RIP.length < 9) RIP.push(new THREE.Vector4(0, 0, 0, 0));
+    const RVS = /* glsl */`
+      uniform vec3 uF;
+      varying vec2 vXZ;
+      varying vec3 vL;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vXZ = position.xz;
+        if (distance(wp.xyz, uEye) > 250.0) { ${CLIP_AWAY} }
+        #ifndef DEPTH_ONLY
+        vec3 up = (modelMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz;
+        vL = vegLight(wp.xyz, up, uF.xy + position.xz, 0.5);
+        #endif
+        vec4 mvPosition = viewMatrix * wp;
+        gl_Position = projectionMatrix * mvPosition;
+        #ifndef DEPTH_ONLY
+        #include <fog_vertex>
+        #endif
+      }`;
+    const RFS = /* glsl */`
+      uniform vec4 uRip[9];                                        // x, z lokal, radius maks cincin, radius sebaran (0 = kosong)
+      uniform float uTime;
+      varying vec2 vXZ;
+      varying vec3 vL;
+      float rh(vec2 p) { uvec2 q = uvec2(ivec2(floor(p)) + 32768); uint n = q.x * 1597334677u ^ q.y * 3812015801u;
+        n = (n ^ (n >> 15u)) * 2246822519u; n ^= n >> 13u; return float(n) * (1.0 / 4294967295.0); }
+      void main() {
+        float s = 0.0, foam = 0.0;
+        for (int i = 0; i < 9; i++) {
+          vec4 R = uRip[i];
+          if (R.z <= 0.0) continue;
+          foam += exp(-dot(vXZ - R.xy, vXZ - R.xy) / max(R.w * R.w * 0.6, 1e-4));
+          float rate = R.z > 0.8 ? 1.6 : 1.2;
+          for (int k = 0; k < 3; k++) {
+            float c = uTime * rate + float(k) / 3.0 + float(i) * 0.37, n = floor(c), ph = fract(c);
+            float j = float(i * 3 + k);
+            vec2 cc = R.xy + (vec2(rh(vec2(j, n)), rh(vec2(j + 64.0, n))) - 0.5) * 1.4 * R.w;   // pusat cincin bergeser dalam sebaran
+            float d = length(vXZ - cc), rr = ph * R.z, w = 0.03 + 0.05 * ph;
+            float e = (d - rr) / w;
+            s += exp(-e * e) * (1.0 - ph) * (1.0 - ph);
+          }
+        }
+        float a = clamp(s * 0.3 + foam * 0.28, 0.0, 0.55) * (1.0 - smoothstep(3.95, 4.18, length(vXZ)));
+        if (a < 0.003) discard;
+        gl_FragColor = vec4(vec3(0.78, 0.84, 0.88) * vL, a);
+        #include <fog_fragment>
+      }`;
+    const rm = vegMaterial({ vertex: RVS, fragment: RFS, uniforms: { uF: UF, uRip: { value: RIP } } });
+    rm.transparent = true; rm.depthWrite = false;
+    FOUNT.ripple = new THREE.Mesh(new THREE.CircleGeometry(4.2, 48).rotateX(-Math.PI / 2).translate(0, 0.425, 0), rm);
+    FOUNT.ripple.frustumCulled = false; FOUNT.ripple.userData.noLight = true;
+    G.add(FOUNT.ripple);
+  }
+  // 23c: kabut tipis di sekitar pancuran tengah: sprite lembut besar, alfa sangat kecil, hanyut pelan searah angin (VU.uWind)
+  {
+    const NM = 40, aM = new Float32Array(NM * 4), lc = FOUNT.land[0];
+    for (let i = 0; i < NM; i++) aM.set([0.9 + 0.9 * frnd(), 5 + 4 * frnd(), frnd(), frnd()], i * 4);
+    const mg = new THREE.InstancedBufferGeometry();
+    mg.index = base.index; mg.setAttribute('position', base.attributes.position); mg.setAttribute('aM', new THREE.InstancedBufferAttribute(aM, 4)); mg.instanceCount = NM;
+    const MVS = /* glsl */`
+      attribute vec4 aM;                                           // ukuran, umur (s), fase, cadangan
+      uniform vec3 uF;
+      uniform float uFh;
+      varying float vA;
+      varying vec3 vL;
+      varying vec2 vUv;
+      ${STREAK_GLSL}
+      void main() {
+        float L = aM.y, c = uTime / L + aM.z, n = floor(c), u = fract(c), id = float(gl_InstanceID);
+        float h1 = hash2(vec2(id, n)), h2 = hash2(vec2(id + 512.0, n)), h3 = hash2(vec2(id + 1024.0, n));
+        // titik lahir: di sepanjang tiang semburan sampai titik jatuh (${lc.x.toFixed(2)} m searah putaran)
+        float a = h2 * 2.0 * PI, rr = 0.2 + 0.9 * sqrt(h3);
+        vec2 hp = vec2(h1 * ${lc.x.toFixed(3)} + cos(a) * rr, sin(a) * rr) + uWind.xy * 0.12 * u * L;
+        vec2 P = uF.xy + hp;
+        float y = 0.6 + 3.8 * h1 * (1.0 - h1 * 0.4) + 0.15 * u * L * (h3 - 0.5);
+        vec3 up, tS; vec3 base = groundFrame(P, y + uFh - terrainH(P), up, tS);
+        if (distance(base, uEye) > 250.0) { ${CLIP_AWAY} }
+        float thin, dE;
+        vec3 p = streakQuad(base, vec3(0.0), up, tS, aM.x * (1.0 + 0.6 * u), 0.0, thin, dE);
+        vUv = position.xy * 2.0;
+        vA = 0.045 * sin(PI * u) * smoothstep(0.6, 2.5, dE);      // tidak menutup layar bila kamera di dalamnya
+        #ifndef DEPTH_ONLY
+        vL = vegLight(base, up, P, 0.5);
+        #endif
+        vec4 mvPosition = viewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mvPosition;
+        #ifndef DEPTH_ONLY
+        #include <fog_vertex>
+        #endif
+      }`;
+    const MFS = /* glsl */`
+      varying float vA;
+      varying vec3 vL;
+      varying vec2 vUv;
+      void main() { float r2 = dot(vUv, vUv), a = vA * exp(-3.0 * r2) * (1.0 - smoothstep(0.6, 1.0, r2));
+        if (a < 0.002) discard;
+        gl_FragColor = vec4(vec3(0.86, 0.89, 0.92) * vL, a);
+        #include <fog_fragment>
+      }`;
+    const mm = vegMaterial({ vertex: MVS, fragment: MFS, uniforms: { uF: UF, uFh: UFH } });
+    mm.transparent = true; mm.depthWrite = false;
+    FOUNT.mist = new THREE.Mesh(mg, mm); FOUNT.mist.frustumCulled = false; FOUNT.mist.userData.noLight = true;
+    realGroup.add(FOUNT.mist);
+  }
   FOUNT.shift10 = 4 / 3 * OMEGA * 1000 / (CONFIG.g * CONFIG.g); FOUNT.shift6 = 4 / 3 * OMEGA * 216 / (CONFIG.g * CONFIG.g);
 }
 SPOTS.fountain = { s: FOUNT.s, za: FOUNT.za + 12, heading: 180, pitch: 8, name: 'Air mancur Coriolis' };
