@@ -1944,6 +1944,15 @@ const groundMat = new THREE.ShaderMaterial({
       float asphM = grayM * (1.0 - smoothstep(0.38, 0.46, lum));
       float concM = grayM - asphM;
       float vegM = max(0.0, 1.0 - grayM - wetM);
+      #ifdef TERRAIN
+      // 23d: alur sungai diturunkan di TER (dasar RIVER.depth = permukaan air, tebing batu miring sampai tepi). Di bawah
+      // jembatan peta lahan berisi cat jalan, jadi air dan tebing di alur ditentukan dari tinggi, bukan dari warna peta
+      float hgC = uR - length(vWorld.xy);
+      if (hgC < -0.25) {
+        waterM = smoothstep(-3.0, -3.6, hgC); wetM = 1.0; shoreM = 1.0 - waterM;
+        grayM = 0.0; asphM = 0.0; concM = 0.0; vegM = 0.0;
+      }
+      #endif
 
       vec3 col = base;
       // variasi skala besar (terlihat dari jauh): petak lembap, rumput tidak rata
@@ -1952,6 +1961,15 @@ const groundMat = new THREE.ShaderMaterial({
       col *= mix(1.0, 0.94 + 0.12 * vnoise(P / 9.0), concM + asphM);
       // tanggul batu di tepi sungai dan danau
       col = mix(col, vec3(0.30, 0.28, 0.25) * (0.85 + 0.3 * vnoise(P * 0.8)), shoreM);
+      #ifdef TERRAIN
+      if (hgC < -0.25) {                                          // 23d: pasangan batu tebing: lajur 0,45 m per tinggi, sambungan berselang
+        float rowI = floor(hgC / 0.45), jx = fract(s / 1.1 + 0.5 * rowI);
+        float jn = max(1.0 - smoothstep(0.0, 0.04, abs(fract(hgC / 0.45) - 0.5) - 0.44), 1.0 - smoothstep(0.0, 0.03, min(jx, 1.0 - jx)));
+        vec3 stn = vec3(0.42, 0.40, 0.36) * (0.8 + 0.35 * hash2(vec2(floor(s / 1.1 + 0.5 * rowI), rowI)));
+        col = mix(col, mix(stn, stn * 0.55, jn * (1.0 - smoothstep(30.0, 90.0, eyeDist))), shoreM);
+        col = mix(col, col * 0.55, smoothstep(-2.6, -3.2, hgC) * shoreM);   // garis basah di kaki tebing
+      }
+      #endif
 
       // ---- jarak ke jalan arteri (dipakai marka dan jalan tanah ladang) ----
       float kS = floor(s / uArt + 0.5);
@@ -2708,6 +2726,37 @@ function onBridge(s) {                                          // jalan arteri 
   return d < (Math.abs(wrapS(s - TRAM.s)) < 25 ? ROAD.boulevard / 2 : ROAD.art / 2);
 }
 function inWater(s, za, margin = 0) { return (inRiver(s, za, margin) && !onBridge(s)) || inLake(s, za, margin); }
+// 23d: alur sungai diturunkan di TER (permukaan air = dasar mesh di -depth, tebing miring selebar bank di luar tepi air) agar
+// perahu bisa lewat di bawah jembatan. BRIDGES = dek di tiap persilangan: arteri keliling (dir 'z', c = s, sepanjang za a0..a0+len)
+// dan jalan lingkar za 2500 yang digambar di atas sungai (dir 's', c = za, sepanjang s a0..a0+len, a0 dibungkus). Dek melewati
+// tebing + 9 m (sel mesh tanah 8 m), tinggi tanah untuk mobil, pejalan kaki, dan pemain di atas dek tetap 0.
+RIVER.depth = 4; RIVER.bank = 7;
+const BRIDGES = [];
+{
+  const reach = RIVER.width / 2 + RIVER.bank + 9;
+  for (let k = 0; k < 26; k++) {
+    const s = k * ART; if (Math.abs(wrapS(s - SKY_S)) < 1) continue;
+    const blvd = Math.abs(wrapS(s - TRAM.s)) < 1, hw = (blvd ? ROAD.boulevard : ROAD.art) / 2 + 1.5;
+    let z0 = 1e9, z1 = -1e9;
+    for (let q = -hw; q <= hw; q += 1) { const rz = riverZ(s + q); z0 = Math.min(z0, rz - reach); z1 = Math.max(z1, rz + reach); }
+    BRIDGES.push({ dir: 'z', c: s, hw, a0: z0, len: z1 - z0, blvd });
+  }
+  const zc = CITY.za1, hw = ROAD.art / 2 + 1.5, hit = (s) => Math.abs(riverZ(s) - zc) < reach + hw && Math.abs(wrapS(s - SKY_S)) > 60;
+  let st = 0; while (hit(st)) st += 1;                               // mulai dari titik bebas agar rentang tidak terpotong di s = 0
+  let a0 = null;
+  for (let i = 0; i <= Math.ceil(CIRC); i++) {
+    const s = st + i, h = hit(s);
+    if (h && a0 === null) a0 = s;
+    if (!h && a0 !== null) { BRIDGES.push({ dir: 's', c: zc, hw, a0: modS(a0), len: s - a0, blvd: false }); a0 = null; }
+  }
+}
+function bridgeAt(s, za, m = 0) {                                    // 23d: titik di atas dek jembatan (m = tambahan tepi)
+  for (const B of BRIDGES) {
+    if (B.dir === 'z') { if (Math.abs(wrapS(s - B.c)) < B.hw + m && za > B.a0 - m && za < B.a0 + B.len + m) return B; }
+    else if (Math.abs(za - B.c) < B.hw + m) { const d = modS(s - B.a0); if (d < B.len + m || d > CIRC - m) return B; }
+  }
+  return null;
+}
 
 // --- kepadatan kota: pusat dekat spaceport + beberapa pusat sekunder ----
 function cityDensity(s, za) {
@@ -6959,7 +7008,27 @@ TER.h = new Float32Array(TER.NS * TER.NZ);
     }
   }
 }
+{                                                                   // 23d: 5) alur sungai diturunkan, tebing miring (lihat BRIDGES)
+  const { NS, ds, dz, h, hh } = TER, W2 = RIVER.width / 2, D = RIVER.depth;
+  for (let j = Math.floor(2290 / dz); j <= Math.ceil(2710 / dz); j++) {
+    const za = j * dz;
+    for (let i = 0; i < NS; i++) {
+      const s = i * ds, rz = riverZ(s), sl = (riverZ(s + 1) - riverZ(s - 1)) / 2;
+      const dd = Math.abs(za - rz) / Math.sqrt(1 + sl * sl);         // jarak tegak lurus ke as sungai
+      let k = 1 - smooth01(W2 - 1, W2 + RIVER.bank, dd);
+      if (k <= 0) continue;
+      k *= smooth01(60, 120, Math.abs(wrapS(s - SKY_S)));            // naik ke akuaduk Skyway (kaca, tinggi 0)
+      const idx = j * NS + i, hv = THREE.DataUtils.toHalfFloat(h[idx] * (1 - k) - D * k);
+      h[idx] = THREE.DataUtils.fromHalfFloat(hv);
+      hh[idx] = bridgeAt(s, za, 8) ? 0 : hv;                         // peta tinggi GPU (mobil, pejalan kaki): dek tetap 0
+    }
+  }
+}
 function groundH(s, za) {                                         // tinggi tanah (m), interpolasi segitiga mesh 8 m
+  const v = groundH0(s, za);
+  return v < 0 && bridgeAt(s, za) ? 0 : v;                         // 23d: di atas dek jembatan
+}
+function groundH0(s, za) {                                        // 23d: tinggi mesh tanah (alur sungai tanpa dek)
   const { NS, NZ, ds, dz, h } = TER, nc = NS / 2;
   const x = modS(s) / (2 * ds), y = Math.min(Math.max(za / (2 * dz), 0), (NZ - 1) / 2 - 1e-6);
   const cx = Math.floor(x), cy = Math.floor(y), fx = x - cx, fy = y - cy;
@@ -6977,7 +7046,7 @@ const realGroup = new THREE.Group(); scene.add(realGroup);        // vegetasi (d
 {
   const { NS, NZ, ds, dz, h } = TER;
   const rowMax = new Float32Array(NZ);
-  for (let j = 0; j < NZ; j++) { let m = 0; for (let i = 0; i < NS; i++) m = Math.max(m, h[j * NS + i]); rowMax[j] = m; }
+  for (let j = 0; j < NZ; j++) { let m = 0; for (let i = 0; i < NS; i++) m = Math.max(m, Math.abs(h[j * NS + i])); rowMax[j] = m; }   // 23d: abs (alur sungai negatif)
   const rows = [];
   for (let j = 0; j < NZ; j += 2) {
     let need = j % 64 === 0 || j === NZ - 1;
@@ -7015,7 +7084,7 @@ const realGroup = new THREE.Group(); scene.add(realGroup);        // vegetasi (d
     m.userData.noLight = true; m.layers.enable(1);                  // bukit ikut membuat bayangan
     scene.add(m); nTri += idx.length / 3;
   }
-  TER.triangles = nTri; TER.rows = rows.length;
+  TER.triangles = nTri; TER.rows = rows.length; TER.mat = terrainMat;   // 23d: dek jembatan memakai shader tanah (cat jalan)
   groundMat.uniforms.uGapHalf.value = WIN_GAP / 2;
   scene.remove(ground);                                              // silinder rata lama diganti mesh tanah ini
 }
@@ -13036,7 +13105,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, ATMO, TAA, OCT };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, bridgeAt, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, ATMO, TAA, OCT };
 requestAnimationFrame(frame);
 </script>
 </body>
