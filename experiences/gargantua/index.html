@@ -2443,7 +2443,7 @@ function main() {
       state.photoKind = kind === 'kamera' ? 'kamera' : 'bebas';
       if (kind) { state.photoLast = state.photoKind; try { localStorage.setItem('gargantua.photoKind', state.photoKind); } catch (e) { /* abaikan */ } }
       if (state.photoKind === 'kamera') CAMKIT.enter(); else toast(txt('Photo mode: Enter saves PNG, F or Esc exits'), 3);
-    } else if (state.photoKind === 'kamera') { state.photoKind = 'bebas'; CAMKIT.leave(); camOff(); }
+    } else if (state.photoKind === 'kamera') { state.photoKind = 'bebas'; CAMKIT.leave(); camOff(); CAMG.big = false; }
   }
   // K: kamera rangefinder (shared/camera.js). Meter = rata-rata 30% sel paling terang (pola AE misi), key 0,7, EV0 10.
   // Foto: subframe ray tracing digeser sub-piksel + arah sinar dimiringkan menurut titik bukaan (lensa tipis untuk adegan di tak hingga).
@@ -2457,8 +2457,9 @@ function main() {
     isLocked: () => false, unlock: () => {},
     audio: () => (AUDIO.ctx && AUDIO.n && AUDIO.n.master ? { ctx: AUDIO.ctx, node: AUDIO.n.master } : null),
     quality: () => (FMT.type === gl.HALF_FLOAT ? ({ ultra: 32, high: 24, medium: 16, low: 8 })[CONFIG.quality] || 16 : 1),
+    photoH: () => ({ ultra: 2160, high: 1800, medium: 1440, low: 1200 })[CONFIG.quality] || 1200,   // tinggi foto tersimpan (px)
   });
-  const CAMG = { acc: null, n: 0, w: 1, pbo: gl.createBuffer(), fence: null, t: 0 };
+  const CAMG = { big: false, acc: null, n: 0, w: 1, pbo: gl.createBuffer(), fence: null, t: 0 };
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, CAMG.pbo); gl.bufferData(gl.PIXEL_PACK_BUFFER, 16 * 9 * 4, gl.STREAM_READ); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
   function camMeter(dt) {                                              // seperti autoExposure(), tetapi untuk meter kamera
     if (CAMG.fence) {
@@ -2669,6 +2670,7 @@ function main() {
      RENDER LOOP
      ===================================================================== */
   function resize() {
+    if (CAMG.big) return;                                              // K: kanvas sedang diperbesar untuk foto
     const dpr = Math.min(window.devicePixelRatio || 1, CONFIG.maxDPR);
     const w = Math.max(1, Math.round(innerWidth * dpr)), h = Math.max(1, Math.round(innerHeight * dpr));
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
@@ -2853,7 +2855,12 @@ function main() {
   function camCapture(dt) {                                           // K: subframe foto; beberapa per frame layar (batas 45 ms)
     const Pc = CAMKIT.cap, t0 = performance.now();
     resize();
-    const sw = Math.max(8, Math.round(canvas.width * CONFIG.renderScale)), sh = Math.max(8, Math.round(canvas.height * CONFIG.renderScale));
+    if (Pc.i === 0 && !CAMG.big) {                                     // resolusi foto: kanvas sementara diperbesar (layar dibekukan), skala render 1
+      const sc = CAMKIT.capScale(canvas.width, canvas.height, gl.getParameter(gl.MAX_TEXTURE_SIZE));
+      if (sc > 1.01) { canvas.width = Math.round(canvas.width * sc); canvas.height = Math.round(canvas.height * sc); }
+      CAMG.big = true;
+    }
+    const sw = Math.max(8, canvas.width), sh = Math.max(8, canvas.height);
     buildTargets(sw, sh);
     if (Pc.i === 0 || !CAMG.acc || CAMG.acc.w !== sw || CAMG.acc.h !== sh) {
       if (CAMG.acc && (CAMG.acc.w !== sw || CAMG.acc.h !== sh)) { freeTarget(CAMG.acc); CAMG.acc = null; }
@@ -2880,6 +2887,7 @@ function main() {
       CAMKIT.view(canvas.width, canvas.height, true); CAMKIT.U.E[1] = CAMKIT.capMul();
       drawPost();
       CAMKIT.finish(canvas);
+      CAMG.big = false;                                                // frame berikut: resize() mengembalikan ukuran layar
     }
     CAMKIT.draw();
   }

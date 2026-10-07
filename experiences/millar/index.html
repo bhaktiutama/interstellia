@@ -3892,6 +3892,7 @@ CAMKIT.init({
   isLocked: () => document.pointerLockElement === canvas, unlock: () => { if (document.pointerLockElement) document.exitPointerLock(); },
   audio: () => (AUDIO.ctx && AUDIO.master ? { ctx: AUDIO.ctx, node: AUDIO.master } : null),
   quality: () => [32, 24, 16, 8, 8][PRESET.idx] || 16,
+  photoH: () => [2160, 1800, 1440, 1200, 1080][PRESET.idx] || 1080,   // tinggi foto tersimpan (px) per preset
 });
 function camAllowed() { return STATE.started && !FLY.on && !CINE.on && !SWEEP.on; }
 function camSetFov(f) {                                               // FOV + besaran turunan (ukuran piksel untuk ombak dan cipratan)
@@ -3908,7 +3909,7 @@ function camOff() {
   const C = M_COMP.uniforms; C.uCamE.value.set(0, 1, 0, 0); C.uCamL.value.set(0, 0, 0, 0); C.uCamR.value.set(0, 0, 0, 0); C.uCamM.value.set(0, 0, 0, 0);
   CAMKIT.U.E = [0, 1, 0, 0]; CAMKIT.U.L = [0, 0, 0, 0]; CAMKIT.U.R = [0, 0, 0, 0]; CAMKIT.U.M = [0, 0, 0, 0];
 }
-function camLeave() { CAMKIT.leave(); camOff(); CAMX.final = false; TAA.valid = false; camSetFov(70); resize(); }
+function camLeave() { CAMKIT.leave(); camOff(); CAMX.final = false; CAMX.big = false; TAA.valid = false; camSetFov(70); resize(); }
 function camOffset(dx, dy) {
   if (!dx && !dy) return;
   camera.updateMatrix(); _kR.setFromMatrixColumn(camera.matrix, 0); _kU.setFromMatrixColumn(camera.matrix, 1);
@@ -3936,7 +3937,16 @@ function camAfterFrame() {
   CAMKIT.draw();
 }
 function camCapture(dtReal, now) {
-  const Pc = CAMKIT.cap, t0 = performance.now(), W = POST.w, H = POST.h;
+  const Pc = CAMKIT.cap, t0 = performance.now();
+  if (Pc.i === 0 && !CAMX.big) {                                     // resolusi foto: render sementara diperbesar (layar dibekukan)
+    const sc = CAMKIT.capScale(POST.w, POST.h, renderer.capabilities.maxTextureSize);
+    if (sc > 1.01) {
+      const w = Math.round(POST.w * sc), h = Math.round(POST.h * sc);
+      renderer.setSize(w, h, false); makePost(w, h, PRESETS[PRESET.idx]); CAMX.big = true;
+      U.uPix.value = 2 * Math.tan(camera.fov * DEG / 2) / h; splMat.uniforms.uScale.value = h / (2 * Math.tan(camera.fov * DEG / 2));
+    }
+  }
+  const W = POST.w, H = POST.h;
   if (Pc.i === 0) {
     if (CAMX.acc.width !== W || CAMX.acc.height !== H) CAMX.acc.setSize(W, H);
     renderer.setRenderTarget(CAMX.acc); renderer.getClearColor(_kCC); const ca = renderer.getClearAlpha();
@@ -3986,6 +3996,7 @@ function camFinish(W, H, now) {
   postRender(now / 1000);
   CAMX.final = false;
   CAMKIT.finish(canvas);
+  if (CAMX.big) { CAMX.big = false; resize(); }                       // kembali ke resolusi layar
   camera.position.copy(CAMX.pos); camera.quaternion.copy(CAMX.q); camera.updateMatrixWorld();
   TAA.valid = false;
 }

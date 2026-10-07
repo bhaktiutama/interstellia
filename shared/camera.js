@@ -73,7 +73,7 @@
     sh: ['Rana', 'Shutter'], iso: ['ISO', 'ISO'], comp: ['Kompensasi', 'Compensation'], focus: ['Fokus', 'Focus'],
     kind: ['Rekam', 'Capture'], photo: ['Foto', 'Photo'], video: ['Video', 'Video'], view: ['Tampilan', 'View'],
     finder: ['Jendela bidik', 'Viewfinder'], live: ['Live view', 'Live view'], mag: ['Pembesaran', 'Magnification'],
-    tripod: ['Tripod', 'Tripod'], skin: ['Badan kamera', 'Camera body'], hint: ['? tombol kamera', '? camera keys'], keysHead: ['Kamera rangefinder (F)', 'Rangefinder camera (F)'], shake: ['Getar tangan', 'Hand shake'], fmt: ['Format', 'Format'], fps: ['Video fps', 'Video fps'],
+    tripod: ['Tripod', 'Tripod'], hint: ['? tombol kamera', '? camera keys'], keysHead: ['Kamera rangefinder (F)', 'Rangefinder camera (F)'], shake: ['Getar tangan', 'Hand shake'], fmt: ['Format', 'Format'], fps: ['Video fps', 'Video fps'],
     rate: ['Bitrate', 'Bitrate'], on: ['nyala', 'on'], off: ['mati', 'off'], free: ['Foto bebas', 'Free photo'], exit: ['Keluar (F)', 'Exit (F)'],
     help: ['Bantuan (?)', 'Help (?)'], dof: ['Tajam', 'In focus'], saved: ['Tersimpan', 'Saved'], busy: ['Memproses...', 'Processing...'],
     recSaved: ['Video tersimpan', 'Video saved'], noRec: ['Perekam video tidak didukung browser ini', 'Video recording is not supported by this browser'],
@@ -101,7 +101,7 @@
     ev100, cocMM, hyperfocal, apertureR, fovV, fovH, rfShift, dofRange, halton, bladeSample, shutterLabel,
     on: false, A: null, cap: null, rec: null, L: null, lock: null, hud: true, panel: false, helpOn: false, seed: 0,
     st: { lens: 3, N: 2.8, sh: 5, iso: 200, mode: 'A', comp: 0, invS: 1 / 3, video: false, live: false, mag: 0.72,
-      tripod: false, shake: true, fmt: 'png', fps: 30, mbps: 8, skin: true },
+      tripod: false, shake: true, fmt: 'png', fps: 30, mbps: 8 },
     U: { E: [0, 1, 0, 0], L: [0, 0, 0, 0], R: [0, 0, 0, 0], M: [0, 0, 0, 0] },
   };
   try { const s = JSON.parse(localStorage.getItem('lazarus.camera') || 'null'); if (s && typeof s === 'object') Object.assign(K.st, s); } catch (e) { /* abaikan */ }
@@ -139,26 +139,26 @@
     const wh = H * 0.9, ww = Math.min(W * 0.96, wh * 1.62);
     return { ww, wh, cx: W / 2, cy: H / 2, T: FIELD_T * 0.72 / K.st.mag };
   }
-  const skinOn = (cap) => !cap && K.st.skin && K.st.live && !K.st.video;   // badan kamera belakang: live view foto saja (video dan tangkap = layar penuh)
-  function skinGeo(W, H) {                                           // layar belakang 3:2 di tengah kanvas, badan di sekitarnya
-    const lh = Math.min(0.62 * H, 0.52 * 0.9 * W / 1.5), lw = 1.5 * lh, bw = lw / 0.52, bh = 0.47 * bw;
-    const lcd = { x: (W - lw) / 2, y: (H - lh) / 2, w: lw, h: lh };
-    return { lcd, body: { x: lcd.x + lw / 2 - 0.45 * bw, y: lcd.y + lh / 2 - 0.58 * bh, w: bw, h: bh } };   // layar sedikit kiri dan bawah tengah badan (seperti foto acuan)
-  }
-  function frameRect(W, H, cap) {                                    // bingkai foto 3:2 / video (seluruh kanvas) dalam piksel; badan kamera = layar belakang
-    if (skinOn(cap)) return skinGeo(W, H).lcd;
+  function frameRect(W, H) {                                         // bingkai foto 3:2 / video (seluruh kanvas) dalam piksel
     if (K.st.video) return { x: 0, y: 0, w: W, h: H };
     const a = W / H;
     if (a >= 1.5) { const w = H * 1.5; return { x: (W - w) / 2, y: 0, w, h: H }; }
     const h = W / 1.5; return { x: 0, y: (H - h) / 2, w: W, h };
   }
-  function liveTanV(W, H, cap) {                                     // tan setengah bidang vertikal live view / tangkap
+  function liveTanV(W, H) {                                          // tan setengah bidang vertikal live view / tangkap
     const f = lens().f, a = W / H;
-    if (skinOn(cap)) return 12 / f * H / skinGeo(W, H).lcd.h;
     if (K.st.video) return 18 / f / a;
     return a >= 1.5 ? 12 / f : 18 / f / a;
   }
   K.frameRect = frameRect;
+  // Skala render saat tangkap foto: tinggi bingkai foto dinaikkan ke target adaptor (A.photoH(), per preset), maks 3x,
+  // dibatasi ukuran tekstur maksimal GPU. Layar kembali ke ukuran biasa setelah foto selesai.
+  K.capScale = function (W, H, maxTex) {
+    const t = (K.A && K.A.photoH && K.A.photoH()) || 0;
+    if (!t || K.st.video) return 1;
+    const fr = frameRect(W, H), lim = Math.min(maxTex || 4096, 8192) / Math.max(W, H);
+    return Math.max(1, Math.min(3, lim, t / fr.h));
+  };
 
   // Parameter render frame ini. W, H = ukuran target render (piksel). Keluaran: vfov (derajat), eye (offset lensa m
   // dalam basis kamera: kanan, atas), live, dan K.U terisi untuk shader.
@@ -166,14 +166,14 @@
     const s = K.st, c = cur(), live = capturing || s.live || s.video, A = K.A, U = K.U;
     const cw = A.canvas.clientWidth || W, ch = A.canvas.clientHeight || H, G = finderGeo(cw, ch);
     let tanV, eye = [0, 0];
-    if (live) { tanV = liveTanV(W, H, capturing); eye = LENS_OFF.slice(); } else tanV = G.T * ch / G.ww;
+    if (live) { tanV = liveTanV(W, H); eye = LENS_OFF.slice(); } else tanV = G.T * ch / G.ww;
     const invS = Math.max(0, Math.min(1 / c.minF, s.invS));
     // eksposur + derau: jendela bidik optik = mata biasa
     if (live) {
       U.E[0] = 1; U.E[1] = c.mul; U.E[2] = NOISE_A * c.iso / 100; U.E[3] = NOISE_B * Math.pow(c.iso / 100, 2);
     } else { U.E[0] = 0; U.E[1] = 1; U.E[2] = 0; U.E[3] = 0; }
     // DOF real-time (live view saja, tangkap foto memakai sampel bukaan)
-    const fr = frameRect(W, H, capturing), hs = s.video ? 0.036 / (W / H) : 0.024, fm = c.f / 1000;
+    const fr = frameRect(W, H), hs = s.video ? 0.036 / (W / H) : 0.024, fm = c.f / 1000;
     const k = fm * fm / (c.N * Math.max(1e-3, 1 - fm * invS));
     U.L[0] = live && !capturing ? 1 : 0; U.L[1] = k * fr.h / hs; U.L[2] = invS; U.L[3] = 0.035 * H;
     // patch rangefinder (jendela bidik optik)
@@ -299,7 +299,7 @@
     const P = K.cap; K.cap = null; K.unfreeze = true;
     if (P.bulb) P.t = Math.max(1 / 30, P.elapsed);
     click(1);
-    const r = frameRect(canvas.width, canvas.height, true), cv = document.createElement('canvas');
+    const r = frameRect(canvas.width, canvas.height), cv = document.createElement('canvas');
     cv.width = Math.round(r.w); cv.height = Math.round(r.h);
     cv.getContext('2d').drawImage(canvas, Math.round(r.x), Math.round(r.y), cv.width, cv.height, 0, 0, cv.width, cv.height);
     const name = fileName(P), jpg = K.st.fmt === 'jpg';
@@ -484,7 +484,6 @@
     row(T('kind'), b(T('photo'), !s.video, () => { if (K.rec) K.recStop(); K.st.video = false; }), b(T('video'), s.video, () => { K.st.video = true; }));
     row(T('view'), b(T('finder'), !s.live && !s.video, () => { K.st.live = false; }), b(T('live'), s.live || s.video, () => { K.st.live = true; }));
     row(T('mag'), ...[0.58, 0.72, 0.85].map((m) => b(String(m).replace('.', ','), s.mag === m, () => { K.st.mag = m; })));
-    row(T('skin'), b(T(s.skin ? 'on' : 'off'), s.skin, () => { K.st.skin = !K.st.skin; }));
     row(T('tripod'), b(T(s.tripod ? 'on' : 'off'), s.tripod, () => { K.st.tripod = !K.st.tripod; }));
     row(T('shake'), b(T(s.shake ? 'on' : 'off'), s.shake, () => { K.st.shake = !K.st.shake; }));
     row(T('fmt'), b('PNG', s.fmt !== 'jpg', () => { K.st.fmt = 'png'; }), b('JPEG', s.fmt === 'jpg', () => { K.st.fmt = 'jpg'; }));
@@ -592,68 +591,9 @@
     g.strokeStyle = `rgba(250,246,226,${0.35 * a})`; g.lineWidth = 1; g.shadowBlur = 0; g.strokeRect(x, y, w, h);
     g.restore();
   }
-  // Badan kamera belakang (desain orisinal tanpa merek): pelat atas, kulit bertekstur, okuler kiri atas, tombol PLAY / FN / MENU,
-  // tombol arah kanan, roda jempol, dial dan dudukan lampu kilat di atas, kait tali. Layar = lubang (gambar live view di baliknya).
-  let leather = null;
-  function leatherPat(g) {
-    if (leather) return leather;
-    const c = document.createElement('canvas'); c.width = c.height = 6; const q = c.getContext('2d');
-    q.fillStyle = '#151515'; q.fillRect(0, 0, 6, 6); q.fillStyle = '#202020'; q.beginPath(); q.moveTo(3, 0.6); q.lineTo(5.4, 3); q.lineTo(3, 5.4); q.lineTo(0.6, 3); q.fill();
-    q.fillStyle = '#0c0c0c'; q.fillRect(0, 0, 1, 1); q.fillRect(5, 5, 1, 1);
-    leather = g.createPattern(c, 'repeat'); return leather;
-  }
-  function rr(g, x, y, w, h, r, add) { if (!add) g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
-  function drawBody(g, W, H) {
-    const S = skinGeo(W, H), L = S.lcd, bw = S.body.w, bh = S.body.h, bx = S.body.x, by = S.body.y, u = bw / 100;
-    g.save();
-    // latar di luar badan: gelap (dunia di belakang kamera tidak sama skala dengan lensa)
-    g.fillStyle = 'rgba(6,6,7,0.94)'; g.beginPath(); g.rect(0, 0, W, H); rr(g, bx, by, bw, bh, 3.2 * u, true); g.fill('evenodd');
-    // dial dan dudukan lampu kilat di atas pelat
-    const knurl = (x, w, h) => { g.fillStyle = '#1a1a1a'; rr(g, x, by - h, w, h + 2 * u, 0.6 * u); g.fill(); g.strokeStyle = 'rgba(255,255,255,0.07)'; g.lineWidth = 1;
-      for (let i = x + 0.6 * u; i < x + w; i += 0.7 * u) { g.beginPath(); g.moveTo(i, by - h + 0.4 * u); g.lineTo(i, by); g.stroke(); } };
-    g.fillStyle = '#121212'; rr(g, bx + 34 * u, by - 2.6 * u, 11 * u, 4 * u, 0.5 * u); g.fill();
-    knurl(bx + 51 * u, 11 * u, 3.4 * u); knurl(bx + 66 * u, 7 * u, 3.8 * u);
-    // badan + kulit
-    g.fillStyle = '#111'; rr(g, bx, by, bw, bh, 3.2 * u); g.rect(L.x, L.y, L.w, L.h); g.fill('evenodd');   // layar = lubang
-    g.save(); rr(g, bx, by + 0.17 * bh, bw, bh * 0.83, 3.2 * u); g.rect(L.x - 1.4 * u, L.y - 1.4 * u, L.w + 2.8 * u, L.h + 2.8 * u); g.clip('evenodd'); g.fillStyle = leatherPat(g); g.fillRect(bx, by, bw, bh); g.restore();
-    const sh = g.createLinearGradient(0, by, 0, by + bh); sh.addColorStop(0, 'rgba(255,255,255,0.10)'); sh.addColorStop(0.18, 'rgba(255,255,255,0.03)'); sh.addColorStop(1, 'rgba(0,0,0,0.25)');
-    g.fillStyle = sh; rr(g, bx, by, bw, bh, 3.2 * u); g.rect(L.x, L.y, L.w, L.h); g.fill('evenodd');
-    g.strokeStyle = 'rgba(255,255,255,0.08)'; g.lineWidth = 1; g.beginPath(); g.moveTo(bx + 2 * u, by + 0.17 * bh); g.lineTo(bx + bw - 2 * u, by + 0.17 * bh); g.stroke();
-    // okuler kiri atas + tombol bulat
-    g.fillStyle = '#1b1c1e'; rr(g, bx + 4 * u, by + 2.2 * u, 17 * u, 12 * u, 2.4 * u); g.fill();
-    const eg = g.createLinearGradient(bx + 6 * u, by + 4 * u, bx + 19 * u, by + 12 * u); eg.addColorStop(0, '#2e4352'); eg.addColorStop(1, '#0d151b');
-    g.fillStyle = eg; rr(g, bx + 6.5 * u, by + 4.3 * u, 12 * u, 7.8 * u, 1.4 * u); g.fill();
-    g.fillStyle = '#0d0d0d'; g.beginPath(); g.arc(bx + 26 * u, by + 7.5 * u, 2.4 * u, 0, 6.2832); g.fill(); g.strokeStyle = 'rgba(255,255,255,0.1)'; g.stroke();
-    // roda jempol kanan atas
-    g.fillStyle = '#161616'; rr(g, bx + 88 * u, by + 5 * u, 8 * u, 4 * u, 1.2 * u); g.fill(); g.strokeStyle = 'rgba(255,255,255,0.08)';
-    for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo(bx + 88.6 * u + i * 0.85 * u, by + 5.4 * u); g.lineTo(bx + 88.6 * u + i * 0.85 * u, by + 8.6 * u); g.stroke(); }
-    // bingkai layar
-    g.fillStyle = '#050505'; rr(g, L.x - 1.4 * u, L.y - 1.4 * u, L.w + 2.8 * u, L.h + 2.8 * u, 1.2 * u); g.rect(L.x, L.y, L.w, L.h); g.fill('evenodd');   // bingkai layar
-    // tombol kiri
-    const lab = ['PLAY', 'FN', 'MENU'];
-    g.font = `600 ${Math.max(8, 1.7 * u)}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
-    lab.forEach((t, i) => { const x = bx + 7 * u, y = L.y + L.h * (0.12 + 0.3 * i); g.fillStyle = '#0a0a0a'; rr(g, x, y, 7 * u, 7 * u, 1.2 * u); g.fill();
-      g.strokeStyle = 'rgba(255,255,255,0.12)'; g.stroke(); g.fillStyle = '#d8d8d8'; g.fillText(t, x + 3.5 * u, y + 3.6 * u); });
-    // tombol arah kanan
-    const dx = L.x + L.w + 7.5 * u, dy = L.y + L.h * 0.28, dr = 5.2 * u;
-    g.fillStyle = '#1d1d1d'; rr(g, dx - dr - 1.5 * u, dy - dr - 1.5 * u, 2 * dr + 3 * u, 2 * dr + 3 * u, 3 * u); g.fill();
-    g.fillStyle = '#0b0b0b'; g.beginPath(); g.arc(dx, dy, dr, 0, 6.2832); g.fill(); g.strokeStyle = 'rgba(255,255,255,0.12)'; g.stroke();
-    g.fillStyle = '#121212'; g.beginPath(); g.arc(dx, dy, dr * 0.42, 0, 6.2832); g.fill();
-    g.fillStyle = '#cfcfcf';
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2, cx = dx + Math.cos(a) * dr * 0.72, cy = dy + Math.sin(a) * dr * 0.72, t = 0.75 * u;
-      g.beginPath(); g.moveTo(cx + Math.cos(a) * t, cy + Math.sin(a) * t); g.lineTo(cx + Math.cos(a + 2.2) * t, cy + Math.sin(a + 2.2) * t); g.lineTo(cx + Math.cos(a - 2.2) * t, cy + Math.sin(a - 2.2) * t); g.fill(); }
-    g.fillStyle = '#0d0d0d'; g.beginPath(); g.arc(dx - dr * 1.15, dy + dr * 1.35, 0.8 * u, 0, 6.2832); g.fill();
-    // kait tali
-    g.fillStyle = '#9a9a9a'; for (const x of [bx - 1.2 * u, bx + bw + 1.2 * u]) { g.beginPath(); g.arc(x, by + 0.42 * bh, 0.9 * u, 0, 6.2832); g.fill(); }
-    // pantulan tipis di kaca layar
-    const gl2 = g.createLinearGradient(L.x, L.y, L.x + L.w, L.y + L.h); gl2.addColorStop(0, 'rgba(255,255,255,0.05)'); gl2.addColorStop(0.45, 'rgba(255,255,255,0)'); gl2.addColorStop(1, 'rgba(255,255,255,0.02)');
-    g.fillStyle = gl2; g.fillRect(L.x, L.y, L.w, L.h);
-    g.restore();
-  }
   function drawLive(g, W, H, c) {
-    const s = K.st, r = frameRect(W, H, false);
-    if (skinOn(false)) drawBody(g, W, H);
-    g.fillStyle = '#000'; if (!skinOn(false) && r.x > 0) { g.fillRect(0, 0, r.x, H); g.fillRect(r.x + r.w, 0, W - r.x - r.w, H); } if (!skinOn(false) && r.y > 0) { g.fillRect(0, 0, W, r.y); g.fillRect(0, r.y + r.h, W, H - r.y - r.h); }
+    const s = K.st, r = frameRect(W, H);
+    g.fillStyle = '#000'; if (r.x > 0) { g.fillRect(0, 0, r.x, H); g.fillRect(r.x + r.w, 0, W - r.x - r.w, H); } if (r.y > 0) { g.fillRect(0, 0, W, r.y); g.fillRect(0, r.y + r.h, W, H - r.y - r.h); }
     if (!K.hud) return;
     g.font = '600 14px system-ui, sans-serif'; g.textBaseline = 'middle'; g.fillStyle = '#f2f2f2'; g.shadowColor = '#000'; g.shadowBlur = 4;
     const y = r.y + r.h - 18, invS = Math.max(0, Math.min(1 / c.minF, s.invS));

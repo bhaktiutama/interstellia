@@ -6457,7 +6457,8 @@ function updateStats(dt) {
   stats.fps = stats.frames / stats.time; stats.ms = 1000 * stats.time / stats.frames;
   if (stats.fps < CONFIG.dynRes.lowFps) { stats.low += stats.time; stats.high = 0; } else stats.low = 0;
   if (stats.fps > CONFIG.dynRes.highFps) { stats.high += stats.time; } else stats.high = 0;
-  if (stats.low >= CONFIG.dynRes.window && dynScale > CONFIG.dynRes.min) { dynScale = Math.max(CONFIG.dynRes.min, +(dynScale - 0.1).toFixed(2)); applyPixelRatio(); stats.low = 0; }
+  if (CAMKIT.on) { stats.low = stats.high = 0; }                 // K: resolusi dinamis dibekukan selama mode kamera
+  else if (stats.low >= CONFIG.dynRes.window && dynScale > CONFIG.dynRes.min) { dynScale = Math.max(CONFIG.dynRes.min, +(dynScale - 0.1).toFixed(2)); applyPixelRatio(); stats.low = 0; }
   else if (stats.high >= CONFIG.dynRes.window && dynScale < 1) { dynScale = Math.min(1, +(dynScale + 0.1).toFixed(2)); applyPixelRatio(); stats.high = 0; }
 
   const info = renderer.info.render;
@@ -9145,7 +9146,7 @@ function lodSet(k, instant) {                                         // dipangg
   BUILD_U.uLodK.value = LODK.k;
 }
 // K: kamera rangefinder: target akumulasi foto (float bila bisa dicampur aditif), matriks frame lalu (blur video)
-const CAMX = { final: false, ex: 0, ey: 0, prevVP: new THREE.Matrix4(), pos: new THREE.Vector3(), q: new THREE.Quaternion(), w: 1, n: 0,
+const CAMX = { final: false, ex: 0, ey: 0, prevPR: null, prevVP: new THREE.Matrix4(), pos: new THREE.Vector3(), q: new THREE.Quaternion(), w: 1, n: 0,
   float: renderer.extensions.has('EXT_float_blend'), reading: false, lumT: 0, px: new Uint16Array(4) };
 CAMX.acc = new THREE.WebGLRenderTarget(4, 4, { type: CAMX.float ? THREE.FloatType : THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, generateMipmaps: false });
 const SSR = { on: true, ready: false };                              // 23a: pantulan ruang layar (butuh efek layar)
@@ -13836,6 +13837,7 @@ CAMKIT.init({
   isLocked: () => document.pointerLockElement === canvas, unlock: () => { if (document.pointerLockElement) document.exitPointerLock(); },
   audio: () => (AUDIO.ctx && AUDIO.master ? { ctx: AUDIO.ctx, node: AUDIO.master } : null),
   quality: () => [32, 24, 16, 8, 8][PRESET.idx] || 16,
+  photoH: () => [2160, 1800, 1440, 1200, 1080][PRESET.idx] || 1080,   // tinggi foto tersimpan (px) per preset
 });
 function camAllowed() {
   return !ext.active && !MOTO.on && !TOUR.on && ['ground', 'air', 'lift', 'float', 'tram', 'pod'].includes(player.state);
@@ -13849,7 +13851,7 @@ function camOff() {                                                  // semua un
   const C = compMat.uniforms; C.uCamE.value.set(0, 1, 0, 0); C.uCamL.value.set(0, 0, 0, 0); C.uCamR.value.set(0, 0, 0, 0); C.uCamM.value.set(0, 0, 0, 0);
   CAMKIT.U.E = [0, 1, 0, 0]; CAMKIT.U.L = [0, 0, 0, 0]; CAMKIT.U.R = [0, 0, 0, 0]; CAMKIT.U.M = [0, 0, 0, 0];
 }
-function camLeave() { CAMKIT.leave(); camOff(); CAMX.final = false; TAA.valid = false; lodSet(1, true); }
+function camLeave() { CAMKIT.leave(); camOff(); camRestoreRes(); CAMX.final = false; TAA.valid = false; lodSet(1, true); }
 const camZoomK = (V) => (V.live ? Math.tan(CONFIG.fov * DEG / 2) / Math.tan(V.vfov * DEG / 2) : 1);   // K10
 function camSetFov(f) {
   if (Math.abs(camera.fov - f) > 1e-5) { camera.fov = farCam.fov = f; camera.updateProjectionMatrix(); farCam.updateProjectionMatrix(); }
@@ -13886,6 +13888,11 @@ function camAfterFrame() {
 }
 function camCapture(dtReal) {                                        // subframe foto; beberapa per frame layar (batas 45 ms)
   const P = CAMKIT.cap, t0 = performance.now();
+  if (P.i === 0 && CAMX.prevPR == null) {                             // resolusi foto: render sementara diperbesar (layar dibekukan)
+    renderer.getDrawingBufferSize(_dbs);
+    const sc = CAMKIT.capScale(_dbs.x, _dbs.y, renderer.capabilities.maxTextureSize);
+    if (sc > 1.01) { CAMX.prevPR = renderer.getPixelRatio(); renderer.setPixelRatio(CAMX.prevPR * sc); }
+  }
   renderer.getDrawingBufferSize(_dbs);
   const W = _dbs.x, H = _dbs.y;
   if (P.i === 0) {
@@ -13943,9 +13950,11 @@ function camFinish(W, H) {
   postEnd();
   CAMX.final = false;
   CAMKIT.finish(canvas);
+  camRestoreRes();
   camera.position.copy(CAMX.pos); camera.quaternion.copy(CAMX.q); camera.updateMatrixWorld();
   TAA.valid = false;
 }
+function camRestoreRes() { if (CAMX.prevPR != null) { renderer.setPixelRatio(CAMX.prevPR); CAMX.prevPR = null; } }
 
 /* =====================================================================
    TAHAP 12d (C3): TUR SINEMATIK (tombol Y)
