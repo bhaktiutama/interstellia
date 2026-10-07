@@ -184,8 +184,8 @@ const CONFIG = {
     depth: 0.6,         // kedalaman untuk dispersi air dangkal (m)
     peak: 4.5,          // panjang ombak puncak spektrum FFT (m)
   },
-  fft: { lam: 0.9, foamJ: 0.7, foamTau: 2.5 },
-  seaState: { far: 0.6, near: 1.5, dFar: 120000, dNear: 4000, tau: 4 },   // pengali tinggi ombak angin: kecil saat gelombang raksasa jauh, besar saat dekat
+  fft: { lam: 0.9, foamJ: 0.45, foamTau: 2.5 },   // M7: buih baru hanya di ombak yang benar-benar pecah (dulu 0,7: bercak putih di mana-mana)
+  seaState: { far: 0.42, near: 1.5, dFar: 120000, dNear: 4000, tau: 4 },   // pengali tinggi ombak angin: kecil saat gelombang raksasa jauh, besar saat dekat
   body: { smooth: 0.12, yawLag: 0.25, yawMax: 0.44,
     standF: 0.02, footDown: 0.12, reachWalk: 0.23, reachRun: 0.38, liftWalk: 0.10, liftRun: 0.22, airLift: 0.25, airF: 0.10, runDrop: 0.06, neckF: 0.14, neckD: 0.05,   // M6d-2: target pergelangan IK (m), jongkok lari, leher (m)
     armFwd: 0.15, armDown: 0.15, armWalk: 0.4, armRun: 0.8, abduct: 0.12, abductRun: 0.25, abductAir: 0.6, elbow: 0.7, elbowRun: 1.5, elbowDown: 0.3,
@@ -367,7 +367,7 @@ const U = {   // uniform bersama material permukaan (objek uniform dipakai bersa
   uT: { value: 0 }, uR: { value: CONFIG.R }, uCam: { value: new THREE.Vector3() },
   uWX: { value: W.start }, uWH: { value: W.H }, uLean: { value: W.lean },
   uSky: { value: null }, uWob: { value: new THREE.Matrix3() }, uFogD: { value: CONFIG.fogD }, uPix: { value: 0.001 },
-  uAmb: { value: new THREE.Color() }, uScat: { value: new THREE.Color(0.10, 0.135, 0.155) }, uAbs: { value: new THREE.Vector3(2.0, 1.6, 1.45) },
+  uAmb: { value: new THREE.Color() }, uScat: { value: new THREE.Color(0.092, 0.128, 0.128) }, uAbs: { value: new THREE.Vector3(2.0, 1.6, 1.45) },
   uBed: { value: new THREE.Color(0.32, 0.29, 0.24) }, uCaustK: { value: 0.2 }, uChopK: { value: 1 }, uMacroK: { value: 1 }, uFoamC: { value: new THREE.Color(0.95, 0.97, 0.98) },
   uWA: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uWB: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
   uMA: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) }, uMB: { value: Array.from({ length: 12 }, () => new THREE.Vector4()) },
@@ -492,6 +492,9 @@ vec3 seaShadeS(vec3 r, vec3 n, float depth, float foam, vec2 P, float caust, flo
   vec3 R = reflect(-V, n); R.y = max(R.y, 0.004); R = normalize(R);
   vec3 env = skyL(R);
   float F = 0.02 + 0.98 * pow(1.0 - nv, 5.0);
+  // M7: riak lebih kecil dari piksel menutupi sebagian sisi miring (masking): pantulan langit mendung di lereng ombak
+  // tidak lagi seputih langit, laut terlihat gelap dan tenang seperti laut mendung sungguhan
+  F *= 1.0 - 0.55 * F;
   float cosT = sqrt(max(1.0 - (1.0 - nv * nv) / 1.777, 0.05));
   vec3 tr = exp(-uAbs * (depth / cosT));
   float bn = vn2(P * 0.35) * 0.6 + vn2(P * 1.7) * 0.4;
@@ -1292,7 +1295,7 @@ function seaMat(near) {
         float inst = smoothstep(uFoamJ, uFoamJ - 0.3, J), stay = texture(tFoam, vP / uLc.x).r;   // buih baru + buih sisa yang memudar
         { float bmF = fftBm(vP, smoothstep(35.0, 90.0, dist)); if (bmF > 0.001) stay = mix(stay, texture(tFoam, fftQ(vP)).r, bmF); }   // M5a-2: buih sisa ikut dicampur
         stay = foamAge(stay, vP, dist);                                    // V4 M2
-        float foam = clamp(max(max(max(inst, stay * 0.85), rf), curF), 0.0, 1.0) * (0.55 + 0.45 * vn2(vP * 3.1)) * 0.85;
+        float foam = clamp(max(max(max(inst, stay * 0.55), rf), curF), 0.0, 1.0) * (0.55 + 0.45 * vn2(vP * 3.1)) * 0.8;
       #if CAUST
         // Kaustik: permukaan cembung memfokuskan cahaya ke dasar (1 / (1 + d x laplasian)); kuat saat langit cerah
         float lap = lapS(tS0, vP, uLc.x, uTexel.x * 1.5);
@@ -1439,13 +1442,17 @@ const waveMat = new THREE.ShaderMaterial({
       // M5e: urat buih memanjang searah turunnya air di muka tegak (skala busur 4-5 x skala sepanjang muka)
       vec2 w0 = vec2(vZ / 45.0, Hh / 220.0 + uT * 0.15);
       vec2 wp = w0 + vec2(fbm2(w0 * 0.7 + 4.1) * 0.6, fbm2(w0 * 0.7 + 8.3) * 1.6);
-      float streak = smoothstep(0.62, 0.8, fbm2(wp * 1.3)) * face;
-      float fine = smoothstep(0.64, 0.8, fbm2(vec2(vZ / 9.0, Hh / 45.0 + uT * 0.73))) * face * fade2;
+      // M7: urat buih = garis tipis (kontur noise), lebar dijaga >= 1,2 piksel lewat fwidth dan diredupkan agar tidak berkedip jauh
+      float f1 = fbm2(wp * 1.3) - 0.5, w1 = max(0.022, 1.2 * fwidth(f1));
+      float streak = (1.0 - smoothstep(0.0, w1, abs(f1))) * (0.022 / w1) * smoothstep(0.35, 0.6, fbm2(wp * 0.6 + 2.9)) * face;
+      float f2 = fbm2(vec2(vZ / 9.0, Hh / 45.0 + uT * 0.73)) - 0.5, w2 = max(0.03, 1.2 * fwidth(f2));
+      float fine = (1.0 - smoothstep(0.0, w2, abs(f2))) * (0.03 / w2) * face * fade2;
       float base = smoothstep(0.02, 0.1, vG) * (1.0 - smoothstep(0.12, 0.3, vG)) * step(vU, 0.0) * smoothstep(0.42, 0.7, fbm2(vec2(vZ / 30.0, Hh / 30.0 + uT * 1.1)));   // air pecah di kaki: petak bergolak, bukan kolom
-      float foam = clamp(crest * (0.65 + 0.35 * fbm2(vec2(vZ / 25.0, uT * 0.5))) + streak * 0.7 + fine * 0.35 + base * 0.8, 0.0, 1.0) * smoothstep(1.0, 30.0, vG * uWH);
+      float foam = clamp(crest * (0.65 + 0.35 * fbm2(vec2(vZ / 25.0, uT * 0.5))) + streak * 0.75 + fine * 0.4 + base * 0.5, 0.0, 1.0) * smoothstep(1.0, 30.0, vG * uWH);
       vec3 c = seaShade(vR, n, 40.0, foam, vec2(vZ, vU), 1.0);
       c += uScat * uAmb * 0.7 * smoothstep(0.7, 0.97, vG) * (1.0 - foam);      // puncak lebih terang: air menipis
       c *= mix(0.68, 1.0, smoothstep(0.05, 0.8, vG));                          // kaki dinding lebih gelap
+      c *= mix(vec3(1.0), vec3(0.78, 0.92, 1.0), face * (1.0 - foam));          // M7: muka air tebal lebih gelap kebiruan, urat buih tetap putih
       gl_FragColor = vec4(c, 1.0);
     }`,
 });
@@ -2777,7 +2784,8 @@ function audioMix(dist, chopK, cur, speed, depth, under) {
     rumbleLP: 55 + 1500 * L * L,                                              // jauh: hanya gemuruh rendah; dekat: terbuka
     roar: a < 4000 ? 0.75 * Math.pow(1 - Math.max(0, (a - 400) / 3600), 1.5) : 0,
     lp: under > 0 ? 22000 - (22000 - 330) * under : 22000,                    // teredam di bawah air
-    shake: 0.035 * L * L,                                                     // getaran tanah (m), ikut gerak kepala
+    // getaran tanah (m), ikut gerak kepala; nol di atas 20 km, penuh di bawah 10 km (sisa 0,3 mm di 37 km tampak getar di Ultra)
+    shake: 0.035 * L * L * (1 - Math.min(1, Math.max(0, (a - 10000) / 10000))),
   };
 }
 function noiseBuf(ctx, sec, kind) {
