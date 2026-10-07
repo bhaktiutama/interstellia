@@ -11854,38 +11854,115 @@ await bootStep(BOOT_W[23], 'Burung...');
    - Formasi V burung besar (bentang sayap sekitar 1,8 m): 7-15 ekor terbang lurus 150-250 m di atas tanah (di bawah awan
      yang ada di sekitar 300 m, jadi terlihat berlatar awan dari tanah), kepak lambat bergantian dari depan ke belakang.
    - Merpati di plaza: mematuk di tanah, terbang serentak bila pemain mendekat 6 m, hinggap lagi di dekatnya setelah beberapa detik.
+   - 23g: merpati punya model sendiri (kepala, leher mengilap, sayap dua ruas, ekor, kaki). Di tanah sayap terlipat rapat (aFold),
+     berjalan pendek dengan kepala mengangguk sinkron langkah, mematuk bergiliran, sesekali berbalik. Kawanan rapat 8-20 ekor
+     (jarak tetangga 0,3-0,8 m) di sekitar pusat G.c yang bergeser pelan. Terkejut: seluruh kawanan lepas landas (jeda acak 0-0,3 s,
+     kepak cepat), berputar di udara (G.air), lalu mendarat bersama dekat titik asal setelah pemain menjauh; sayap terlipat 0,3 s.
    - Siklus hari: aktif 6:00-18:30. Menjelang senja kawanan terbang ke pohon terdekat lalu hilang; malam tidak ada.
    - Udara ikut berputar dengan stasiun, jadi tidak ada efek Coriolis yang terlihat pada terbang burung.
    ===================================================================== */
 const BIRDS = { flocks: [], pigeons: [], groups: [], vees: [], nVee: 2, max: 400, n: 0, nFlock: 5, pigeonsOn: true, user: true };
 try { const sv = JSON.parse(localStorage.getItem('cooperStation.birds') || 'null'); if (sv && sv.user === false) BIRDS.user = false; } catch (e) { /* abaikan */ }
+let pgSeed = 230707; const pgRnd = () => ((pgSeed = (pgSeed * 16807) % 2147483647) / 2147483647);   // 23g: acak sendiri merpati (dunia lain tidak bergeser)
 {
   // model: badan + kepala + ekor + 2 sayap (aWing: 0 badan, -1 kiri, 1 kanan); maju = +z, atas = +y
-  const pos = [], wing = [], idx = [];
-  const tri = (a, b, c, w) => { const v = pos.length / 3; pos.push(...a, ...b, ...c); wing.push(w, w, w); idx.push(v, v + 1, v + 2); };
+  // 23g: model merpati terpisah di buffer yang sama: aPg.x = 1 segitiga merpati, 0 segitiga burung langit (yang tidak cocok dibuang di shader).
+  //      aPg = (jenis, bobot kepala, wilayah warna, bobot ekor), aFold = posisi sayap terlipat, aPw = (u bentang, v lebar, 1) sayap / (sisi, bobot, 0) kaki
+  const pos = [], wing = [], idx = [], fold = [], pg = [], pw = [];
+  const tri = (a, b, c, w) => { const v = pos.length / 3; pos.push(...a, ...b, ...c); fold.push(...a, ...b, ...c); wing.push(w, w, w); for (let k = 0; k < 3; k++) { pg.push(0, 0, 0, 0); pw.push(0, 0, 0); } idx.push(v, v + 1, v + 2); };
   const body = [[0, 0, 0.16], [0.045, 0, 0], [0, 0.04, 0], [-0.045, 0, 0], [0, -0.035, 0], [0, 0, -0.12]];
   for (const [a, b] of [[1, 2], [2, 3], [3, 4], [4, 1]]) { tri(body[0], body[a], body[b], 0); tri(body[5], body[b], body[a], 0); }
   tri([0, 0.005, -0.1], [0.06, 0, -0.22], [-0.06, 0, -0.22], 0);                          // ekor
   for (const sg of [-1, 1]) { tri([sg * 0.03, 0.01, 0.07], [sg * 0.3, 0.0, -0.02], [sg * 0.03, 0.01, -0.06], sg); tri([sg * 0.3, 0.0, -0.02], [sg * 0.03, 0.01, 0.07], [sg * 0.26, 0.0, 0.03], sg); }
+  // 23g: merpati ukuran asli (panjang 0,37 m, bentang 0,66 m), titik asal di tanah di antara kaki.
+  //      wilayah warna: 0 badan, 1 leher mengilap, 2 kepala, 3 paruh, 4 sayap dalam (dua garis gelap di FS), 5 bulu primer, 6 pita ekor, 7 perut, 8 kaki
+  const PV = (p, r, o = {}) => ({ p, r, h: o.h || 0, t: o.t || 0, f: o.f || p, w: o.w || 0, u: o.u || 0, v: o.v || 0, k: o.k || 0 });
+  const ptri = (...q) => { const v = pos.length / 3; for (const a of q) { pos.push(...a.p); fold.push(...a.f); wing.push(a.w); pg.push(1, a.h, a.r, a.t); pw.push(a.u, a.v, a.k); } idx.push(v, v + 1, v + 2); };
+  const RING = [ // z, pusat y, rx, ry, wilayah, bobot kepala
+    [-0.095, 0.125, 0.026, 0.022, 0, 0], [-0.03, 0.115, 0.05, 0.046, 0, 0], [0.04, 0.12, 0.052, 0.054, 0, 0],
+    [0.085, 0.145, 0.03, 0.033, 1, 0.15], [0.105, 0.18, 0.021, 0.022, 1, 0.7], [0.122, 0.2, 0.02, 0.021, 2, 1]];
+  const ring = RING.map(([z, cy, rx, ry, rg, h]) => Array.from({ length: 6 }, (_, k) => { const a = Math.PI / 2 + k * Math.PI / 3, sy = Math.sin(a); return PV([rx * Math.cos(a), cy + ry * sy, z], rg === 0 && sy < -0.3 ? 7 : rg, { h }); }));
+  for (let i = 0; i + 1 < ring.length; i++) for (let k = 0; k < 6; k++) { const a = ring[i][k], b = ring[i][(k + 1) % 6], c = ring[i + 1][k], d = ring[i + 1][(k + 1) % 6]; ptri(a, b, d); ptri(a, d, c); }
+  const back = PV([0, 0.125, -0.11], 0), nose = PV([0, 0.199, 0.142], 2, { h: 1 });
+  for (let k = 0; k < 6; k++) { ptri(back, ring[0][(k + 1) % 6], ring[0][k]); ptri(nose, ring[5][k], ring[5][(k + 1) % 6]); }
+  const bL = PV([-0.006, 0.194, 0.138], 3, { h: 1 }), bR = PV([0.006, 0.194, 0.138], 3, { h: 1 }), bT = PV([0, 0.201, 0.136], 3, { h: 1 }), bX = PV([0, 0.192, 0.163], 3, { h: 1 });
+  ptri(bL, bT, bX); ptri(bT, bR, bX); ptri(bR, bL, bX);                                   // paruh
+  const tl = [PV([-0.02, 0.13, -0.08], 0, { t: 0.2 }), PV([0.02, 0.13, -0.08], 0, { t: 0.2 }), PV([-0.034, 0.126, -0.165], 0, { t: 0.8 }), PV([0.034, 0.126, -0.165], 0, { t: 0.8 }), PV([-0.036, 0.123, -0.205], 6, { t: 1 }), PV([0.036, 0.123, -0.205], 6, { t: 1 })];
+  ptri(tl[0], tl[1], tl[3]); ptri(tl[0], tl[3], tl[2]); ptri(tl[2], tl[3], tl[5]); ptri(tl[2], tl[5], tl[4]);   // ekor, pita gelap di ujung
+  for (const sg of [-1, 1]) {
+    // sayap dua ruas: position = terkembang, aFold = terlipat rapat di sisi badan (ujung bersilang di atas ekor)
+    const W = (x, y, z, fx, fy, fz, r, u, v) => PV([sg * x, y, z], r, { f: [sg * fx, fy, fz], w: sg, u, v, k: 1 });
+    const A = W(0.04, 0.155, 0.06, 0.047, 0.152, 0.055, 4, 0, 0), B = W(0.04, 0.15, -0.045, 0.052, 0.14, -0.02, 4, 0, 1),
+      C = W(0.17, 0.155, 0.045, 0.054, 0.157, 0.015, 4, 0.5, 0), D = W(0.17, 0.152, -0.075, 0.048, 0.137, -0.065, 4, 0.5, 1),
+      E = W(0.33, 0.155, -0.035, 0.022, 0.142, -0.165, 5, 1, 0.2), F = W(0.28, 0.152, -0.1, 0.032, 0.134, -0.135, 5, 0.85, 1);
+    ptri(A, C, B); ptri(B, C, D); ptri(C, E, D); ptri(D, E, F);
+    // kaki pendek merah muda (bobot 1 di telapak: ayun saat berjalan, dilipat ke belakang saat terbang)
+    const L = (x, y, z, wt) => PV([sg * x, y, z], 8, { u: sg, v: wt });
+    const T1 = L(0.016, 0.08, -0.005, 0), T2 = L(0.016, 0.08, 0.007, 0), F1 = L(0.018, 0.0, 0.006, 1), F2 = L(0.018, 0.0, 0.018, 1), F3 = L(0.02, 0.0, 0.045, 1);
+    ptri(T1, T2, F2); ptri(T1, F2, F1); ptri(F1, F2, F3);
+  }
   const g = new THREE.InstancedBufferGeometry();
   g.setIndex(idx); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aWing', new THREE.Float32BufferAttribute(wing, 1));
-  for (const nm of ['aB', 'aC']) g.setAttribute(nm, new THREE.InstancedBufferAttribute(new Float32Array(BIRDS.max * 4), 4).setUsage(THREE.DynamicDrawUsage));
+  g.setAttribute('aFold', new THREE.Float32BufferAttribute(fold, 3)); g.setAttribute('aPg', new THREE.Float32BufferAttribute(pg, 4)); g.setAttribute('aPw', new THREE.Float32BufferAttribute(pw, 3));
+  for (const nm of ['aB', 'aC', 'aD']) g.setAttribute(nm, new THREE.InstancedBufferAttribute(new Float32Array(BIRDS.max * 4), 4).setUsage(THREE.DynamicDrawUsage));
   g.instanceCount = 0;
   const VS = /* glsl */`
     attribute float aWing;
-    attribute vec4 aB, aC;                                   // aB: s, za, tinggi, arah; aC: kepak (rad), pitch, skala, warna (0 gelap, 1 merpati)
+    attribute vec3 aFold, aPw;
+    attribute vec4 aPg;
+    attribute vec4 aB, aC, aD;                               // aB: s, za, tinggi, arah; aC: kepak (rad), pitch, skala, warna (0 gelap, 1 merpati)
+                                                             // 23g merpati: aC.z = ayun kaki (-1..1, skala dari rona); aD: sayap terbuka 0..1, kepala maju (m), matuk 0..1, jenis warna + rona
     varying vec3 vCol;
+    varying vec3 vPw;
     void main() {
+      vCol = vec3(0.0); vPw = vec3(0.0);
+      bool pig = aC.w > 0.5;
+      if ((aPg.x > 0.5) != pig) { ${CLIP_AWAY} }               // 23g: segitiga milik jenis lain dibuang
       vec3 p = position;
-      float a = aWing * aC.x;                                // sayap berputar di pangkal
-      if (aWing != 0.0) { float x = p.x - aWing * 0.03; p.x = aWing * 0.03 + x * cos(a); p.y += abs(x) * sin(aC.x); }
-      float cp = cos(aC.y), sp = sin(aC.y); p = vec3(p.x, p.y * cp + p.z * sp, -p.y * sp + p.z * cp);
-      p *= aC.z;
+      float tn = 0.0, vt = 0.0;
+      if (!pig) {
+        float a = aWing * aC.x;                                // sayap berputar di pangkal
+        if (aWing != 0.0) { float x = p.x - aWing * 0.03; p.x = aWing * 0.03 + x * cos(a); p.y += abs(x) * sin(aC.x); }
+        float cp = cos(aC.y), sp = sin(aC.y); p = vec3(p.x, p.y * cp + p.z * sp, -p.y * sp + p.z * cp);
+        p *= aC.z;
+      } else {
+        // 23g: merpati: sayap terkembang dikepakkan lalu dicampur dengan pose terlipat lewat aD.x
+        float op = clamp(aD.x, 0.0, 1.0);
+        vt = floor(aD.w + 1e-3); tn = fract(aD.w);
+        if (aPw.z > 0.5) { float xr = max(abs(p.x) - 0.04, 0.0); p.x = aWing * (0.04 + xr * cos(aC.x)); p.y += xr * sin(aC.x) + max(0.0, xr - 0.13) * sin(0.6 * aC.x); }
+        p = mix(aFold, p, op);
+        if (aPg.w > 0.0) {                                     // ekor: sedikit turun saat diam, mengembang saat terbang
+          float ta = aPg.w * mix(0.18, -0.04, op), c2 = cos(ta), s2 = sin(ta); vec2 q = p.yz - vec2(0.128, -0.085);
+          p.yz = vec2(0.128, -0.085) + vec2(q.x * c2 + q.y * s2, -q.x * s2 + q.y * c2); p.x *= 1.0 + 0.9 * op * aPg.w;
+        }
+        if (aPw.z < 0.5 && aPw.y > 0.0) { float sw = aC.z * aPw.x; p.z += aPw.y * (sw * 0.028 - op * 0.07); p.y += aPw.y * (max(0.0, sw) * 0.012 + op * 0.055); }
+        if (aPg.y > 0.0) {                                     // kepala: angguk maju-mundur, lalu leher menunduk saat mematuk
+          p.z += aPg.y * aD.y;
+          float na = -aPg.y * aD.z * 1.5, c3 = cos(na), s3 = sin(na); vec2 q = p.yz - vec2(0.14, 0.08);
+          p.yz = vec2(0.14, 0.08) + vec2(q.x * c3 + q.y * s3, -q.x * s3 + q.y * c3);
+        }
+        float cp = cos(aC.y), sp = sin(aC.y); p = vec3(p.x, p.y * cp + p.z * sp, -p.y * sp + p.z * cp);   // pitch di titik kaki
+        p *= 1.0 + 0.09 * (tn - 0.45);
+      }
       vec3 up, tS; vec3 base = groundFrame(aB.xy, aB.z, up, tS);
       vec3 F = tS * sin(aB.w) + vec3(0.0, 0.0, 1.0) * cos(aB.w), Rt = cross(up, F);
       vec3 p3 = base + Rt * p.x + up * p.y + F * p.z;
       #ifndef DEPTH_ONLY
-      vec3 c = aC.w > 0.5 ? (position.z > 0.12 ? vec3(0.2, 0.24, 0.27) : vec3(0.28, 0.29, 0.32)) : vec3(0.07, 0.065, 0.06);
+      vec3 c = vec3(0.07, 0.065, 0.06);
+      if (pig) {
+        // 23g: abu-abu kebiruan, leher hijau-ungu berkilau menurut arah pandang, dua garis sayap; sebagian putih atau cokelat
+        int rg = int(aPg.z + 0.5);
+        vec3 bodyC = vec3(0.26, 0.29, 0.36), wingC = vec3(0.34, 0.37, 0.43), headC = vec3(0.21, 0.23, 0.29), darkC = vec3(0.06, 0.06, 0.075), bellyC = vec3(0.23, 0.25, 0.31);
+        float irK = 1.0, barK = 1.0;
+        if (vt > 1.5) { bodyC = vec3(0.30, 0.18, 0.11); wingC = vec3(0.38, 0.24, 0.15); headC = vec3(0.27, 0.16, 0.10); darkC = vec3(0.12, 0.06, 0.04); bellyC = vec3(0.28, 0.18, 0.12); irK = 0.45; barK = 0.8; }
+        else if (vt > 0.5) { bodyC = vec3(0.72, 0.72, 0.70); wingC = bodyC; headC = bodyC; bellyC = vec3(0.68, 0.68, 0.66); darkC = vec3(0.6, 0.6, 0.58); irK = 0.15; barK = 0.0; }
+        vec3 vd = cameraPosition - p3; vd /= max(length(vd), 1e-3);
+        float gl = 0.5 + 0.5 * sin(dot(vd, Rt) * 6.0 + dot(vd, up) * 5.0 + tn * 9.0);
+        vec3 neckC = mix(headC, mix(vec3(0.06, 0.24, 0.12), vec3(0.22, 0.08, 0.24), gl), irK);
+        c = rg == 0 ? bodyC : rg == 1 ? neckC : rg == 2 ? headC : rg == 3 ? vec3(0.09, 0.07, 0.07) : rg == 4 ? wingC : rg == 5 ? mix(wingC, darkC, 0.75) : rg == 6 ? darkC : rg == 7 ? bellyC : vec3(0.5, 0.17, 0.19);
+        c *= 0.92 + 0.16 * tn;
+        vPw = vec3(aPw.xy, aPw.z * barK);
+      }
       vCol = c * vegLight(p3, up, aB.xy, 0.5);
       #endif
       vec4 mvPosition = viewMatrix * vec4(p3, 1.0);
@@ -11896,7 +11973,14 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.birds') || 'null
     }`;
   const FS = /* glsl */`
     varying vec3 vCol;
-    void main() { gl_FragColor = vec4(vCol, 1.0);
+    varying vec3 vPw;
+    void main() {
+      float bar = 0.0;                                         // 23g: dua garis gelap di sayap dalam merpati
+      if (vPw.z > 0.01) {
+        float v = vPw.y, b1 = smoothstep(0.5, 0.53, v) * (1.0 - smoothstep(0.6, 0.63, v)), b2 = smoothstep(0.72, 0.75, v) * (1.0 - smoothstep(0.83, 0.86, v));
+        bar = (b1 + b2) * (1.0 - smoothstep(0.45, 0.6, vPw.x)) * vPw.z;
+      }
+      gl_FragColor = vec4(vCol * (1.0 - 0.7 * bar), 1.0);
       #include <colorspace_fragment>
       #include <fog_fragment>
     }`;
@@ -11907,11 +11991,16 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.birds') || 'null
   const spots = parkBlocks.filter((b) => b[4]).map((b) => [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2 - (b === FOUNT.block ? 10 : 0)]);   // 21a-1: plaza air mancur: 10 m di sisi -za kolam
   spots.push([TERM.s + 14, TERM.za + 33], [TERM.s - 26, TERM.za + 33],   // trotoar antara pintu selatan terminal dan jalan (jalan mulai za + 42)
      [FIELD.s - 60, FIELD.za - 70]);
-  let sd = 91357; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  // 23g: kawanan rapat 8-20 ekor (pola bunga matahari, jarak tetangga sekitar 0,5 m), pusat G.c bergeser pelan dekat titik asal (G.s, G.za)
   for (const [s0, z0] of spots) {
-    const G = { s: s0, za: z0, birds: [], flushT: -1e9 };
-    const n = 5 + Math.floor(r() * 6);
-    for (let k = 0; k < n; k++) G.birds.push({ s: s0 + (r() - 0.5) * 8, za: z0 + (r() - 0.5) * 8, h: 0, hd: r() * TAU, vs: 0, vz: 0, vh: 0, fly: false, ph: r() * TAU, seed: r() });
+    const n = 8 + Math.floor(pgRnd() * 13), rad = 0.3 * Math.sqrt(n);
+    const G = { s: s0, za: z0, c: [s0, z0], cv: pgRnd() * TAU, rad, birds: [], flushT: -1e9, air: null };
+    for (let k = 0; k < n; k++) {
+      const a = k * 2.39996 + pgRnd() * 0.3, rr = rad * Math.sqrt((k + 0.5) / n), ox = Math.sin(a) * rr, oz = Math.cos(a) * rr, x = pgRnd(), hd = pgRnd() * TAU;
+      G.birds.push({ s: s0 + ox, za: z0 + oz, h: 0, hd, th: hd, vs: 0, vz: 0, vh: 0, fly: false, ph: pgRnd() * TAU, seed: pgRnd(),
+        ox, oz, oh: (pgRnd() - 0.5) * 1.6, vw: (x < 0.84 ? 0 : x < 0.92 ? 1 : 2) + pgRnd() * 0.9,
+        act: 'idle', at: pgRnd() * 1.5, ae: 0, open: 0, flap: 0, pitch: -0.05, hf: 0, peck: 0, wph: 0, sw: 0, fp: '', wait: 0, ft: 0, glide: 0 });
+    }
     BIRDS.groups.push(G);
   }
 }
@@ -11979,36 +12068,136 @@ function stepBirds(dt) {
     V.s += Math.sin(V.hd) * 13 * dt; V.za += Math.cos(V.hd) * 13 * dt;
     if (V.za < 150 || V.za > 7850) V.dead = true;
   }
-  // merpati
+  // merpati (23g: kawanan rapat, lihat stepPigeons)
+  const pS = player.theta * R, pZ = player.za;
   for (const G of BIRDS.groups) {
-    const pS = player.theta * R, pZ = player.za, t = clock.sim;
     if (Math.hypot(wrapS(G.s - pS), G.za - pZ) > 160 || !BIRDS.pigeonsOn) continue;
-    for (const b of G.birds) {
-      if (!b.fly) {
-        if (Math.hypot(wrapS(b.s - pS), b.za - pZ) < (MOTO.on ? (MOTO.horn > 0 ? 30 : 12) : 6) && player.state === 'ground') {   // terkejut: seluruh kelompok terbang (19b: motor 12 m, klakson 30 m)
-          for (const o of G.birds) { const a = Math.atan2(wrapS(o.s - pS), o.za - pZ) + (Math.random() - 0.5) * 0.8; o.fly = true; o.vs = Math.sin(a) * 6; o.vz = Math.cos(a) * 6; o.vh = 4 + Math.random() * 2; o.t0 = t; o.hd = a; }
-          break;
-        }
-        b.ph += dt * (1 + b.seed); if (Math.random() < dt * 0.3) b.hd += (Math.random() - 0.5) * 1.2;   // mematuk, berbalik sesekali
-        const w = 0.25 * dt; b.s += Math.sin(b.hd) * w; b.za += Math.cos(b.hd) * w;                     // berjalan pelan
-      } else {
-        const age = t - b.t0;
-        if (age < 4) { b.vh -= 1.5 * dt; } else { b.vh = -1.2; b.vs *= 0.98; b.vz *= 0.98; }
-        b.s += b.vs * dt; b.za += b.vz * dt; b.h = Math.max(0, b.h + b.vh * dt); b.ph += 16 * dt;
-        if (age > 4 && b.h <= 0.01) { b.fly = false; b.h = 0; }
-        if (Math.hypot(wrapS(b.s - G.s), b.za - G.za) > 25 && age > 4) { b.vs += wrapS(G.s - b.s) * 0.02; b.vz += (G.za - b.za) * 0.02; }   // kembali ke plaza
-        const dF = fountDist(b.s, b.za);                               // 21a-1: saat turun, menjauh dari kolam air mancur
-        if (age > 4 && dF < 7 && dF > 1e-3) { const k = 6 * dt / dF; b.vs += wrapS(b.s - FOUNT.s) * k; b.vz += (b.za - FOUNT.za) * k; }
-      }
-      if (b.h <= 0.01) { const [ps, pz] = fountPush(b.s, b.za, 5.2); b.s = ps; b.za = pz; }   // 21a-1: tidak berjalan atau mendarat di dalam kolam
+    stepPigeons(G, dt, pS, pZ);
+  }
+}
+// 23g: seluruh kawanan terkejut: tiap ekor lepas landas menjauhi pemain setelah jeda acak 0-0,3 s, lalu berputar di udara mengitari titik asal
+function pigeonFlush(G, pS, pZ) {
+  const r = 10 + pgRnd() * 4;
+  G.air = { t: 0, land: false, lt: 0, r, h: 5 + pgRnd() * 3, dir: pgRnd() < 0.5 ? -1 : 1, ang: Math.atan2(wrapS(G.c[0] - pS), G.c[1] - pZ), w: 8.5 / r };
+  G.flushT = clock.sim;
+  for (const b of G.birds) { b.fly = true; b.fp = 'wait'; b.wait = pgRnd() * 0.3; b.ft = 0; b.glide = 0; b.th = Math.atan2(wrapS(b.s - pS), b.za - pZ) + (pgRnd() - 0.5) * 0.8; }
+}
+function stepPigeons(G, dt, pS, pZ) {
+  const B = G.birds, trig = MOTO.on ? (MOTO.horn > 0 ? 30 : 12) : 6;   // 19b: motor 12 m, klakson 30 m
+  if (!G.air && player.state === 'ground') for (const b of B) if (Math.hypot(wrapS(b.s - pS), b.za - pZ) < trig) { pigeonFlush(G, pS, pZ); break; }
+  const A = G.air;
+  if (!A) {                                                         // pusat kawanan bergeser pelan, dalam 3 m dari titik asal, di luar kolam
+    G.cv += (pgRnd() - 0.5) * 0.8 * dt;
+    let cs = G.c[0] + Math.sin(G.cv) * 0.05 * dt, cz = G.c[1] + Math.cos(G.cv) * 0.05 * dt;
+    const ds = wrapS(cs - G.s), dz = cz - G.za, dd = Math.hypot(ds, dz);
+    if (dd > 3) { cs = G.s + ds * 3 / dd; cz = G.za + dz * 3 / dd; G.cv = Math.atan2(-ds, -dz) + (pgRnd() - 0.5); }
+    G.c = fountPush(cs, cz, 5.2 + G.rad + 0.3);
+  } else {
+    A.t += dt; A.ang += A.dir * A.w * dt;
+    if (!A.land && A.t > 5 && Math.hypot(wrapS(G.s - pS), G.za - pZ) > trig + 8) {   // pemain sudah menjauh: mendarat bersama dekat titik asal
+      A.land = true; A.lt = 0;
+      const a = pgRnd() * TAU, d = pgRnd() * 1.5;
+      G.c = fountPush(G.s + Math.sin(a) * d, G.za + Math.cos(a) * d, 5.2 + G.rad + 0.3);
+      for (const b of B) if (b.fly) b.fp = 'land';
+    }
+    if (A.land) A.lt += dt;
+  }
+  for (const b of B) { if (b.fly) pigeonFly(G, b, dt); else pigeonWalk(G, b, dt); }
+  for (let i = 0; i < B.length; i++) {                              // separasi di tanah: jarak tetangga minimal 0,28 m
+    const a = B[i]; if (a.h > 0.01) continue;
+    for (let j = i + 1; j < B.length; j++) {
+      const o = B[j]; if (o.h > 0.01) continue;
+      const ds = wrapS(a.s - o.s), dz = a.za - o.za, d2 = ds * ds + dz * dz;
+      if (d2 < 0.0784 && d2 > 1e-8) { const d = Math.sqrt(d2), k = (0.28 - d) * 0.5 / d; a.s += ds * k; a.za += dz * k; o.s -= ds * k; o.za -= dz * k; }
     }
   }
+  for (const b of B) if (b.h <= 0.01) { const [ps, pz] = fountPush(b.s, b.za, 5.2); b.s = ps; b.za = pz; }   // 21a-1: tidak berjalan atau mendarat di dalam kolam
+  if (A && B.every((b) => !b.fly)) G.air = null;
+}
+// 23g: di tanah: jalan pendek (kepala mengangguk sinkron langkah), mematuk, berbalik, diam; tetap dekat pusat kawanan
+function pigeonWalk(G, b, dt) {
+  b.open = Math.max(0, b.open - dt / 0.3);                          // sayap terlipat dalam 0,3 s setelah mendarat
+  b.flap *= Math.exp(-8 * dt); b.h = 0; b.at -= dt; b.ae += dt;
+  if (b.at <= 0) {
+    b.ae = 0;
+    const cs = wrapS(G.c[0] - b.s), cz = G.c[1] - b.za, dc = Math.hypot(cs, cz), x = pgRnd();
+    let nn = null, nd = 1e9;
+    for (const o of G.birds) if (o !== b && !o.fly) { const d = Math.hypot(wrapS(o.s - b.s), o.za - b.za); if (d < nd) { nd = d; nn = o; } }
+    if (dc > G.rad * 1.15) { b.act = 'walk'; b.th = Math.atan2(cs, cz) + (pgRnd() - 0.5) * 0.6; b.at = 0.5 + pgRnd() * 0.8; }        // kembali ke gerombolan
+    else if (nn && nd < 0.32) { b.act = 'walk'; b.th = Math.atan2(wrapS(b.s - nn.s), b.za - nn.za) + (pgRnd() - 0.5) * 0.8; b.at = 0.4 + pgRnd() * 0.4; }   // terlalu rapat
+    else if (x < 0.42) { b.act = 'peck'; b.at = (1 + Math.floor(pgRnd() * 3)) * 0.42; }
+    else if (x < 0.7) { b.act = 'walk'; b.th = b.hd + (pgRnd() - 0.5) * 1.4 + Math.sin(G.cv - b.hd) * 0.5; b.at = 0.4 + pgRnd() * 1.0; }   // ikut arah geser kawanan
+    else if (x < 0.84) { b.act = 'turn'; b.th = b.hd + (pgRnd() < 0.5 ? -1 : 1) * (0.6 + pgRnd() * 1.4); b.at = 0.7; }
+    else { b.act = 'idle'; b.at = 0.5 + pgRnd() * 1.2; }
+    if (b.act === 'walk' || b.act === 'turn') b.wph = Math.ceil(b.wph / 2) * 2 + 0.13;   // mulai langkah dari pose kepala netral
+  }
+  let dh = b.th - b.hd; dh = Math.atan2(Math.sin(dh), Math.cos(dh));
+  b.hd += Math.sign(dh) * Math.min(Math.abs(dh), (b.act === 'peck' ? 0 : 4) * dt);
+  const walking = b.act === 'walk', stepping = walking || (b.act === 'turn' && Math.abs(dh) > 0.05);
+  if (walking) { const v = 0.32 * dt; b.s += Math.sin(b.hd) * v; b.za += Math.cos(b.hd) * v; }
+  if (stepping) {
+    b.wph += dt * (walking ? 3.5 : 2.5);
+    const f = b.wph - Math.floor(b.wph), q = Math.min(1, f / 0.3);    // kepala maju cepat (30% langkah), lalu diam di udara selagi badan menyusul
+    b.hf = f < 0.3 ? -0.025 + 0.055 * q * q * (3 - 2 * q) : 0.03 - 0.055 * (f - 0.3) / 0.7;
+    b.sw = Math.sin(Math.PI * b.wph);                               // kaki kiri dan kanan bergantian tiap angguk
+  } else { b.hf *= Math.exp(-10 * dt); b.sw *= Math.exp(-10 * dt); }
+  if (b.act === 'peck') { const q = Math.sin(Math.PI * ((b.ae / 0.42) % 1)); b.peck = q * q; } else b.peck *= Math.exp(-12 * dt);
+  b.pitch = -0.05 - 0.4 * b.peck;                                   // badan agak membungkuk, condong saat mematuk
+}
+// 23g: terbang: tunggu (merunduk), lepas landas (kepak cepat), berputar di slot kawanan, mendarat (mengerem badan tegak)
+function pigeonFly(G, b, dt) {
+  const A = G.air; b.ft += dt;
+  b.peck *= Math.exp(-12 * dt); b.hf *= Math.exp(-10 * dt); b.sw *= Math.exp(-10 * dt);
+  if (b.fp === 'wait') {
+    b.wait -= dt; b.pitch += (-0.15 - b.pitch) * Math.min(1, 10 * dt);
+    if (b.wait <= 0) { b.fp = 'up'; b.ft = 0; b.hd = b.th; b.vs = Math.sin(b.th) * 2.5; b.vz = Math.cos(b.th) * 2.5; b.vh = 3.2; }
+    return;
+  }
+  b.open = Math.min(1, b.open + dt / 0.12);
+  let fq = 6, amp = 0.85, pitchT = null;
+  if (b.fp === 'up') {
+    const sp = Math.hypot(b.vs, b.vz);
+    if (sp < 7) { b.vs += Math.sin(b.th) * 6 * dt; b.vz += Math.cos(b.th) * 6 * dt; }
+    b.vh += (2.2 - b.vh) * Math.min(1, 2 * dt);
+    fq = 8.5; amp = 1.05; pitchT = 0.35;
+    if (b.ft > 0.9) b.fp = A && A.land ? 'land' : 'air';
+  } else {
+    let ts, tz, th, dvs, dvz;
+    if (b.fp === 'air') {                                           // slot di lingkaran kawanan, ikut sudut A.ang
+      const a = A.ang, v = A.w * A.r * A.dir;
+      ts = G.s + Math.sin(a) * A.r + b.ox * 1.7; tz = G.za + Math.cos(a) * A.r + b.oz * 1.7; th = A.h + b.oh;
+      const ds = wrapS(ts - b.s), dz = tz - b.za;
+      dvs = Math.cos(a) * v + ds * 1.2; dvz = -Math.sin(a) * v + dz * 1.2;
+      b.glide = Math.max(0, b.glide - dt);
+      if (!b.glide && b.vh < 1 && pgRnd() < dt * 0.4) b.glide = 0.6 + pgRnd() * 0.8;   // sesekali meluncur
+    } else {                                                        // mendarat: lereng turun ke tempat masing-masing di gerombolan
+      ts = G.c[0] + b.ox; tz = G.c[1] + b.oz; b.glide = 0;
+      const ds = wrapS(ts - b.s), dz = tz - b.za, dist = Math.hypot(ds, dz), sp = Math.min(8, dist * 1.1 + 0.4), id = 1 / Math.max(dist, 1e-3);
+      dvs = ds * id * sp; dvz = dz * id * sp; th = Math.max(0, Math.min(A.h + b.oh, dist * 0.45 - 0.05));
+      if (dist < 2.5) { fq = 8; amp = 0.6; pitchT = 0.55; }
+      if (A.lt > 5) { const q = Math.min(1, 3 * dt); b.s += ds * q; b.za += dz * q; b.h *= 1 - q; }   // cadangan: pasti mendarat
+      if (dist < 0.25 && b.h < 0.1) {
+        b.fly = false; b.fp = ''; b.h = 0; b.vs = b.vz = b.vh = 0; b.act = 'idle'; b.at = 0.4 + pgRnd() * 0.8; b.ae = 0; b.th = b.hd;
+        return;
+      }
+    }
+    const dsp = Math.hypot(dvs, dvz); if (dsp > 11) { dvs *= 11 / dsp; dvz *= 11 / dsp; }
+    const k = Math.min(1, 2.5 * dt); b.vs += (dvs - b.vs) * k; b.vz += (dvz - b.vz) * k;
+    b.vh += ((th - b.h) * 1.2 - b.vh) * Math.min(1, 2 * dt); b.vh = Math.max(-3.5, Math.min(3.5, b.vh));
+  }
+  b.s += b.vs * dt; b.za += b.vz * dt; b.h = Math.max(0, b.h + b.vh * dt);
+  const sp = Math.hypot(b.vs, b.vz);
+  if (sp > 0.5) b.hd = Math.atan2(b.vs, b.vz);
+  if (pitchT === null) pitchT = Math.atan2(b.vh, Math.max(sp, 0.5)) * 0.6;
+  b.pitch += (pitchT - b.pitch) * Math.min(1, 6 * dt);
+  if (b.glide) b.flap += (0.2 - b.flap) * Math.min(1, 8 * dt);     // meluncur: sayap terentang sedikit terangkat
+  else { b.ph += TAU * fq * dt; b.flap = amp * Math.sin(b.ph) + 0.1; }
 }
 function updateBirds() {
   const g = BIRDS.mesh.geometry;
   if (ext.active || !BIRDS.user) { g.instanceCount = BIRDS.n = 0; return; }
-  const eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, B = g.attributes.aB.array, C = g.attributes.aC.array; let n = 0;
-  const put = (s, za, h, hd, flap, pitch, sc, col) => { if (n >= BIRDS.max) return; const o = n * 4; B[o] = eS + wrapS(s - eS); B[o + 1] = za; B[o + 2] = h; B[o + 3] = hd; C[o] = flap; C[o + 1] = pitch; C[o + 2] = sc; C[o + 3] = col; n++; };
+  const eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, B = g.attributes.aB.array, C = g.attributes.aC.array, D = g.attributes.aD.array; let n = 0;
+  const put = (s, za, h, hd, flap, pitch, sc, col, d0 = 0, d1 = 0, d2 = 0, d3 = 0) => { if (n >= BIRDS.max) return; const o = n * 4; B[o] = eS + wrapS(s - eS); B[o + 1] = za; B[o + 2] = h; B[o + 3] = hd; C[o] = flap; C[o + 1] = pitch; C[o + 2] = sc; C[o + 3] = col; D[o] = d0; D[o + 1] = d1; D[o + 2] = d2; D[o + 3] = d3; n++; };
   for (const F of BIRDS.flocks) if (!F.dead && F.members) for (const b of F.members) {
     if (b.gone) continue;
     const sp = Math.hypot(b.v[0], b.v[1]);
@@ -12025,9 +12214,9 @@ function updateBirds() {
   }
   if (birdDay(clock.hour) && BIRDS.pigeonsOn) for (const G of BIRDS.groups) {
     if (Math.hypot(wrapS(G.s - eS), G.za - eZ) > 160) continue;
-    for (const b of G.birds) put(b.s, b.za, b.h + (b.fly ? 0 : 0.1), b.hd, b.fly ? 0.8 * Math.sin(b.ph) : 0.05, b.fly ? -0.2 : 0.25 + 0.2 * Math.max(0, Math.sin(b.ph * 3)), 1.15, 1);
+    for (const b of G.birds) put(b.s, b.za, b.h, b.hd, b.flap, b.pitch, b.sw, 1, b.open, b.hf, b.peck, b.vw);   // 23g: aC.z = ayun kaki, aD = sayap terbuka, angguk, matuk, warna
   }
-  for (const nm of ['aB', 'aC']) { const a = g.attributes[nm]; a.clearUpdateRanges(); a.addUpdateRange(0, n * 4); a.needsUpdate = true; }
+  for (const nm of ['aB', 'aC', 'aD']) { const a = g.attributes[nm]; a.clearUpdateRanges(); a.addUpdateRange(0, n * 4); a.needsUpdate = true; }
   g.instanceCount = BIRDS.n = n;
 }
 function applyBirdsPreset(i) {
