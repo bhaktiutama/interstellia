@@ -6906,7 +6906,9 @@ const mixV = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
    tipis ada di dekat mata dan di dekat titik yang dilihat). Kabut rata di material dikurangi dari 4x ke 1x tambahan selama
    aktif. ATMO.gate diisi di postEnd (Ultra/Tinggi, efek layar menyala, di dalam stasiun); ?v4=0 = tampilan sebelum V4. */
 const ATMO = { off: new URLSearchParams(location.search).get('v4') === '0', gate: false, mist: 0, mistRho: 0.0038, mistH: 30,
-  sig0: 0.004, sigRain: 0.026, sigMist: 0.012, sigOv: 0.005 };   // C2: koefisien hamburan udara untuk cahaya lampu (1/m)
+  sig0: 0.0006, sigRain: 0.026, sigMist: 0.012, sigOv: 0.002, haloRef: 0.01 };   // C2: koefisien hamburan udara untuk cahaya lampu (1/m)
+// 24e: sig0 dulu 0,004 (kerucut dan halo terang walau udara bersih). Kini udara bersih 0,0006 (kerucut nyaris tak terlihat, silau
+// kepala lampu cukup dari bloom); halo bulat di kepala lampu hanya muncul sebanding kabut udara (hujan, kabut pagi, mendung) / haloRef
 function updateLighting() {
   const h = clock.hour, U = LIGHT.uniforms;
   const day = sstep(5.5, 7.5, h) * (1 - sstep(17.5, 19.5, h));
@@ -9162,7 +9164,7 @@ const rayMat = fsMat(/* glsl */`
    (setengah resolusi) melangkah 16 kali sampai 160 m, menjumlah cahaya yang dihamburkan udara: kerucut di bawah kepala lampu
    (8 m), halo bulat di sekitar kepala, kerucut lampu depan trem dan motor. Kekuatan hamburan uSig naik saat hujan, kabut pagi,
    dan mendung. Keluaran a = jarak pandang untuk upsample sadar kedalaman (sama dengan sunrays). */
-const lampFogMat = fsMat('uniform mat4 uProjInvL, uCamWorldL; uniform sampler2D tDepthL; uniform float uSig;\nvarying vec2 vUv;\n' + LIGHT_GLSL + /* glsl */`
+const lampFogMat = fsMat('uniform mat4 uProjInvL, uCamWorldL; uniform sampler2D tDepthL; uniform float uSig, uHaloK;\nvarying vec2 vUv;\n' + LIGHT_GLSL + /* glsl */`
   float ignL(vec2 p) { return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y)); }
   void main() {
     float d = textureLod(tDepthL, vUv, 0.0).r;
@@ -9183,7 +9185,8 @@ const lampFogMat = fsMat('uniform mat4 uProjInvL, uCamWorldL; uniform sampler2D 
         // garis pandang dan tampak sebagai dinding lurus. Pangkat 3: kerucut lebih sempit (sekitar 3,7 m) dan nilai di batas 0,005
         float pool = lampPoolL(s, za);
         float cone = pool * pool * pool * (1.0 - smoothstep(6.5, 8.6, h));           // kerucut di bawah kepala lampu
-        float p2 = pool * pool, halo = p2 * p2 * p2 * exp(-(h - 8.0) * (h - 8.0) / 3.0) * 2.5;   // halo bulat di kepala
+        // 24e: halo lebih lebar dan lembut (pangkat 4, bukan 6) dan hanya sebanding kabut udara uHaloK (0 = udara bersih)
+        float p2 = pool * pool, halo = uHaloK * p2 * p2 * exp(-(h - 8.0) * (h - 8.0) / 5.0) * 1.6;
         e += vec3(1.0, 0.72, 0.42) * 1.5 * uL_Night * (cone + halo);
       }
       if (uL_Tram.w > 0.01 && h < 6.0) e += vec3(1.0, 0.9, 0.75) * uL_Tram.w * tramPoolL(s, za) * (1.0 - smoothstep(2.0, 5.0, h));
@@ -9200,7 +9203,7 @@ const lampFogMat = fsMat('uniform mat4 uProjInvL, uCamWorldL; uniform sampler2D 
       acc += e * dt;
     }
     gl_FragColor = vec4(acc * uSig, dist);
-  }`, Object.assign({}, LIGHT.uniforms, { tDepthL: { value: null }, uProjInvL: { value: new THREE.Matrix4() }, uCamWorldL: { value: new THREE.Matrix4() }, uSig: { value: 0 } }));
+  }`, Object.assign({}, LIGHT.uniforms, { tDepthL: { value: null }, uProjInvL: { value: new THREE.Matrix4() }, uCamWorldL: { value: new THREE.Matrix4() }, uSig: { value: 0 }, uHaloK: { value: 0 } }));
 function toggleRays() {
   RAYS.on = !RAYS.on;
   uiLabel('labRays', () => t('Sunrays: {s}', { s: t(RAYS.on ? 'nyala' : 'mati') }) + (RAYS.n ? '' : t(' (preset ini: mati)')));
@@ -9507,7 +9510,8 @@ function postEnd() {
     if (useLamp) {
       const M = lampFogMat.uniforms;
       M.tDepthL.value = R0.hdr.depthTexture; M.uProjInvL.value.copy(camera.projectionMatrixInverse); M.uCamWorldL.value.copy(camera.matrixWorld);
-      M.uSig.value = ATMO.sig0 + ATMO.sigRain * RAIN.k + ATMO.sigMist * ATMO.mist + ATMO.sigOv * WEATHER.ov;
+      const haze = ATMO.sigRain * RAIN.k + ATMO.sigMist * ATMO.mist + ATMO.sigOv * WEATHER.ov;   // 24e: kabut udara di atas udara bersih
+      M.uSig.value = ATMO.sig0 + haze; M.uHaloK.value = Math.min(1, haze / ATMO.haloRef);
       fsPass(lampFogMat, R0.lamp);
     }
     C.uUseLamp.value = useLamp ? 1 : 0; C.tLamp.value = R0.lamp.texture;
