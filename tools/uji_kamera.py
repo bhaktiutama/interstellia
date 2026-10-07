@@ -73,7 +73,7 @@ async def part_browser(names):
             await pg.wait_for_timeout(5000)
             res = {}
             res['masuk mode kamera'] = await pg.evaluate('CAMKIT.on')
-            await pg.evaluate("() => { window.__shots = []; CAMKIT.onSaved = (b, n) => window.__shots.push([n, b.size]); Object.assign(CAMKIT.st, { mode: 'A', video: false, live: true }); CAMKIT.shutterPress(); }")
+            await pg.evaluate("() => { window.__shots = []; CAMKIT.onSaved = (b, n) => window.__shots.push([n, b.size]); Object.assign(CAMKIT.st, { mode: 'A', video: false, live: true, N: 8, invS: 0 }); CAMKIT.shutterPress(); }")
             await pg.wait_for_function('window.__shots.length > 0', timeout=600000)
             s = await pg.evaluate('window.__shots[0]')
             res[f'foto live view tersimpan ({s[1]} byte, {s[0]})'] = s[1] > 2000

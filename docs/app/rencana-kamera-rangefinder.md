@@ -282,7 +282,7 @@ Permintaan pemilik sesudah K1-K9: detail LOD diperluas sesuai bidikan, tepi lemb
 | Yang ikut | Pohon (mesh vs impostor; shader memakai pusat `uLodC`), perabot dan detail kota `FURN`, pejalan kaki `PEDS`, pudar ruangan dan pantulan kaca jendela (`BUILD_U.uLodK`: jarak dibagi k) |
 | Tidak ikut | Rumput, jagung 3D dekat, rumput bukit (paling mahal), detail material `LIGHT_GLSL` (berisiko di M1), bayangan dekat |
 | Jagung kartu (pilihan A) | Hanya saat tangkap foto (dunia beku): `cornCapture(on)` menggeser pusat grid kartu `CORN.mid` ke bidikan (`lodShift(cornMid)`, radius maks 268 m, grid `sortedCells` kini 270 m), uniform `uCornCap` / `uCornC`, tanah jagung `uCornR` ikut; live view dan mode biasa tidak berubah (`uCornCap` 0 = perilaku lama) |
-| Subframe adaptif | `plan()`: jumlah sampel bukaan dari diameter blur terbesar D (px foto, latar tak hingga atau benda 1,5 m): 0,3 x D^2, min dasar preset, maks 8x dasar dan 512; dulu tetap 4-64 sehingga blur besar tampak sebagai salinan bertumpuk |
+| Subframe adaptif | `plan()`: jumlah sampel bukaan dari diameter blur terbesar D (px foto, latar tak hingga atau benda 1,5 m): 0,15 x D^2, min dasar preset, maks 8x dasar dan 512; dulu tetap 4-64 sehingga blur besar tampak sebagai salinan bertumpuk |
 | Bunyi rana | Tutup rana berbunyi tepat sesudah waktu rana nyata (min 70 ms), bukan sesudah olah subframe selesai; B: saat tombol dilepas |
 | k = 1 | Perilaku lama: `uLodC` = mata tiap frame, radius dan pusat sama dengan sebelumnya |
 | Badan kamera | Dicoba lalu dihapus atas permintaan pemilik (live view kembali layar penuh seperti K6) |
