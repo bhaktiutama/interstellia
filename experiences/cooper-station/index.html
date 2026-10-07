@@ -86,6 +86,12 @@
     border-radius: 8px; padding: 16px; white-space: pre-wrap; z-index: 10; margin: 0; }
   #err[hidden], [hidden] { display: none !important; }
   .hidden-ui #hud, .hidden-ui #cross { display: none; }
+  /* 24f: tombol kembali ke menu utama saat bermain; HUD digeser ke bawahnya */
+  #menuBtn { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; padding: 4px 10px; font-size: 12px;
+    color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; text-decoration: none; z-index: 2; }
+  #menuBtn:hover { border-color: var(--accent); color: #fff; }
+  #hud { top: calc(44px + env(safe-area-inset-top, 0px)); }
+  .hidden-ui #menuBtn, body.photo #menuBtn, body.tour #menuBtn, body:has(#start:not([hidden])) #menuBtn { display: none !important; }
   @media (max-width: 520px) { #hud { font-size: 10.5px; padding: 8px 10px; } #hud .wide { display: none; } }
   #lab { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: min(300px, calc(100vw - 24px));
     max-height: min(70vh, calc(100vh - 90px)); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
@@ -178,6 +184,7 @@
 <canvas id="view"></canvas>
 <div id="cross"></div>
 <div id="hud"></div>
+<a id="menuBtn" class="menuHref" href="../../index.html" title="Kembali ke menu utama">← Menu</a>
 <div id="joy" hidden><div id="knob"></div></div>
 <div id="touchbtns"><button id="btnHud" type="button">HUD</button><button id="btnLab" type="button">Panel</button><button id="btnRun" type="button">Lari</button><button id="btnAuto" type="button">Otomatis</button><button id="btnJump" type="button">Lompat</button><button id="btnMoto" type="button">Motor</button><button id="btnThrow" type="button">Lempar</button><button id="btnAct" type="button">Aksi</button><button id="btnMap" type="button">Peta</button><button id="btnPhoto" type="button">Foto</button><button id="btnTour" type="button">Tur</button></div>
 <div id="prompt" hidden></div>
@@ -280,6 +287,7 @@
       <div class="btns">
         <button id="labHudMode" type="button">HUD: ringkas</button>
         <button id="labHideUi" type="button"><kbd>H</kbd>Sembunyikan UI</button>
+        <a class="menuHref" href="../../index.html" style="color: var(--accent); align-self: center;">Kembali ke menu utama</a>
         <button id="labHelp" type="button"><kbd>?</kbd>Bantuan</button>
         <button id="labMap" type="button"><kbd>M</kbd>Peta</button>
       </div>
@@ -303,13 +311,13 @@
       <label class="pauto"><input id="presetAuto" type="checkbox"> Turunkan otomatis bila FPS di bawah 30</label>
       <div class="pnote">Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.</div>
       <button id="go" type="button">Mulai</button>
-      <div class="links"><a href="#" id="helpLink">Kontrol dan bantuan (?)</a><a id="menuLink" href="../../index.html">Kembali ke menu utama</a></div>
+      <div class="links"><a href="#" id="helpLink">Kontrol dan bantuan (?)</a><a id="menuLink" class="menuHref" href="../../index.html">Kembali ke menu utama</a></div>
     </div>
   </div>
 </div>
 <div id="help" hidden>
   <div class="card">
-    <div class="hhead"><span>Bantuan</span><button id="helpClose" type="button">Tutup (?)</button></div>
+    <div class="hhead"><span>Bantuan</span><span><a class="menuHref" href="../../index.html" style="color: var(--accent); margin-right: 12px;">Kembali ke menu utama</a><button id="helpClose" type="button">Tutup (?)</button></span></div>
     <div class="htabs"><button type="button" data-tab="dasar">Dasar</button><button type="button" data-tab="trans" class="desk-only">Transportasi</button><button type="button" data-tab="kamera" class="desk-only">Kamera dan foto</button><button type="button" data-tab="waktu" class="desk-only">Waktu dan cuaca</button><button type="button" data-tab="grafik" class="desk-only">Grafik dan suara</button><button type="button" data-tab="kapal" class="desk-only">Pesawat</button><button type="button" data-tab="tentang">Tentang</button></div>
     <table data-pane="dasar">
         <tr class="desk-only"><td>Mouse</td><td>Melihat. Klik = kunci kursor untuk melihat, klik lagi = kursor bebas untuk panel (Esc juga)</td></tr>
@@ -475,6 +483,7 @@ Object.assign(I18N.en, {
   "Mulai": "Start",
   "Kontrol dan bantuan (?)": "Controls and help (?)",
   "Kembali ke menu utama": "Back to main menu",
+  "← Menu": "← Menu",
   "W A S D berjalan · klik = kunci / lepas kursor · E aksi · ? bantuan": "W A S D walk · click = lock / free the cursor · E action · ? help",
   "Jempol kiri berjalan · jempol kanan melihat · tombol Panel = panel kontrol": "Left thumb walks · right thumb looks · Panel button = control panel",
   "Bantuan": "Help",
@@ -831,7 +840,11 @@ translateDom(document.body);
   const mark = () => document.querySelectorAll('.langPick button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG.cur));
   document.querySelectorAll('.langPick').forEach((box) => { for (const [c, name] of LANGS) { const b = document.createElement('button'); b.type = 'button'; b.dataset.lang = c; b.textContent = name; b.addEventListener('click', (e) => { setLang(c); e.currentTarget.blur(); }); box.appendChild(b); } });
   LANG.hooks.push(mark); mark();
-  const menuHref = () => { document.getElementById('menuLink').href = `../../index.html?lang=${LANG.cur}`; };   // menu utama ikut bahasa
+  const menuHref = () => {                                           // 24f: semua tautan menu utama ikut bahasa
+    const h = `../../index.html?lang=${LANG.cur}`;
+    for (const a of document.querySelectorAll('.menuHref')) a.href = h;
+    const b = document.getElementById('menuBtn'); if (b) b.title = t('Kembali ke menu utama');
+  };   // menu utama ikut bahasa
   LANG.hooks.push(menuHref); menuHref();
 }
 window.__stationBoot = true;
