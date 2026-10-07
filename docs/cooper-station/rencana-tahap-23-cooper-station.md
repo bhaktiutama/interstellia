@@ -10,7 +10,7 @@ Per 7 Oktober 2026 · Bhakti
 
 Catatan: nomor 22 sudah dipakai keragaman kota (rencana-tahap-22), jadi tahap ini menjadi 23. Dibangun di atas V0-V5 (TAA, GTAO, kabut V4).
 
-Status: 23a dan 23b selesai.
+Status: 23a sampai 23g selesai, menunggu uji visual dan FPS Bhakti (GTX 1060, M1).
 
 ## Keluhan dan penyebab
 
@@ -42,3 +42,13 @@ Status: 23a dan 23b selesai.
 - Pertahankan yang ada: bila SSR tidak menemukan pantulan, hasil sama dengan sebelumnya.
 - Tidak menambah suite uji di tahap ini; tiap commit cukup `tools/qc_load.py`.
 - Visual dan FPS diuji Bhakti di GTX 1060 dan M1.
+
+## Hasil dan penyederhanaan
+
+| Tahap | Catatan |
+| --- | --- |
+| 23a | Sumber pantulan = frame sebelumnya (setengah resolusi). Objek di luar layar tidak terpantul (kembali ke farEnv) |
+| 23d | Jalan lingkar za 2500 sejajar sungai di dua tempat: dek di sana sepanjang sekitar 650 m (jalan layang di atas sungai). Dekat akuaduk Skyway alur naik kembali ke tinggi 0. Lompat dari dek ke sungai: pendaratan langsung ke tinggi air (belum jatuh bertahap) |
+| 23e | Air sungai diwakili permukaan mesh alur; dalam air dihitung dari jarak ke tepi (tanpa kamera bawah air) |
+| 23f | Teduhan hanya kanopi kafe dan atap halte (pintu gedung belum); yang tidak mendapat teduhan membuka payung dan tetap duduk |
+| 23g | Merpati tidak menghindari orang atau benda selain kolam; tanpa miring saat belok di udara |
