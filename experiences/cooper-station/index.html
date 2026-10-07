@@ -2138,17 +2138,43 @@ const groundMat = new THREE.ShaderMaterial({
       if (waterM > 0.01) {
         vec3 tS = vec3(-up.y, up.x, 0.0), tZ = vec3(0.0, 0.0, 1.0);
         vec2 grad = vec2(0.0);
-        // 6 gelombang: panjang 0,8 sampai 7 m, kecepatan dari dispersi air dalam c = sqrt(g L / 2 pi), arus 0,4 m/s arah keliling
-        vec2 Pf = P - vec2(0.4 * uTime, 0.0);
+        // 23b: riak tidak berulang. Sungai mengalir searah alurnya (riverZ, angka sama dengan RIVER: t = s / R), danau diam.
+        // Domain dilengkungkan derau skala 30-80 m, arah riak diputar angin (uWind) dan per wilayah, kekasaran per petak
+        // (tiupan angin menyapu permukaan, digeser uGustOff) jadi ada bagian licin dan bagian kasar. Dua set: 6 gelombang
+        // 0,8-7 m (dispersi air dalam) + 6 riak pendek 0,25-0,9 m. Kemiringan dipudarkan di bawah ukuran piksel (fp).
+        float rt = a;
+        float rz = 2500.0 + 110.0 * sin(3.0 * rt + 0.7) + 55.0 * sin(7.0 * rt + 2.1);
+        float rdz = (330.0 * cos(3.0 * rt + 0.7) + 385.0 * cos(7.0 * rt + 2.1)) / uR;   // dz/ds
+        float rivK = 1.0 - smoothstep(22.0, 32.0, abs(za - rz));
+        vec2 flowD = vec2(1.0, rdz) * inversesqrt(1.0 + rdz * rdz);
+        vec2 flow = flowD * 0.6 * rivK;                                // arus 0,6 m/s di sungai
+        vec2 Pw = P + vec2(vnoise(P * 0.021), vnoise(P * 0.021 + 7.3)) * 9.0 - 4.5;
+        Pw += vec2(vnoise(P * 0.09 + 3.1), vnoise(P * 0.09 + 11.7)) * 1.6;
+        float wl = length(uWind.xy), wsp = clamp(wl / 3.0, 0.3, 1.7);
+        float wAng = wl > 1e-3 ? atan(uWind.y, uWind.x) : 0.0;
+        float rough = smoothstep(0.25, 0.8, fbm2(P * 0.018 - uGustOff * 0.06));
+        float ampK = mix(0.3, 1.35, rough) * wsp;
+        float regA = (vnoise(P * 0.006 + 2.0) - 0.5) * 1.6;
+        vec2 Pf = Pw - flow * uTime;
         for (int i = 0; i < 6; i++) {
           float fi = float(i);
           float L = 7.0 * pow(0.66, fi);
           float k = 2.0 * PI / L;
-          float an = 0.4 + fi * 2.1;
+          float an = mix(0.4 + fi * 2.1, wAng + (fi - 2.5) * 0.45, 0.6 * (1.0 - rivK)) + regA;
           vec2 d = vec2(cos(an), sin(an));
           float w = sqrt(9.81 * k);
-          float amp = 0.035 * (1.0 - smoothstep(0.15 * L, 0.5 * L, fp));
-          grad += amp * d * cos(k * dot(d, Pf) - w * uTime + fi * 1.7);
+          float amp = 0.03 * ampK * (1.0 - smoothstep(0.15 * L, 0.5 * L, fp));
+          grad += amp * d * cos(k * dot(d, Pf) - w * uTime + fi * 1.7 + 6.0 * vnoise(P * 0.05 + fi));
+        }
+        for (int i = 0; i < 6; i++) {
+          float fi = float(i);
+          float L = 0.9 * pow(0.78, fi);
+          float k = 2.0 * PI / L;
+          float an = wAng + (fi - 2.5) * 0.7 + regA * 1.7 + 0.9 * fi * fi;
+          vec2 d = vec2(cos(an), sin(an));
+          float w = sqrt(9.81 * k);
+          float amp = 0.022 * ampK * rough * (1.0 - smoothstep(0.15 * L, 0.5 * L, fp));
+          grad += amp * d * cos(k * dot(d, Pf) - w * uTime + fi * 2.9);
         }
         vec3 N = normalize(up - tS * grad.x - tZ * grad.y);
         vec3 V = normalize(cameraPosition - vWorld);
