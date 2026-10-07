@@ -10622,10 +10622,46 @@ function aiShuttleState(t) {
 }
 placeShip(SHIPS.cargo, BERTH_P[2].p, BERTH_P[2].q);
 
+// 24c: geometri datar di kerangka lokal pusat (x = tangen) ditekuk mengikuti lengkung silinder, seperti ballparkModel().
+// bendSub: pecah segitiga sampai lebar x <= maxDx (kalau tidak, kotak panjang jadi tali busur yang turun ke lantai).
+function bendSub(geo, maxDx = 4) {
+  const g = geo.index ? geo.toNonIndexed() : geo, names = Object.keys(g.attributes), A = names.map((n) => g.attributes[n]);
+  const out = names.map(() => []), n = g.attributes.position.count;
+  const vtx = (i) => A.map((a) => Array.from(a.array.subarray(i * a.itemSize, (i + 1) * a.itemSize)));
+  const mid = (u, v) => u.map((arr, k) => arr.map((x, j) => (x + v[k][j]) / 2));
+  const xi = names.indexOf('position');
+  for (let t = 0; t < n; t += 3) {
+    const stack = [[vtx(t), vtx(t + 1), vtx(t + 2)]];
+    while (stack.length) {
+      const T = stack.pop(), x = T.map((v) => v[xi][0]);
+      if (Math.max(...x) - Math.min(...x) <= maxDx) { for (const v of T) v.forEach((arr, k) => out[k].push(...arr)); continue; }
+      let e = 0, best = -1;                                          // sisi dengan selisih x terbesar dibelah di tengah
+      for (let k = 0; k < 3; k++) { const dx = Math.abs(x[k] - x[(k + 1) % 3]); if (dx > best) { best = dx; e = k; } }
+      const a = T[e], b = T[(e + 1) % 3], c = T[(e + 2) % 3], m = mid(a, b);
+      stack.push([a, m, c], [m, b, c]);
+    }
+  }
+  const r = new THREE.BufferGeometry();
+  names.forEach((nm, k) => r.setAttribute(nm, new THREE.Float32BufferAttribute(out[k], A[k].itemSize)));
+  return r;
+}
+// bendCyl: titik datar (x, y, z) -> a = x / R, x' = (R - y) sin a, y' = R - (R - y) cos a; normal diputar a di sumbu z
+function bendCyl(geo) {
+  const p = geo.attributes.position, nr = geo.attributes.normal;
+  for (let i = 0; i < p.count; i++) {
+    const a = p.getX(i) / R, y = p.getY(i), c = Math.cos(a), s = Math.sin(a);
+    p.setXY(i, (R - y) * s, R - (R - y) * c);
+    if (nr) { const nx = nr.getX(i), ny = nr.getY(i); nr.setXY(i, nx * c - ny * s, nx * s + ny * c); }
+  }
+  p.needsUpdate = true; if (nr) nr.needsUpdate = true;
+  geo.computeBoundingBox(); geo.computeBoundingSphere();
+  return geo;
+}
 // --- terminal di plaza spaceport (TERM didefinisikan di bagian plaza) ---
 {
   const G = new THREE.Group(), P = [], GL = [], m4 = new THREE.Matrix4();
   const { w, d, h } = TERM, STONE = [0.8, 0.79, 0.76], COLW = [0.9, 0.91, 0.92], MUL = [0.25, 0.27, 0.3], TEAL = [0.1, 0.45, 0.5];
+  // 24c: semua dibangun datar lalu ditekuk (bendSub + bendCyl) agar lantai dan kedua ujung (sagitta 1,8 m) menempel tanah
   P.push({ geo: bx(w, 0.08, d, 0, 0.04, 0), color: STONE }, { geo: bx(w + 8, 0.9, d + 8, 0, h + 0.45, 0), color: COLW }, { geo: bx(w + 8.2, 0.3, d + 8.2, 0, h - 0.1, 0), color: [0.35, 0.37, 0.4] });
   const cols = [];
   // 12a: tiang di tengah pintu selatan, pintu barat, dan gerbang B1 dihapus (menghalangi jalan)
@@ -10664,18 +10700,18 @@ placeShip(SHIPS.cargo, BERTH_P[2].p, BERTH_P[2].q);
   for (const x of [-36, -18, 18, 36]) { P.push({ geo: bx(6, 1.1, 1.2, x, 0.55, 14), color: [0.3, 0.26, 0.22] }, { geo: bx(6, 2.8, 0.2, x, 1.4, 16.2), color: TEAL }); }
   // papan keberangkatan (bingkai)
   P.push({ geo: bx(11, 3.8, 0.35, 0, 6.6, 4), color: [0.12, 0.13, 0.14] }, { geo: bx(0.2, 5, 0.2, -4, h - 2.4, 4), color: MUL }, { geo: bx(0.2, 5, 0.2, 4, h - 2.4, 4), color: MUL });
-  const mesh = new THREE.Mesh(mergeSimple(P.map(({ geo, color }) => ({ geo, color }))), new THREE.MeshBasicMaterial({ vertexColors: true }));
-  const glass = new THREE.Mesh(mergeSimple(GL.map((geo) => ({ geo, color: [1, 1, 1] }))), specMat(new THREE.MeshBasicMaterial({ color: 0xa8cfe0, transparent: true, opacity: 0.16, depthWrite: false, vertexColors: true }), 0.03, 0.06, 0, true));
+  const mesh = new THREE.Mesh(bendCyl(bendSub(mergeSimple(P.map(({ geo, color }) => ({ geo, color }))))), new THREE.MeshBasicMaterial({ vertexColors: true }));
+  const glass = new THREE.Mesh(bendCyl(bendSub(mergeSimple(GL.map((geo) => ({ geo, color: [1, 1, 1] }))))), specMat(new THREE.MeshBasicMaterial({ color: 0xa8cfe0, transparent: true, opacity: 0.16, depthWrite: false, vertexColors: true }), 0.03, 0.06, 0, true));
   glass.renderOrder = 7; glass.userData.noShadow = true;
   // papan keberangkatan (kanvas) + papan nama gedung
   const bc = document.createElement('canvas'); bc.width = 1024; bc.height = 352;
   const btex = new THREE.CanvasTexture(bc); btex.anisotropy = 4;
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(10.4, 3.5).translate(0, 6.6, 4.19), new THREE.MeshBasicMaterial({ map: btex }));
+  const board = new THREE.Mesh(bendCyl(new THREE.PlaneGeometry(10.4, 3.5).translate(0, 6.6, 4.19)), new THREE.MeshBasicMaterial({ map: btex }));
   board.userData.noLight = true; board.userData.noShadow = true;
   const sc = document.createElement('canvas'); sc.width = 1024; sc.height = 128;
   { const g = sc.getContext('2d'); g.fillStyle = '#123a40'; g.fillRect(0, 0, 1024, 128); g.fillStyle = '#e8f4f4'; g.font = 'bold 58px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillText('SPACEPORT  ·  DERMAGA SUMBU', 512, 66); }
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(26, 3.2).translate(0, h - 1.9, d / 2 + 0.3), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc) }));
+  const sign = new THREE.Mesh(bendCyl(bendSub(new THREE.PlaneGeometry(26, 3.2).translate(0, h - 1.9, d / 2 + 0.3))), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(sc) }));
   sign.userData.noShadow = true;
   G.add(mesh, glass, board, sign);
   // 12a: papan arah (menyala sendiri, terbaca siang dan malam)
@@ -10689,7 +10725,7 @@ placeShip(SHIPS.cargo, BERTH_P[2].p, BERTH_P[2].q);
       g.fillText(t, 512, cv.height * (i + 0.5) / lines.length + 2);
     });
     const tx = new THREE.CanvasTexture(cv); tx.anisotropy = 4;
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph).rotateY(rotY).translate(x, y, z), new THREE.MeshBasicMaterial({ map: tx }));
+    const m = new THREE.Mesh(bendCyl(new THREE.PlaneGeometry(pw, ph).rotateY(rotY).translate(x, y, z)), new THREE.MeshBasicMaterial({ map: tx }));
     m.userData.noLight = true; m.userData.noShadow = true; G.add(m); return m;
   };
   const GRN = '#1f7a47', ORG = '#c4600f', WHT = '#f4f7f5';
@@ -10703,12 +10739,13 @@ placeShip(SHIPS.cargo, BERTH_P[2].p, BERTH_P[2].q);
   plate([['\u2191  KELUAR · KOTA', 110]], 8, 0.9, GRN, WHT, 0, 5.3, 22, Math.PI);
   plate([['\u2196  GERBANG B1 · KE LIFT DERMAGA', 88]], 8, 0.9, ORG, WHT, -46, 5.3, 0, -Math.PI / 2);
   const cableM = new THREE.MeshBasicMaterial({ color: 0x3a3f45 });
-  for (const [x, z] of [[-3.2, 22], [3.2, 22], [-46, -3.2], [-46, 3.2]]) G.add(new THREE.Mesh(bx(0.05, h - 5.75, 0.05, x, (h + 5.75) / 2, z), cableM));   // kabel gantung
+  for (const [x, z] of [[-3.2, 22], [3.2, 22], [-46, -3.2], [-46, 3.2]]) G.add(new THREE.Mesh(bendCyl(bx(0.05, h - 5.75, 0.05, x, (h + 5.75) / 2, z)), cableM));   // kabel gantung
   // bangku ruang tunggu menghadap jendela (ke end cap A dan dermaga)
   const seats = [];
   for (let z = -24; z <= -12; z += 3) for (let x = -40; x <= 40; x += 2.1) if (Math.abs(x) > 4) seats.push([x, z]);
   const bm = new THREE.InstancedMesh(FURN.GEO.bench, new THREE.MeshBasicMaterial({ vertexColors: true }), seats.length), mm = new THREE.Matrix4();
-  seats.forEach(([x, z], i) => bm.setMatrixAt(i, mm.makeRotationY(Math.PI).setPosition(x, 0.05, z)));
+  const mr = new THREE.Matrix4();                                   // 24c: kursi di lantai tekuk, dimiringkan a di sumbu z
+  seats.forEach(([x, z], i) => { const a = x / R, y = 0.05; mm.makeRotationZ(a).multiply(mr.makeRotationY(Math.PI)).setPosition((R - y) * Math.sin(a), R - (R - y) * Math.cos(a), z); bm.setMatrixAt(i, mm); });
   TERM.seats = seats;                                                // 12b-3: kursi ruang tunggu untuk orang duduk
   G.add(bm);
   surfaceMatrix(m4, TERM.s / R, TERM.za, 0); G.matrixAutoUpdate = false; G.matrix.copy(m4);
