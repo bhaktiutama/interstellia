@@ -1,12 +1,44 @@
 # Rencana K: Mode kamera rangefinder (semua experience)
 
-Per 7 Oktober 2026 · Status: rencana, belum dikerjakan. Berlaku untuk Copper Corn Station, Millar's World, dan Gargantua; dikerjakan di Copper dulu.
+Per 7 Oktober 2026 · Status: K1-K9 dikerjakan (lihat Status implementasi), menunggu uji visual dan FPS pemilik di GTX 1060 dan M1. Berlaku untuk Copper Corn Station, Millar's World, dan Gargantua.
 
 ## Ringkasan
 
 - Mode foto lama diganti pengalaman memegang kamera rangefinder full frame: pilih lensa (21-90 mm), aperture, kecepatan rana, ISO; membidik lewat jendela bidik optik dengan garis bingkai, patch rangefinder untuk fokus, dan HUD LED di bawah jendela.
 - Foto diambil dengan render akumulasi (banyak subframe): kedalaman bidang dan bokeh dari sampel bukaan lensa sungguhan, motion blur dan eksposur lama dari waktu rana, derau sensor dari ISO. Video direkam lewat live view (EVF) dengan `MediaRecorder` plus suara.
 - Logika bersama ada di modul baru `shared/camera.js` (`window.CAMKIT`); tiap experience hanya menyediakan kait (FOV, tap HDR, meter cahaya, langkah dunia). Mode foto lama tetap ada sebagai "Foto bebas".
+
+## Status implementasi
+
+| Tahap | Status | Catatan |
+| --- | --- | --- |
+| K1 | Selesai | `shared/camera.js` (`window.CAMKIT`); `tools/uji_kamera.py` bagian 1 (Node) 15 / 15 lulus |
+| K2 | Selesai | Copper: jendela bidik 68 derajat, masker okuler, garis bingkai berpasangan + paralaks, patch rangefinder di `compMat`, HUD LED, tombol lokal |
+| K3 | Selesai | Meter: Copper `POST_R.lum` kanal g (rata-rata log berbobot tengah), Millar `M_LUM` (rumus sama), Gargantua rata-rata 30% sel paling terang (pola `AE`) |
+| K4 | Selesai | Akumulasi subframe, bukaan 9 bilah, PNG + chunk tEXt / JPEG 92%, tinjau foto, bunyi rana; resolusi 2x belum (ditunda) |
+| K5 | Selesai | Dunia maju bila rana >= 1/500 s (Copper `worldStep()`, Millar `worldStep()`, Gargantua waktu piringan + orbit otomatis), B maks 30 s, getar tangan + tripod |
+| K6 | Selesai | Live view (V), DOF gather 32 tap, blur kamera video dari proyeksi ulang kedalaman (Copper, Millar), perekam + audio master |
+| K7 | Selesai | Millar: kedalaman dibuat di semua preset selama mode kamera, visor mati (sama dengan mode foto) |
+| K8 | Selesai | Gargantua: bukaan = kemiringan arah sinar (adegan di tak hingga), wahana tidak punya DOF sendiri, Enter = rana (tanpa kunci kursor) |
+| K9 | Selesai | `docs/app/tombol.md`, `CLAUDE.md`, `FEATS` / `KEYS` menu utama, teks kamera dua bahasa di `CAMKIT` |
+
+Kalibrasi yang dipakai (nilai awal, belum diukur):
+
+| Experience | EV0 (EV100 saat meter = key) | key | Sumber meter |
+| --- | --- | --- | --- |
+| Copper | 13 | 0,16 (`ADAPT.key`) | `POST_R.lum` kanal g |
+| Millar | 12 | 0,232 / 0,85 = 0,273 (abu-abu tengah pra-ACES sama dengan Copper: 1,45 x 0,16 = 0,232) | `M_LUM` |
+| Gargantua | 10 | 0,7 (target `AE` misi) | 30% sel paling terang |
+
+Hasil uji asap di sandbox (Chromium + SwiftShader, 640 x 360; bukan ukuran FPS):
+
+| Experience | Masuk | Foto live view | Foto 1/4 s | Video | Keluar | Error halaman |
+| --- | --- | --- | --- | --- | --- | --- |
+| Copper (preset Hemat, 8 subframe) | ya | 177.910 byte | lihat uji ulang | lihat uji ulang | ya | tidak ada |
+| Millar (Hemat) | ya | 285.009 byte | 60.013 byte | mp4 438.766 byte (9 s) | ya | tidak ada |
+| Gargantua | ya | 420.120 byte | 201.486 byte | mp4 41.826 byte (9 s) | ya | tidak ada |
+
+Penyimpangan dari rencana: shuttle sandar di Copper belum termasuk tempat yang boleh memakai kamera (`ext.active` = mode shuttle); Copper Ultra dengan 32 subframe terlalu lambat untuk diuji di SwiftShader (tidak mewakili GPU sungguhan).
 
 ## Context
 

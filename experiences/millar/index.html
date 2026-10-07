@@ -155,6 +155,7 @@
 
 <script src="../../shared/kestrel.js"></script>
 <script src="../../shared/post.js"></script>
+<script src="../../shared/camera.js"></script>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
 </script>
@@ -301,6 +302,7 @@ const I18N = { en: {
   'Efek layar: {m}': 'Screen effects: {m}', 'Kecepatan waktu: {x}': 'Time speed: {x}', 'Tampilan: {v}': 'View: {v}',
   'Panggil gelombang': 'Summon wave', 'Mode foto': 'Photo mode', 'Kembali ke titik awal': 'Back to start point',
   'Mode foto: Enter simpan PNG, F atau Esc keluar': 'Photo mode: Enter saves PNG, F or Esc exits', 'Foto disimpan': 'Photo saved',
+  'Kamera rangefinder hanya bisa dipakai saat berjalan kaki atau pandangan drone': 'The rangefinder camera works on foot or in the drone view',
   'Melihat. Klik = kunci kursor, Esc = lepas kursor': 'Look around. Click = lock cursor, Esc = release cursor',
   'Berjalan di air setinggi lutut (air menahan langkah)': 'Walk in knee-deep water (the water drags your steps)',
   'Lari': 'Run', 'Lompat (1,3 g: 77% lompatan di Bumi)': 'Jump (1.3 g: 77% of an Earth jump)',
@@ -1529,6 +1531,20 @@ const M_UP = pmat(`uniform sampler2D tSrc, tCur; uniform vec2 uPx; varying vec2 
     for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) s += texture2D(tSrc, vUv + vec2(x, y) * uPx).rgb * (x == 0 ? 2.0 : 1.0) * (y == 0 ? 2.0 : 1.0);
     gl_FragColor = vec4(texture2D(tCur, vUv).rgb + s / 16.0, 1.0); }`, { tSrc: { value: null }, tCur: { value: null }, uPx: { value: new THREE.Vector2() } });
 const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform vec3 uWhite; uniform float uExp, uBloomK, uUnder, uTime; varying vec2 vUv;
+  // K: kamera rangefinder (shared/camera.js): kedalaman dari POST.hdr.depthTexture (dibuat di semua preset selama mode kamera)
+  uniform sampler2D tDepth; uniform float uHasD; uniform mat4 uCamPI, uCamCW, uCamPV;
+  ${CAMKIT.GLSL_U}
+  vec3 camHdr(vec2 uv) { vec3 c = textureLod(tHdr, uv, 0.0).rgb; return any(isnan(c)) ? vec3(0.0) : clamp(c, 0.0, 64.0); }
+  vec3 camView(vec2 uv, out float d) { d = textureLod(tDepth, uv, 0.0).r; vec4 v = uCamPI * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return v.xyz / v.w; }
+  float camDist(vec2 uv) { if (uHasD < 0.5) return 1e5; float d; vec3 vp = camView(uv, d); return d >= 0.99999 ? 1e5 : length(vp); }
+  vec2 camPrevUv(vec2 uv) {
+    if (uHasD < 0.5) return uv;
+    float d; vec3 vp = camView(uv, d);
+    vec4 wp = d >= 0.99999 ? vec4(mat3(uCamCW) * vp, 0.0) : uCamCW * vec4(vp, 1.0);
+    vec4 pc = uCamPV * wp;
+    return pc.w > 1e-6 ? pc.xy / pc.w * 0.5 + 0.5 : uv;
+  }
+  ${CAMKIT.GLSL_F}
   uniform float uVis, uAsp, uFog, uWet, uSeed; uniform vec2 uGlint;   // M6d visor: tingkat (0 mati), aspek, embun, basah, pola tetes, kilau (kuat, x layar)
   vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
   float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
@@ -1548,7 +1564,8 @@ const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform vec3 uWhite; unifor
       }
     }
     vec3 c = texture2D(tHdr, uv).rgb; if (any(isnan(c))) c = vec3(0.0);
-    c = clamp(c, 0.0, 64.0) + texture2D(tBloom, vUv).rgb * uBloomK;   // jepit juga Inf
+    c = camPre(uv, clamp(c, 0.0, 64.0));                              // K: patch rangefinder / DOF / blur video (mati = tidak berubah)
+    c = c + texture2D(tBloom, vUv).rgb * uBloomK;   // jepit juga Inf
     c = c * dSh + dSp;
     if (uUnder > 0.0) {                                               // R4: di dalam gelombang: hijau-abu gelap, terang ke atas, gelembung naik
       float l = dot(c, vec3(0.3, 0.5, 0.2));
@@ -1565,7 +1582,7 @@ const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform vec3 uWhite; unifor
       }
       c = mix(c, uw + vec3(0.35, 0.45, 0.45) * b, uUnder);
     }
-    c = aces(c * uExp * uWhite);                                      // V0: white balance di ruang linear sebelum ACES
+    c = aces(camPost(vUv, c * uExp * camMul(1.0) * uWhite));         // V0: white balance di ruang linear sebelum ACES; K: pengali kamera + derau ISO
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
     c = mix(vec3(l), c, 0.82) * vec3(0.97, 1.0, 1.03);              // grading: agak pudar, dingin
     c = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));                      // ke ruang tampilan (sRGB didekati gamma 2,2)
@@ -1584,7 +1601,9 @@ const M_COMP = pmat(`uniform sampler2D tHdr, tBloom; uniform vec3 uWhite; unifor
     }
     gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));        // alpha = luma untuk FXAA
   }`, { tHdr: { value: null }, tBloom: { value: null }, uExp: { value: CONFIG.exposure }, uWhite: { value: new THREE.Vector3(...POSTKIT.wb(CONFIG.wb.k, CONFIG.wb.tint)) }, uBloomK: { value: 0.08 }, uUnder: { value: 0 }, uTime: { value: 0 },
-  uVis: { value: 0 }, uAsp: { value: 1.7778 }, uFog: { value: 0 }, uWet: { value: 0 }, uSeed: { value: 0 }, uGlint: { value: new THREE.Vector2() } });
+  uVis: { value: 0 }, uAsp: { value: 1.7778 }, uFog: { value: 0 }, uWet: { value: 0 }, uSeed: { value: 0 }, uGlint: { value: new THREE.Vector2() },
+  tDepth: { value: null }, uHasD: { value: 0 }, uCamPI: { value: new THREE.Matrix4() }, uCamCW: { value: new THREE.Matrix4() }, uCamPV: { value: new THREE.Matrix4() },
+  uCamE: { value: new THREE.Vector4(0, 1, 0, 0) }, uCamL: { value: new THREE.Vector4() }, uCamR: { value: new THREE.Vector4() }, uCamM: { value: new THREE.Vector4() }, uCamT: { value: new THREE.Vector2(1e-3, 1e-3) } });
 const M_FINAL = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; uniform float uTime, uGrain, uVig, uTaa; varying vec2 vUv;
   float h12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
   vec3 fxaa() {
@@ -1634,6 +1653,7 @@ function makePost(w, h, P) {
   const opt = { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false };
   POST.hdr = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, depthBuffer: true, samples: P.msaa });
   TAA.hist = []; TAA.valid = false;
+  if (CAMKIT.on && !(!TAA.off && P === PRESETS[0])) POST.hdr.depthTexture = new THREE.DepthTexture(w, h);   // K: DOF dan patch rangefinder butuh kedalaman
   if (!TAA.off && P === PRESETS[0]) {                                // V5: kedalaman untuk proyeksi ulang TAA + dua riwayat
     POST.hdr.depthTexture = new THREE.DepthTexture(w, h);
     TAA.hist = [0, 1].map(() => new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }));
@@ -1656,17 +1676,18 @@ function postRender(time) {
       pass(M_UP, Up[i]); src = Up[i];
     }
   }
-  M_COMP.uniforms.uBloomK.value = 0.08 * PM.bloom; M_FINAL.uniforms.uGrain.value = PRESETS[PRESET.idx].grain * PM.grain; M_FINAL.uniforms.uVig.value = PM.vig;
+  M_COMP.uniforms.uBloomK.value = 0.08 * PM.bloom; M_FINAL.uniforms.uGrain.value = CAMKIT.U.E[0] > 0.5 ? 0 : PRESETS[PRESET.idx].grain * PM.grain; M_FINAL.uniforms.uVig.value = PM.vig;   // K: derau sensor menggantikan butiran
+  { const C = M_COMP.uniforms; C.tDepth.value = POST.hdr.depthTexture || null; C.uHasD.value = POST.hdr.depthTexture ? 1 : 0; C.uCamPI.value.copy(camera.projectionMatrixInverse); C.uCamCW.value.copy(camera.matrixWorld); }
   M_COMP.uniforms.tHdr.value = POST.hdr.texture; M_COMP.uniforms.tBloom.value = src.texture; pass(M_COMP, POST.ldr);
   let fin = POST.ldr;
-  if (TAA.act) {                                                      // V5: TAA sesudah tone map, sebelum vinyet dan butiran
+  if (TAA.act && !CAMX.final) {                                       // V5: TAA sesudah tone map, sebelum vinyet dan butiran (K: foto akumulasi tanpa TAA)
     const T = M_TAA.uniforms, hw = TAA.hist[TAA.cur], hr = TAA.hist[1 - TAA.cur];
     T.tCur.value = POST.ldr.texture; T.tHist.value = hr.texture; T.tDepth.value = POST.hdr.depthTexture;
     T.uProjInv.value.copy(camera.projectionMatrixInverse); T.uCamWorld.value.copy(camera.matrixWorld); T.uPrevVP.value.copy(TAA.prevVP);
     T.uTexel.value.set(1 / POST.w, 1 / POST.h); T.uValid.value = TAA.valid ? 1 : 0;
     pass(M_TAA, hw); TAA.valid = true; TAA.cur = 1 - TAA.cur; fin = hw;
   }
-  M_FINAL.uniforms.uTaa.value = TAA.act ? 1 : 0;
+  M_FINAL.uniforms.uTaa.value = TAA.act || CAMX.final ? 1 : 0;      // K: foto akumulasi = pertajam ringan, bukan FXAA
   M_FINAL.uniforms.tSrc.value = fin.texture; M_FINAL.uniforms.uPx.value.set(1 / POST.w, 1 / POST.h); M_FINAL.uniforms.uTime.value = time;
   pass(M_FINAL, null);
 }
@@ -1731,7 +1752,7 @@ function applyPreset(i) {
   const au = document.getElementById('presetAuto'); if (au) au.checked = PRESET.auto;
 }
 function autoPreset(dt) {
-  if (!PRESET.auto || !STATE.started) return;
+  if (!PRESET.auto || !STATE.started || CAMKIT.on) return;           // K: mode kamera (tangkap / rekam) tidak mengubah resolusi atau preset
   if (!PHOTO.on && DYN.update(dt, fps)) resize();                     // V0: turunkan resolusi dulu, preset hanya bila skala sudah minimum
   PRESET.low = fps < 30 && (DYN.atMin() || !DYN.opt.on) ? PRESET.low + dt : Math.max(0, PRESET.low - dt);
   if (PRESET.low > 4 && PRESET.idx < PRESETS.length - 1) { applyPreset(PRESET.idx + 1); PRESET.low = -6; toast(t('FPS rendah: grafik diturunkan ke {p}.', { p: t(PRESETS[PRESET.idx].name) }), 3); }
@@ -2505,7 +2526,8 @@ function playerAtDoor() {
 /* Tombol standar aplikasi (patokan Copper Corn Station, docs/app/tombol.md): Q grafik, P efek layar, U suara, N suasana/cuaca,
    Z waktu, V tampilan, F foto, R kembali, H sembunyikan, ` panel, ? atau F1 bantuan. Khusus Millar: G panggil gelombang.
    Gerak kepala pindah ke panel (B di Copper = lempar bola). */
-const PHOTO = { on: false, shot: false };
+const PHOTO = { on: false, shot: false, kind: 'bebas', last: 'kamera' };   // K: kind 'bebas' (lama) / 'kamera' (rangefinder)
+try { const k = localStorage.getItem('millar.photoKind'); if (k === 'bebas' || k === 'kamera') PHOTO.last = k; } catch (e) { /* abaikan */ }
 function cyclePreset() { PRESET.auto = false; applyPreset((PRESET.idx + 1) % PRESETS.length); toast(t('Grafik: {p}', { p: t(PRESETS[PRESET.idx].name) }), 2); syncLab(); }
 function cyclePost() { POST.mode = (POST.mode + 1) % POST_MODES.length; toast(t('Efek layar: {m}', { m: t(POST_MODES[POST.mode].name) }), 2); syncLab(); }
 function cycleMood() { setMood((MOOD.idx + 1) % MOODS.length); toast(t('Suasana: {m}', { m: t(MOODS[MOOD.idx].key) }), 2); syncLab(); }
@@ -2525,9 +2547,16 @@ function cycleVisor() {
 function cycleSpeed() { P.speed = (P.speed + 1) % CONFIG.speeds.length; syncLab(); }
 function cycleView() { P.view = (P.view + 1) % CONFIG.views.length; if (P.view === 0) P.y = seabed(P.x, P.z) + CONFIG.eye; syncLab(); }
 function summonWave() { if (MIS.on) { toast(t('Tidak tersedia di mode Misi'), 2); return; } U.uWX.value += P.x + W.summon - frontX(P.z); toast(t('Gelombang dipanggil: {d} km', { d: fmtN(W.summon / 1000) }), 2.5); }
-function togglePhoto(on = !PHOTO.on) {
+function togglePhoto(on = !PHOTO.on, kind) {                         // K: kind 'kamera' = kamera rangefinder, lainnya = mode foto lama
+  if (on === PHOTO.on) return;
+  if (on && kind === 'kamera' && !camAllowed()) { toast(t('Kamera rangefinder hanya bisa dipakai saat berjalan kaki atau pandangan drone'), 3); return; }
   PHOTO.on = on; document.body.classList.toggle('photo', on);
-  if (on) { labEl.hidden = true; toast(t('Mode foto: Enter simpan PNG, F atau Esc keluar'), 3); }
+  if (on) {
+    PHOTO.kind = kind === 'kamera' ? 'kamera' : 'bebas'; labEl.hidden = true;
+    if (kind) { PHOTO.last = PHOTO.kind; try { localStorage.setItem('millar.photoKind', PHOTO.kind); } catch (e) { /* abaikan */ } }
+    if (PHOTO.kind === 'kamera') { CAMKIT.enter(); resize(); lockPointer(); }
+    else toast(t('Mode foto: Enter simpan PNG, F atau Esc keluar'), 3);
+  } else if (PHOTO.kind === 'kamera') { PHOTO.kind = 'bebas'; camLeave(); }
 }
 function savePhoto() {           // dipanggil tepat setelah frame digambar (tanpa preserveDrawingBuffer)
   canvas.toBlob((blob) => {
@@ -2607,7 +2636,7 @@ addEventListener('keydown', (e) => {
     if (e.code === 'Backquote') toggleLab();
     if (!['KeyQ', 'KeyP', 'KeyN', 'KeyU', 'KeyZ', 'KeyH', 'KeyG'].includes(e.code)) return;   // tombol umum tetap jalan
   }
-  if (e.code === 'KeyF') { togglePhoto(); return; }
+  if (e.code === 'KeyF') { togglePhoto(undefined, PHOTO.last); return; }   // K: jenis terakhir (bawaan kamera rangefinder)
   if (e.code === 'KeyM') toggleRadar();
   if (e.code === 'KeyE') missionAction();
   if (PHOTO.on && (e.code === 'Enter' || e.code === 'NumpadEnter')) { PHOTO.shot = true; return; }
@@ -3767,10 +3796,7 @@ addEventListener('resize', resize);
 /* ---------------- Loop ---------------- */
 const WOB_AXIS = new THREE.Vector3(1, 0, 0.35).normalize(), wobQ = new THREE.Quaternion(), wobM4 = new THREE.Matrix4();
 let last = performance.now(), depthNow = 0;
-function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
-  autoPreset(dt);
+function worldStep(dt, now) {                         // K: simulasi + kamera (frame biasa dan subframe foto kamera)
   const sdt = dt * CONFIG.speeds[P.speed];
   STATE.visT += sdt;
   if (STATE.started) { if (!SWEEP.on && !FLY.on) depthNow = stepPlayer(dt); simStep(sdt, dt); if (!MIS.result) updateFly(dt); else if (AUDIO.eng) flyAudio(); }
@@ -3788,12 +3814,9 @@ function frame(now) {
   SKYU.uTime.value = STATE.visT; GU_.uTime.value = STATE.visT * 1.5;   // waktu piringan (satuan rs/c), sekitar 30 s per putaran di tepi dalam
 
   const onFoot = P.view === 0 && !FLY.on, AM = updateAudio(dt, dist);
-  { // FOV naik sedikit saat lari (M6a-2); diam tepat 70, tidak berubah di mode foto
+  if (!(PHOTO.on && PHOTO.kind === 'kamera')) { // FOV naik sedikit saat lari (M6a-2); diam tepat 70, tidak berubah di mode foto (K: kamera mengatur sendiri)
     const f = 70 + (onFoot && !PHOTO.on ? CONFIG.walk.fovRun * BOB.run : 0);
-    if (Math.abs(camera.fov - f) > 0.01) {
-      camera.fov = f; camera.updateProjectionMatrix(); const h = renderer.domElement.height || 1;
-      U.uPix.value = 2 * Math.tan(camera.fov * DEG / 2) / h; splMat.uniforms.uScale.value = h / (2 * Math.tan(camera.fov * DEG / 2));
-    }
+    if (Math.abs(camera.fov - f) > 0.01) camSetFov(f);
   }
   // Getaran tanah (R5): gemuruh gelombang raksasa terasa di kaki, ikut tingkat gerak kepala (B)
   const shk = onFoot && !SWEEP.on ? AM.shake * BOB_LEVELS[BOB.level][1] : 0, tv = now / 1000;
@@ -3812,6 +3835,14 @@ function frame(now) {
   if (CLK.msgT > 0 && (CLK.msgT -= dt) <= 0) msgEl.classList.remove('on');
   whiteEl.style.opacity = CLK.white.toFixed(3);
   if ((hudT -= dt) <= 0) { hudT = 0.2; updateHud(depthNow, dist, wob); }
+}
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
+  if (CAMKIT.cap) { camCapture(dt, now); requestAnimationFrame(frame); return; }   // K: subframe foto (layar dibekukan)
+  autoPreset(dt);
+  worldStep(dt, now);
+  camFrame();                                          // K: kamera rangefinder (bidang, lensa, uniform)
 
   if (CINE.on && CINE.orbit) {                          // M4: adegan orbit (dunia tidak dirender)
     gpuBegin('sk'); updateGCube(); gpuEnd();
@@ -3825,8 +3856,136 @@ function frame(now) {
     gpuBegin('po'); postRender(now / 1000); taaEnd(); gpuEnd();
   }
   if (PHOTO.shot) { PHOTO.shot = false; savePhoto(); }
+  camAfterFrame();                                     // K: rana ditekan = bekukan layar lalu mulai subframe
   gpuFrameEnd();
   requestAnimationFrame(frame);
+}
+/* =====================================================================
+   K: KAMERA RANGEFINDER (shared/camera.js, docs/app/rencana-kamera-rangefinder.md), pola sama dengan Copper Corn Station.
+   Meter: rata-rata log berbobot tengah dari HDR (M_LUM, 1 x 1, dibaca asinkron). Kalibrasi: key = 0,232 / exposure (abu-abu
+   tengah sama terangnya dengan Copper), EV0 = 12 (siang mendung). Foto: subframe ke target akumulasi lalu postRender sekali.
+   ===================================================================== */
+const M_LUM = pmat(`uniform sampler2D tHdr; varying vec2 vUv;
+  void main() {
+    float s = 0.0, ws = 0.0;
+    for (int j = 0; j < 12; j++) for (int i = 0; i < 16; i++) {
+      vec2 uv = (vec2(float(i), float(j)) + 0.5) / vec2(16.0, 12.0), d = (uv - 0.5) * vec2(1.6, 1.2);
+      float w = exp(-dot(d, d) * 2.0), l = dot(textureLod(tHdr, uv, 0.0).rgb, vec3(0.2126, 0.7152, 0.0722));
+      if (!(l >= 0.0 && l < 1e4)) l = 0.2;
+      s += log(max(l, 1e-4)) * w; ws += w;
+    }
+    gl_FragColor = vec4(exp(s / ws), 0.0, 0.0, 1.0);
+  }`, { tHdr: { value: null } });
+const M_ACC = pmat(`uniform sampler2D tSrc; uniform float uW; varying vec2 vUv;
+  void main() { vec3 c = textureLod(tSrc, vUv, 0.0).rgb; c = vec3(c.r == c.r ? c.r : 0.0, c.g == c.g ? c.g : 0.0, c.b == c.b ? c.b : 0.0); gl_FragColor = vec4(clamp(c, 0.0, 6e4) * uW, 1.0); }`, { tSrc: { value: null }, uW: { value: 1 } });
+M_ACC.blending = THREE.CustomBlending; M_ACC.blendEquation = THREE.AddEquation; M_ACC.blendSrc = THREE.OneFactor; M_ACC.blendDst = THREE.OneFactor; M_ACC.blendSrcAlpha = THREE.ZeroFactor; M_ACC.blendDstAlpha = THREE.OneFactor;
+const M_CPY = pmat(`uniform sampler2D tSrc; uniform float uS; varying vec2 vUv; void main() { gl_FragColor = vec4(textureLod(tSrc, vUv, 0.0).rgb * uS, 1.0); }`, { tSrc: { value: null }, uS: { value: 1 } });
+const CAMX = { final: false, ex: 0, ey: 0, prevVP: new THREE.Matrix4(), pos: new THREE.Vector3(), q: new THREE.Quaternion(), w: 1, n: 0, reading: false, lumT: 0,
+  float: renderer.extensions.has('EXT_float_blend'), px: new Uint16Array(4), lum: new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false }) };
+CAMX.acc = new THREE.WebGLRenderTarget(4, 4, { type: CAMX.float ? THREE.FloatType : THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false });
+const _kR = new THREE.Vector3(), _kU = new THREE.Vector3(), _kQ = new THREE.Quaternion(), _kCC = new THREE.Color(), _kX = new THREE.Vector3(1, 0, 0), _kY = new THREE.Vector3(0, 1, 0);
+CAMKIT.init({
+  app: 'millar', canvas, ev0: 12, key: 0.232 / CONFIG.exposure, minFocus: 0.7,
+  lang: () => LANG, exit: () => togglePhoto(false), freeMode: () => { togglePhoto(false); togglePhoto(true, 'bebas'); },
+  isLocked: () => document.pointerLockElement === canvas, unlock: () => { if (document.pointerLockElement) document.exitPointerLock(); },
+  audio: () => (AUDIO.ctx && AUDIO.master ? { ctx: AUDIO.ctx, node: AUDIO.master } : null),
+  quality: () => [32, 24, 16, 8, 8][PRESET.idx] || 16,
+});
+function camAllowed() { return STATE.started && !FLY.on && !CINE.on && !SWEEP.on; }
+function camSetFov(f) {                                               // FOV + besaran turunan (ukuran piksel untuk ombak dan cipratan)
+  if (Math.abs(camera.fov - f) < 1e-5) return;
+  camera.fov = f; camera.updateProjectionMatrix(); const h = renderer.domElement.height || 1;
+  U.uPix.value = 2 * Math.tan(camera.fov * DEG / 2) / h; splMat.uniforms.uScale.value = h / (2 * Math.tan(camera.fov * DEG / 2));
+}
+function camUniforms(W, H) {
+  const C = M_COMP.uniforms, K = CAMKIT.U;
+  C.uCamE.value.fromArray(K.E); C.uCamL.value.fromArray(K.L); C.uCamR.value.fromArray(K.R); C.uCamM.value.fromArray(K.M);
+  C.uCamT.value.set(1 / W, 1 / H); C.uCamPV.value.copy(CAMX.prevVP);
+}
+function camOff() {
+  const C = M_COMP.uniforms; C.uCamE.value.set(0, 1, 0, 0); C.uCamL.value.set(0, 0, 0, 0); C.uCamR.value.set(0, 0, 0, 0); C.uCamM.value.set(0, 0, 0, 0);
+  CAMKIT.U.E = [0, 1, 0, 0]; CAMKIT.U.L = [0, 0, 0, 0]; CAMKIT.U.R = [0, 0, 0, 0]; CAMKIT.U.M = [0, 0, 0, 0];
+}
+function camLeave() { CAMKIT.leave(); camOff(); CAMX.final = false; TAA.valid = false; camSetFov(70); resize(); }
+function camOffset(dx, dy) {
+  if (!dx && !dy) return;
+  camera.updateMatrix(); _kR.setFromMatrixColumn(camera.matrix, 0); _kU.setFromMatrixColumn(camera.matrix, 1);
+  camera.position.addScaledVector(_kR, dx).addScaledVector(_kU, dy);
+}
+function camFrame() {
+  if (!(PHOTO.on && PHOTO.kind === 'kamera')) return;
+  if (!camAllowed()) { togglePhoto(false); return; }
+  const V = CAMKIT.view(POST.w, POST.h, false);
+  camSetFov(V.vfov);
+  camOffset(V.eye[0], V.eye[1]); CAMX.ex = V.eye[0]; CAMX.ey = V.eye[1];
+  camera.updateMatrixWorld();
+  camUniforms(POST.w, POST.h);
+  CAMKIT.tick();
+}
+function camAfterFrame() {
+  CAMX.prevVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+  if (!CAMKIT.on) return;
+  if (!CAMX.reading && performance.now() - CAMX.lumT > 200 && !(CINE.on && CINE.orbit)) {   // meter: HDR frame ini masih utuh
+    M_LUM.uniforms.tHdr.value = POST.hdr.texture; pass(M_LUM, CAMX.lum);
+    CAMX.reading = true; CAMX.lumT = performance.now();
+    renderer.readRenderTargetPixelsAsync(CAMX.lum, 0, 0, 1, 1, CAMX.px).then(() => CAMKIT.meter(THREE.DataUtils.fromHalfFloat(CAMX.px[0]))).catch(() => {}).finally(() => { CAMX.reading = false; });
+  }
+  CAMKIT.afterFrame(canvas);
+  CAMKIT.draw();
+}
+function camCapture(dtReal, now) {
+  const Pc = CAMKIT.cap, t0 = performance.now(), W = POST.w, H = POST.h;
+  if (Pc.i === 0) {
+    if (CAMX.acc.width !== W || CAMX.acc.height !== H) CAMX.acc.setSize(W, H);
+    renderer.setRenderTarget(CAMX.acc); renderer.getClearColor(_kCC); const ca = renderer.getClearAlpha();
+    renderer.setClearColor(0x000000, 0); renderer.clear(true, false, false); renderer.setClearColor(_kCC, ca);
+    CAMX.n = 0; CAMX.w = CAMX.float ? 1 : 1 / (Pc.bulb ? 120 : Pc.N);
+    camOffset(-CAMX.ex, -CAMX.ey); camera.updateMatrixWorld();
+    CAMX.pos.copy(camera.position); CAMX.q.copy(camera.quaternion);
+    TAA.act = false; TAA.valid = false; CAMX.t = now;
+  }
+  while (!Pc.done) {
+    const s = CAMKIT.sub(dtReal);
+    if (s.dt > 0) {                                                  // dunia maju: ombak, gelombang, cipratan, pemain
+      CAMX.t += s.dt * 1000;
+      worldStep(s.dt, CAMX.t);
+      if (!camAllowed()) { Pc.done = true; break; }
+      camera.updateMatrixWorld(); CAMX.pos.copy(camera.position); CAMX.q.copy(camera.quaternion);
+      updateGCube(); updateSkyCube(); updateOcean(); updateRipple(s.dt); probeOcean(P.x, P.z); updateShadow();
+    }
+    camSub(s, W, H);
+    if (Pc.bulb || performance.now() - t0 > 45) break;
+  }
+  if (Pc.done) camFinish(W, H, now);
+  CAMKIT.draw();
+}
+function camSub(s, W, H) {
+  const V = CAMKIT.view(W, H, true);
+  camSetFov(V.vfov);
+  camera.position.copy(CAMX.pos); camera.quaternion.copy(CAMX.q);
+  if (s.yaw || s.pitch) camera.quaternion.multiply(_kQ.setFromAxisAngle(_kY, s.yaw)).multiply(_kQ.setFromAxisAngle(_kX, s.pitch));
+  camOffset(V.eye[0] + s.ax, V.eye[1] + s.ay);
+  camera.updateMatrixWorld();
+  const e = camera.projectionMatrix.elements;
+  e[8] += -e[0] * s.ax * s.invS + 2 * s.jx / W; e[9] += -e[5] * s.ay * s.invS + 2 * s.jy / H;   // bidang fokus tetap + geser sub-piksel
+  camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
+  U.uCam.value.copy(camera.position);
+  renderer.setRenderTarget(POST.hdr); renderer.clear(); renderer.render(scene, camera);
+  camera.updateProjectionMatrix();
+  M_ACC.uniforms.tSrc.value = POST.hdr.texture; M_ACC.uniforms.uW.value = CAMX.w;
+  pass(M_ACC, CAMX.acc); CAMX.n++;
+}
+function camFinish(W, H, now) {
+  M_CPY.uniforms.tSrc.value = CAMX.acc.texture; M_CPY.uniforms.uS.value = 1 / Math.max(1, CAMX.n * CAMX.w);
+  pass(M_CPY, POST.hdr);
+  CAMKIT.view(W, H, true); CAMKIT.U.E[1] = CAMKIT.capMul();
+  camUniforms(W, H);
+  CAMX.final = true; TAA.act = false;
+  postRender(now / 1000);
+  CAMX.final = false;
+  CAMKIT.finish(canvas);
+  camera.position.copy(CAMX.pos); camera.quaternion.copy(CAMX.q); camera.updateMatrixWorld();
+  TAA.valid = false;
 }
 try { renderer.compile(scene, camera); renderer.compile(skyScene, camera); renderer.compile(gScene, camera); renderer.compile(orbScene, orbCam); } catch (e) { /* lanjut tanpa pra-kompilasi */ }
 requestAnimationFrame(frame);

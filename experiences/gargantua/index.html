@@ -117,6 +117,7 @@
 <pre id="err" hidden></pre>
 <script src="assets/gx01.data.js"></script>
 <script src="../../shared/post.js"></script>
+<script src="../../shared/camera.js"></script>
 
 <script>
 'use strict';
@@ -532,21 +533,37 @@ void main() {
   o = vec4(c / ws, 1.0);
 }`;
 
+// K: akumulasi subframe foto kamera (didekode, bobot uW) dan salin rata-rata kembali ke target scene (dienkode)
+const CAMACC_FS = COMMON + `
+in vec2 vUv; out vec4 o;
+uniform sampler2D uTex; uniform float uDec, uW;
+void main() { vec3 c = texture(uTex, vUv).rgb * uDec; c = vec3(c.r == c.r ? c.r : 0.0, c.g == c.g ? c.g : 0.0, c.b == c.b ? c.b : 0.0); o = vec4(clamp(c, 0.0, 6e4) * uW, 1.0); }`;
+const CAMCPY_FS = COMMON + `
+in vec2 vUv; out vec4 o;
+uniform sampler2D uTex; uniform float uS, uEnc;
+void main() { o = vec4(texture(uTex, vUv).rgb * uS * uEnc, 1.0); }`;
+
 const COMPOSITE_FS = COMMON + `
 in vec2 vUv; out vec4 o;
 uniform sampler2D uScene, uB0, uB1, uB2, uB3, uStreak;
 uniform float uExposure, uBloom, uStreakAmt, uGrain, uVig, uDec;
 uniform vec3 uWhite;  // V0: white balance (shared/post.js), netral = 1
 uniform vec2 uRes; uniform uint uFrame;
+// K: kamera rangefinder (shared/camera.js): adegan praktis di tak hingga (lubang hitam, piringan, bintang), jadi jarak = tak hingga
+${CAMKIT.GLSL_U}
+vec3 camHdr(vec2 uv) { return texture(uScene, uv).rgb * uDec; }
+float camDist(vec2 uv) { return 1e9; }
+vec2 camPrevUv(vec2 uv) { return uv; }
+${CAMKIT.GLSL_F}
 // ACES filmic fit (Narkowicz 2015)
 vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 void main() {
-  vec3 c = texture(uScene, vUv).rgb * uDec;
+  vec3 c = camPre(vUv, texture(uScene, vUv).rgb * uDec);           // K: patch rangefinder / DOF (mati = tidak berubah)
   vec3 b = (texture(uB0, vUv).rgb * 0.30 + texture(uB1, vUv).rgb * 0.30
           + texture(uB2, vUv).rgb * 0.22 + texture(uB3, vUv).rgb * 0.18) * uDec;
   vec3 s = texture(uStreak, vUv).rgb * uDec;
   c += b * uBloom + s * uStreakAmt * vec3(0.9, 0.95, 1.0);
-  c = aces(c * uExposure * uWhite);
+  c = aces(camPost(vUv, c * uExposure * camMul(1.0) * uWhite));    // K: pengali kamera + derau ISO
   vec2 q = vUv - 0.5; q.x *= uRes.x / uRes.y;
   c *= 1.0 - uVig * smoothstep(0.35, 1.15, length(q));
   c = pow(c, vec3(1.0 / 2.2));
@@ -729,7 +746,7 @@ let LANG = 'en';
 const ID = {
   'Gargantua Black Hole · Schwarzschild ray-traced approximation': 'Gargantua Black Hole · pendekatan ray tracing Schwarzschild',
   'drag: orbit · wheel/pinch: zoom · 1-4: presets · H: hide UI · ?: help': 'seret: putar · roda/cubit: zoom · 1-4: sudut pandang · H: sembunyikan UI · ?: bantuan',
-  'Photo mode': 'Mode foto', 'Fullscreen': 'Layar penuh', 'Help': 'Bantuan', 'Close (?)': 'Tutup (?)', 'Photo saved': 'Foto disimpan',
+  'Photo mode': 'Mode foto', 'Fullscreen': 'Layar penuh', 'Help': 'Bantuan', 'Close (?)': 'Tutup (?)', 'Photo saved': 'Foto disimpan', 'The rangefinder camera works outside a mission or while paused': 'Kamera rangefinder bisa dipakai di luar misi atau saat jeda',
   'Photo mode: Enter saves PNG, F or Esc exits': 'Mode foto: Enter simpan PNG, F atau Esc keluar',
   'Quality: {q}': 'Kualitas: {q}', 'Screen effects: {m}': 'Efek layar: {m}', 'Off': 'Mati', 'Paused': 'Dijeda', 'Running': 'Berjalan',
   'Drag / wheel / pinch': 'Seret / roda / cubit', 'Orbit and zoom the camera': 'Putar dan zoom kamera',
@@ -1001,6 +1018,7 @@ function main() {
     blur: program(BLUR_FS, 'blur'),
     streak: program(STREAK_FS, 'streak'),
     composite: program(COMPOSITE_FS, 'composite'),
+    camAcc: program(CAMACC_FS, 'camAcc'), camCpy: program(CAMCPY_FS, 'camCpy'),
   };
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
@@ -2416,7 +2434,51 @@ function main() {
     applyQuality(q); syncUI(); toast(txt('Quality: {q}').replace('{q}', txt(q[0].toUpperCase() + q.slice(1))));
   }
   function cyclePost() { state.postMode = (state.postMode + 1) % POST_MODES.length; toast(txt('Screen effects: {m}').replace('{m}', txt(POST_MODES[state.postMode].name))); }
-  function togglePhoto(on = !state.photo) { state.photo = on; document.body.classList.toggle('photo', on); if (on) toast(txt('Photo mode: Enter saves PNG, F or Esc exits'), 3); }
+  function togglePhoto(on = !state.photo, kind) {                     // K: kind 'kamera' = kamera rangefinder, lainnya = mode foto lama
+    if (on === state.photo) return;
+    if (on && kind === 'kamera' && !camAllowed()) { toast(txt('The rangefinder camera works outside a mission or while paused'), 3); return; }
+    state.photo = on; document.body.classList.toggle('photo', on);
+    if (on) {
+      state.photoKind = kind === 'kamera' ? 'kamera' : 'bebas';
+      if (kind) { state.photoLast = state.photoKind; try { localStorage.setItem('gargantua.photoKind', state.photoKind); } catch (e) { /* abaikan */ } }
+      if (state.photoKind === 'kamera') CAMKIT.enter(); else toast(txt('Photo mode: Enter saves PNG, F or Esc exits'), 3);
+    } else if (state.photoKind === 'kamera') { state.photoKind = 'bebas'; CAMKIT.leave(); camOff(); }
+  }
+  // K: kamera rangefinder (shared/camera.js). Meter = rata-rata 30% sel paling terang (pola AE misi), key 0,7, EV0 10.
+  // Foto: subframe ray tracing digeser sub-piksel + arah sinar dimiringkan menurut titik bukaan (lensa tipis untuk adegan di tak hingga).
+  state.photoKind = 'bebas'; state.photoLast = 'kamera';
+  try { const k = localStorage.getItem('gargantua.photoKind'); if (k === 'bebas' || k === 'kamera') state.photoLast = k; } catch (e) { /* abaikan */ }
+  function camAllowed() { return !(MIS.on && !MIS.end && !state.paused); }
+  function camOff() { CAMKIT.U.E = [0, 1, 0, 0]; CAMKIT.U.L = [0, 0, 0, 0]; CAMKIT.U.R = [0, 0, 0, 0]; CAMKIT.U.M = [0, 0, 0, 0]; }
+  CAMKIT.init({
+    app: 'gargantua', canvas, ev0: 10, key: 0.7, minFocus: 0.7,
+    lang: () => LANG, exit: () => togglePhoto(false), freeMode: () => { togglePhoto(false); togglePhoto(true, 'bebas'); },
+    isLocked: () => false, unlock: () => {},
+    audio: () => (AUDIO.ctx && AUDIO.n && AUDIO.n.master ? { ctx: AUDIO.ctx, node: AUDIO.n.master } : null),
+    quality: () => (FMT.type === gl.HALF_FLOAT ? ({ ultra: 32, high: 24, medium: 16, low: 8 })[CONFIG.quality] || 16 : 1),
+  });
+  const CAMG = { acc: null, n: 0, w: 1, pbo: gl.createBuffer(), fence: null, t: 0 };
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, CAMG.pbo); gl.bufferData(gl.PIXEL_PACK_BUFFER, 16 * 9 * 4, gl.STREAM_READ); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  function camMeter(dt) {                                              // seperti autoExposure(), tetapi untuk meter kamera
+    if (CAMG.fence) {
+      if (gl.getSyncParameter(CAMG.fence, gl.SYNC_STATUS) === gl.SIGNALED) {
+        gl.deleteSync(CAMG.fence); CAMG.fence = null;
+        const px = new Uint8Array(16 * 9 * 4); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, CAMG.pbo); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, px); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+        const v = []; for (let i = 0; i < px.length; i += 4) { const a = Math.min(px[i], 254) / 255; v.push(a / (1 - a)); }
+        v.sort((a, b) => b - a); CAMKIT.meter(v.slice(0, 43).reduce((a, b) => a + b, 0) / 43);
+      }
+    } else if ((CAMG.t -= dt) <= 0) {
+      CAMG.t = 0.2;
+      pass(P.lum, AE.tgt, (p) => { tex(p, 'uTex', T.scene.tex, 0); gl.uniform1f(p.u('uDec'), 1 / FMT.enc); });
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, CAMG.pbo); gl.readPixels(0, 0, 16, 9, gl.RGBA, gl.UNSIGNED_BYTE, 0); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      CAMG.fence = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0); gl.flush();
+    }
+  }
+  function camBasis(b, s, sh, tanHalf) {                               // sub-piksel + bukaan (arah) + getar; mata tetap
+    const k = 2 * tanHalf / sh, dx = s.jx * k - s.ax * s.invS + s.yaw, dy = s.jy * k - s.ay * s.invS + s.pitch;
+    const f = v3.norm(v3.add(b.f, v3.add(v3.mul(b.r, dx), v3.mul(b.u, dy)))), r = v3.norm(v3.cross(f, b.u));
+    return Object.assign({}, b, { f, r, u: v3.cross(r, f) });
+  }
   function toggleFullscreen() { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.().catch(() => {}); }
   function toggleHelp(on = $('#help').hidden) { $('#help').hidden = !on; }
   $('#helpClose').addEventListener('click', () => toggleHelp(false));
@@ -2442,7 +2504,7 @@ function main() {
       if (c === 'Enter' && MIS.tes && !MIS.tes.locked) { tesLaunch(); return; }
       if (/^Digit[1-4]$/.test(c)) return;
     }
-    if (c === 'KeyF') { togglePhoto(); return; }
+    if (c === 'KeyF') { togglePhoto(undefined, state.photoLast); return; }   // K: jenis terakhir (bawaan kamera rangefinder)
     if (state.photo && (c === 'Enter' || c === 'NumpadEnter')) { state.shot = true; toast(txt('Photo saved'), 1.5); return; }
     if (state.photo && c === 'Escape') { togglePhoto(false); return; }
     if (c === 'Escape' && SHIP.on) { setShip(false); return; }
@@ -2636,6 +2698,8 @@ function main() {
     if (state.halt) return;   // debugging hook: stops the loop
     const dt = Math.min(0.1, Math.max(0, (now - state.last) / 1000));
     state.last = now;
+    if (CAMKIT.on && !camAllowed()) togglePhoto(false);
+    if (CAMKIT.cap) { camCapture(dt); requestAnimationFrame(frame); return; }   // K: subframe foto (layar dibekukan)
     // G3: selama misi piringan berputar menurut waktu wajar wahana (gerak relatif gas dan wahana konsisten), lihat stepMission
     if (!state.paused && !(MIS.on && !MIS.end)) state.simTime += dt * CONFIG.timeScale * CONFIG.disk.speed;
     state.frame = (state.frame + 1) >>> 0;
@@ -2659,9 +2723,42 @@ function main() {
     relStep(dt);                                                     // G4: waktu relai, zoom dan sinar diagram
     const b = viewBasis();
     const q = Q();
-    const tanHalf = Math.tan((b.fov || cam.fov) * Math.PI / 360);
-    const enc = FMT.enc, dec = 1 / FMT.enc;
+    let tanHalf = Math.tan((b.fov || cam.fov) * Math.PI / 360);
+    if (CAMKIT.on) tanHalf = Math.tan(CAMKIT.view(canvas.width, canvas.height, false).vfov * Math.PI / 360);   // K: bidang jendela bidik / lensa
+    drawScene(b, q, sw, sh, tanHalf);
+    drawDash(now); drawRelayCard(now); drawTess(dt);
+    if (state.readCb && FMT.type === gl.HALF_FLOAT) {                  // uji: statistik buffer HDR scene (nilai tidak valid, maks, rata-rata)
+      const cb = state.readCb, px = new Float32Array(sw * sh * 4); state.readCb = null;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, T.scene.fb); gl.readPixels(0, 0, sw, sh, gl.RGBA, gl.FLOAT, px);
+      let bad = 0, mx = 0, sum = 0;
+      for (let i = 0; i < px.length; i += 4) for (let k = 0; k < 3; k++) { const v = px[i + k]; if (!Number.isFinite(v)) bad++; else { mx = Math.max(mx, v); sum += v; } }
+      cb({ bad, max: mx, mean: sum / (sw * sh * 3), w: sw, h: sh });
+    }
 
+    autoExposure(dt);                                                // G3a: hanya saat misi (di luar misi k = 1)
+    if (CAMKIT.on) { camMeter(dt); CAMKIT.tick(); }
+    drawPost();
+
+    // screenshot in the same task as the draw (no preserveDrawingBuffer needed)
+    if (state.shot) {
+      state.shot = false;
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `gargantua-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      }, 'image/png');
+    }
+
+    if (state.captureCb) { const cb = state.captureCb; state.captureCb = null; cb(canvas.toDataURL('image/png')); }   // test hook
+    if (CAMKIT.on) { CAMKIT.afterFrame(canvas); CAMKIT.draw(); }       // K: rana ditekan = bekukan layar lalu mulai subframe
+    updateStats(dt);
+    requestAnimationFrame(frame);
+  }
+  function drawScene(b, q, sw, sh, tanHalf) {                         // ray tracing + raster wahana ke T.scene (K: juga per subframe foto)
+    const enc = FMT.enc;
     // 1) ray-traced scene (HDR)
     pass(P.scene, T.scene, (p) => {
       gl.uniform2f(p.u('uRes'), sw, sh);
@@ -2696,21 +2793,13 @@ function main() {
     // 1b) G1: wahana GX-01 di atas hasil ray tracing, sebelum bloom; G3b: awan debu sebelum wahana, garis bara dan tumbukan kaca sesudahnya
     if (MIS.on) drawDust(b, sw, sh, tanHalf);
     if (SHIP.on && SHIP.ready && b.eye) {
-      if (MIS.on && SHIP.view === 'cockpit') drawMFD(now);
+      if (MIS.on && SHIP.view === 'cockpit') drawMFD(performance.now());
       drawShip(b, sw, sh, tanHalf);
       if (MIS.on) { state.partsDrawn = drawParts(b, sw, sh, tanHalf); drawImps(b, sw, sh, tanHalf); }
     }
-    drawDash(now); drawRelayCard(now); drawTess(dt);
-    if (state.readCb && FMT.type === gl.HALF_FLOAT) {                  // uji: statistik buffer HDR scene (nilai tidak valid, maks, rata-rata)
-      const cb = state.readCb, px = new Float32Array(sw * sh * 4); state.readCb = null;
-      gl.bindFramebuffer(gl.FRAMEBUFFER, T.scene.fb); gl.readPixels(0, 0, sw, sh, gl.RGBA, gl.FLOAT, px);
-      let bad = 0, mx = 0, sum = 0;
-      for (let i = 0; i < px.length; i += 4) for (let k = 0; k < 3; k++) { const v = px[i + k]; if (!Number.isFinite(v)) bad++; else { mx = Math.max(mx, v); sum += v; } }
-      cb({ bad, max: mx, mean: sum / (sw * sh * 3), w: sw, h: sh });
-    }
-
-    autoExposure(dt);                                                // G3a: hanya saat misi (di luar misi k = 1)
-
+  }
+  function drawPost() {                                               // bloom, streak, komposit ke layar
+    const enc = FMT.enc, dec = 1 / FMT.enc;
     // 2) bright pass -> bloom level 0
     const L = T.bloom;
     pass(P.bright, L[0].a, (p) => {
@@ -2748,30 +2837,51 @@ function main() {
       tex(p, 'uStreak', T.streakOut.tex, 5);
       const po = CONFIG.post;
       gl.uniform1f(p.u('uExposure'), po.exposure * AE.k); gl.uniform3fv(p.u('uWhite'), POSTKIT.wb(po.wbK, po.wbTint)); gl.uniform1f(p.u('uBloom'), po.bloom * PM.bloom);
-      gl.uniform1f(p.u('uStreakAmt'), po.streak * PM.streak); gl.uniform1f(p.u('uGrain'), po.grain * PM.grain);
+      const KU = CAMKIT.U;                                           // K: kamera (mati = E.x 0)
+      gl.uniform1f(p.u('uStreakAmt'), po.streak * PM.streak); gl.uniform1f(p.u('uGrain'), KU.E[0] > 0.5 ? 0 : po.grain * PM.grain);
+      gl.uniform4fv(p.u('uCamE'), KU.E); gl.uniform4fv(p.u('uCamL'), KU.L); gl.uniform4fv(p.u('uCamR'), KU.R); gl.uniform4fv(p.u('uCamM'), KU.M);
+      gl.uniform2f(p.u('uCamT'), 1 / canvas.width, 1 / canvas.height);
       gl.uniform1f(p.u('uVig'), po.vignette * PM.vig); gl.uniform1f(p.u('uDec'), dec);
       gl.uniform2f(p.u('uRes'), canvas.width, canvas.height);
       gl.uniform1ui(p.u('uFrame'), state.paused ? 0 : state.frame);
     });
 
-    // screenshot in the same task as the draw (no preserveDrawingBuffer needed)
-    if (state.shot) {
-      state.shot = false;
-      canvas.toBlob((blob) => {
-        if (!blob) return;
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `gargantua-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-      }, 'image/png');
-    }
-
-    if (state.captureCb) { const cb = state.captureCb; state.captureCb = null; cb(canvas.toDataURL('image/png')); }   // test hook
-    updateStats(dt);
-    requestAnimationFrame(frame);
   }
 
+
+  function camCapture(dt) {                                           // K: subframe foto; beberapa per frame layar (batas 45 ms)
+    const Pc = CAMKIT.cap, t0 = performance.now();
+    resize();
+    const sw = Math.max(8, Math.round(canvas.width * CONFIG.renderScale)), sh = Math.max(8, Math.round(canvas.height * CONFIG.renderScale));
+    buildTargets(sw, sh);
+    if (Pc.i === 0 || !CAMG.acc || CAMG.acc.w !== sw || CAMG.acc.h !== sh) {
+      if (CAMG.acc && (CAMG.acc.w !== sw || CAMG.acc.h !== sh)) { freeTarget(CAMG.acc); CAMG.acc = null; }
+      if (!CAMG.acc) CAMG.acc = makeTarget(sw, sh);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, CAMG.acc.fb); gl.viewport(0, 0, sw, sh); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+      CAMG.n = 0; CAMG.w = 1 / (Pc.bulb ? 120 : Pc.N);
+    }
+    const q = Q();
+    while (!Pc.done) {
+      const s = CAMKIT.sub(dt);
+      if (s.dt > 0) {                                                  // waktu maju: piringan berputar, kamera orbit otomatis
+        if (!state.paused && !MIS.on) state.simTime += s.dt * CONFIG.timeScale * CONFIG.disk.speed;
+        if (cam.autoOrbit && !state.paused) cam.yaw += cam.orbitSpeed * s.dt;
+      }
+      const V = CAMKIT.view(canvas.width, canvas.height, true), tanHalf = Math.tan(V.vfov * Math.PI / 360);
+      drawScene(camBasis(viewBasis(), s, sh, tanHalf), q, sw, sh, tanHalf);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+      pass(P.camAcc, CAMG.acc, (p) => { tex(p, 'uTex', T.scene.tex, 0); gl.uniform1f(p.u('uDec'), 1 / FMT.enc); gl.uniform1f(p.u('uW'), CAMG.w); });
+      gl.disable(gl.BLEND); CAMG.n++;
+      if (Pc.bulb || performance.now() - t0 > 45) break;
+    }
+    if (Pc.done) {
+      pass(P.camCpy, T.scene, (p) => { tex(p, 'uTex', CAMG.acc.tex, 0); gl.uniform1f(p.u('uS'), 1 / Math.max(1e-6, CAMG.n * CAMG.w)); gl.uniform1f(p.u('uEnc'), FMT.enc); });
+      CAMKIT.view(canvas.width, canvas.height, true); CAMKIT.U.E[1] = CAMKIT.capMul();
+      drawPost();
+      CAMKIT.finish(canvas);
+    }
+    CAMKIT.draw();
+  }
   window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
     SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
     misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, AE, stepMission,

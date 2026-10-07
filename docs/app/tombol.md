@@ -15,13 +15,33 @@ Per 30 September 2026. Patokan: Copper Corn Station. Fungsi yang sama memakai to
 | N | Cuaca / suasana | cuaca | suasana | - |
 | Z | Kecepatan waktu | ya | ya | - |
 | V | Tampilan / kamera luar | kamera luar | jalan kaki, drone, tinggi | wahana GX-01: kamera luar / kokpit (Esc keluar) |
-| F | Mode foto (UI disembunyikan, Enter simpan PNG, F atau Esc keluar) | ya | ya (baru) | ya (dulu layar penuh) |
+| F | Kamera rangefinder (Rencana K; jenis terakhir diingat, panel kamera = Foto bebas lama: UI disembunyikan, Enter simpan PNG), F atau Esc keluar | ya | ya | ya (di luar misi atau saat jeda) |
 | R | Kembali ke titik awal / atur ulang | ya | ya | atur ulang kamera |
 | H | Sembunyikan HUD | ya | ya | ya |
 | ` (backtick) | Panel kontrol | ya | ya (baru) | buka / lipat panel (baru) |
 | ? (atau F1) | Bantuan | ya | ya (baru) | ya (baru) |
 | 1 - 9, 0 | Lokasi / sudut pandang | lokasi | - | sudut pandang 1-4 |
 | Esc | Lepas kursor, tutup bantuan, keluar mode foto | ya | ya | ya |
+
+## Tombol lokal mode kamera rangefinder (Rencana K, `shared/camera.js`)
+
+Hanya berlaku selama mode kamera aktif, sama di ketiga experience. Tombol khusus Copper (B, G, E, M, L, T, I, C) tidak dipakai. WASD, Shift, mouse, Z, Q, P, N, U tetap seperti biasa.
+
+| Tombol | Fungsi |
+| --- | --- |
+| Klik kiri (kursor terkunci) / Enter | Rana foto, atau mulai / berhenti rekam video; rana B: tahan |
+| Roda mouse | Cincin fokus (patch rangefinder di tengah) |
+| Shift + roda, atau , dan . | Aperture |
+| [ dan ] | Kecepatan rana (mode A / P pindah ke M) |
+| - dan = | ISO; dengan Shift = kompensasi eksposur |
+| 1 - 6 | Lensa 21 / 28 / 35 / 50 / 75 / 90 mm |
+| Tab | Foto / video |
+| V | Jendela bidik optik / live view |
+| Klik kanan tahan | Kunci eksposur (AE-L) |
+| H | Sembunyikan HUD kamera |
+| ` | Panel kamera (mode M / A / P, tripod, format, fps, bitrate, Foto bebas) |
+| ? / F1 | Bantuan tombol kamera |
+| F / Esc | Keluar |
 
 ## Tombol khusus Copper Corn Station (jangan dipakai untuk fungsi lain)
 
