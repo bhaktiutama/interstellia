@@ -11193,7 +11193,7 @@ const PARK_PATHS = { runs: [], w: 2.6, mesh: null };
   const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xb8ad94, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, side: THREE.DoubleSide }));
   mesh.frustumCulled = false; mesh.userData.noShadow = true; scene.add(mesh); PARK_PATHS.mesh = mesh;
 }
-const PEDS = { list: [], walk: [], near: [], nearAt: 0, nearS: 1e9, nearZ: 1e9, frame: 0, max: 4000, n: 0, radius: 300, dens: 1, user: 1, users: [1, 0.4, 0], names: ['nyala', 'sedikit', 'mati'] };
+const PEDS = { rainList: [], rk: 0, uk: 0, uOn: false, hk: 0, shelter: false, calm: 0, busy: 0, list: [], walk: [], near: [], nearAt: 0, nearS: 1e9, nearZ: 1e9, frame: 0, max: 4000, n: 0, radius: 300, dens: 1, user: 1, users: [1, 0.4, 0], names: ['nyala', 'sedikit', 'mati'] };
 // 21a-1: pengunjung plaza (kind 'visit'). Keadaan: 'loop' keliling tepi dalam plaza, 'in' jalan lurus ke tujuan, 'stay' diam
 // (berdiri / duduk), 'out' jalan lurus kembali ke jalur keliling. Dua jenis: pengunjung air mancur (VIS.fount, berdiri di tepi
 // kolam atau duduk di bibir kolam 20-90 s) dan anggota kelompok mengobrol (VIS.groups, bubar tiap 3-8 menit, berkumpul lagi di
@@ -11247,14 +11247,20 @@ function visChatSpot(G) {                                           // tempat ke
 function visSlot(p) { const G = p.g; return [G.c[0] + Math.sin(p.ga) * 0.75, G.c[1] + Math.cos(p.ga) * 0.75]; }
 function stepVisit(p, dt) {
   const G = p.g;
+  const vr = PEDS.rk > 0.15 ? pedRainV(p) : 1;                      // 23f: lebih cepat saat hujan tanpa payung
+  if (PEDS.shelter) {                                               // 23f: hujan deras: kelompok bubar, pengunjung kolam langsung pergi
+    if (G && p === G.members[0] && G.st !== 'apart') G.st = 'apart';
+    if (!G && p.st === 'stay') p.tm = 0;
+    if (p.st === 'loop' && p.tm < 4) p.tm = 4;                     // tidak datang / berkumpul selama hujan deras
+  }
   if (G && p === G.members[0] && G.st !== 'apart' && (G.tm -= dt) <= 0) {   // kelompok bubar; berkumpul paling lama 4 menit
     if (G.st === 'gather') { G.st = 'talk'; G.tm = 60; } else G.st = 'apart';
   }
   if (p.st === 'loop') {
     const [, , w, d] = p.rect, P = 2 * (w + d);
-    p.u = ((p.u + p.dir * p.v0 * dt) % P + P) % P;
+    p.u = ((p.u + p.dir * p.v0 * vr * dt) % P + P) % P;
     const [s, za, ds, dz] = rectPoint(p.rect, p.u); p.s = s; p.za = za; p.hd = Math.atan2(ds * p.dir, dz * p.dir);
-    p.pose = 0; p.elev = 0; p.ph += p.v0 / 1.45 * TAU * dt;
+    p.pose = 0; p.elev = 0; p.ph += p.v0 * vr / 1.45 * TAU * dt;
     if ((p.tm -= dt) > 0) return;
     if (G) {                                                         // anggota kelompok: berkumpul di tempat (baru)
       if (G.st === 'apart') { visChatSpot(G); G.st = 'gather'; G.arr = 0; G.tm = 240; }
@@ -11272,7 +11278,7 @@ function stepVisit(p, dt) {
       p.tm = 3;
     }
   } else if (p.st === 'in' || p.st === 'out') {
-    const v = p.v0; p.k = Math.min(1, p.k + v * dt / p.L);
+    const v = p.v0 * vr; p.k = Math.min(1, p.k + v * dt / p.L);
     const ds = wrapS(p.a1[0] - p.a0[0]), dz = p.a1[1] - p.a0[1];
     p.s = p.a0[0] + ds * p.k; p.za = p.a0[1] + dz * p.k; p.hd = Math.atan2(ds, dz);
     p.pose = 0; p.elev = 0; p.ph += v / 1.45 * TAU * dt;
@@ -11360,10 +11366,10 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     const cls = za < CITY.za1 + 100 ? 0 : 1, pr = r();
     if (pr > (cls ? 0.22 : 0.3)) continue;
     const two = pr < 0.08, fs = Math.sin(ang), fz = Math.cos(ang);
-    for (const off of two ? [-0.45, 0.45] : [(r() - 0.5) * 0.8]) still({ pose: 2, s: s0 + fz * off + fs * 0.05, za: za - fs * off + fz * 0.05, hd: ang, zone: cls });
+    for (const off of two ? [-0.45, 0.45] : [(r() - 0.5) * 0.8]) still({ pose: 2, s: s0 + fz * off + fs * 0.05, za: za - fs * off + fz * 0.05, hd: ang, zone: cls, bench: 1 });   // 23f: bench = berteduh saat hujan deras
   }
   // 5b) duduk di kursi kafe trotoar (12b-5)
-  for (const [cs, cz, hd] of VIBE.cafeSeats) if (r() < 0.45) still({ pose: 2, s: cs, za: cz, hd, zone: 0 });
+  for (const [cs, cz, hd] of VIBE.cafeSeats) if (r() < 0.45) still({ pose: 2, s: cs, za: cz, hd, zone: 0, roof: 1 });   // 23f: roof = di bawah payung kafe
   // 6) terminal: duduk di kursi ruang tunggu, berjalan di aula
   for (const [x, z] of TERM.seats) if (r() < 0.25) still({ pose: 2, s: TERM.s + x, za: TERM.za + z, hd: Math.PI, elev: 0.05, zone: 2 });
   for (const z of [-6, -3, 4, 8, 24, 27]) for (let q = 0; q < 5; q++) {
@@ -11371,11 +11377,11 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     walker({ kind: 'seg', p0: [TERM.s + x0, TERM.za + z + (r() - 0.5) * 2], p1: [TERM.s + x1, TERM.za + z + (r() - 0.5) * 2], L: x1 - x0, u: r(), elev: 0.08, zone: 2 });
   }
   // 16d: pasar: pedagang di belakang meja lapak, pembeli berjalan di lorong
-  for (const [s, za] of MARKET.stalls) if (r() < 0.7) still({ pose: 1, s: s + (r() - 0.5) * 1.2, za: za - 0.95, hd: 0, zone: 0 });
+  for (const [s, za] of MARKET.stalls) if (r() < 0.7) still({ pose: 1, s: s + (r() - 0.5) * 1.2, za: za - 0.95, hd: 0, zone: 0, roof: 1 });
   for (const [a0, z, a1] of MARKET.aisles) for (let q = 0, n = Math.round((a1 - a0) / 6); q < n; q++)
-    walker({ kind: 'seg', p0: [a0, z + (r() - 0.5) * 1.2], p1: [a1, z + (r() - 0.5) * 1.2], L: a1 - a0, u: r(), v0: 0.6 + 0.4 * r(), zone: 0, kid: r() < 0.1 });
+    walker({ kind: 'seg', p0: [a0, z + (r() - 0.5) * 1.2], p1: [a1, z + (r() - 0.5) * 1.2], L: a1 - a0, u: r(), v0: 0.6 + 0.4 * r(), zone: 0, kid: r() < 0.1, roof: 1 });
   // 7) menunggu di halte trem (menghadap rel)
-  for (const st of TRAM.stops) { const n = 1 + Math.floor(r() * 4); for (let q = 0; q < n; q++) still({ pose: 1, s: TRAM.s + 3.2 + r() * 2.2, za: st.za + (r() - 0.5) * 20, hd: -Math.PI / 2 + (r() - 0.5) * 0.6, elev: 0.35, zone: 0 }); }
+  for (const st of TRAM.stops) { const n = 1 + Math.floor(r() * 4); for (let q = 0; q < n; q++) still({ pose: 1, s: TRAM.s + 3.2 + r() * 2.2, za: st.za + (r() - 0.5) * 20, hd: -Math.PI / 2 + (r() - 0.5) * 0.6, elev: 0.35, zone: 0, roof: 1 }); }
   // 21a-1: pengunjung air mancur (8 orang): keliling plaza, datang ke tepi kolam, berdiri atau duduk 20-90 s, lalu pergi
   if (VIS.rect) for (let q = 0; q < 8; q++) {
     const [, , w, d] = VIS.rect, u = visRnd() * 2 * (w + d), [s, za] = rectPoint(VIS.rect, u);
@@ -11402,6 +11408,15 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     for (let m = 1; m < zCuts.length - 1; m++) lane(false, zCuts[m], c.s0 + ROAD.art / 2 + 5, c.s0 + ART - ROAD.art / 2 - 5);
   }
   for (const p of PEDS.list) { p.lt = -20; p.isNear = false; if (p.kind === 'z') p.s = p.fix; if (p.kind === 's') p.za = p.fix; p.s = p.s ?? 0; p.za = p.za ?? 0; p.hd = p.hd ?? 0; p.pose = p.pose ?? 0; }
+  // 23f: payung dan berteduh. Generator acak sendiri (urutan acak setup di atas tidak berubah). umb = membawa payung (75%),
+  // uc = warna (PEDS_UMB_COL), ud = tunda buka 0..1 (payung terbuka bergiliran), wk = pejalan (ikut turun kepadatan saat hujan deras)
+  let usd = 230623; const ur = () => ((usd = (usd * 16807) % 2147483647) / 2147483647);
+  for (const p of PEDS.walk) p.wk = 1;
+  for (const p of PEDS.list) {
+    if (p.zone === 2) p.roof = 1;                                    // terminal: di dalam ruangan
+    p.umb = ur() < (p.scale < 0.7 ? 0.55 : 0.75) ? 1 : 0; p.uc = Math.floor(ur() * 8); p.ud = ur(); p.uv = ur();
+    if (p.bench) PEDS.rainList.push(p);
+  }
 }
 // --- model orang: kotak-kotak dengan id bagian (aPart) untuk animasi dan warna ---
 {
@@ -11436,7 +11451,7 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
   };
   const VS = /* glsl */`
     attribute float aPart;
-    attribute vec4 aP, aI, aJ;                                      // aP: s, za, arah hadap, fase langkah; aI: baju, celana, kulit/rambut, pose; aJ: skala, tinggi lantai, tas
+    attribute vec4 aP, aI, aJ;                                      // aP: s, za, arah hadap, fase langkah; aI: baju, celana, kulit/rambut, pose; aJ: skala, tinggi lantai, tas, payung (23f)
     uniform vec3 uShirt[14], uPants[8], uSkin[6], uHair[6];
     varying vec3 vCol;
     vec3 rotX(vec3 v, float a) { float c = cos(a), s = sin(a); return vec3(v.x, v.y * c - v.z * s, v.y * s + v.z * c); }
@@ -11456,6 +11471,7 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
       else { arm = 0.05 * sin(uTime * 0.7 + aP.x); }
       if (id > 4.5 && id < 6.5) { p.y -= 0.48; p = rotX(p, knee); n = rotX(n, knee); p.y += 0.48; }
       if (id > 2.5 && id < 6.5) { p.y -= 0.9; p = rotX(p, hip); n = rotX(n, hip); p.y += 0.9; }
+      if (aJ.w > 0.0 && (id == 8.0 || id == 13.0)) arm = mix(arm, -0.75, aJ.w);   // 23f: lengan kanan memegang payung (aJ.w = buka payung)
       if ((id > 6.5 && id < 8.5) || id > 11.5) { p.y -= 1.44; p = rotX(p, arm); n = rotX(n, arm); p.y += 1.44; }
       p.y += yOff;
       p *= aJ.x;
@@ -11486,22 +11502,180 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
   castAlpha(PEDS.mesh, vegMaterial({ vertex: VS, fragment: FS, uniforms: U, depth: true, side: THREE.FrontSide }));   // 17f: pejalan kaki membuat bayangan
   realGroup.add(PEDS.mesh);
 }
+// 23f: payung pejalan kaki saat hujan. InstancedMesh terpisah; posisi dari data orang yang sama dengan buffer PEDS (ditulis di
+// updatePeds, radius sama). Kanopi kubah 8 segi diameter 1,04 m, puncak 2,02 m, tangkai tipis dari tangan kanan (lengan kanan
+// diangkat di shader pejalan kaki lewat aJ.w). Buka-tutup: bP.w 0..1 (tertutup = tongkat ramping, terbuka = kubah).
+const PEDS_UMB_COL = ['#1c1c1f', '#1e2c4f', '#b0262a', '#e3b52b', '#d6dfe4', '#2c4a34', '#b0262a', '#1e2c4f'];   // 6, 7 = bergaris putih
+{
+  const pos = [], aU = [];
+  const vtx = (r, a, i) => { pos.push(0, 0, 0); aU.push(r, a, i); };
+  for (let i = 0; i < 8; i++) {                                    // per panel: segitiga puncak + segi empat sampai tepi
+    const a0 = i / 8 * TAU, a1 = (i + 1) / 8 * TAU, am = (a0 + a1) / 2;
+    vtx(0, am, i); vtx(0.6, a0, i); vtx(0.6, a1, i);
+    vtx(0.6, a0, i); vtx(1, a0, i); vtx(1, a1, i);
+    vtx(0.6, a0, i); vtx(1, a1, i); vtx(0.6, a1, i);
+  }
+  const box = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0).toNonIndexed(), bp = box.attributes.position.array;
+  for (let i = 0; i < bp.length; i += 3) { pos.push(bp[i], bp[i + 1], bp[i + 2]); aU.push(-1, 0, 0); }   // tangkai: y = 0..1 sepanjang
+  const g = new THREE.InstancedBufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aU', new THREE.Float32BufferAttribute(aU, 3));
+  for (const nm of ['bP', 'bJ']) g.setAttribute(nm, new THREE.InstancedBufferAttribute(new Float32Array(PEDS.max * 4), 4).setUsage(THREE.DynamicDrawUsage));
+  g.instanceCount = 0;
+  const U = { uUmb: { value: PEDS_UMB_COL.map((h) => new THREE.Color(h)) } };
+  const VS = /* glsl */`
+    attribute vec3 aU;
+    attribute vec4 bP, bJ;                                          // bP: s, za, arah hadap, buka 0..1; bJ: skala, tinggi lantai, warna, turun badan (duduk)
+    uniform vec3 uUmb[8];
+    varying vec3 vCol;
+    void main() {
+      float k = bP.w;
+      if (k < 0.01) { ${CLIP_AWAY} }
+      float aSh = (bJ.w < -0.1 ? -0.35 : 0.0);
+      float arm = mix(aSh, -0.75, k);                                // sama dengan lengan kanan di shader pejalan kaki
+      vec3 H = vec3(0.25, 1.44 - 0.61 * cos(arm), -0.61 * sin(arm)); // tangan kanan
+      vec3 A = H + vec3(-0.13, 1.06, -0.22);                         // puncak payung (di atas kepala)
+      float grow = smoothstep(0.0, 0.25, k);                         // muncul bertahap
+      vec3 p, n;
+      if (aU.x < -0.5) {                                             // tangkai
+        vec3 d = A - H, ax = normalize(d), sx = normalize(cross(ax, vec3(0.0, 0.0, 1.0))), sz = cross(sx, ax);
+        p = H - ax * 0.06 + d * position.y + (sx * position.x + sz * position.z) * 0.022;
+        n = normalize(sx * position.x + sz * position.z + ax * 0.01);
+      } else {                                                       // kanopi: terbuka kubah, tertutup terlipat ke bawah sepanjang tangkai
+        float r = aU.x, a = aU.y, ko = smoothstep(0.2, 1.0, k);
+        float rad = mix(0.045, 0.52, ko) * r, y = mix(-0.6 * r, -0.24 * r * r, ko);
+        vec2 cs = vec2(sin(a), cos(a));
+        p = A + vec3(cs.x * rad, y, cs.y * rad);
+        float sl = mix(8.0, 0.92 * r + 0.05, ko);
+        n = normalize(vec3(cs.x * sl, 1.0, cs.y * sl));
+      }
+      p = mix(H, p, grow);
+      p.y += bJ.w;
+      p *= bJ.x;
+      vec3 up, tS; vec3 base = groundFrame(bP.xy, bJ.y, up, tS);
+      vec3 F = tS * sin(bP.z) + vec3(0.0, 0.0, 1.0) * cos(bP.z), Rt = cross(up, F);
+      vec3 p3 = base + Rt * p.x + up * p.y + F * p.z;
+      if (distance(uEye, base + up * (1.9 * bJ.x)) < 1.0) { ${CLIP_AWAY} }   // tidak menembus wajah kamera
+      #ifndef DEPTH_ONLY
+      int ci = int(bJ.z);
+      vec3 c = uUmb[ci];
+      if (aU.x < -0.5) c = vec3(0.12, 0.12, 0.13);
+      else if (ci >= 6 && mod(aU.z, 2.0) > 0.5) c = vec3(0.91, 0.9, 0.86);   // motif garis
+      vec3 nw = normalize(Rt * n.x + up * n.y + F * n.z);
+      float under = dot(uEye - p3, nw) < 0.0 ? 1.0 : 0.0;           // dilihat dari bawah: sisi dalam lebih gelap
+      vCol = c * vegLight(p3, nw, bP.xy, 1.0) * mix(1.0, 0.55, under);
+      #endif
+      vec4 mvPosition = viewMatrix * vec4(p3, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #ifndef DEPTH_ONLY
+      #include <fog_vertex>
+      #endif
+    }`;
+  const FS = /* glsl */`
+    varying vec3 vCol;
+    void main() { gl_FragColor = vec4(vCol, 1.0);
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`;
+  PEDS.umbMesh = new THREE.Mesh(g, vegMaterial({ vertex: VS, fragment: FS, uniforms: U, side: THREE.DoubleSide }));
+  PEDS.umbMesh.frustumCulled = false; PEDS.umbMesh.userData.noLight = true;
+  castAlpha(PEDS.umbMesh, vegMaterial({ vertex: VS, fragment: FS, uniforms: U, depth: true, side: THREE.DoubleSide }));
+  realGroup.add(PEDS.umbMesh);
+}
 function pedAct(h, zone) {                                             // kepadatan menurut jam: 0 kota, 1 taman, 2 terminal
   const day = sstep(5.5, 8, h) * (1 - sstep(19, 22.5, h)), peak = Math.exp(-(((h - 8) / 1.2) ** 2)) + Math.exp(-(((h - 17.5) / 1.5) ** 2));
   if (zone === 1) return 0.03 + 0.97 * sstep(7, 9, h) * (1 - sstep(18, 20.5, h));
   if (zone === 2) return 0.3 + 0.7 * day;
   return 0.08 + 0.62 * day + 0.3 * Math.min(1, peak);
 }
+// 23f: hujan. PEDS.rk = RAIN.k (diisi updateRain), PEDS.uk = payung terbuka global 0..1, PEDS.shelter = hujan deras (berteduh,
+// berakhir 150 s setelah reda), PEDS.hk = faktor hujan deras halus (kepadatan pejalan turun 40%). Semua 0 / false saat kering,
+// jadi perilaku tanpa hujan identik dengan sebelumnya.
+function pedRainV(p) {                                                // jalan lebih cepat saat hujan tanpa payung
+  if (PEDS.rk <= 0.15 || p.roof || p.umb) return 1;
+  return 1 + 0.3 * Math.min(1, (PEDS.rk - 0.15) / 0.3);
+}
+function pedUmbK(p) {                                                 // buka payung orang ini 0..1 (bergiliran menurut p.ud)
+  if (!PEDS.uk || p.roof || !(p.umb || p.umbF) || p.rs) return 0;
+  return Math.max(0, Math.min(1, (PEDS.uk - p.ud * 0.5) * 4));
+}
+// teduhan: titik berdiri di bawah payung meja kafe (VIBE.cafeSeats berpasangan per meja) dan di bawah atap halte trem
+function shelterGrid() {
+  if (PEDS.shGrid) return PEDS.shGrid;
+  const G = PEDS.shGrid = new Map(), add = (s, za, hd, elev) => {
+    const sp = { s: modS(s), za, hd, elev, used: null }, key = Math.floor(sp.s / 40) * 1000 + Math.floor(za / 40);
+    if (!G.has(key)) G.set(key, []); G.get(key).push(sp);
+  };
+  const C = VIBE.cafeSeats;
+  for (let i = 0; i + 1 < C.length; i += 2) {
+    const [s0, z0] = C[i], [s1, z1] = C[i + 1], cs = (s0 + s1) / 2, cz = (z0 + z1) / 2, ds = wrapS(s1 - s0), dz = z1 - z0, L = Math.hypot(ds, dz);
+    if (L < 1e-3) continue;
+    for (const sg of [-1, 1]) {                                       // di samping meja, tegak lurus arah kursi, menghadap meja
+      const s = cs + sg * dz / L * 0.85, za = cz - sg * ds / L * 0.85;
+      if (!colAt(s, za, 0.12)) add(s, za, Math.atan2(cs - s, cz - za), 0);
+    }
+  }
+  for (const st of TRAM.stops) for (const ds of [4.0, 4.8]) for (const dz of [-3, -1.5, 0, 1.5, 3]) add(TRAM.s + ds, st.za + dz, -Math.PI / 2, 0.35);
+  return G;
+}
+function rainPathOK(s0, z0, s1, z1) {                                 // jalur lurus bebas gedung, perabot, air, kolam, rel trem
+  const ds = wrapS(s1 - s0), dz = z1 - z0, L = Math.hypot(ds, dz), n = Math.ceil(L);
+  for (let i = 1; i < n; i++) {
+    const d = L * i / n; if (d < 1.2 || L - d < 1.0) continue;
+    const s = s0 + ds * i / n, za = z0 + dz * i / n;
+    if (colAt(s, za, 0.25) || inWater(s, za, 0.5) || fountDist(s, za) < 5.2 || Math.abs(wrapS(s - TRAM.s)) < 1.6) return false;
+  }
+  return true;
+}
+function shelterFind(p) {                                             // teduhan bebas terdekat dalam 70 m yang bisa dicapai lurus
+  const G = shelterGrid(), cs = Math.floor(modS(p.s) / 40), cz = Math.floor(p.za / 40), cand = [];
+  for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) {
+    const arr = G.get(((cs + a) % 1000 + 1000) % 1000 * 1000 + cz + b); if (!arr) continue;
+    for (const sp of arr) { if (sp.used) continue; const d = Math.hypot(wrapS(sp.s - p.s), sp.za - p.za); if (d < 70) cand.push([d, sp]); }
+  }
+  cand.sort((x, y) => x[0] - y[0]);
+  for (let i = 0; i < Math.min(6, cand.length); i++) if (rainPathOK(p.s, p.za, cand[i][1].s, cand[i][1].za)) return cand[i][1];
+  return null;
+}
+function rainGo(p, s, za, elev, rs) { p.rs = rs; p.r0 = [p.s, p.za, p.elev]; p.r1 = [s, za, elev]; p.rL = Math.max(0.1, Math.hypot(wrapS(s - p.s), za - p.za)); p.rk = 0; }
+function rainBench(p, dt) {                                           // orang di bangku: ke teduhan saat hujan deras, kembali setelah reda
+  if (!p.rs) {
+    if (!PEDS.shelter) { if (p.umbF && !PEDS.uOn) p.umbF = 0; return; }
+    if (p.umb || p.umbF || p.uv * 20 > PEDS.shT) return;             // berpayung tetap duduk; berdiri bergiliran 0-20 s
+    const sp = shelterFind(p);
+    if (!sp) { p.umbF = 1; return; }                                  // tidak ada teduhan terjangkau: buka payung, tetap duduk
+    p.home = [p.s, p.za, p.hd, p.pose, p.elev]; p.spot = sp; sp.used = p; PEDS.busy++;
+    rainGo(p, sp.s, sp.za, sp.elev, 1);
+  } else if (p.rs === 2) {                                            // di teduhan
+    if (PEDS.shelter || (p.rw += dt) < 10 + p.uv * 80) return;
+    p.spot.used = null; p.spot = null; rainGo(p, p.home[0], p.home[1], p.home[4], 3);
+  } else {                                                            // berjalan ke teduhan (1) atau kembali (3)
+    if (p.rs === 1 && !PEDS.shelter) { p.spot.used = null; p.spot = null; rainGo(p, p.home[0], p.home[1], p.home[4], 3); }
+    const v = 1.35 + 0.3 * p.uv; p.rk = Math.min(1, p.rk + v * dt / p.rL);
+    const ds = wrapS(p.r1[0] - p.r0[0]), dz = p.r1[1] - p.r0[1];
+    p.s = p.r0[0] + ds * p.rk; p.za = p.r0[1] + dz * p.rk; p.hd = Math.atan2(ds, dz);
+    p.elev = p.r0[2] + (p.r1[2] - p.r0[2]) * sstep(0.8, 1, p.rk);
+    p.pose = 0; p.ph += v / 1.45 * TAU * dt;
+    if (p.rk < 1) return;
+    if (p.rs === 1) { p.rs = 2; p.rw = 0; p.pose = 1; p.hd = p.spot.hd + (p.uv - 0.5) * 0.8; p.elev = p.spot.elev; }
+    else { [p.s, p.za, p.hd, p.pose, p.elev] = p.home; p.rs = 0; p.home = null; PEDS.busy--; }
+  }
+}
 // orang dekat (PEDS.near, radius + 60 m) dilangkahkan tiap frame; orang jauh bergiliran 1 dari 10 per frame dengan dt terkumpul
 function stepPeds(dt, t = clock.sim) {
   if (dt <= 0) return;
   const fr = ++PEDS.frame % 10;
+  PEDS.shT = PEDS.shelter ? (PEDS.shT || 0) + dt : 0;               // 23f: lama hujan deras (waktu simulasi)
+  if (PEDS.shelter || PEDS.busy || PEDS.uOn) for (let i = 0; i < PEDS.rainList.length; i++) {   // 23f: orang di bangku, bergiliran
+    const p = PEDS.rainList[i];
+    if (!p.isNear && i % 10 !== fr) continue;
+    const d = Math.min(3, t - p.lt); p.lt = t; if (d > 0) rainBench(p, d);
+  }
   for (let i = 0; i < PEDS.walk.length; i++) {
     const p = PEDS.walk[i];
     if (!p.isNear && i % 10 !== fr) continue;
     dt = Math.min(3, t - p.lt); p.lt = t; if (dt <= 0) continue;
     if (p.kind === 'visit') { stepVisit(p, dt); continue; }         // 21a-1: pengunjung plaza (pose dan langkah diatur sendiri)
-    let v = p.v0;
+    let v = PEDS.rk > 0.15 ? p.v0 * pedRainV(p) : p.v0;             // 23f: lebih cepat saat hujan tanpa payung
     if (p.kind === 'z' || p.kind === 's') {
       const onRoad = p.cross.some((c) => Math.abs(p.u - c.c) < 12.6);
       if (onRoad) v = Math.max(p.v0, 1.5);                             // menyeberang lebih cepat
@@ -11529,7 +11703,7 @@ function stepPeds(dt, t = clock.sim) {
 }
 function updatePeds() {                                                 // pilih orang dalam radius, tulis atribut instance
   const g = PEDS.mesh.geometry;
-  if (ext.active || !PEDS.user || !PEDS.dens) { g.instanceCount = PEDS.n = 0; return; }
+  if (ext.active || !PEDS.user || !PEDS.dens) { g.instanceCount = PEDS.n = PEDS.umbMesh.geometry.instanceCount = 0; return; }
   const eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, R2 = PEDS.radius * PEDS.radius, h = clock.hour, f = PEDS.dens * PEDS.user;
   const now = performance.now();
   if (now > PEDS.nearAt || Math.hypot(wrapS(eS - PEDS.nearS), eZ - PEDS.nearZ) > 30) {   // daftar orang dekat, tiap 0,5 s
@@ -11539,14 +11713,21 @@ function updatePeds() {                                                 // pilih
   }
   const act = [pedAct(h, 0) * f, pedAct(h, 1) * f, pedAct(h, 2) * f];
   const P = g.attributes.aP.array, I = g.attributes.aI.array, J = g.attributes.aJ.array; let n = 0;
+  const UG = PEDS.umbMesh.geometry, BP = UG.attributes.bP.array, BJ = UG.attributes.bJ.array, am = 1 - 0.4 * PEDS.hk; let nu = 0;   // 23f
   for (const p of PEDS.near) {
-    if (p.thr >= act[p.zone]) continue;
+    if (p.thr >= act[p.zone] * (p.wk && !p.roof ? am : 1)) continue;   // 23f: hujan deras = pejalan kaki berkurang 40%
     const ds = wrapS(p.s - eS), dz = p.za - eZ;
     if (ds * ds + dz * dz > R2) continue;
     const o = n * 4;
     P[o] = eS + ds; P[o + 1] = p.za; P[o + 2] = p.hd; P[o + 3] = p.ph;
     I[o] = p.shirt; I[o + 1] = p.pants; I[o + 2] = p.skin; I[o + 3] = p.pose;
-    J[o] = p.scale; J[o + 1] = p.elev; J[o + 2] = p.bag; J[o + 3] = 0;
+    const uk = pedUmbK(p);                                             // 23f: payung
+    J[o] = p.scale; J[o + 1] = p.elev; J[o + 2] = p.bag; J[o + 3] = uk;
+    if (uk > 0) {
+      const q = nu * 4; nu++;
+      BP[q] = P[o]; BP[q + 1] = p.za; BP[q + 2] = p.hd; BP[q + 3] = uk;
+      BJ[q] = p.scale; BJ[q + 1] = p.elev; BJ[q + 2] = p.uc; BJ[q + 3] = p.pose > 1.5 ? -0.38 : 0;
+    }
     if (++n >= PEDS.max) break;
   }
   if (BASEBALL.on) for (const q of BASEBALL.people) {                  // pemain dan penonton baseball
@@ -11560,6 +11741,8 @@ function updatePeds() {                                                 // pilih
   }
   for (const nm of ['aP', 'aI', 'aJ']) { const a = g.attributes[nm]; a.clearUpdateRanges(); a.addUpdateRange(0, n * 4); a.needsUpdate = true; }
   g.instanceCount = PEDS.n = n;
+  for (const nm of ['bP', 'bJ']) { const a = UG.attributes[nm]; a.clearUpdateRanges(); a.addUpdateRange(0, nu * 4); a.needsUpdate = true; }
+  UG.instanceCount = PEDS.nu = nu;
 }
 function applyPedsPreset(i) {
   PEDS.radius = [300, 250, 180, 120, 80][i]; PEDS.dens = [1, 1, 0.85, 0.6, 0.3][i];
@@ -11947,6 +12130,13 @@ function updateRain(dt) {
   }
   RAIN.local = (RAIN.local || 0) + ((RAIN.localT || 0) - (RAIN.local || 0)) * Math.min(1, dt / 3);
   WIND.base = 1.4 + 2.1 * WEATHER.ov;                                  // B5: angin menguat saat mendung
+  // 23f: keadaan hujan untuk pejalan kaki (payung > 0,15, berteduh > 0,45 sampai 150 s setelah di bawah 0,35, kepadatan turun)
+  PEDS.rk = RAIN.k;
+  PEDS.uOn = PEDS.uOn ? RAIN.k > 0.1 : RAIN.k > 0.15;
+  PEDS.uk = Math.max(0, Math.min(1, PEDS.uk + (PEDS.uOn ? 1 : -1) * dt / 6));
+  if (RAIN.k > 0.45) { PEDS.shelter = true; PEDS.calm = 0; } else if (PEDS.shelter && RAIN.k < 0.35 && (PEDS.calm += dt) > 150) PEDS.shelter = false;
+  const hkT = sstep(0.35, 0.6, RAIN.k); PEDS.hk += (hkT - PEDS.hk) * Math.min(1, dt / 20);
+  if (!hkT && PEDS.hk < 1e-3) PEDS.hk = 0;
 }
 PRESET_HOOKS.push((i) => { RAIN.presetN = [12000, 9000, 6000, 3000, 1500][i]; });
 RAIN.presetN = [12000, 9000, 6000, 3000, 1500][PRESET.idx];
