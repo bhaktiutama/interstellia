@@ -6731,7 +6731,7 @@ const mixV = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
    tipis ada di dekat mata dan di dekat titik yang dilihat). Kabut rata di material dikurangi dari 4x ke 1x tambahan selama
    aktif. ATMO.gate diisi di postEnd (Ultra/Tinggi, efek layar menyala, di dalam stasiun); ?v4=0 = tampilan sebelum V4. */
 const ATMO = { off: new URLSearchParams(location.search).get('v4') === '0', gate: false, mist: 0, mistRho: 0.0038, mistH: 30,
-  sig0: 0.003, sigRain: 0.022, sigMist: 0.014, sigOv: 0.004 };   // C2: koefisien hamburan udara untuk cahaya lampu (1/m)
+  sig0: 0.004, sigRain: 0.026, sigMist: 0.012, sigOv: 0.005 };   // C2: koefisien hamburan udara untuk cahaya lampu (1/m)
 function updateLighting() {
   const h = clock.hour, U = LIGHT.uniforms;
   const day = sstep(5.5, 7.5, h) * (1 - sstep(17.5, 19.5, h));
@@ -8624,8 +8624,10 @@ const GTAO_FS = /* glsl */`
         // bobot: jarak (memudar 0,3-1 R), elevasi di atas bidang singgung (lantai datar jauh: galat kuantisasi kedalaman tidak jadi
         // garis-garis) dan benda tipis di depan titik (orang, tiang: tidak dianggap tembok tebal yang menggelapkan lantai lebar)
         float iA = inversesqrt(max(lA, 1e-8)), iB = inversesqrt(max(lB, 1e-8));
-        float wA = (1.0 - smoothstep(0.3 * R2, R2, lA)) * smoothstep(0.03, 0.12, dot(sA, N) * iA) * (1.0 - 0.6 * smoothstep(0.5, 1.5, dot(sA, V)));
-        float wB = (1.0 - smoothstep(0.3 * R2, R2, lB)) * smoothstep(0.03, 0.12, dot(sB, N) * iB) * (1.0 - 0.6 * smoothstep(0.5, 1.5, dot(sB, V)));
+        // + tinggi mutlak: penghalang < 5-15 cm di atas permukaan (garis zebra 2 cm, marka, tepi petak) tidak memberi AO;
+        //   dulu memberi pita gelap di sekeliling garis zebra sehingga tampak seperti lempeng tebal
+        float wA = (1.0 - smoothstep(0.3 * R2, R2, lA)) * smoothstep(0.03, 0.12, dot(sA, N) * iA) * smoothstep(0.05, 0.15, dot(sA, N)) * (1.0 - 0.6 * smoothstep(0.5, 1.5, dot(sA, V)));
+        float wB = (1.0 - smoothstep(0.3 * R2, R2, lB)) * smoothstep(0.03, 0.12, dot(sB, N) * iB) * smoothstep(0.05, 0.15, dot(sB, N)) * (1.0 - 0.6 * smoothstep(0.5, 1.5, dot(sB, V)));
         vec2 uA = vUv + o, uB = vUv - o;                              // sampel di luar layar: tidak ada data (tepi tidak diulang jadi garis)
         wA *= step(0.0, uA.x) * step(uA.x, 1.0) * step(0.0, uA.y) * step(uA.y, 1.0);
         wB *= step(0.0, uB.x) * step(uB.x, 1.0) * step(0.0, uB.y) * step(uB.y, 1.0);
@@ -8770,8 +8772,10 @@ const lampFogMat = fsMat('uniform mat4 uProjInvL, uCamWorldL; uniform sampler2D 
       float h = uL_R - r, s = atan(p.y, p.x) * uL_R, za = p.z + uL_HalfL;
       vec3 e = vec3(0.0);
       if (uL_Night > 0.01 && h < 12.0) {
+        // lampPoolL memotong keras di 12 m dari garis lampu (di tanah nilainya 0,17, tak terlihat); di udara terkumpul sepanjang
+        // garis pandang dan tampak sebagai dinding lurus. Pangkat 3: kerucut lebih sempit (sekitar 3,7 m) dan nilai di batas 0,005
         float pool = lampPoolL(s, za);
-        float cone = pool * (1.0 - smoothstep(6.5, 8.6, h));                         // kerucut di bawah kepala lampu
+        float cone = pool * pool * pool * (1.0 - smoothstep(6.5, 8.6, h));           // kerucut di bawah kepala lampu
         float p2 = pool * pool, halo = p2 * p2 * p2 * exp(-(h - 8.0) * (h - 8.0) / 3.0) * 2.5;   // halo bulat di kepala
         e += vec3(1.0, 0.72, 0.42) * 1.5 * uL_Night * (cone + halo);
       }
@@ -9589,7 +9593,7 @@ const FURN = { kinds: {}, lastS: 1e9, lastZ: 1e9, total: 0, sigMeta: [], glow: {
   for (const [kind, geo] of Object.entries(GEO)) {
     const items = list[kind], n = items.length; if (!n) continue;
     const mat = kind === 'signalLamp' ? signalLampMat : kind === 'zebra'
-      ? new THREE.MeshBasicMaterial({ color: 0xd9d9d4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 })
+      ? new THREE.MeshBasicMaterial({ color: 0xd9d9d4, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, depthWrite: false })   // V3 revisi: tanpa tulis kedalaman (offset membuat garis tercatat lebih dekat -> GTAO melihat lempeng tebal)
       : new THREE.MeshBasicMaterial({ vertexColors: true });
     const mesh = new THREE.InstancedMesh(geo, mat, n);
     const mats = new Float32Array(n * 16), m4 = new THREE.Matrix4(), rot = new THREE.Matrix4();
