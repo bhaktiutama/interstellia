@@ -1,5 +1,5 @@
 """Uji 21e (Copper Corn Station): kabut pagi. Kerapatan scene.fog naik sebelum fajar, penuh 6,0-7,2, menipis sampai 9,5, puncak
-sekitar 5x kerapatan dasar; warna lebih pucat hangat saat kabut; pantulan daratan seberang (uL_FarAvg) ikut berkabut; mendung
+sekitar 5x kerapatan dasar (V4 Ultra / Tinggi: 2x + lapisan kabut tanah); warna lebih pucat hangat saat kabut; pantulan daratan seberang (uL_FarAvg) ikut berkabut; mendung
 menghapus kabut pagi; kamera luar tanpa kabut tidak berubah; render pagi tanpa nilai tidak valid.
 Pakai: python tools/uji_kabut_pagi.py   (butuh: pip install playwright && playwright install chromium)
 Tanpa akses CDN langsung: THREE_LOCAL=<folder berisi three.module.js dan three.core.js> python tools/uji_kabut_pagi.py
@@ -23,7 +23,10 @@ UJI = r"""
   for (const h of hrs) { v[h] = at(h, false); info.push(`jam ${h}: kerapatan ${(v[h].d / base).toFixed(2)} x dasar, warna ${v[h].c.map((x) => x.toFixed(3)).join(' ')}`); }
   out['jam 4,0 dan 12,0 sama dengan dasar (kabut pagi tidak aktif)'] = Math.abs(v[4].d - base) < 1e-9 && Math.abs(v[12].d - base) < 1e-9;
   out[`naik 5,0 -> 6,0 (${(v[5].d / base).toFixed(2)} -> ${(v[6].d / base).toFixed(2)})`] = v[6].d > v[5].d && v[5].d > base;
-  out[`puncak 6,0-7,2 sekitar 5x (${(v[6.6].d / base).toFixed(2)})`] = Math.abs(v[6.6].d / base - 5) < 0.05 && Math.abs(v[7.2].d / base - 5) < 0.05;
+  // V4: di Ultra / Tinggi (ATMO.gate) kabut pagi menjadi lapisan menempel tanah di compMat; kabut rata material hanya +1x (puncak 2x)
+  const pk = S.ATMO && S.ATMO.gate ? 2 : 5;
+  out[`puncak 6,0-7,2 sekitar ${pk}x (${(v[6.6].d / base).toFixed(2)})` + (pk === 2 ? ', V4 lapisan kabut tanah aktif' : '')] = Math.abs(v[6.6].d / base - pk) < 0.05 && Math.abs(v[7.2].d / base - pk) < 0.05;
+  if (pk === 2) out[`V4: kabut tanah jam 6,6 penuh (ATMO.mist ${S.ATMO.mist.toFixed(2)})`] = S.ATMO.mist > 0.95;
   out[`menipis 8,0 -> 9,0 -> 9,6 (${(v[8].d / base).toFixed(2)} ${(v[9].d / base).toFixed(2)} ${(v[9.6].d / base).toFixed(2)})`] = v[8].d > v[9].d && v[9].d > base && Math.abs(v[9.6].d - base) < 1e-9;
   out['farEnv memakai kerapatan yang sama (uL_FogD)'] = Math.abs(v[6.6].fogD - v[6.6].d) < 1e-12;
   const lum = (a) => 0.2126 * a[0] + 0.7152 * a[1] + 0.0722 * a[2], sat = (a) => Math.max(...a) - Math.min(...a);
