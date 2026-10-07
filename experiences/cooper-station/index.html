@@ -6730,7 +6730,8 @@ const mixV = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
    pass komposit dari buffer kedalaman: integral kerapatan sepanjang garis pandang, 12 sampel rapat di kedua ujung karena lapisan
    tipis ada di dekat mata dan di dekat titik yang dilihat). Kabut rata di material dikurangi dari 4x ke 1x tambahan selama
    aktif. ATMO.gate diisi di postEnd (Ultra/Tinggi, efek layar menyala, di dalam stasiun); ?v4=0 = tampilan sebelum V4. */
-const ATMO = { off: new URLSearchParams(location.search).get('v4') === '0', gate: false, mist: 0, mistRho: 0.0038, mistH: 30 };
+const ATMO = { off: new URLSearchParams(location.search).get('v4') === '0', gate: false, mist: 0, mistRho: 0.0038, mistH: 30,
+  sig0: 0.003, sigRain: 0.022, sigMist: 0.014, sigOv: 0.004 };   // C2: koefisien hamburan udara untuk cahaya lampu (1/m)
 function updateLighting() {
   const h = clock.hour, U = LIGHT.uniforms;
   const day = sstep(5.5, 7.5, h) * (1 - sstep(17.5, 19.5, h));
@@ -8525,6 +8526,7 @@ const POST_R = {};
   POST_R.down = [0, 1, 2, 3, 4, 5].map(() => new THREE.WebGLRenderTarget(4, 4, hf));
   POST_R.up = [0, 1, 2, 3, 4].map(() => new THREE.WebGLRenderTarget(4, 4, hf));
   POST_R.ray = new THREE.WebGLRenderTarget(4, 4, hf);                // tahap 11b: sunrays setengah resolusi
+  POST_R.lamp = new THREE.WebGLRenderTarget(4, 4, hf);               // V4 C2: cahaya lampu di udara, setengah resolusi
   POST_R.lum = [0, 1].map(() => new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false, generateMipmaps: false }));   // 17c
   POST_R.w = 0; POST_R.h = 0;
 }
@@ -8746,6 +8748,42 @@ const rayMat = fsMat(/* glsl */`
   uSunDir: LIGHT.uniforms.uL_SunDir, uFogD: { value: 0 }, uStr: { value: 0 }, uHaze: { value: RAYS.haze }, uBeam: { value: RAYS.beam }, uDark: { value: RAYS.dark },
   uR: { value: CONFIG.R }, uHalfL: { value: HALF_L }, uL: { value: CONFIG.L }, uN: { value: 16 },
   tBright: { value: null }, uViewProj: { value: new THREE.Matrix4() }, uStreak: { value: RAYS.streak }, uAspect: { value: 1 } });
+/* V4 C2: cahaya lampu di udara malam (lampu jalan, trem, lampu depan motor). Posisi lampu dari rumus yang sama dengan kolam
+   cahaya tanah (lampPoolL, tramPoolL, headSpotL di LIGHT_GLSL), jadi kerucut di udara tepat di atas kolamnya. Tiap piksel
+   (setengah resolusi) melangkah 16 kali sampai 160 m, menjumlah cahaya yang dihamburkan udara: kerucut di bawah kepala lampu
+   (8 m), halo bulat di sekitar kepala, kerucut lampu depan trem dan motor. Kekuatan hamburan uSig naik saat hujan, kabut pagi,
+   dan mendung. Keluaran a = jarak pandang untuk upsample sadar kedalaman (sama dengan sunrays). */
+const lampFogMat = fsMat('uniform mat4 uProjInvL, uCamWorldL; uniform sampler2D tDepthL; uniform float uSig;\nvarying vec2 vUv;\n' + LIGHT_GLSL + /* glsl */`
+  float ignL(vec2 p) { return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y)); }
+  void main() {
+    float d = textureLod(tDepthL, vUv, 0.0).r;
+    vec4 v = uProjInvL * vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); vec3 vp = v.xyz / v.w;
+    float dist = d >= 0.99999 ? 6000.0 : length(vp);
+    vec3 dir = mat3(uCamWorldL) * vp; dir *= inversesqrt(max(dot(dir, dir), 1e-12));
+    vec3 O = uCamWorldL[3].xyz;
+    float L = min(dist, 160.0), j = ignL(gl_FragCoord.xy);
+    vec3 acc = vec3(0.0);
+    for (int i = 0; i < 16; i++) {
+      float x = (float(i) + j) / 16.0, t = L * x * x, dt = 2.0 * L * x / 16.0;
+      vec3 p = O + dir * t; float r = length(p.xy);
+      if (r < 900.0 || r > uL_R) continue;                            // hanya lapisan dekat tanah (lampu di bawah 20 m)
+      float h = uL_R - r, s = atan(p.y, p.x) * uL_R, za = p.z + uL_HalfL;
+      vec3 e = vec3(0.0);
+      if (uL_Night > 0.01 && h < 12.0) {
+        float pool = lampPoolL(s, za);
+        float cone = pool * (1.0 - smoothstep(6.5, 8.6, h));                         // kerucut di bawah kepala lampu
+        float p2 = pool * pool, halo = p2 * p2 * p2 * exp(-(h - 8.0) * (h - 8.0) / 3.0) * 2.5;   // halo bulat di kepala
+        e += vec3(1.0, 0.72, 0.42) * 1.5 * uL_Night * (cone + halo);
+      }
+      if (uL_Tram.w > 0.01 && h < 6.0) e += vec3(1.0, 0.9, 0.75) * uL_Tram.w * tramPoolL(s, za) * (1.0 - smoothstep(2.0, 5.0, h));
+      if (uL_Head.w > 0.01) {
+        vec3 q = p - uL_Head.xyz; float q2 = dot(q, q);
+        if (q2 > 0.04 && q2 < 3600.0) e += vec3(1.0, 0.94, 0.84) * uL_Head.w * smoothstep(0.87, 0.975, dot(q * inversesqrt(q2), uL_HeadDir)) * 70.0 / (q2 + 6.0);
+      }
+      acc += e * dt;
+    }
+    gl_FragColor = vec4(acc * uSig, dist);
+  }`, Object.assign({}, LIGHT.uniforms, { tDepthL: { value: null }, uProjInvL: { value: new THREE.Matrix4() }, uCamWorldL: { value: new THREE.Matrix4() }, uSig: { value: 0 } }));
 function toggleRays() {
   RAYS.on = !RAYS.on;
   uiLabel('labRays', () => t('Sunrays: {s}', { s: t(RAYS.on ? 'nyala' : 'mati') }) + (RAYS.n ? '' : t(' (preset ini: mati)')));
@@ -8809,6 +8847,18 @@ const compMat = fsMat(/* glsl */`
     }
     return s / ws;
   }
+  uniform sampler2D tLamp; uniform float uUseLamp;               // V4 C2
+  vec3 lampUp() {                                                  // upsample sadar kedalaman (seperti rays)
+    float dist = viewDist(vUv); vec2 tx = 1.0 / vec2(textureSize(tLamp, 0));
+    vec3 s = vec3(0.0); float ws = 0.0;
+    for (int k = 0; k < 9; k++) {
+      vec2 o = vec2(float(k - (k / 3) * 3) - 1.0, float(k / 3) - 1.0) * 1.25 * tx;
+      vec4 t = textureLod(tLamp, vUv + o, 0.0);
+      float w = 1.0 / (0.02 + abs(t.a - dist) / max(dist, 1.0));
+      s += t.rgb * w; ws += w;
+    }
+    return s / ws;
+  }
   vec3 rays() {                                                    // upsample sadar kedalaman: tidak bocor ke tepi objek dekat
     float dist = viewDist(vUv);
     vec3 s = vec3(0.0); float ws = 0.0;
@@ -8857,6 +8907,7 @@ const compMat = fsMat(/* glsl */`
     }
     if (uMist > 1e-6) c = groundMist(c);
     if (uUseRay > 0.5) c = max(c + rays(), vec3(0.0));
+    if (uUseLamp > 0.5) c += lampUp();
     c += texture2D(tBloom, vUv).rgb * uBloom;
     float mAd = 1.0;
     if (uAdOn > 0.5) mAd = clamp(pow(uAdKey / max(texture2D(tAdapt, vec2(0.5)).r, 1e-4), uAdPow), uAdMin, uAdMax);
@@ -8871,6 +8922,7 @@ const compMat = fsMat(/* glsl */`
   uDof: { value: 0 }, uFocus: { value: 20 }, uTexelF: { value: new THREE.Vector2() },
   tAdapt: { value: null }, uAdOn: { value: 0 }, uAdKey: { value: 0.2 }, uAdPow: { value: 0.45 }, uAdMin: { value: 0.6 }, uAdMax: { value: 1.8 },
   uWhite: { value: new THREE.Vector3(...POSTKIT.wb(CONFIG.wb.k, CONFIG.wb.tint)) },
+  tLamp: { value: null }, uUseLamp: { value: 0 },
   uMist: { value: 0 }, uMistH: { value: ATMO.mistH }, uR: { value: CONFIG.R }, uHalfL: { value: HALF_L }, uMistCol: { value: new THREE.Vector3() }, uCamWorld: { value: new THREE.Matrix4() } });
 // --- FXAA (versi ringkas, luma di kanal alfa) ---
 const fxaaMat = fsMat(/* glsl */`
@@ -8900,6 +8952,7 @@ function postBegin() {                                            // dipanggil s
     POST_R.down.forEach((t, i) => t.setSize(Math.max(2, w >> (i + 1)), Math.max(2, h >> (i + 1))));
     POST_R.up.forEach((t, i) => t.setSize(Math.max(2, w >> (i + 1)), Math.max(2, h >> (i + 1))));
     POST_R.ray.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
+    POST_R.lamp.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1));
   }
   renderer.setRenderTarget(POST_R.hdr);
   return true;
@@ -8958,6 +9011,17 @@ function postEnd() {
     C.tAdapt.value = b.texture;
   }
   ATMO.gate = !ATMO.off && PRESET.idx <= 1 && !ext.active;                 // V4: Ultra / Tinggi di dalam stasiun (postEnd hanya jalan bila efek layar menyala)
+  { // V4 C2: cahaya lampu di udara saat malam / lampu trem / motor menyala
+    const LU = LIGHT.uniforms, night = LU.uL_Night.value > 0.01 || LU.uL_Tram.value.w > 0.01 || LU.uL_Head.value.w > 0.01;
+    const useLamp = ATMO.gate && night;
+    if (useLamp) {
+      const M = lampFogMat.uniforms;
+      M.tDepthL.value = R0.hdr.depthTexture; M.uProjInvL.value.copy(camera.projectionMatrixInverse); M.uCamWorldL.value.copy(camera.matrixWorld);
+      M.uSig.value = ATMO.sig0 + ATMO.sigRain * RAIN.k + ATMO.sigMist * ATMO.mist + ATMO.sigOv * WEATHER.ov;
+      fsPass(lampFogMat, R0.lamp);
+    }
+    C.uUseLamp.value = useLamp ? 1 : 0; C.tLamp.value = R0.lamp.texture;
+  }
   C.uMist.value = ATMO.gate ? ATMO.mistRho * ATMO.mist : 0; C.uMistCol.value.set(scene.fog.color.r, scene.fog.color.g, scene.fog.color.b);
   C.uCamWorld.value.copy(camera.matrixWorld);
   C.uAdOn.value = ADAPT.on ? 1 : 0; C.uAdKey.value = ADAPT.key; C.uAdPow.value = ADAPT.pow; C.uAdMin.value = ADAPT.min; C.uAdMax.value = ADAPT.max;
