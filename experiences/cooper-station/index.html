@@ -345,7 +345,7 @@
     </table>
     <table data-pane="grafik">
         <tr class="desk-only"><td>Q</td><td>Preset kualitas: Ultra, Tinggi, Sedang, Rendah, Hemat (untuk MacBook M1). Awal: pilihan terakhir (atau Ultra), turun otomatis bila FPS di bawah 30. Bisa juga lewat alamat: index.html?preset=hemat</td></tr>
-        <tr class="desk-only"><td>K · P</td><td>Kualitas vegetasi · efek layar (bloom, SSAO, tone mapping): Tinggi, Sedang, Rendah/Mati</td></tr>
+        <tr class="desk-only"><td>K · P</td><td>Kualitas vegetasi · efek layar (bloom, AO, tone mapping): Tinggi, Sedang, Rendah/Mati</td></tr>
         <tr class="desk-only"><td>U · J</td><td>Suara nyala/mati · musik: generatif, file sendiri (pilih di panel Uji), mati</td></tr>
     </table>
     <table data-pane="kapal">
@@ -522,7 +522,7 @@ Object.assign(I18N.en, {
   "gerhana dalam {x}": "eclipse in {x}",
   "mnt": "min",
   "Preset kualitas: Ultra, Tinggi, Sedang, Rendah, Hemat (untuk MacBook M1). Awal: pilihan terakhir (atau Ultra), turun otomatis bila FPS di bawah 30. Bisa juga lewat alamat: index.html?preset=hemat": "Quality preset: Ultra, High, Medium, Low, Saver (for MacBook M1). Starts with your last choice (or Ultra) and drops automatically when FPS is below 30. Also via the address: index.html?preset=hemat",
-  "Kualitas vegetasi · efek layar (bloom, SSAO, tone mapping): Tinggi, Sedang, Rendah/Mati": "Vegetation quality · screen effects (bloom, SSAO, tone mapping): High, Medium, Low/Off",
+  "Kualitas vegetasi · efek layar (bloom, AO, tone mapping): Tinggi, Sedang, Rendah/Mati": "Vegetation quality · screen effects (bloom, AO, tone mapping): High, Medium, Low/Off",
   "Suara nyala/mati · musik: generatif, file sendiri (pilih di panel Uji), mati": "Sound on/off · music: generative, your own file (choose it in the panel), off",
   "E lepas sandar / sandar otomatis (kotak target hijau = bisa sandar: jarak < 400 m, kecepatan < 30 m/s; layar kokpit: jarak, kecepatan mendekat/geser, penunjuk arah berth) · W/S dorong · A/D geser · R/F naik-turun · Z/C guling · mouse arah · Shift boost 10x · X rem · V kokpit/kamera belakang · L keluar (saat sandar)": "E undock / auto dock (green target box = docking possible: distance < 400 m, speed < 30 m/s; cockpit screen: distance, closing/lateral speed, berth direction) · W/S thrust · A/D strafe · R/F up/down · Z/C roll · mouse to steer · Shift boost 10x · X brake · V cockpit/rear camera · L exit (while docked)",
   "Tahap 12d · siklus tanam dan mesin panen di ladang, mode foto (F), tur sinematik (Y) · 12c: hujan dengan fisika Coriolis, air mancur Coriolis (9) · 12b-5: suasana kota · 12b-4: burung · 12b-3: pejalan kaki · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g": "Stage 12d · crop cycle and harvesters in the fields, photo mode (F), cinematic tour (Y) · 12c: rain with Coriolis physics, Coriolis fountain (9) · 12b-5: city ambience · 12b-4: birds · 12b-3: pedestrians · 12b-2: 8 tree species, leaf moods, falling leaves · 12b-1: traffic lights, queuing cars, tram crossings, Saver preset · stage 12a: gate B1, shuttle sounds, docking guide · despun dock, original flyable shuttle · street furniture, weather, sunrays · R 1,000 m, L 8,000 m, 1 g",
@@ -8503,18 +8503,19 @@ function updateTraffic() {
 await bootStep(BOOT_W[16], 'Efek layar...');
 /* =====================================================================
    TAHAP 9: POST-PROCESSING (tanpa addon)
-   Scene dirender ke target HDR (half float) -> SSAO setengah resolusi -> bloom berantai (mip 6 tingkat)
+   Scene dirender ke target HDR (half float) -> AO setengah resolusi (V3: GTAO; ?ao=ssao = SSAO lama) -> bloom berantai (mip 6 tingkat)
    -> komposit: exposure + tone mapping ACES + sRGB + vignette + grain -> FXAA ke layar.
-   Kualitas (tombol P): Tinggi = semua, Sedang = tanpa SSAO, Mati = render langsung seperti tahap 8.
+   Kualitas (tombol P): Tinggi = semua, Sedang = tanpa AO, Mati = render langsung seperti tahap 8.
    ===================================================================== */
-const POST = { mode: 0, names: ['Tinggi', 'Sedang', 'Mati'], exposure: 1.45, bloom: 0.5, bloomThr: 1.15, ao: 0.55, grain: 0.012, vignette: 0.2 };
+const POST = { mode: 0, names: ['Tinggi', 'Sedang', 'Mati'], exposure: 1.45, bloom: 0.5, bloomThr: 1.15, ao: 0.55, grain: 0.012, vignette: 0.2,
+  aoQ: 2, aoG: 0.9, ssao: /ssao/.test(new URLSearchParams(location.search).get('ao') || ''), view: /view/.test(new URLSearchParams(location.search).get('ao') || '') };   // ?ao=view = tampilkan AO saja (alat banding)   // V3: GTAO kualitas 2 Ultra / 1 Tinggi; ?ao=ssao = SSAO lama untuk banding
 const POST_R = {};
 {
   const hf = { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, generateMipmaps: false };
   POST_R.hdr = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: true, generateMipmaps: false });
   POST_R.hdr.depthTexture = new THREE.DepthTexture(4, 4);
   POST_R.ldr = new THREE.WebGLRenderTarget(4, 4, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
-  POST_R.ao = [0, 1].map(() => new THREE.WebGLRenderTarget(4, 4, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }));
+  POST_R.ao = [0, 1].map(() => new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, generateMipmaps: false }));   // V3: r = AO, g = jarak pandang (m)
   POST_R.down = [0, 1, 2, 3, 4, 5].map(() => new THREE.WebGLRenderTarget(4, 4, hf));
   POST_R.up = [0, 1, 2, 3, 4].map(() => new THREE.WebGLRenderTarget(4, 4, hf));
   POST_R.ray = new THREE.WebGLRenderTarget(4, 4, hf);                // tahap 11b: sunrays setengah resolusi
@@ -8569,6 +8570,75 @@ const aoBlurMat = fsMat(/* glsl */`
   uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
   void main() { float s = 0.0; for (int i = -2; i < 2; i++) for (int j = -2; j < 2; j++) s += textureLod(tSrc, vUv + (vec2(float(i), float(j)) + 0.5) * uTexel, 0.0).r;
     gl_FragColor = vec4(vec3(s / 16.0), 1.0); }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
+/* --- V3: GTAO (Ground Truth Ambient Occlusion, Jimenez dkk. 2016), setengah resolusi ---
+   Per piksel: DIRS irisan (arah layar diputar noise per piksel), tiap irisan STEPS langkah ke dua sisi mencari sudut horizon
+   tertinggi dalam radius 2,5 m (bobot jarak memudar ke horizon terendah), lalu integral kosinus busur yang terlihat di sekitar
+   normal terproyeksi (rumus tertutup a(h) = (-cos(2h - n) + cos n + 2h sin n) / 4). Hasil r = visibilitas 0..1, g = jarak pandang.
+   Aman M1: acos / sqrt hanya untuk nilai yang dijepit, normalize hanya untuk vektor yang dijaga tidak nol. Pudar 80-200 m. */
+const GTAO_FS = /* glsl */`
+  uniform sampler2D tDepth; uniform mat4 uProjInv; uniform vec2 uTexel; uniform float uRadius, uPxR;
+  varying vec2 vUv;
+  vec3 vpos(vec2 uv) { float d = textureLod(tDepth, uv, 0.0).r; vec4 v = uProjInv * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return v.xyz / v.w; }
+  float ign(vec2 p) { return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y)); }
+  float acosC(float x) { return acos(clamp(x, -1.0, 1.0)); }
+  void main() {
+    float d0 = textureLod(tDepth, vUv, 0.0).r;
+    if (d0 >= 0.99999) { gl_FragColor = vec4(1.0, 6000.0, 0.0, 1.0); return; }
+    vec3 P = vpos(vUv); float dist = -P.z;
+    float fade = 1.0 - smoothstep(80.0, 200.0, dist);
+    if (fade <= 0.0) { gl_FragColor = vec4(1.0, dist, 0.0, 1.0); return; }
+    vec3 pr = vpos(vUv + vec2(uTexel.x, 0.0)), pl = vpos(vUv - vec2(uTexel.x, 0.0)), pu = vpos(vUv + vec2(0.0, uTexel.y)), pd = vpos(vUv - vec2(0.0, uTexel.y));
+    vec3 dx = abs(pr.z - P.z) < abs(P.z - pl.z) ? pr - P : P - pl;
+    vec3 dy = abs(pu.z - P.z) < abs(P.z - pd.z) ? pu - P : P - pd;
+    vec3 N = cross(dx, dy);
+    N = dot(N, N) > 1e-16 ? normalize(N) : vec3(0.0, 0.0, 1.0);
+    vec3 V = -P / max(dist, 1e-4); V *= inversesqrt(max(dot(V, V), 1e-12));
+    if (dot(N, V) < 0.0) N = -N;
+    // radius layar (uv) dari radius dunia; dibatasi 0,12 tinggi layar agar biaya cache tetap kecil dari dekat
+    float rUv = min(uRadius * uPxR / dist, 0.12);
+    if (rUv * 0.5 / uTexel.y < 1.5) { gl_FragColor = vec4(1.0, dist, 0.0, 1.0); return; }   // radius < 1,5 piksel: tidak ada informasi
+    float rot = ign(gl_FragCoord.xy) * 3.14159265 / float(DIRS), jit = fract(ign(gl_FragCoord.yx + 17.0) + 0.5);
+    float vis = 0.0, R2 = uRadius * uRadius;
+    for (int i = 0; i < DIRS; i++) {
+      float phi = rot + float(i) * 3.14159265 / float(DIRS);
+      vec3 dir = vec3(cos(phi), sin(phi), 0.0);
+      vec3 ortho = dir - V * dot(dir, V);
+      vec3 axis = cross(dir, V); axis *= inversesqrt(max(dot(axis, axis), 1e-12));
+      vec3 pN = N - axis * dot(N, axis); float pNL = sqrt(max(dot(pN, pN), 0.0));
+      float n = sign(dot(ortho, pN)) * acosC(dot(pN, V) / max(pNL, 1e-4));
+      float lo1 = -sin(n), lo0 = sin(n);                           // cos horizon terendah tiap sisi: n +- pi/2
+      float c1 = lo1, c0 = lo0;
+      for (int k = 0; k < STEPS; k++) {
+        float t = (float(k) + jit) / float(STEPS); t = max(t * t, uTexel.y * 2.0 / rUv);   // langkah rapat dekat titik
+        vec2 o = dir.xy * rUv * t * vec2(uTexel.x / uTexel.y, 1.0);    // rUv dalam satuan tinggi layar
+        vec3 sA = vpos(vUv + o) - P, sB = vpos(vUv - o) - P;
+        float lA = dot(sA, sA), lB = dot(sB, sB);
+        float wA = 1.0 - smoothstep(0.45 * R2, R2, lA), wB = 1.0 - smoothstep(0.45 * R2, R2, lB);
+        c1 = max(c1, mix(lo1, dot(sA, V) * inversesqrt(max(lA, 1e-8)), wA));
+        c0 = max(c0, mix(lo0, dot(sB, V) * inversesqrt(max(lB, 1e-8)), wB));
+      }
+      float h1 = n + min(acosC(c1) - n, 1.5707963), h0 = n + max(-acosC(c0) - n, -1.5707963);
+      float cn = cos(n), sn = sin(n);
+      vis += pNL * 0.25 * ((-cos(2.0 * h0 - n) + cn + 2.0 * h0 * sn) + (-cos(2.0 * h1 - n) + cn + 2.0 * h1 * sn));
+    }
+    vis = clamp(vis / float(DIRS), 0.0, 1.0);
+    gl_FragColor = vec4(mix(1.0, vis, fade), dist, 0.0, 1.0);
+  }`;
+const gtaoU = () => ({ tDepth: { value: null }, uProjInv: { value: new THREE.Matrix4() }, uTexel: { value: new THREE.Vector2() }, uRadius: { value: 2.5 }, uPxR: { value: 1 } });
+const GTAO_MATS = [null, fsMat(GTAO_FS, gtaoU()), fsMat(GTAO_FS, gtaoU())];   // [1] Tinggi: 2 x 4, [2] Ultra: 3 x 6
+GTAO_MATS[1].defines = { DIRS: 2, STEPS: 4 }; GTAO_MATS[2].defines = { DIRS: 3, STEPS: 6 };
+// penghalus 4x4 sadar kedalaman: bobot turun bila jarak pandang tetangga berbeda > 5%, tidak membuat halo di tepi siluet
+const gtaoBlurMat = fsMat(/* glsl */`
+  uniform sampler2D tSrc; uniform vec2 uTexel; varying vec2 vUv;
+  void main() {
+    vec2 c = textureLod(tSrc, vUv, 0.0).rg; float s = 0.0, ws = 0.0;
+    for (int i = -2; i < 2; i++) for (int j = -2; j < 2; j++) {
+      vec2 t = textureLod(tSrc, vUv + (vec2(float(i), float(j)) + 0.5) * uTexel, 0.0).rg;
+      float w = max(0.0, 1.0 - abs(t.g - c.g) / max(0.05 * c.g, 0.02));
+      s += t.r * w; ws += w;
+    }
+    gl_FragColor = vec4(ws > 1e-4 ? s / ws : c.r, c.g, 0.0, 1.0);
+  }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() } });
 // --- bloom: turun (dengan ambang lembut di tingkat pertama) lalu naik (filter tenda) ---
 const downMat = fsMat(/* glsl */`
   uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uFirst, uThr, uKnee; varying vec2 vUv;
@@ -8690,7 +8760,7 @@ const lumMat = fsMat(/* glsl */`
   }`, { tHdr: { value: null }, tPrev: { value: null }, uKUp: { value: 0.03 }, uKDown: { value: 0.01 }, uInit: { value: 1 } });
 // --- komposit: AO, bloom, exposure, ACES, sRGB, vignette, grain ---
 const compMat = fsMat(/* glsl */`
-  uniform sampler2D tHdr, tBloom, tAO, tRay, tDepth; uniform float uExp, uBloom, uAO, uUseAO, uGrain, uVig, uTime, uUseRay; uniform vec2 uRayTexel; uniform mat4 uProjInv; varying vec2 vUv;
+  uniform sampler2D tHdr, tBloom, tAO, tRay, tDepth; uniform float uExp, uBloom, uAO, uUseAO, uGtao, uAoView, uGrain, uVig, uTime, uUseRay; uniform vec2 uRayTexel; uniform mat4 uProjInv; varying vec2 vUv;
   uniform float uDof, uFocus; uniform vec2 uTexelF;                // 12d: kedalaman bidang untuk mode foto
   uniform sampler2D tAdapt; uniform float uAdOn, uAdKey, uAdPow, uAdMin, uAdMax;   // 17c: adaptasi mata
   uniform vec3 uWhite;                                             // V0: white balance
@@ -8721,6 +8791,17 @@ const compMat = fsMat(/* glsl */`
     }
     return s / ws;
   }
+  float gtaoUp(float dist) {                                       // V3: upsample sadar kedalaman 2x2 dari target setengah resolusi
+    vec2 sz = vec2(textureSize(tAO, 0)), f = vUv * sz - 0.5, b = floor(f), fr = f - b;
+    float s = 0.0, ws = 0.0;
+    for (int k = 0; k < 4; k++) {
+      vec2 o = vec2(float(k - (k / 2) * 2), float(k / 2));
+      vec2 t = textureLod(tAO, (b + o + 0.5) / sz, 0.0).rg;
+      float w = (o.x > 0.5 ? fr.x : 1.0 - fr.x) * (o.y > 0.5 ? fr.y : 1.0 - fr.y) / (0.02 + abs(t.g - dist) / max(dist, 1.0)) + 1e-5;
+      s += t.r * w; ws += w;
+    }
+    return s / ws;
+  }
   vec3 aces(vec3 x) {                                              // ACES fitted (Stephen Hill)
     const mat3 m1 = mat3(0.59719, 0.07600, 0.02840, 0.35458, 0.90834, 0.13383, 0.04823, 0.01566, 0.83777);
     const mat3 m2 = mat3(1.60475, -0.10208, -0.00327, -0.53108, 1.10813, -0.07276, -0.07367, -0.00605, 1.07602);
@@ -8733,7 +8814,18 @@ const compMat = fsMat(/* glsl */`
     vec3 c = texture2D(tHdr, vUv).rgb;
     float coc = uDof > 0.0 ? cocAt(viewDist(vUv)) : 0.0;
     if (coc > 0.02) c = dof(c, coc);
-    if (uUseAO > 0.5) c *= mix(1.0, texture2D(tAO, vUv).r, uAO * (1.0 - coc));
+    if (uAoView > 0.5) { float v = uGtao > 0.5 ? gtaoUp(viewDist(vUv)) : texture2D(tAO, vUv).r; v = uUseAO > 0.5 ? v : 1.0; gl_FragColor = vec4(vec3(v), v); return; }
+    if (uUseAO > 0.5 && uGtao < 0.5) c *= mix(1.0, texture2D(tAO, vUv).r, uAO * (1.0 - coc));
+    else if (uUseAO > 0.5) {
+      // V3: GTAO + pantulan berulang (Jimenez: kurva per albedo; albedo ditaksir dari kecerahan, terang = putih) dan diredam
+      // di bagian yang terang sekali (perkiraan kena sinar langsung: AO seharusnya hanya menggelapkan cahaya sekitar)
+      float v = gtaoUp(viewDist(vUv)), L = dot(c, vec3(0.2126, 0.7152, 0.0722)) * uExp;
+      float al = clamp(L / (L + 0.6), 0.1, 0.9);
+      float va = 2.0404 * al - 0.3324, vb = -4.7951 * al + 0.6417, vc = 2.7552 * al + 0.6903;
+      v = max(v, ((v * va + vb) * v + vc) * v);
+      float direct = smoothstep(0.5, 1.6, L);
+      c *= mix(1.0, min(v, 1.0), uAO * (1.0 - 0.6 * direct) * (1.0 - coc));
+    }
     if (uUseRay > 0.5) c = max(c + rays(), vec3(0.0));
     c += texture2D(tBloom, vUv).rgb * uBloom;
     float mAd = 1.0;
@@ -8743,7 +8835,7 @@ const compMat = fsMat(/* glsl */`
     c = toSRGB(c);
     c += (h(vUv * 1000.0 + uTime) - 0.5) * uGrain;
     gl_FragColor = vec4(c, dot(c, vec3(0.299, 0.587, 0.114)));
-  }`, { tHdr: { value: null }, tBloom: { value: null }, tAO: { value: null }, uExp: { value: 1 }, uBloom: { value: 0.5 }, uAO: { value: 0.5 }, uUseAO: { value: 1 },
+  }`, { tHdr: { value: null }, tBloom: { value: null }, tAO: { value: null }, uExp: { value: 1 }, uBloom: { value: 0.5 }, uAO: { value: 0.5 }, uUseAO: { value: 1 }, uGtao: { value: 1 }, uAoView: { value: 0 },
   uGrain: { value: 0.01 }, uVig: { value: 0.2 }, uTime: { value: 0 },
   tRay: { value: null }, tDepth: { value: null }, uUseRay: { value: 0 }, uRayTexel: { value: new THREE.Vector2() }, uProjInv: { value: new THREE.Matrix4() },
   uDof: { value: 0 }, uFocus: { value: 20 }, uTexelF: { value: new THREE.Vector2() },
@@ -8782,8 +8874,16 @@ function postBegin() {                                            // dipanggil s
   return true;
 }
 function postEnd() {
-  const R0 = POST_R, useAO = POST.mode === 0 && !ext.active;
-  if (useAO) {
+  // V3: AO juga di kokpit dan kamera belakang shuttle (ext.flight); kamera luar stasiun (V, ribuan m) tetap tanpa AO
+  const R0 = POST_R, useAO = POST.mode === 0 && (!ext.active || ext.flight), gtao = !POST.ssao;
+  if (useAO && gtao) {
+    const M = GTAO_MATS[POST.aoQ || 1], U = M.uniforms;   // P = Tinggi di preset Sedang ke bawah: GTAO ringan
+    U.tDepth.value = R0.hdr.depthTexture; U.uProjInv.value.copy(camera.projectionMatrixInverse);
+    U.uTexel.value.set(1 / R0.w, 1 / R0.h); U.uPxR.value = camera.projectionMatrix.elements[5] * 0.5;   // uv per m di jarak 1 m
+    fsPass(M, R0.ao[0]);
+    gtaoBlurMat.uniforms.tSrc.value = R0.ao[0].texture; gtaoBlurMat.uniforms.uTexel.value.set(1 / R0.ao[0].width, 1 / R0.ao[0].height);
+    fsPass(gtaoBlurMat, R0.ao[1]);
+  } else if (useAO) {
     const U = aoMat.uniforms;
     U.tDepth.value = R0.hdr.depthTexture; U.uProj.value.copy(camera.projectionMatrix); U.uProjInv.value.copy(camera.projectionMatrixInverse);
     U.uTexel.value.set(1 / R0.w, 1 / R0.h);
@@ -8830,8 +8930,8 @@ function postEnd() {
   C.uUseRay.value = useRay ? 1 : 0; C.tRay.value = R0.ray.texture; C.tDepth.value = R0.hdr.depthTexture;
   C.uRayTexel.value.set(1 / R0.ray.width, 1 / R0.ray.height); C.uProjInv.value.copy(camera.projectionMatrixInverse);
   C.uTexelF.value.set(R0.h / 1080 / R0.w, 1 / 1080);                 // radius blur skala 1080p
-  C.tHdr.value = R0.hdr.texture; C.tBloom.value = R0.up[0].texture; C.tAO.value = R0.ao[1].texture; C.uUseAO.value = useAO ? 1 : 0;
-  C.uExp.value = POST.exposure; C.uBloom.value = POST.bloom / 6; C.uAO.value = POST.ao; C.uGrain.value = POST.grain; C.uVig.value = POST.vignette; C.uTime.value = (clock.sim % 100);
+  C.tHdr.value = R0.hdr.texture; C.tBloom.value = R0.up[0].texture; C.tAO.value = R0.ao[1].texture; C.uUseAO.value = useAO ? 1 : 0; C.uGtao.value = gtao ? 1 : 0; C.uAoView.value = POST.view ? 1 : 0;
+  C.uExp.value = POST.exposure; C.uBloom.value = POST.bloom / 6; C.uAO.value = gtao ? POST.aoG : POST.ao; C.uGrain.value = POST.grain; C.uVig.value = POST.vignette; C.uTime.value = (clock.sim % 100);
   fsPass(compMat, R0.ldr);
   fxaaMat.uniforms.tSrc.value = R0.ldr.texture; fxaaMat.uniforms.uTexel.value.set(1 / R0.w, 1 / R0.h);
   fsPass(fxaaMat, null);
@@ -9145,7 +9245,7 @@ await bootStep(BOOT_W[18], 'Preset grafik...');
    ===================================================================== */
 const PRESETS = [
   { name: 'Ultra', dpr: 2.0, veg: 0, post: 0, shadow: true, traffic: 1.0 },
-  { name: 'Tinggi', dpr: 1.5, veg: 0, post: 1, shadow: true, traffic: 1.0 },
+  { name: 'Tinggi', dpr: 1.5, veg: 0, post: 0, shadow: true, traffic: 1.0 },      // V3: post 0 = AO (GTAO ringan) juga di Tinggi
   { name: 'Sedang', dpr: 1.25, veg: 1, post: 1, shadow: true, traffic: 0.6 },
   { name: 'Rendah', dpr: 1.0, veg: 2, post: 2, shadow: false, traffic: 0.35 },
   { name: 'Hemat', dpr: 0.85, veg: 2, post: 2, shadow: false, traffic: 0.25 },   // 12b: untuk laptop tanpa GPU terpisah (MacBook M1), dipakai fitur 12b berikutnya
@@ -9159,7 +9259,7 @@ function applyPreset(i) {
   PRESET.idx = i; const P = PRESETS[i];
   CONFIG.dprMax = P.dpr; applyPixelRatio();
   vegQ = P.veg; applyVegQuality();
-  POST.mode = P.post; uiLabel('labPost', () => t('Efek layar: {m} (P)', { m: t(POST.names[POST.mode]) }));
+  POST.mode = P.post; POST.aoQ = [2, 1, 0, 0, 0][i]; uiLabel('labPost', () => t('Efek layar: {m} (P)', { m: t(POST.names[POST.mode]) }));
   SHADOW.enabled = P.shadow; const cb = document.getElementById('inShadow'); if (cb) cb.checked = P.shadow;
   TRAFFIC.U.uTraffic.value = P.traffic;
   LEAF.presetN = [3000, 2200, 1500, 900, 0][i]; applyFall();                  // 12b-2: daun jatuh per preset (Hemat: mati)
