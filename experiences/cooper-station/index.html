@@ -2901,6 +2901,12 @@ for (const [fz0, fz1] of FARMS) {
     z += bh;
   }
 }
+// 23i: petak yang bersinggungan dengan danau (+15 m): mesin ladang tidak bekerja di sana (dulu traktor menyusuri lajur
+// petak sampai masuk danau). Tanpa angka acak, jadi dunia lain tetap.
+for (const f of fieldList) f.lake = LAKES.some((L) => {
+  const ds = Math.max(0, Math.abs(wrapS(L.s - (f.s0 + f.s1) / 2)) - (f.s1 - f.s0) / 2), dz = Math.max(0, Math.abs(L.za - (f.z0 + f.z1) / 2) - (f.z1 - f.z0) / 2);
+  return (ds / (L.rs + 15)) ** 2 + (dz / (L.rz + 15)) ** 2 < 1;
+});
 // area uji: petak dekat bukit jadi padang rumput, sisanya ladang jagung (kecuali yang baru dibajak)
 const CROP_OF = { '#8b6f4e': 'plow', '#7fa84a': 'corn', '#6e9442': 'corn', '#98b852': 'corn', '#a7b86a': 'soy',
   '#c9b85a': 'wheat', '#d8c26a': 'wheat', '#b7a24f': 'wheat', '#c98f45': 'sorghum' };
@@ -3604,8 +3610,10 @@ function buildSite(site) {
     { // 18b-2: dek pandang = teras keliling di atap tingkat 4 (lebar 16 m, 175 m) di sekeliling tingkat puncak (10 m); hanya pagar
       const RAIL = [0.6, 0.63, 0.66], top = tiers[tiers.length - 1], sub = tiers[tiers.length - 2], F = y - top[1], hw = sub[0] / 2;
       for (const e of [-1, 1]) for (const ax of [0, 1]) {
-        for (let q = -hw; q <= hw + 1e-6; q += 2) add(new THREE.BoxGeometry(0.08, 1.2, 0.08), RAIL, ax ? e * (hw - 0.1) : q, F + 0.6, ax ? q : e * (hw - 0.1));
-        for (const [yy, th] of [[0.4, 0.05], [0.8, 0.05], [1.2, 0.1]]) add(ax ? new THREE.BoxGeometry(th, th, 2 * hw) : new THREE.BoxGeometry(2 * hw, th, th), RAIL, ax ? e * (hw - 0.1) : 0, F + yy, ax ? 0 : e * (hw - 0.1));
+        // 23i: pagar kabel (tiang tipis tiap 2 m, pegangan 1,1 m, 5 kabel baja 1,2 cm) supaya pandangan ke bawah tidak terhalang
+        // (dulu tiang 8 cm + tiga palang 5-10 cm setinggi 1,2 m)
+        for (let q = -hw; q <= hw + 1e-6; q += 2) add(new THREE.BoxGeometry(0.05, 1.1, 0.05), RAIL, ax ? e * (hw - 0.1) : q, F + 0.55, ax ? q : e * (hw - 0.1));
+        for (const [yy, th] of [[0.18, 0.012], [0.36, 0.012], [0.54, 0.012], [0.72, 0.012], [0.9, 0.012], [1.1, 0.07]]) add(ax ? new THREE.BoxGeometry(th, th, 2 * hw) : new THREE.BoxGeometry(2 * hw, th, th), RAIL, ax ? e * (hw - 0.1) : 0, F + yy, ax ? 0 : e * (hw - 0.1));
       }
       Object.assign(DECK, { s: bs, za: bz, h: F, half: hw, inner: top[0] / 2, podD: Math.min(bd - 4, 46) });
     }
@@ -3798,7 +3806,7 @@ for (let s = 20; s < CIRC - 60; s += U(110, 150)) for (let z = UTIL.za0 + 40; z 
 // Kompleks baru (angka acak sendiri): jalan servis keliling di tengah pita (10 m) dan dua jalan sekunder (7 m), jalan
 // silang tiap 70-130 m. Tiap blok dipecah berulang (BSP) menjadi modul yang rapat, dipisah lorong 2,5-4,5 m: gudang dan
 // hanggar bertingkat, blok atas bertangga, unit atap, gugus tangki, cerobong, dan rak pipa di atas jalan servis.
-const UTIL_PLAN = { modules: 0, silos: 0, pipes: 0 };
+const UTIL_PLAN = { modules: 0, silos: 0, pipes: 0, foot: [] };   // 23i: foot = tapak modul [s, za, w, d, h, jenis]
 {
   let sd = 20260928; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const RU = (a, b) => a + (b - a) * r(), RP = (a) => a[Math.floor(r() * a.length)];
@@ -3815,6 +3823,7 @@ const UTIL_PLAN = { modules: 0, silos: 0, pipes: 0 };
     if (w < 8 || d < 8 || !clearOf(cs, cz, w, d, 2)) return;
     const k = r();
     UTIL_PLAN.modules++;
+    UTIL_PLAN.foot.push([cs, cz, w, d, 0, 'x']);                       // 23i: jenis dan tinggi diisi di bawah (tanpa angka acak)
     if (k < 0.1 && w >= 14 && d >= 14) {                              // gugus tangki
       const ns = Math.min(3, Math.floor(w / 9)), nz = Math.min(3, Math.floor(d / 9)), h = RU(10, 20), col = RP(['#c9ccd0', '#b8bcc0', '#d4d6d8']);
       box(cs, cz, w, d, 1.2, '#7d8388');                               // alas beton
@@ -3830,6 +3839,7 @@ const UTIL_PLAN = { modules: 0, silos: 0, pipes: 0 };
     }
     const h = r() < 0.12 ? RU(24, 30) : RU(6, 20), col = RP(COLS_U), st = r() < 0.7 ? 4 : 10;
     box(cs, cz, w, d, h, col, 0, st);
+    Object.assign(UTIL_PLAN.foot[UTIL_PLAN.foot.length - 1], { 4: h, 5: 'gudang' });
     if (r() < 0.45 && w > 14 && d > 14) {                             // blok atas bertangga
       const w2 = w * RU(0.35, 0.7), d2 = d * RU(0.35, 0.7);
       const s2 = a0 + w2 / 2 + (w - w2) * r(), z2 = b0 + d2 / 2 + (d - d2) * r();
@@ -3861,6 +3871,33 @@ const UTIL_PLAN = { modules: 0, silos: 0, pipes: 0 };
     }
     s = s1 + LANE;
   }
+}
+
+// 23i: rute pipa pompa sungai (geometri dibangun setelah peta tinggi tanah, lihat blok "23i: pipa pompa sungai"). Rumah pompa =
+// gudang utilitas terdekat di sisi -s promenade Skyway yang lorong pipanya ke promenade tidak terhalang modul lain; pipa
+// membelok di tengah antara dua pohon promenade (pohon tiap 25 m dari za 150). inPipeRoute() dipakai tree() agar tidak ada
+// pohon di jalur pipa (tanpa angka acak, jadi dunia lain tetap).
+const PIPE = { D: 3.6, sA: SKY_S - 25.5, sB: SKY_S - 30.2, sI: SKY_S - 135, paths: [], len: [], pump: null };
+{
+  const SP = SKY_S, F = UTIL_PLAN.foot, Z0 = UTIL.za0 + 14;
+  let pump = null;
+  for (const m of F) {
+    const [cs, cz, w, d, h, kind] = m, e = cs + w / 2;
+    if (kind !== 'gudang' || w < 14 || d < 16 || h < 8 || cz - d / 2 < Z0 || cz + d / 2 > UTIL.za0 + 121) continue;
+    const gap = wrapS(SP - e); if (gap < 40 || gap > 200) continue;
+    const zt = 150 + 25 * Math.round((cz - 162.5) / 25) + 12.5;
+    if (Math.abs(zt - cz) > d / 2 - 4.6) continue;
+    const blockedBy = F.some((o) => o !== m && Math.abs(o[1] - zt) < o[3] / 2 + 5 && wrapS(o[0] + o[2] / 2 - e) > -0.5 && wrapS(SP - (o[0] - o[2] / 2)) > 30);
+    if (!blockedBy && (!pump || gap < pump.gap)) pump = { s: cs, za: cz, w, d, h, face: e, gap, zt };
+  }
+  PIPE.pump = pump; PIPE.zT = pump ? pump.zt : UTIL.za0 + 62.5; PIPE.face = pump ? pump.face - 0.6 : SP - 60;
+}
+function inPipeRoute(s, za, m = 0) {
+  const w = PIPE.D / 2 + m, ds = wrapS(s - SKY_S);
+  if (ds > -37 - w && ds < -21 + w && za > riverZ(s) + 18 && za < PIPE.zT + 2.35 + w) return Math.abs(wrapS(s - PIPE.sA)) < w || Math.abs(wrapS(s - PIPE.sB)) < w || za < riverZ(s) + 28.5 + w;
+  if (ds >= -140 - w && ds <= -21 && Math.abs(za - riverZ(s) - 28.5) < w) return true;                     // pipa isap di tepi sungai
+  if (Math.abs(za - PIPE.zT) < 2.35 + w && wrapS(s - PIPE.face) > -w && ds < -21) return true;           // lajur ke rumah pompa
+  return false;
 }
 
 // --- rumah pertanian di ladang -------------------------------------------
@@ -4436,6 +4473,7 @@ function tree(s, za, k) {
   if (inWater(s, za, 3) || inRiver(s, za, 3)) return;
   if (inReal(s, za, 3)) return;                                   // area uji memakai pohon prosedural sendiri
   if (inBallpark(s, za, 1)) return;
+  if (inPipeRoute(s, za, 3.5)) return;                           // 23i: jalur pipa pompa sungai
   treeList.push([modS(s), za, k]);
 }
 // 21a-1: lokasi air mancur Coriolis (plaza pusat kota terdekat ke s 14, za 625) ditentukan sebelum pohon, pejalan kaki,
@@ -5490,6 +5528,20 @@ function deckClamp() {                                             // di dalam p
   if (Math.abs(ds) < hs && Math.abs(dz) < hs) { if (hs - Math.abs(ds) < hs - Math.abs(dz)) ds = Math.sign(ds || 1) * hs; else dz = Math.sign(dz || 1) * hs; }
   player.theta = modS(DECK.s + ds) / R; player.za = DECK.za + dz;
 }
+// 23i: condong di pagar dek. Bila pemain dekat pagar (< 1,3 m), menghadap ke luar, dan menunduk, mata bergeser ke luar sampai
+// 0,85 m dan turun 0,15 m (badan bersandar di pegangan 1,1 m), jadi kaki menara dan jatuhnya bola terlihat.
+const DECK_LEAN = { k: 0 };
+function deckLean(dt, eye) {
+  const ds = wrapS(player.theta * R - DECK.s), dz = player.za - DECK.za, alongS = Math.abs(ds) >= Math.abs(dz);
+  const ns = alongS ? Math.sign(ds) : 0, nz = alongS ? 0 : Math.sign(dz), dist = DECK.half - Math.max(Math.abs(ds), Math.abs(dz));
+  const face = Math.sin(player.heading) * ns + Math.cos(player.heading) * nz;
+  const want = player.state === 'ground' && player.deck ? smooth01(1.3, 0.6, dist) * smooth01(0.2, 0.6, face) * smooth01(-0.15, -0.6, player.pitch) : 0;
+  DECK_LEAN.k += (want - DECK_LEAN.k) * (1 - Math.exp(-dt / 0.35));
+  if (DECK_LEAN.k < 1e-3) return;
+  if (alongS) tanAt(player.theta, _v3).multiplyScalar(ns); else _v3.set(0, 0, nz);
+  eye.addScaledVector(_v3, 0.85 * DECK_LEAN.k);
+  upAt(player.theta, _v3); eye.addScaledVector(_v3, -0.15 * DECK_LEAN.k);
+}
 function towerJump(up) {                                           // E: naik ke teras depan dek / turun ke depan lobi
   if (!DECK.h) return;
   if (up) { goDeck(); return; }
@@ -5863,6 +5915,8 @@ function drawMapStatic() {                                          // latar sek
   const x = (za) => za / CONFIG.L * MW, y = (s) => (wrapS(s) + CIRC / 2) / CIRC * MH;
   g.fillStyle = 'rgba(40,40,45,0.6)';
   for (const [hs, za, w, d] of houseList) g.fillRect(x(za - d / 2), y(hs - w / 2), Math.max(1, d * MW / CONFIG.L), Math.max(1, w * MH / CIRC));
+  g.strokeStyle = '#5f7d70'; g.lineWidth = Math.max(1.5, PIPE.D * MW / CONFIG.L); g.lineJoin = 'round';   // 23i: pipa pompa sungai
+  for (const S of PIPE.paths) { g.beginPath(); S.forEach((p, i) => (i ? g.lineTo(x(p[1]), y(p[0])) : g.moveTo(x(p[1]), y(p[0])))); g.stroke(); }
 }
 function sizeMap() {
   const r = mapCv.getBoundingClientRect(), dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -6102,6 +6156,7 @@ function updateCamera() {
     rollBasis(BOB.roll);                                           // 19a: gerak kepala
     groundPoint(player.theta, player.za, player.h + (player.state === 'tram' ? 1.2 : CONFIG.eye) + BOB.oy, _eye);   // duduk: mata 1,2 m di atas lantai
     if (BOB.ox) _eye.addScaledVector(_right, BOB.ox);
+    if (player.deck || DECK_LEAN.k > 0) deckLean(dt, _eye);      // 23i
   }
   waterNear();                                                     // 23h
   updateFov(dt);
@@ -7156,6 +7211,140 @@ function groundH0(s, za) {                                        // 23d: tinggi
 const heightTex = new THREE.DataTexture(TER.hh, TER.NS, TER.NZ, THREE.RedFormat, THREE.HalfFloatType);   // 20c: nilai half float dari langkah 4
 heightTex.minFilter = heightTex.magFilter = THREE.NearestFilter; heightTex.generateMipmaps = false; heightTex.unpackAlignment = 1; heightTex.needsUpdate = true;
 buildMosqueMesh(true);                                              // revisi 16: lapak pasar mengikuti tinggi tanah (groundH sudah ada)
+// --- 23i: pipa pompa sungai ------------------------------------------------------------------------------------------
+// Sungai melingkar penuh di jari-jari tetap tidak punya turunan; di akuaduk Skyway muka airnya naik dari -4 m ke 0 lalu turun
+// lagi. Pompa di gudang utilitas (za 6.400-6.900, sisi -s promenade Skyway) mengisap air dari sungai 135 m di hulu akuaduk
+// (muka -4 m) lewat pipa isap, lalu mendorongnya lewat pipa dorong ke alur atas akuaduk (muka 0); dari sana air mengalir
+// searah +s melewati akuaduk dan turun ke sungai di hilir, lalu mengelilingi stasiun kembali ke pipa isap. Tanjakan alur di
+// hulu akuaduk berperan sebagai bendung. Dua pipa baja diameter 3,6 m di atas pelana beton, di promenade antara bangku
+// (21 m dari tengah jendela) dan barisan pohon (36 m); di bawah jalan (za 2.500 dan cincin 3.000-6.000) pipa masuk tanah
+// lewat dinding beton. Hanya geometri statis + kolider; angka acak dunia tidak dipakai.
+{
+  const SP = SKY_S, r = PIPE.D / 2, HC = 0.45 + r, sA = PIPE.sA, sB = PIPE.sB, rzA = riverZ(sA), rzB = riverZ(sB);
+  const zT = PIPE.zT, face = PIPE.face;
+  const gH = (s, za) => groundH0(s, za);
+  // titik jalur [s, za, h] (h null = ikut tanah + HC)
+  const A = [[sA, rzA + 20.6, 0.35], [sA, rzA + 23.0, 1.25], [sA, rzA + 27, null], [sA, zT + 2.35, null], [face, zT + 2.35, null]];
+  const B = [];
+  const sI = PIPE.sI, rzI = riverZ(sI);
+  B.push([sI, rzI + 19.6, -3.7]);
+  for (const dd of [22.5, 25.0]) B.push([sI, rzI + dd, gH(sI, rzI + dd) + r + 0.12]);
+  for (let q = sI; q < sB - 1; q += 5) B.push([q, riverZ(q) + 28.5, null]);
+  B.push([sB, rzB + 28.5, null], [sB, zT - 2.35, null], [face, zT - 2.35, null]);
+  // sudut dibulatkan (Bezier kuadrat, jari-jari 6 m di bidang s-za), lalu sampel tiap 3 m
+  function rounded(P) {
+    const out = [P[0]];
+    for (let i = 1; i < P.length - 1; i++) {
+      const p = P[i], a = P[i - 1], b = P[i + 1];
+      const la = Math.hypot(p[0] - a[0], p[1] - a[1]), lb = Math.hypot(b[0] - p[0], b[1] - p[1]);
+      const cosT = ((p[0] - a[0]) * (b[0] - p[0]) + (p[1] - a[1]) * (b[1] - p[1])) / Math.max(1e-6, la * lb);
+      if (cosT > 0.995) { out.push(p); continue; }
+      const t = Math.min(6, la / 2, lb / 2), u = [p[0] - (p[0] - a[0]) * t / la, p[1] - (p[1] - a[1]) * t / la], v = [p[0] + (b[0] - p[0]) * t / lb, p[1] + (b[1] - p[1]) * t / lb];
+      for (let k = 0; k <= 6; k++) { const q = k / 6, m0 = (1 - q) * (1 - q), m1 = 2 * q * (1 - q), m2 = q * q; out.push([m0 * u[0] + m1 * p[0] + m2 * v[0], m0 * u[1] + m1 * p[1] + m2 * v[1], p[2]]); }
+    }
+    out.push(P[P.length - 1]);
+    return out;
+  }
+  function sample(P) {
+    const S = [];
+    for (let i = 0; i < P.length - 1; i++) {
+      const a = P[i], b = P[i + 1], L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L / 3));
+      for (let k = 0; k < n; k++) {
+        const q = k / n, s = a[0] + (b[0] - a[0]) * q, za = a[1] + (b[1] - a[1]) * q;
+        const h = a[2] === null && b[2] === null ? gH(s, za) + HC : a[2] === null ? gH(s, za) + HC + ((b[2] ?? 0) - gH(b[0], b[1]) - HC) * q : b[2] === null ? a[2] + (gH(b[0], b[1]) + HC - a[2]) * q : a[2] + (b[2] - a[2]) * q;
+        S.push([s, za, h, a[2] === null && b[2] === null]);
+      }
+    }
+    const z = P[P.length - 1]; S.push([z[0], z[1], z[2] === null ? gH(z[0], z[1]) + HC : z[2], z[2] === null]);
+    return S;
+  }
+  // jalan yang dilintasi (jalan lingkar kota za 2.500 di jembatan Skyway, jalan lokal kota, cincin struktur): pipa masuk tanah lewat
+  // dinding beton 6 m sebelum tepi jalan (sampel di badan jalan dilebarkan 2 sampel ke tiap sisi)
+  const gapsOf = (S) => { const g0 = S.map((p) => p[2] > -0.5 && onRoad(p[0], p[1])); return g0.map((_, i) => g0.slice(Math.max(0, i - 2), i + 3).some(Boolean)); };
+  const hdOf = (S, i) => { const a = S[Math.max(0, i - 1)], b = S[Math.min(S.length - 1, i + 1)]; return Math.atan2(wrapS(b[0] - a[0]), b[1] - a[1]); };
+  const pos = [], nor = [], col = [], idx = [], saddles = [], portals = [], NR = 16;
+  const PAINT = [0.50, 0.56, 0.52], DARK = [0.05, 0.05, 0.05];
+  const P0 = new THREE.Vector3(), P1 = new THREE.Vector3(), T = new THREE.Vector3(), UP = new THREE.Vector3(), SD = new THREE.Vector3(), N2 = new THREE.Vector3(), Q = new THREE.Vector3();
+  const chunks = [];
+  function flush() {
+    if (!idx.length) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos.splice(0), 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor.splice(0), 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(col.splice(0), 3)); g.setIndex(idx.splice(0)); g.computeBoundingSphere();
+    chunks.push(g);
+  }
+  const ring = (c, side, n2, color, nScale = 1) => {
+    const base = pos.length / 3;
+    for (let k = 0; k < NR; k++) {
+      const a = k / NR * TAU, cx = Math.cos(a), sy = Math.sin(a);
+      Q.copy(side).multiplyScalar(cx).addScaledVector(n2, sy);
+      pos.push(c.x + Q.x * r, c.y + Q.y * r, c.z + Q.z * r); nor.push(Q.x * nScale, Q.y * nScale, Q.z * nScale); col.push(...color);
+    }
+    return base;
+  };
+  function cap(c, tdir, side, n2, color) {                        // tutup ujung (gelap = mulut pipa, terang = tertanam di dinding)
+    const base = pos.length / 3; pos.push(c.x, c.y, c.z); nor.push(tdir.x, tdir.y, tdir.z); col.push(...color);
+    for (let k = 0; k < NR; k++) { const a = k / NR * TAU; Q.copy(side).multiplyScalar(Math.cos(a)).addScaledVector(n2, Math.sin(a)); pos.push(c.x + Q.x * r, c.y + Q.y * r, c.z + Q.z * r); nor.push(tdir.x, tdir.y, tdir.z); col.push(...color); }
+    for (let k = 0; k < NR; k++) { const i0 = base + 1 + k, i1 = base + 1 + (k + 1) % NR; if (tdir.dot(Q.set(0, 0, 0).addScaledVector(side, 1).cross(n2)) > 0) idx.push(base, i0, i1); else idx.push(base, i1, i0); }
+  }
+  const world = (p, out) => groundPoint(modS(p[0]) / R, p[1], p[2], out);
+  function run(S, mouthStart, mouthEnd) {                          // satu ruas terlihat
+    let prev = -1, acc = 0, lastSad = -1e9;
+    for (let i = 0; i < S.length; i++) {
+      world(S[Math.max(0, i - 1)], P0); world(S[Math.min(S.length - 1, i + 1)], P1); T.subVectors(P1, P0).normalize();
+      upAt(modS(S[i][0]) / R, UP); SD.crossVectors(T, UP); if (SD.lengthSq() < 1e-8) tanAt(modS(S[i][0]) / R, SD); SD.normalize(); N2.crossVectors(SD, T);
+      world(S[i], P0);
+      const b = ring(P0, SD, N2, PAINT);
+      if (prev >= 0) for (let k = 0; k < NR; k++) { const k1 = (k + 1) % NR; idx.push(prev + k, b + k, prev + k1, prev + k1, b + k, b + k1); }   // muka menghadap keluar
+      if (i === 0) cap(P0, Q.copy(T).negate().clone(), SD, N2, mouthStart ? DARK : PAINT);
+      if (i === S.length - 1) cap(P0, T.clone(), SD, N2, mouthEnd ? DARK : PAINT);
+      prev = b;
+      if (i > 0) acc += Math.hypot(wrapS(S[i][0] - S[i - 1][0]), S[i][1] - S[i - 1][1]);
+      if (S[i][3] && acc - lastSad >= 9 && i > 0 && i < S.length - 1) {   // pelana tiap 9 m di bagian yang ikut tanah
+        lastSad = acc;
+        saddles.push([S[i][0], S[i][1], Math.atan2(wrapS(S[i + 1][0] - S[i - 1][0]), S[i + 1][1] - S[i - 1][1])]);
+      }
+      if (pos.length > 3600 && i < S.length - 1) { flush(); prev = -1; i--; }   // potong per ~75 ring (225 m): frustum culling per potongan
+    }
+  }
+  for (const [P, outlet] of [[A, true], [B, false]]) {
+    const S = sample(rounded(P)); PIPE.paths.push(S);
+    let L = 0; for (let i = 1; i < S.length; i++) L += Math.hypot(wrapS(S[i][0] - S[i - 1][0]), S[i][1] - S[i - 1][1]); PIPE.len.push(L);
+    const G = gapsOf(S);
+    let cur = [], c0 = 0;
+    for (let i = 0; i <= S.length; i++) {
+      if (i < S.length && !G[i]) { if (!cur.length) c0 = i; cur.push(S[i]); continue; }
+      if (cur.length > 1) {
+        const c1 = c0 + cur.length - 1;
+        run(cur, c0 === 0, false);                                  // ujung awal jalur = mulut di sungai
+        if (c0 > 0) portals.push([S[c0][0], S[c0][1], hdOf(S, c0)]);
+        if (c1 < S.length - 1) portals.push([S[c1][0], S[c1][1], hdOf(S, c1)]);
+      }
+      cur = [];
+    }
+    flush();
+    // kolider tiap ruas ~8 m (kotak di bidang s-za, + jari-jari)
+    for (let i = 0; i < S.length - 1; i += 3) {
+      const a = S[i], b = S[Math.min(S.length - 1, i + 3)];
+      if (G[i] && G[Math.min(S.length - 1, i + 3)]) continue;
+      if (a[2] < -0.5 && b[2] < -0.5) continue;                     // bagian di dalam air
+      const ds = wrapS(b[0] - a[0]), dz = b[1] - a[1];
+      addCollider(modS(a[0] + ds / 2), a[1] + dz / 2, Math.abs(ds) / 2 + r, Math.abs(dz) / 2 + r);
+    }
+    void outlet;
+  }
+  const mat = specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.45, 0.04);
+  PIPE.meshes = chunks.map((g) => { const m = new THREE.Mesh(g, mat); scene.add(m); return m; });
+  // pelana dan dinding tembus jalan: kotak beton
+  const unit = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), cm = new THREE.MeshBasicMaterial({ color: 0x9a9c98 });
+  const list = [...saddles.map(([s, za, hd]) => [s, za, hd, 4.0, HC, 0.9]), ...portals.map(([s, za, hd]) => [s, za, hd, 5.2, HC + r + 0.5, 1.4])];
+  // mulut pipa dorong: dinding beton di tepi alur atas akuaduk
+  list.push([sA, rzA + 21.6, 0, 6.5, 1.1, 2.2]);
+  const im = new THREE.InstancedMesh(unit, cm, list.length), m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), sv = new THREE.Vector3();
+  list.forEach(([s, za, hd, w, h, d], i) => { surfaceMatrix(m4, modS(s) / R, za, gH(s, za)); m4.multiply(rot.makeRotationY(hd)).scale(sv.set(w, h, d)); im.setMatrixAt(i, m4); });
+  im.frustumCulled = false; scene.add(im); PIPE.concrete = im;
+  PIPE.portals = portals.length; PIPE.saddles = saddles.length;
+}
 
 await bootStep(BOOT_W[9], 'Mesh tanah...');
 // --- mesh tanah global: 8 m di area berbukit, baris jarang di area rata; 8 x 8 potongan (bisa di-cull) ---
@@ -13558,7 +13747,7 @@ function updateFarm(dt) {
     FARM.nextPick = now + 3000;
     const cand = [];
     for (const f of fieldList) {
-      if (f.meadow || f.noFarm || f.forest || f.s1 - f.s0 < 50 || f.z1 - f.z0 < 40) continue;
+      if (f.meadow || f.noFarm || f.forest || f.lake || f.s1 - f.s0 < 50 || f.z1 - f.z0 < 40) continue;
       const cs = (f.s0 + f.s1) / 2, cz = (f.z0 + f.z1) / 2, d = Math.hypot(wrapS(cs - eS), cz - eZ); if (d > 900) continue;
       let type = null;
       if (f.crop === 'wheat') { const ph = farmStage(f); if (ph >= 0.72 && ph < 0.82) type = 'harvester'; }
@@ -14672,7 +14861,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE };
 requestAnimationFrame(frame);
 </script>
 </body>

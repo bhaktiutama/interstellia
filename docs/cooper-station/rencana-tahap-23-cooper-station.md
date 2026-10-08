@@ -36,6 +36,7 @@ Status: 23a sampai 23g selesai, menunggu uji visual dan FPS Bhakti (GTX 1060, M1
 | 23f | 2 | Payung dan berteduh saat hujan | Medium | Opus 5.5 subagent | medium | `stepPeds()`, `updatePeds()`, `VIS` |
 | 23g | 6 | Merpati melipat sayap, bergerombol | Medium | Opus 5.5 subagent | medium | `BIRDS` |
 | 23h | revisi foto | Revisi air dari foto Bhakti: jagung di atas danau, bintang di bawah layar saat berenang, riak sungai tidak ikut alur, riak danau seperti arus | High | Opus 5.5 | high | tekstur ladang, `waterNear()`, `SWIM`, shader air |
+| 23i | revisi Bhakti | Pipa pompa sungai ke gudang utilitas, traktor tidak masuk danau, pagar dek pandang kabel + condong di pagar | High | Opus 5.5 | high | `PIPE`, `inPipeRoute()`, `UTIL_PLAN.foot`, `f.lake`, `deckLean()` |
 | - | - | Kamus English, label panel, CLAUDE.md | Low | Opus 5.5 subagent | low | `I18N.en` |
 
 ## Aturan
@@ -65,3 +66,15 @@ Status: 23a sampai 23g selesai, menunggu uji visual dan FPS Bhakti (GTX 1060, M1
 | Riak danau terlalu kasar, seperti arus | Gelombang danau sama dengan sungai: panjang 7 m, kemiringan sampai sekitar 0,3 | Danau: gelombang 1,8 m ke bawah, kemiringan sekitar 4x lebih kecil, petak licin seperti kaca diselingi tiupan angin |
 
 Fisika sungai di silinder O'Neill: permukaan air diam = silinder sejari (potensial sentrifugal), jadi sungai yang mengelilingi keliling pada jari-jari tetap tidak punya turunan. Sungai melingkar penuh (panjang alur 6.662 m) hanya bisa mengalir dengan pompa: kemiringan Manning (n 0,03, penampang 82 m2, jari-jari hidrolik 2,0 m) untuk 0,5-0,6 m/s = 0,9-1,3 x 10^-4, beda tinggi 0,6-0,85 m per keliling, daya pompa sekitar 340-590 kW (efisiensi 70%). Coriolis untuk arus mendatar di lantai silinder selalu tegak (arus searah putaran 1,2% lebih berat pada 0,6 m/s), tidak mendorong ke tepi seperti di Bumi.
+
+## Revisi 23i (pipa pompa, traktor, dek pandang)
+
+| Butir | Perbaikan |
+| --- | --- |
+| Pipa pompa sungai | Pompa di gudang utilitas (za 6.488, sisi -s promenade Skyway). Pipa isap mengambil air 135 m di hulu akuaduk (muka -4 m) dan menyusuri tepi utara sungai; pipa dorong mengisi alur atas akuaduk (muka 0). Dua pipa baja diameter 3,6 m di atas pelana beton tiap 9 m, sepanjang promenade antara bangku dan barisan pohon (4,2 dan 4,3 km). Di bawah jalan pipa masuk tanah lewat dinding beton (11 persilangan per pipa). Kolider di sepanjang pipa, pohon tidak ditanam di jalurnya, tampil di peta |
+| Traktor masuk danau | 17 petak ladang yang bersinggungan dengan danau (+15 m) tidak lagi dipakai mesin ladang |
+| Dek pandang terhalang pagar | Pagar kabel: tiang 5 cm tiap 2 m, pegangan 1,1 m, 5 kabel baja 1,2 cm (dulu tiang 8 cm dan 3 palang setinggi 1,2 m). Condong di pagar: dekat pagar (< 1,3 m), menghadap keluar, dan menunduk = mata bergeser 0,85 m ke luar dan turun 0,15 m |
+
+Fisika pompa (pipa baja, kekasaran 0,045 mm, Darcy-Weisbach): debit sungai 45 m3/s, kecepatan di pipa 4,42 m/s, faktor gesek 0,009, rugi gesek kedua pipa 21,1 m, rugi lokal 3,3 m, angkat statis 4 m; tinggi total 28,4 m, daya sekitar 15,7 MW (efisiensi 80%). Pompa yang dipasang langsung di sungai cukup sekitar 3,0 MW, jadi 80% daya habis di pipa sepanjang 8,5 km.
+
+Batasan: tanjakan alur di hulu dan hilir akuaduk tampak sebagai batu kering (belum ada air terjun di hilir); kemiringan alur 1 x 10^-4 di sepanjang keliling tidak terlihat.
