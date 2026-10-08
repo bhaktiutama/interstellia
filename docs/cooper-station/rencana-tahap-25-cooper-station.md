@@ -111,4 +111,9 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 
 ## Hasil
 
-Belum dikerjakan. Status: rencana.
+| Tahap | Status | Hasil |
+| --- | --- | --- |
+| 25a | Selesai, menunggu uji visual Bhakti | `TREE_KINDS` jadi `TREE_SPECIES` dengan nilai bawaan `TREE_DEF` (jit0, tpos, clMode, leader, crown). Cabang `kindName ===` di `makeTree()` hilang. Saklar `?pohon=lama` disiapkan (belum berefek, jenis baru di 25b). Uji: sidik jari FNV-1a dari 16 template (indeks, atribut, dan ukuran per template) sama dengan sebelum perubahan, 0 field berbeda, dengan dan tanpa `?pohon=lama`. Review terpisah: 336 pohon (16 template asli dan 40 benih tambahan per jenis) dibandingkan bit per bit dengan kode HEAD, 0 beda. `tools/qc_load.py` tanpa error; `tools/uji_pohon.py` 7 cek lolos |
+| 25b-25j | Belum dikerjakan | - |
+
+Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.

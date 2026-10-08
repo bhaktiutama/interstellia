@@ -7877,19 +7877,23 @@ const CORN = {};
 
 await bootStep(BOOT_W[13], 'Pohon...');
 // --- pohon prosedural ------------------------------------------------------------
-const TREE_KINDS = {
-  oak:    { trunk: [4.6, 0.34], kids: [5, 4], spread: [0.8, 0.9], lenR: [0.95, 0.5], leafLevel: 2, cards: 11, card: 1.7, atlas: 0, up: 0.25, bark: [0.40, 0.35, 0.29] },
-  elm:    { trunk: [5.5, 0.3], kids: [4, 4], spread: [0.55, 0.75], lenR: [1.15, 0.5], leafLevel: 2, cards: 10, card: 1.6, atlas: 0, up: 0.45, bark: [0.44, 0.40, 0.34] },
-  poplar: { trunk: [19, 0.3], kids: [16], spread: [0.4], lenR: [0.2], leafLevel: 1, cards: 9, card: 1.25, atlas: 1, up: 0.8, bark: [0.52, 0.50, 0.44] },
+// 25a: semua perbedaan jenis dibaca dari tabel ini; makeTree() tidak lagi bercabang per nama.
+// TREE_DEF = nilai bawaan field baru (jit0 jitter arah cabang tingkat 0, tpos [a, b, k] posisi cabang anak = a + b * (c + r() * k) / n,
+// clMode panjang cabang khusus 'column' / 'cone', leader pucuk utama, crown daun rapat di pucuk / batang atas tingkat 0).
+const TREE_DEF = { jit0: 0.35, tpos: [0.45, 0.55, 1], clMode: null, leader: true, crown: null };
+const TREE_SPECIES = {
+  oak:    { ...TREE_DEF, trunk: [4.6, 0.34], kids: [5, 4], spread: [0.8, 0.9], lenR: [0.95, 0.5], leafLevel: 2, cards: 11, card: 1.7, atlas: 0, up: 0.25, bark: [0.40, 0.35, 0.29] },
+  elm:    { ...TREE_DEF, trunk: [5.5, 0.3], kids: [4, 4], spread: [0.55, 0.75], lenR: [1.15, 0.5], leafLevel: 2, cards: 10, card: 1.6, atlas: 0, up: 0.45, bark: [0.44, 0.40, 0.34] },
+  poplar: { ...TREE_DEF, trunk: [19, 0.3], kids: [16], spread: [0.4], lenR: [0.2], leafLevel: 1, cards: 9, card: 1.25, atlas: 1, up: 0.8, bark: [0.52, 0.50, 0.44], tpos: [0.12, 0.86, 0.5], clMode: 'column', leader: false, crown: { n: 10, t0: 0.3, dt: 0.7, sz: 1, jx: 1, jy: 0 } },
   // 12b-2: jenis baru (bentuk orisinal prosedural). upL = kecenderungan naik per tingkat cabang (negatif = menjuntai)
-  maple:  { trunk: [3.8, 0.33], kids: [6, 4], spread: [0.95, 0.85], lenR: [0.9, 0.5], leafLevel: 2, cards: 12, card: 1.75, atlas: 0, up: 0.3, bark: [0.38, 0.34, 0.30] },
-  birch:  { trunk: [9.5, 0.2], kids: [7, 3], spread: [0.55, 0.8], lenR: [0.5, 0.55], leafLevel: 2, cards: 7, card: 1.15, atlas: 1, up: 0.55, bark: [0.88, 0.87, 0.83] },
-  pine:   { trunk: [15, 0.32], kids: [22], spread: [1.35], lenR: [0.3], leafLevel: 1, cards: 9, card: 2.0, atlas: 2, up: 0.2, upL: [0.9, -0.25], bark: [0.36, 0.28, 0.22] },
-  willow: { trunk: [4.2, 0.42], kids: [5, 5], spread: [0.9, 0.35], lenR: [1.0, 0.9], leafLevel: 2, cards: 16, card: 2.6, atlas: 3, up: 0.3, upL: [0.3, 0.2, -1.2], bark: [0.42, 0.38, 0.32] },
-  bunga:  { trunk: [2.8, 0.24], kids: [5, 4], spread: [1.0, 0.85], lenR: [1.15, 0.55], leafLevel: 2, cards: 11, card: 1.45, atlas: 1, up: 0.15, bark: [0.34, 0.28, 0.25] },
+  maple:  { ...TREE_DEF, trunk: [3.8, 0.33], kids: [6, 4], spread: [0.95, 0.85], lenR: [0.9, 0.5], leafLevel: 2, cards: 12, card: 1.75, atlas: 0, up: 0.3, bark: [0.38, 0.34, 0.30] },
+  birch:  { ...TREE_DEF, trunk: [9.5, 0.2], kids: [7, 3], spread: [0.55, 0.8], lenR: [0.5, 0.55], leafLevel: 2, cards: 7, card: 1.15, atlas: 1, up: 0.55, bark: [0.88, 0.87, 0.83] },
+  pine:   { ...TREE_DEF, trunk: [15, 0.32], kids: [22], spread: [1.35], lenR: [0.3], leafLevel: 1, cards: 9, card: 2.0, atlas: 2, up: 0.2, upL: [0.9, -0.25], bark: [0.36, 0.28, 0.22], jit0: 0.08, tpos: [0.18, 0.8, 0.5], clMode: 'cone', leader: false, crown: { n: 6, t0: 0.86, dt: 0.14, sz: 0.8, jx: 0.6, jy: 0.3 } },
+  willow: { ...TREE_DEF, trunk: [4.2, 0.42], kids: [5, 5], spread: [0.9, 0.35], lenR: [1.0, 0.9], leafLevel: 2, cards: 16, card: 2.6, atlas: 3, up: 0.3, upL: [0.3, 0.2, -1.2], bark: [0.42, 0.38, 0.32] },
+  bunga:  { ...TREE_DEF, trunk: [2.8, 0.24], kids: [5, 4], spread: [1.0, 0.85], lenR: [1.15, 0.55], leafLevel: 2, cards: 11, card: 1.45, atlas: 1, up: 0.15, bark: [0.34, 0.28, 0.25] },
 };
 function makeTree(kindName, seed) {
-  const K = TREE_KINDS[kindName];
+  const K = TREE_SPECIES[kindName];
   let sd = seed; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const bp = [], bn = [], buv = [], bc = [], bi = [];
   const cards = [];                                               // [pusat, normal kartu, ukuran]
@@ -7918,7 +7922,7 @@ function makeTree(kindName, seed) {
     const pts = [start.clone()], radii = [rad]; let d = dir.clone(), p = start.clone();
     const upHere = K.upL ? K.upL[level] : K.up;
     for (let s = 1; s <= segs; s++) {
-      d.x += (r() - 0.5) * (kindName === 'pine' && level === 0 ? 0.08 : 0.35); d.z += (r() - 0.5) * (kindName === 'pine' && level === 0 ? 0.08 : 0.35); d.y += upHere * 0.15; d.normalize();
+      d.x += (r() - 0.5) * (level === 0 ? K.jit0 : 0.35); d.z += (r() - 0.5) * (level === 0 ? K.jit0 : 0.35); d.y += upHere * 0.15; d.normalize();
       p = p.clone().addScaledVector(d, len / segs); pts.push(p); radii.push(rad * (1 - 0.7 * s / segs));
     }
     tube(pts, radii, sides);
@@ -7934,24 +7938,20 @@ function makeTree(kindName, seed) {
     const n = K.kids[level];
     const perp0 = Math.abs(dir.y) < 0.9 ? V(0, 1, 0).cross(dir).normalize() : V(1, 0, 0).cross(dir).normalize();
     for (let c = 0; c < n; c++) {
-      const tpos = kindName === 'poplar' ? 0.12 + 0.86 * (c + r() * 0.5) / n : kindName === 'pine' ? 0.18 + 0.8 * (c + r() * 0.5) / n : 0.45 + 0.55 * (c + r()) / n;
+      const tpos = K.tpos[0] + K.tpos[1] * (c + r() * K.tpos[2]) / n;
       const [pp, pd, pr] = at(Math.min(0.98, tpos));
       const az = c * 2.39996 + r() * 0.6, sp = K.spread[level] * (0.8 + 0.4 * r());
       const perp = perp0.clone().applyAxisAngle(pd, az);
       const cd = pd.clone().multiplyScalar(Math.cos(sp)).addScaledVector(perp, Math.sin(sp)); cd.y += (K.upL ? K.upL[level + 1] : K.up) * 0.3; cd.normalize();
       let cl = len * K.lenR[level] * (0.8 + 0.4 * r());
-      if (kindName === 'poplar') cl = (2.2 + 2.5 * r()) * (1 - 0.55 * tpos);
-      if (kindName === 'pine') cl = (0.6 + 4.4 * Math.pow(1 - tpos, 1.1)) * (0.85 + 0.3 * r());   // tajuk kerucut
+      if (K.clMode === 'column') cl = (2.2 + 2.5 * r()) * (1 - 0.55 * tpos);
+      else if (K.clMode === 'cone') cl = (0.6 + 4.4 * Math.pow(1 - tpos, 1.1)) * (0.85 + 0.3 * r());   // tajuk kerucut
       branch(pp, cd, cl, Math.max(0.03, pr * 0.62), level + 1);
     }
-    if (level === 0 && kindName !== 'poplar' && kindName !== 'pine') branch(pts[segs], V(r() - 0.5, 2.5, r() - 0.5).normalize(), len * 0.7, radii[segs], 1);   // pucuk utama
-    if (kindName === 'pine' && level === 0) for (let c = 0; c < 6; c++) {   // pucuk pinus
-      const [pp] = at(0.86 + 0.14 * c / 6);
-      cards.push([pp.add(V((r() - 0.5) * 0.6, 0.3, (r() - 0.5) * 0.6)), V(r() - 0.5, r() - 0.5, r() - 0.5).normalize(), K.card * 0.8]);
-    }
-    if (kindName === 'poplar' && level === 0) for (let c = 0; c < 10; c++) {   // daun rapat di sepanjang batang atas
-      const [pp] = at(0.3 + 0.7 * c / 10);
-      cards.push([pp.add(V(r() - 0.5, 0, r() - 0.5)), V(r() - 0.5, r() - 0.5, r() - 0.5).normalize(), K.card]);
+    if (level === 0 && K.leader) branch(pts[segs], V(r() - 0.5, 2.5, r() - 0.5).normalize(), len * 0.7, radii[segs], 1);   // pucuk utama
+    if (level === 0 && K.crown) for (let c = 0; c < K.crown.n; c++) {   // pucuk pinus / daun rapat di sepanjang batang atas poplar
+      const [pp] = at(K.crown.t0 + K.crown.dt * c / K.crown.n);
+      cards.push([pp.add(V((r() - 0.5) * K.crown.jx, K.crown.jy, (r() - 0.5) * K.crown.jx)), V(r() - 0.5, r() - 0.5, r() - 0.5).normalize(), K.card * K.crown.sz]);
     }
   }
   branch(V(0, -0.4, 0), V(0, 1, 0), K.trunk[0], K.trunk[1], 0);
@@ -8112,6 +8112,8 @@ const IMP_FS = /* glsl */`
   }`;
 const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, lastZ: 1e9, lastD: 0, cell: 64, grid: new Map() };
 {
+  // 25a: saklar ?pohon=lama. Jenis baru (25b ke atas) hanya boleh masuk bila !POHON.lama.
+  const POHON = { lama: new URLSearchParams(location.search).get('pohon') === 'lama' };
   const kinds = ['oak', 'oak', 'elm', 'elm', 'poplar', 'poplar', 'maple', 'maple', 'birch', 'birch', 'pine', 'pine', 'willow', 'willow', 'bunga', 'bunga'];   // 12b-2: 6 lama + 10 baru
   kinds.forEach((k, i) => TREES.templates.push(makeTree(k, 1000 + i * 7919)));
   let sd = 2468; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
