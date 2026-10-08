@@ -152,10 +152,7 @@
   #map canvas { display: block; flex: 1; min-width: 0; width: 100%; height: 100%; border-radius: 6px; background: #0b0d11; cursor: grab; touch-action: none; }
   #map canvas.drag { cursor: grabbing; }
   /* peta: kolom samping = hologram 3D + tab (Tempat, Fisika, Distrik, Legenda), daftar ringkas */
-  #mapMain { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
-  #map #mapCanvas { flex: 1; min-height: 0; height: auto; }
   #mapSide { width: 280px; flex: none; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
-  #map #mapHolo { flex: none; width: 100%; height: clamp(150px, 30vh, 300px); border-radius: 6px; background: #04070c; cursor: grab; border: 1px solid rgba(111,227,255,0.18); }
   #mapTabs { display: flex; gap: 4px; }
   #map #mapTabs button { flex: 1; padding: 4px 2px; font-size: 11.5px; }
   #map .mbtns button.on { border-color: #6fe3ff; color: #6fe3ff; }
@@ -171,7 +168,7 @@
   #mapLegend .sw { display: flex; gap: 6px; align-items: center; margin-bottom: 2px; color: var(--ink); font-size: 11.5px; }
   #mapLegend .sw i { flex: none; width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
   #map .mnote { color: var(--muted); font-size: 10.5px; margin-top: 6px; }
-  @media (max-width: 760px) { #map .mbody { flex-direction: column; } #mapSide { width: auto; max-height: 38vh; } #map #mapHolo { height: 22vh; } }
+  @media (max-width: 760px) { #map .mbody { flex-direction: column; } #mapSide { width: auto; max-height: 38vh; } }
   /* 12d: mode foto dan tur sinematik */
   body.photo #hud, body.photo #cross, body.photo #lab, body.photo #touchbtns, body.photo #prompt,
   body.tour #hud, body.tour #cross, body.tour #lab, body.tour #touchbtns, body.tour #prompt { display: none !important; }
@@ -215,8 +212,8 @@
 <div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><button id="tourStop" type="button">Berhenti (Y)</button></div></div>
 <div id="plaque" hidden><div class="card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
 <div id="map" hidden><div class="mcard">
-  <div class="mhead"><span>Peta silinder (dibuka)</span><span class="mbtns"><button id="mapZoomIn" type="button">+</button><button id="mapZoomOut" type="button">-</button><button id="mapMe" type="button">Posisi saya</button><button id="mapHoloBtn" type="button">Hologram</button><button id="mapClose" type="button">Tutup (M)</button></span></div>
-  <div class="mbody"><div id="mapMain"><canvas id="mapHolo"></canvas><canvas id="mapCanvas"></canvas></div><div id="mapSide"><div id="mapTabs"></div><div id="mapLegend"></div></div></div>
+  <div class="mhead"><span>Peta silinder (dibuka)</span><span class="mbtns"><button id="mapZoomIn" type="button">+</button><button id="mapZoomOut" type="button">-</button><button id="mapMe" type="button">Posisi saya</button><button id="mapHoloBtn" type="button">Hologram</button><button id="mapCtlBtn" type="button">Kendali 3D</button><button id="mapClose" type="button">Tutup (M)</button></span></div>
+  <div class="mbody"><canvas id="mapCanvas"></canvas><div id="mapSide"><div id="mapTabs"></div><div id="mapLegend"></div></div></div>
   <div class="mnote">Kiri-kanan = sumbu 8 km dari end cap A · atas-bawah = keliling 6,28 km (tengah = rel trem, tepi atas dan bawah = Skyway) · roda atau cubit = zoom, seret = geser, klik penanda = pindah ke sana</div>
 </div></div>
 <div id="lab">
@@ -459,7 +456,9 @@ Object.assign(I18N.en, {
   "Tempat fisika": "Physics places",
   "Pipa pompa sungai": "River pump pipes",
   "Hologram": "Hologram",
-  "Hologram 3D · seret = putar": "3D hologram · drag = rotate",
+  "Kendali 3D": "3D control",
+  "Hologram: seret = putar · Shift + seret = putar sumbu · seret kanan = geser · roda = zoom · klik ganda = awal": "Hologram: drag = rotate · Shift + drag = spin on axis · right drag = pan · wheel = zoom · double click = reset",
+  "Seret kanan = putar hologram · Kendali 3D = putar dan zoom hologram": "Right drag = rotate hologram · 3D control = rotate and zoom the hologram",
   "Dek pandang menara 175 m": "Tower observation deck 175 m",
   "g 0,825; bola jatuh melenceng 85,7 m melawan putaran": "g 0.825; a dropped ball drifts 85.7 m against the spin",
   "Hub nol-g di sumbu": "Zero-g hub on the axis",
@@ -6053,7 +6052,6 @@ function mapZoomAt(f, px = MAPV.W / 2, py = MAPV.H / 2) {
 function mapClamp() { const half = MAPV.W / 2 / MAPV.k; MAPV.cx = CONFIG.L <= 2 * half ? CONFIG.L / 2 : Math.max(half, Math.min(CONFIG.L - half, MAPV.cx)); }
 function drawMap() {
   if (mapEl.hidden) return;
-  { const now = performance.now(), dt = HOLO.t0 ? Math.min(0.1, (now - HOLO.t0) / 1000) : 0; HOLO.t0 = now; drawHolo(dt); }
   const g = mapCv.getContext('2d'), W = MAPV.W, H = MAPV.H, d = MAPV.dpr; MAPV.k = mapK(); const k = MAPV.k;
   g.fillStyle = '#0b0d11'; g.fillRect(0, 0, W, H);
   const x0 = mapX(0), top = MAPV.H / 2 + (-CIRC / 2 - wrapS(MAPV.cy)) * k;   // latar statis mulai dari s = -keliling/2
@@ -6128,6 +6126,7 @@ function drawMap() {
   const L1 = 1000 * k, sx = 16 * d, sy = H - 16 * d;
   g.strokeStyle = '#fff'; g.lineWidth = 2 * d; g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + L1, sy); g.moveTo(sx, sy - 4 * d); g.lineTo(sx, sy + 4 * d); g.moveTo(sx + L1, sy - 4 * d); g.lineTo(sx + L1, sy + 4 * d); g.stroke();
   g.font = `${11 * d}px system-ui, sans-serif`; text('1 km', sx + L1 / 2, sy - 10 * d, '#fff', 'center');
+  { const now = performance.now(), dt = HOLO.t0 ? Math.min(0.1, (now - HOLO.t0) / 1000) : 0; HOLO.t0 = now; drawHolo(g, dt); }   // hologram menimpa peta
 }
 // Kolom samping peta: tab Tempat / Fisika / Distrik / Legenda (tab diingat). Sorot satu baris = penanda berkedip di hologram dan peta.
 const MAP_TABS = [['tempat', 'Tempat'], ['fisika', 'Fisika'], ['distrik', 'Distrik'], ['legenda', 'Legenda']];
@@ -6194,13 +6193,17 @@ function buildMapLegend() {
 /* Peta: HOLOGRAM 3D tembus pandang silinder (kanvas 2D, tanpa konteks WebGL kedua). Proyeksi ortografik dari titik (s, za, h):
    sudut a = s / R + rot, jari-jari R - h, x = za - L/2. Garis di sisi jauh lebih redup (4 tingkat). Diam = berputar pelan;
    saat satu tempat disorot, silinder berputar sampai tempat itu menghadap pengamat dan penandanya berkedip. Seret = putar. */
-const holoCv = document.getElementById('mapHolo');
-const HOLO = { W: 1, H: 1, dpr: 1, rot: 0, yaw: 0.22, pitch: 0.42, k: 1, cx: 0, cy: 0, xc: 0, t0: 0, drag: null, idle: 0 };
+// HOLO: on = tampil, ctl = kendali 3D (seret / roda / klik mengatur hologram, bukan peta 2D); yaw, pitch = arah pandang,
+// rot = putaran silinder pada sumbunya, zoom dan px / py = skala dan geser di layar (piksel kanvas)
+const HOLO = { on: true, ctl: false, rot: 0, yaw: 0.22, pitch: 0.42, zoom: 1, px: 0, py: 0, k: 1, cx: 0, cy: 0, xc: 0, t0: 0, hold: 0 };
+try { HOLO.on = localStorage.getItem('cooperStation.mapHolo') !== '0'; HOLO.ctl = localStorage.getItem('cooperStation.mapCtl') === '1'; } catch (e) { /* tidak wajib */ }
+const HOLO_HOME = { yaw: 0.22, pitch: 0.42, zoom: 1, px: 0, py: 0 };
 function holoP(s, za, h, o) {
   const a = s / R + HOLO.rot, r = R - h, x = za - HALF_L - HOLO.xc, y = -r * Math.cos(a), z = r * Math.sin(a);
   const cy = Math.cos(HOLO.yaw), sy = Math.sin(HOLO.yaw), cp = Math.cos(HOLO.pitch), sp = Math.sin(HOLO.pitch);
   const X = x * cy + z * sy, d = -x * sy + z * cy;
-  o[0] = HOLO.cx + X * HOLO.k; o[1] = HOLO.cy - (y * cp - d * sp) * HOLO.k; o[2] = (y * sp + d * cp) / R;   // o[2]: -1 jauh .. 1 dekat
+  o[0] = HOLO.cx + X * HOLO.k; o[1] = HOLO.cy - (y * cp - d * sp) * HOLO.k;
+  o[2] = (y * sp + z * cy * cp) / R;                                 // kedalaman bagian keliling saja: -1 sisi jauh .. 1 sisi dekat
   return o;
 }
 const HOLO_A = [0.16, 0.3, 0.55, 0.9];
@@ -6208,92 +6211,92 @@ function holoLines(g, list, col, w) {                               // list = [[
   const P = [new Path2D(), new Path2D(), new Path2D(), new Path2D()], a = [0, 0, 0], b = [0, 0, 0];
   for (const L of list) for (let i = 0; i < L.length; i++) {
     holoP(L[i][0], L[i][1], L[i][2] || 0, b);
-    if (i) { const q = P[Math.max(0, Math.min(3, Math.floor((a[2] + b[2] + 2) * 1.0)))]; q.moveTo(a[0], a[1]); q.lineTo(b[0], b[1]); }
+    if (i) { const q = P[Math.max(0, Math.min(3, Math.floor(a[2] + b[2] + 2)))]; q.moveTo(a[0], a[1]); q.lineTo(b[0], b[1]); }
     a[0] = b[0]; a[1] = b[1]; a[2] = b[2];
   }
-  g.strokeStyle = col; g.lineWidth = w * HOLO.dpr;
-  for (let i = 0; i < 4; i++) { g.globalAlpha = HOLO_A[i]; g.stroke(P[i]); }
+  g.strokeStyle = col; g.lineWidth = w * MAPV.dpr;
+  for (let i = 0; i < 4; i++) { g.globalAlpha = HOLO_A[i] * HOLO.alpha; g.stroke(P[i]); }
   g.globalAlpha = 1;
 }
 const holoRing = (za, h = 0, n = 72) => { const L = []; for (let i = 0; i <= n; i++) L.push([i / n * CIRC, za, h]); return L; };
-function drawHolo(dt) {
-  const r = holoCv.getBoundingClientRect(); if (r.width < 10) return;
-  const dpr = MAPV.dpr || 1, W = Math.round(r.width * dpr), H = Math.round(r.height * dpr);
-  if (holoCv.width !== W || holoCv.height !== H) { holoCv.width = W; holoCv.height = H; }
-  HOLO.W = W; HOLO.H = H; HOLO.dpr = dpr;
+/* Hologram 3D tembus pandang digambar di atas peta 2D di kanvas yang sama (satu view). Proyeksi ortografik; skala dasar dari
+   bola pembatas silinder (tidak berubah saat diputar), lalu zoom dan geser bebas. Diam = berputar pelan; saat satu tempat disorot,
+   silinder berputar sampai tempat itu di sisi dekat dan penandanya berkedip. */
+function drawHolo(g, dt) {
+  if (!HOLO.on) return;
+  const W = MAPV.W, H = MAPV.H, dpr = MAPV.dpr;
   const hl = MAPV.hl || (MAPV.hover >= 0 && MAP_MARKS[MAPV.hover] ? markHl(MAP_MARKS[MAPV.hover], MAPV.hover) : null);
-  const cy = Math.cos(HOLO.yaw), sy = Math.sin(HOLO.yaw), cp = Math.cos(HOLO.pitch), sp = Math.sin(HOLO.pitch);
-  if (hl && !HOLO.drag) {                                            // putar sampai tempat itu di sisi dekat
+  const cy = Math.cos(HOLO.yaw), cp = Math.cos(HOLO.pitch), sp = Math.sin(HOLO.pitch), busy = MAPV.drag && MAPV.drag.holo;
+  HOLO.hold = Math.max(0, HOLO.hold - dt);
+  if (hl && !busy) {                                                 // putar sampai tempat itu di sisi dekat
     const tgt = Math.atan2(cy * cp, -sp) - hl.s / R, d = Math.atan2(Math.sin(tgt - HOLO.rot), Math.cos(tgt - HOLO.rot));
     HOLO.rot += d * Math.min(1, dt * 4);
-  } else if (!HOLO.drag) HOLO.rot += dt * 0.18;
-  const xa = PORT.zDockPod - 80, hl2 = (HALF_L - xa) / 2; HOLO.xc = (xa + HALF_L) / 2;   // x = z dunia; dermaga (z < -L/2) ikut di dalam bingkai
-  const halfW = hl2 * Math.abs(cy) + R * Math.abs(sy) + 40, halfH = R * Math.hypot(cp, cy * sp) + hl2 * Math.abs(sy) * sp;
-  HOLO.k = Math.min(W * 0.47 / halfW, H * 0.43 / halfH); HOLO.cx = W / 2; HOLO.cy = H / 2;
-  const g = holoCv.getContext('2d');
-  g.globalCompositeOperation = 'source-over'; g.fillStyle = '#04070c'; g.fillRect(0, 0, W, H);
-  g.globalCompositeOperation = 'lighter';
+  } else if (!busy && !HOLO.hold) HOLO.rot += dt * 0.18;
+  const xa = PORT.zDockPod - 80, hl2 = (HALF_L - xa) / 2; HOLO.xc = (xa + HALF_L) / 2;   // x = z dunia; dermaga (z < -L/2) ikut
+  HOLO.k = Math.min(W * 0.48, H * 0.75) / Math.hypot(hl2, R) * HOLO.zoom;
+  HOLO.cx = W / 2 + HOLO.px; HOLO.cy = H / 2 + HOLO.py; HOLO.alpha = HOLO.ctl ? 1 : 0.7;
+  g.fillStyle = HOLO.ctl ? 'rgba(4,7,12,0.55)' : 'rgba(4,7,12,0.28)'; g.fillRect(0, 0, W, H);   // peta diredupkan agar hologram terbaca (lebih gelap saat kendali 3D)
+  g.save(); g.globalCompositeOperation = 'lighter';
   const C = '#6fe3ff';
-  // tutup ujung, sumbu, cincin struktur
-  for (const za of [0, CONFIG.L]) holoLines(g, [holoRing(za)], C, 1.2);
+  for (const za of [0, CONFIG.L]) holoLines(g, [holoRing(za)], C, 1.2);                 // tutup ujung, sumbu, cincin struktur
   holoLines(g, [[[0, PORT.zDockPod + HALF_L, R], [0, CONFIG.L, R]]], C, 0.6);
   holoLines(g, RINGS_Z.map((z) => holoRing(z, 0, 48)), C, 0.5);
-  // zona: garis sepanjang sumbu berwarna zona + batas zona
-  const lon = [], n = 16;
+  const lon = [], n = 16;                                                                  // zona: garis sepanjang sumbu berwarna zona
   for (const z of CONFIG.zones) {
     const L = []; for (let i = 0; i < n; i++) { const s = (i + 0.5) / n * CIRC, seg = []; for (let q = 0; q <= 4; q++) seg.push([s, z.from + (z.to - z.from) * q / 4, 0]); L.push(seg); }
     holoLines(g, L, z.color, 0.9); lon.push(z.from);
   }
   holoLines(g, lon.slice(1).map((z) => holoRing(z, 0, 48)), C, 0.7);
-  // Skyway, rel trem, sungai, danau, lift
   holoLines(g, [-1, 1].map((k) => [[SKY_S + k * WIN.width / 2, 0, 0], [SKY_S + k * WIN.width / 2, HALF_L, 0], [SKY_S + k * WIN.width / 2, CONFIG.L, 0]]), '#e9fbff', 1.4);
   holoLines(g, [[[TRAM.s, 30, 0], [TRAM.s, HALF_L, 0], [TRAM.s, CONFIG.L - 30, 0]]], '#d8a24a', 1.1);
   { const L = []; for (let i = 0; i <= 120; i++) { const s = i / 120 * CIRC; L.push([s, riverZ(s), 0]); } holoLines(g, [L], '#3fa9ff', 1.8); }
   holoLines(g, LAKES.map((Lk) => { const L = []; for (let i = 0; i <= 24; i++) { const a = i / 24 * TAU; L.push([Lk.s + Lk.rs * Math.cos(a), Lk.za + Lk.rz * Math.sin(a), 0]); } return L; }), '#3fa9ff', 1.4);
   holoLines(g, [[[LIFT.theta * R, LIFT.za, 0], [LIFT.theta * R, LIFT.za, R / 2], [LIFT.theta * R, LIFT.za, R - LIFT.topR]]], C, 1);
-  // dermaga despun di depan end cap A
-  { const zd = PORT.zDockPod + HALF_L, L = []; for (let i = 0; i <= 24; i++) L.push([i / 24 * CIRC, zd, R - 70]); holoLines(g, [L, [[0, zd, R], [0, 0, R]]], C, 1); }
-  // penanda tempat, pemain, sorotan
-  const o = [0, 0, 0], now = performance.now() / 1000;
-  MAP_MARKS.forEach((m) => {
-    const p = m.at(); if (!p) return; holoP(p.s, p.z3 ?? p.za, p.h || 0, o);
-    g.globalAlpha = 0.35 + 0.3 * (o[2] + 1); g.fillStyle = m.fis ? '#6fe3ff' : '#e8b765';
-    g.beginPath(); g.arc(o[0], o[1], 1.8 * dpr, 0, TAU); g.fill();
+  { const zd = PORT.zDockPod + HALF_L, L = []; for (let i = 0; i <= 24; i++) L.push([i / 24 * CIRC, zd, R - 70]); holoLines(g, [L, [[0, zd, R], [0, 0, R]]], C, 1); }   // dermaga despun
+  // penanda tempat (posisi layar hx / hy dipakai klik di mode kendali 3D), pemain
+  const o = [0, 0, 0], now = performance.now() / 1000, rr0 = (HOLO.ctl ? 4.5 : 2.2) * dpr;
+  g.font = `700 ${9 * dpr}px system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  MAP_MARKS.forEach((m, i) => {
+    const p = m.at(); if (!p) { m.hx = m.hy = -1e9; return; } holoP(p.s, p.z3 ?? p.za, p.h || 0, o); m.hx = o[0]; m.hy = o[1];
+    g.globalAlpha = (0.35 + 0.3 * (o[2] + 1)) * HOLO.alpha; g.fillStyle = m.fis ? '#6fe3ff' : '#e8b765';
+    g.beginPath(); g.arc(o[0], o[1], i === MAPV.hover ? rr0 * 1.4 : rr0, 0, TAU); g.fill();
+    if (HOLO.ctl && HOLO.zoom > 1.4) { g.fillStyle = '#04070c'; g.fillText(m.key, o[0], o[1] + 0.5 * dpr); }
   });
   holoP(player.theta * R, player.za, Math.max(0, player.h), o);
-  g.globalAlpha = 0.6 + 0.4 * Math.sin(now * 6); g.fillStyle = '#ff5a3c'; g.beginPath(); g.arc(o[0], o[1], 2.6 * dpr, 0, TAU); g.fill();
-  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
-  if (hl) {
+  g.globalAlpha = 0.6 + 0.4 * Math.sin(now * 6); g.fillStyle = '#ff5a3c'; g.beginPath(); g.arc(o[0], o[1], 3 * dpr, 0, TAU); g.fill();
+  g.restore();
+  if (hl) {                                                          // sorotan: cincin melebar + titik berkedip + nama
     holoP(hl.s, hl.z3 ?? hl.za, hl.h, o);
-    const bl = 0.5 + 0.5 * Math.sin(now * 9), rr = (5 + 7 * ((now * 1.6) % 1)) * dpr;
-    g.strokeStyle = '#fff'; g.lineWidth = 1.5 * dpr; g.globalAlpha = 1 - ((now * 1.6) % 1);
-    g.beginPath(); g.arc(o[0], o[1], rr, 0, TAU); g.stroke();
-    g.globalAlpha = 0.4 + 0.6 * bl; g.fillStyle = '#fff'; g.beginPath(); g.arc(o[0], o[1], 3.2 * dpr, 0, TAU); g.fill();
-    g.globalAlpha = 1; g.font = `600 ${11 * dpr}px system-ui, sans-serif`; g.textBaseline = 'middle';
+    const ph = (now * 1.6) % 1, rr = (6 + 10 * ph) * dpr;
+    g.strokeStyle = '#fff'; g.lineWidth = 1.5 * dpr; g.globalAlpha = 1 - ph; g.beginPath(); g.arc(o[0], o[1], rr, 0, TAU); g.stroke();
+    g.globalAlpha = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(now * 9)); g.fillStyle = '#fff'; g.beginPath(); g.arc(o[0], o[1], 3.5 * dpr, 0, TAU); g.fill();
+    g.globalAlpha = 1; g.font = `600 ${12 * dpr}px system-ui, sans-serif`; g.textBaseline = 'middle';
     const tx = t(hl.name), right = o[0] < W * 0.6; g.textAlign = right ? 'left' : 'right';
-    const lx = o[0] + (right ? 10 : -10) * dpr, ly = Math.max(10 * dpr, Math.min(H - 10 * dpr, o[1] - 12 * dpr));
-    g.fillStyle = 'rgba(0,0,0,0.75)'; g.fillText(tx, lx + dpr, ly + dpr); g.fillStyle = '#e9fbff'; g.fillText(tx, lx, ly);
+    const lx = o[0] + (right ? 12 : -12) * dpr, ly = Math.max(12 * dpr, Math.min(H - 12 * dpr, o[1] - 14 * dpr));
+    g.fillStyle = 'rgba(0,0,0,0.8)'; g.fillText(tx, lx + dpr, ly + dpr); g.fillStyle = '#e9fbff'; g.fillText(tx, lx, ly);
   }
-  g.font = `${9.5 * dpr}px system-ui, sans-serif`; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillStyle = 'rgba(111,227,255,0.6)';
-  g.fillText(t('Hologram 3D · seret = putar'), 6 * dpr, H - 6 * dpr);
+  g.font = `${10.5 * dpr}px system-ui, sans-serif`; g.textAlign = 'right'; g.textBaseline = 'alphabetic'; g.fillStyle = 'rgba(111,227,255,0.85)';
+  g.fillText(t(HOLO.ctl ? 'Hologram: seret = putar · Shift + seret = putar sumbu · seret kanan = geser · roda = zoom · klik ganda = awal' : 'Seret kanan = putar hologram · Kendali 3D = putar dan zoom hologram'), W - 10 * dpr, H - 10 * dpr);
 }
-holoCv.addEventListener('pointerdown', (e) => { holoCv.setPointerCapture(e.pointerId); HOLO.drag = [e.clientX, e.clientY]; holoCv.style.cursor = 'grabbing'; });
-holoCv.addEventListener('pointermove', (e) => {
-  if (!HOLO.drag) return;
-  const dx = e.clientX - HOLO.drag[0], dy = e.clientY - HOLO.drag[1]; HOLO.drag = [e.clientX, e.clientY];
-  HOLO.yaw = Math.max(-1.55, Math.min(1.55, HOLO.yaw + dx * 0.01)); HOLO.rot += dy * 0.012;
-});
-const holoUp = () => { HOLO.drag = null; holoCv.style.cursor = ''; };
-holoCv.addEventListener('pointerup', holoUp); holoCv.addEventListener('pointercancel', holoUp);
-holoCv.addEventListener('dblclick', () => { HOLO.yaw = 0.22; });
-// pita hologram di atas peta 2D bisa disembunyikan (diingat); peta 2D mengisi ruang yang tersisa
-try { holoCv.hidden = localStorage.getItem('cooperStation.mapHolo') === '0'; } catch (e) { /* tidak wajib */ }
-document.getElementById('mapHoloBtn').classList.toggle('on', !holoCv.hidden);
-document.getElementById('mapHoloBtn').addEventListener('click', (e) => {
-  holoCv.hidden = !holoCv.hidden; e.currentTarget.classList.toggle('on', !holoCv.hidden); e.currentTarget.blur();
-  try { localStorage.setItem('cooperStation.mapHolo', holoCv.hidden ? '0' : '1'); } catch (er) { /* tidak wajib */ }
-  sizeMap(); MAPV.k = mapK(); mapClamp(); drawMap();
-});
+function holoZoomAt(f, px, py) {                                     // zoom hologram dengan titik di bawah kursor tetap
+  const z = Math.max(0.3, Math.min(30, HOLO.zoom * f)); f = z / HOLO.zoom; HOLO.zoom = z;
+  const cx = MAPV.W / 2 + HOLO.px, cy = MAPV.H / 2 + HOLO.py;
+  HOLO.px += (px - cx) * (1 - f); HOLO.py += (py - cy) * (1 - f);
+}
+function holoRotate(dx, dy, spin) {                                  // dx, dy dalam piksel CSS
+  if (spin) HOLO.rot += dx * 0.01;
+  else { HOLO.yaw += dx * 0.01; HOLO.pitch = Math.max(-1.5, Math.min(1.5, HOLO.pitch + dy * 0.01)); }
+  HOLO.hold = 4;                                                     // putaran otomatis berhenti sebentar setelah diputar tangan
+}
+function holoReset() { Object.assign(HOLO, HOLO_HOME); }
+const holoBtn = document.getElementById('mapHoloBtn'), ctlBtn = document.getElementById('mapCtlBtn');
+function holoButtons() {
+  holoBtn.classList.toggle('on', HOLO.on); ctlBtn.classList.toggle('on', HOLO.on && HOLO.ctl); ctlBtn.hidden = !HOLO.on;
+  try { localStorage.setItem('cooperStation.mapHolo', HOLO.on ? '1' : '0'); localStorage.setItem('cooperStation.mapCtl', HOLO.ctl ? '1' : '0'); } catch (e) { /* tidak wajib */ }
+}
+holoBtn.addEventListener('click', (e) => { HOLO.on = !HOLO.on; if (!HOLO.on) HOLO.ctl = false; holoButtons(); e.currentTarget.blur(); drawMap(); });
+ctlBtn.addEventListener('click', (e) => { HOLO.ctl = !HOLO.ctl; holoButtons(); e.currentTarget.blur(); drawMap(); });
+holoButtons();
 LANG.hooks.push(() => { if (!mapEl.hidden) buildMapLegend(); });
 function mapGo(m) { toggleMap(); m.go(); }
 function mapCenterMe() { MAPV.zoom = 4; MAPV.k = mapK(); MAPV.cx = player.za; MAPV.cy = player.theta * R; mapClamp(); }
@@ -6302,26 +6305,46 @@ function toggleMap() {
   if (!mapEl.hidden) { if (document.pointerLockElement) document.exitPointerLock(); sizeMap(); MAPV.k = mapK(); mapClamp(); buildMapLegend(); drawMap(); }
 }
 window.addEventListener('resize', () => { if (!mapEl.hidden) sizeMap(); });
-mapCv.addEventListener('wheel', (e) => { e.preventDefault(); const r = mapCv.getBoundingClientRect(); mapZoomAt(Math.exp(-e.deltaY * 0.0015), (e.clientX - r.left) * MAPV.dpr, (e.clientY - r.top) * MAPV.dpr); }, { passive: false });
+// Pointer peta: kendali 3D aktif (atau seret kanan) = mengatur hologram; selain itu = geser dan zoom peta 2D seperti sebelumnya.
+const holoCtl = (e) => HOLO.on && (HOLO.ctl || (e && e.button === 2));
+mapCv.addEventListener('contextmenu', (e) => e.preventDefault());
+mapCv.addEventListener('wheel', (e) => {
+  e.preventDefault(); const r = mapCv.getBoundingClientRect(), px = (e.clientX - r.left) * MAPV.dpr, py = (e.clientY - r.top) * MAPV.dpr, f = Math.exp(-e.deltaY * 0.0015);
+  if (HOLO.on && HOLO.ctl) holoZoomAt(f, px, py); else mapZoomAt(f, px, py);
+}, { passive: false });
 const mapPt = (e) => { const r = mapCv.getBoundingClientRect(); return [(e.clientX - r.left) * MAPV.dpr, (e.clientY - r.top) * MAPV.dpr]; };
-const mapPick = (px, py) => { let best = -1, bd = 16 * MAPV.dpr; MAP_MARKS.forEach((m, i) => { const q = Math.hypot(m.px - px, m.py - py); if (q < bd) { bd = q; best = i; } }); return best; };
-mapCv.addEventListener('pointerdown', (e) => { mapCv.setPointerCapture(e.pointerId); const p = mapPt(e); MAPV.pts.set(e.pointerId, p); MAPV.drag = { p, moved: 0, pinch: MAPV.pts.size === 2 ? null : undefined }; mapCv.classList.add('drag'); });
+const mapPick = (px, py) => {
+  const h3 = HOLO.on && HOLO.ctl; let best = -1, bd = 16 * MAPV.dpr;
+  MAP_MARKS.forEach((m, i) => { const q = h3 ? Math.hypot(m.hx - px, m.hy - py) : Math.hypot(m.px - px, m.py - py); if (q < bd) { bd = q; best = i; } });
+  return best;
+};
+mapCv.addEventListener('dblclick', () => { if (HOLO.on && HOLO.ctl) holoReset(); });
+mapCv.addEventListener('pointerdown', (e) => {
+  try { mapCv.setPointerCapture(e.pointerId); } catch (er) { /* pointer sintetis */ }
+  const p = mapPt(e); MAPV.pts.set(e.pointerId, p);
+  MAPV.drag = { p, moved: 0, holo: holoCtl(e), pan: HOLO.ctl && e.button === 2, shift: e.shiftKey, pinch: MAPV.pts.size === 2 ? null : undefined }; mapCv.classList.add('drag');
+});
 mapCv.addEventListener('pointermove', (e) => {
   const p = mapPt(e);
   if (!MAPV.pts.has(e.pointerId)) { const h = mapPick(p[0], p[1]); MAPV.hover = h; mapCv.style.cursor = h >= 0 ? 'pointer' : ''; return; }
   const prev = MAPV.pts.get(e.pointerId); MAPV.pts.set(e.pointerId, p);
-  if (MAPV.pts.size === 2) {                                        // cubit: zoom di titik tengah dua jari
-    const [a, b] = [...MAPV.pts.values()], dist = Math.hypot(a[0] - b[0], a[1] - b[1]);
-    if (MAPV.pinchD) mapZoomAt(dist / MAPV.pinchD, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
-    MAPV.pinchD = dist; MAPV.drag.moved = 99; return;
+  const D = MAPV.drag;
+  if (MAPV.pts.size === 2) {                                        // cubit: zoom di titik tengah dua jari (hologram bila kendali 3D)
+    const [a, b] = [...MAPV.pts.values()], dist = Math.hypot(a[0] - b[0], a[1] - b[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+    if (MAPV.pinchD) { if (D.holo) { holoZoomAt(dist / MAPV.pinchD, mx, my); HOLO.px += mx - MAPV.pinchM[0]; HOLO.py += my - MAPV.pinchM[1]; } else mapZoomAt(dist / MAPV.pinchD, mx, my); }
+    MAPV.pinchD = dist; MAPV.pinchM = [mx, my]; D.moved = 99; return;
   }
-  const dx = p[0] - prev[0], dy = p[1] - prev[1]; MAPV.drag.moved += Math.abs(dx) + Math.abs(dy);
+  const dx = p[0] - prev[0], dy = p[1] - prev[1]; D.moved += Math.abs(dx) + Math.abs(dy);
+  if (D.holo) {
+    if (D.pan) { HOLO.px += dx; HOLO.py += dy; } else holoRotate(dx / MAPV.dpr, dy / MAPV.dpr, D.shift || e.shiftKey);
+    return;
+  }
   MAPV.cx -= dx / MAPV.k; MAPV.cy = modS(MAPV.cy - dy / MAPV.k); mapClamp();
 });
 const mapUp = (e) => {
   if (!MAPV.pts.has(e.pointerId)) return;
   const p = MAPV.pts.get(e.pointerId); MAPV.pts.delete(e.pointerId); MAPV.pinchD = 0;
-  if (!MAPV.pts.size) { mapCv.classList.remove('drag'); if (MAPV.drag && MAPV.drag.moved < 6 * MAPV.dpr) { const i = mapPick(p[0], p[1]); if (i >= 0) mapGo(MAP_MARKS[i]); } MAPV.drag = null; }
+  if (!MAPV.pts.size) { mapCv.classList.remove('drag'); if (MAPV.drag && MAPV.drag.moved < 6 * MAPV.dpr && e.button !== 2) { const i = mapPick(p[0], p[1]); if (i >= 0) mapGo(MAP_MARKS[i]); } MAPV.drag = null; }
 };
 mapCv.addEventListener('pointerup', mapUp); mapCv.addEventListener('pointercancel', mapUp);
 document.getElementById('mapZoomIn').addEventListener('click', (e) => { mapZoomAt(1.6); e.currentTarget.blur(); });
@@ -15125,7 +15148,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, mapTab, goHub, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE };
 requestAnimationFrame(frame);
 </script>
 </body>

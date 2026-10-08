@@ -42,19 +42,39 @@ UJI = r"""
   const shown = [...document.querySelectorAll('#mapLegend [data-mpane]')].filter((d) => !d.hidden).map((d) => d.dataset.mpane);
   out[`tab: panel tampil ${shown.join(',')}, ${document.querySelectorAll('#mapLegend [data-mpane=fisika] button').length} tombol fisika`] = shown.length === 1 && shown[0] === 'fisika' && document.querySelectorAll('#mapLegend [data-mpane=fisika] button').length === 8;
   out['tab diingat'] = localStorage.getItem('cooperStation.mapTab') === 'fisika';
-  const hc = document.getElementById('mapHolo'), hd = hc.getContext('2d').getImageData(0, 0, hc.width, hc.height).data;
-  let lit = 0; for (let i = 0; i < hd.length; i += 4) if (hd[i] + hd[i + 1] + hd[i + 2] > 120) lit++;
-  out[`hologram ${hc.width}x${hc.height}, piksel garis ${lit}`] = hc.width > 100 && lit > 500;
+  // hologram menimpa peta 2D di kanvas yang sama
+  out['tidak ada kanvas hologram terpisah'] = !document.getElementById('mapHolo');
+  const cv2 = document.getElementById('mapCanvas'), g2 = cv2.getContext('2d'), snap = () => g2.getImageData(0, 0, cv2.width, cv2.height).data;
+  S.HOLO.on = false; S.HOLO.ctl = false; S.drawMap(); const d0 = snap();
+  S.HOLO.on = true; S.drawMap(); const d1 = snap();
+  let diff = 0; for (let i = 0; i < d0.length; i += 4) if (Math.abs(d0[i] - d1[i]) + Math.abs(d0[i + 1] - d1[i + 1]) + Math.abs(d0[i + 2] - d1[i + 2]) > 30) diff++;
+  out[`hologram tergambar di atas peta 2D (${diff} piksel berubah dari ${cv2.width * cv2.height})`] = diff > 3000 && diff < cv2.width * cv2.height * 0.5;
   const m = S.MAP_MARKS.find((x) => x.key === 'U'), p = m.at();
-  S.MAPV.hl = { s: p.s, za: p.za, h: 0, name: m.name, i: -1 }; for (let i = 0; i < 40; i++) S.drawHolo(0.1);   // langkah frame langsung (sandbox lambat)
+  S.MAPV.hl = { s: p.s, za: p.za, h: 0, name: m.name, i: -1 }; for (let i = 0; i < 40; i++) S.drawHolo(g2, 0.1);   // langkah frame langsung (sandbox lambat)
   const o = S.holoP(p.s, p.za, 0, [0, 0, 0]), o2 = S.holoP(p.s + Math.PI * S.R, p.za, 0, [0, 0, 0]);   // titik di seberang keliling
-  out[`sorot U: hologram berputar sampai tempat di sisi dekat (beda kedalaman dengan seberang ${(o[2] - o2[2]).toFixed(2)} dari maks 1,96)`] = o[2] - o2[2] > 1.8;
-  const cr = document.getElementById('mapCanvas').getBoundingClientRect(), hr = hc.getBoundingClientRect();
-  out[`hologram di atas peta 2D, selebar peta (${Math.round(hr.width)} vs ${Math.round(cr.width)} px)`] = hr.bottom <= cr.top + 1 && Math.abs(hr.width - cr.width) < 2;
-  const H0 = S.MAPV.H; document.getElementById('mapHoloBtn').click();
-  out[`tombol Hologram: sembunyi, peta 2D membesar (${H0} -> ${S.MAPV.H} px)`] = hc.hidden && S.MAPV.H > H0;
+  out[`sorot U: hologram berputar sampai tempat di sisi dekat (beda kedalaman dengan seberang ${(o[2] - o2[2]).toFixed(2)} dari maks 2)`] = o[2] - o2[2] > 1.8;
+  S.MAPV.hl = null;
+  // kendali 3D: roda = zoom hologram (peta 2D tetap), seret = putar, seret tanpa kendali 3D = geser peta 2D
+  const ev = (type, x, y, extra = {}) => { const r = cv2.getBoundingClientRect(); return new PointerEvent(type, { clientX: r.left + x, clientY: r.top + y, pointerId: 7, bubbles: true, button: 0, ...extra }); };
+  const drag = (x0, y0, x1, y1, extra) => { cv2.dispatchEvent(ev('pointerdown', x0, y0, extra)); for (let i = 1; i <= 5; i++) cv2.dispatchEvent(ev('pointermove', x0 + (x1 - x0) * i / 5, y0 + (y1 - y0) * i / 5, extra)); cv2.dispatchEvent(ev('pointerup', x1, y1, extra)); };
+  document.getElementById('mapCtlBtn').click();
+  const mz = S.MAPV.zoom, hz = S.HOLO.zoom, mcx = S.MAPV.cx;
+  cv2.dispatchEvent(new WheelEvent('wheel', { deltaY: -400, clientX: cv2.getBoundingClientRect().left + 200, clientY: cv2.getBoundingClientRect().top + 150, bubbles: true, cancelable: true }));
+  out[`kendali 3D: roda zoom hologram ${hz} -> ${S.HOLO.zoom.toFixed(2)}, peta 2D tetap ${mz}`] = S.HOLO.ctl && S.HOLO.zoom > hz * 1.5 && S.MAPV.zoom === mz;
+  const y0 = S.HOLO.yaw, p0 = S.HOLO.pitch; drag(300, 200, 400, 240);
+  out[`kendali 3D: seret memutar hologram (yaw ${y0.toFixed(2)} -> ${S.HOLO.yaw.toFixed(2)}, pitch ${p0.toFixed(2)} -> ${S.HOLO.pitch.toFixed(2)}), peta 2D tidak bergeser`] = S.HOLO.yaw > y0 + 0.5 && S.HOLO.pitch > p0 + 0.2 && S.MAPV.cx === mcx;
+  const px0 = S.HOLO.px; drag(300, 200, 360, 200, { button: 2 });
+  out[`kendali 3D: seret kanan menggeser hologram (${px0} -> ${Math.round(S.HOLO.px)})`] = S.HOLO.px > px0 + 50;
+  S.holoReset(); document.getElementById('mapCtlBtn').click(); S.mapZoomAt(3);
+  const cxA = S.MAPV.cx, yA = S.HOLO.yaw; drag(300, 200, 200, 200);
+  out[`tanpa kendali 3D: seret menggeser peta 2D (cx ${Math.round(cxA)} -> ${Math.round(S.MAPV.cx)}), hologram tetap`] = S.MAPV.cx > cxA + 10 && S.HOLO.yaw === yA && !S.HOLO.ctl;
+  const yB = S.HOLO.yaw; drag(300, 200, 360, 200, { button: 2 });
+  out['tanpa kendali 3D: seret kanan memutar hologram'] = S.HOLO.yaw > yB + 0.3;
   document.getElementById('mapHoloBtn').click();
-  out['tombol Hologram: tampil lagi'] = !hc.hidden && localStorage.getItem('cooperStation.mapHolo') === '1';
+  out['tombol Hologram: sembunyi (kendali 3D ikut mati dan tombolnya tersembunyi)'] = !S.HOLO.on && !S.HOLO.ctl && document.getElementById('mapCtlBtn').hidden;
+  document.getElementById('mapHoloBtn').click();
+  out['tombol Hologram: tampil lagi, diingat'] = S.HOLO.on && localStorage.getItem('cooperStation.mapHolo') === '1';
+  S.holoReset();
   S.MAPV.hl = null; S.mapTab('tempat'); S.toggleMap();
   S.setLang('en'); S.toggleMap(); await wait(300);
   const lh = [...document.querySelectorAll('#mapLegend .lh')].map((x) => x.textContent).join(' | ');
