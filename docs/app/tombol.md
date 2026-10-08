@@ -34,6 +34,7 @@ Hanya berlaku selama mode kamera aktif, sama di ketiga experience. Tombol khusus
 | Shift + roda, atau , dan . | Aperture |
 | [ dan ] | Kecepatan rana (mode A / P pindah ke M) |
 | - dan = | ISO; dengan Shift = kompensasi eksposur |
+| M | Mode eksposur A / M / P (berganti; lokal mode kamera, tidak membuka peta / radar) |
 | 1 - 6 | Lensa 21 / 28 / 35 / 50 / 75 / 90 mm |
 | Tab | Foto / video |
 | V | Jendela bidik optik / live view |

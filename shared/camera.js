@@ -83,14 +83,14 @@
       ['Klik kiri / Enter', 'Rana (foto) atau mulai / berhenti rekam (video); rana B: tahan'],
       ['Roda mouse', 'Cincin fokus: satukan dua gambar di patch tengah'], ['Shift + roda, atau , .', 'Aperture'],
       ['[ ]', 'Kecepatan rana (mode A / P pindah ke M)'], ['- =', 'ISO'], ['Shift + - =', 'Kompensasi eksposur (mode A dan P)'],
-      ['1-6', 'Lensa 21 / 28 / 35 / 50 / 75 / 90 mm'], ['Tab', 'Foto / video'], ['V', 'Jendela bidik optik / live view'],
+      ['M', 'Mode eksposur A / M / P (berganti)'], ['1-6', 'Lensa 21 / 28 / 35 / 50 / 75 / 90 mm'], ['Tab', 'Foto / video'], ['V', 'Jendela bidik optik / live view'],
       ['Klik kanan tahan', 'Kunci eksposur (AE-L)'], ['H', 'Sembunyikan HUD'], ['`', 'Panel kamera'], ['WASD, Shift, mouse, Z', 'Tetap: jalan, lari, menoleh, kecepatan waktu'],
       ['F / Esc', 'Keluar mode kamera'],
     ], [
       ['Left click / Enter', 'Shutter (photo) or start / stop recording (video); B shutter: hold'],
       ['Mouse wheel', 'Focus ring: merge the two images in the centre patch'], ['Shift + wheel, or , .', 'Aperture'],
       ['[ ]', 'Shutter speed (A / P mode switches to M)'], ['- =', 'ISO'], ['Shift + - =', 'Exposure compensation (A and P)'],
-      ['1-6', 'Lens 21 / 28 / 35 / 50 / 75 / 90 mm'], ['Tab', 'Photo / video'], ['V', 'Optical viewfinder / live view'],
+      ['M', 'Exposure mode A / M / P (cycle)'], ['1-6', 'Lens 21 / 28 / 35 / 50 / 75 / 90 mm'], ['Tab', 'Photo / video'], ['V', 'Optical viewfinder / live view'],
       ['Right click hold', 'Exposure lock (AE-L)'], ['H', 'Hide HUD'], ['`', 'Camera panel'], ['WASD, Shift, mouse, Z', 'Unchanged: walk, run, look, time speed'],
       ['F / Esc', 'Exit camera mode'],
     ]],
@@ -255,6 +255,7 @@
     if (!K.on || K.cap || K.armed) return;
     if (K.st.video) { K.rec ? K.recStop() : K.recStart(); return; }
     K.armed = true; click(0);
+    if (!cur().bulb) click(1, 0.055);        // satu bunyi "cekrek" langsung saat klik; olah subframe menyusul tanpa bunyi
   };
   K.shutterRelease = function () { if (K.cap && K.cap.bulb && !K.cap.done) { K.cap.release = true; if (!K.cap.clicked) { K.cap.clicked = true; click(1); } } };
   function plan() {
@@ -279,8 +280,7 @@
       try { const g = freezeEl.getContext('2d'); freezeEl.width = canvas.width; freezeEl.height = canvas.height; g.drawImage(canvas, 0, 0); freezeEl.hidden = false; } catch (e) { /* abaikan */ }
       K.seed = (Math.random() * 997) | 0;
       K.cap = plan();
-      // bunyi tutup rana tepat sesudah waktu rana nyata; olah subframe berlanjut sesudahnya (B: saat tombol dilepas)
-      if (!K.cap.bulb) { const P = K.cap; P.clicked = true; setTimeout(() => click(1), Math.max(70, Math.min(30000, P.t * 1000))); }
+      K.cap.clicked = !K.cap.bulb;                                   // bunyi tutup sudah dimainkan saat klik (B: saat dilepas)
     }
   };
   // Subframe berikut: offset Halton (piksel), bukaan (m, basis kamera), getar (rad), dt dunia sebelum subframe ini
@@ -395,14 +395,14 @@
   // ---------- bunyi (AudioContext sendiri: tidak ikut terekam) ----------
   let actx = null;
   function ac() { if (!actx) { const C = window.AudioContext || window.webkitAudioContext; if (C) actx = new C(); } if (actx && actx.state === 'suspended') actx.resume(); return actx; }
-  function click(phase) {                                            // rana kain: buka (0) dan tutup (1) lembut
+  function click(phase, delay) {                                     // rana kain: buka (0) dan tutup (1) lembut; delay (s) dijadwalkan di AudioContext
     const c = ac(); if (!c) return;
     const n = Math.floor(c.sampleRate * 0.03), b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0);
     for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (n * (phase ? 0.18 : 0.12)));
     const s = c.createBufferSource(); s.buffer = b;
     const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = phase ? 2600 : 3400; f.Q.value = 1.2;
     const g = c.createGain(); g.gain.value = phase ? 0.35 : 0.28;
-    s.connect(f).connect(g).connect(c.destination); s.start();
+    s.connect(f).connect(g).connect(c.destination); s.start(c.currentTime + (delay || 0));
   }
   function beep(hz) {
     const c = ac(); if (!c) return;
@@ -663,6 +663,7 @@
     else if (c === 'Tab') { if (!e.repeat) setS(() => { if (K.rec) K.recStop(); K.st.video = !K.st.video; }); }
     else if (c === 'KeyV') { if (!e.repeat) setS(() => { if (!K.st.video) K.st.live = !K.st.live; }); }
     else if (c === 'KeyH') K.hud = !K.hud;
+    else if (c === 'KeyM') { if (!e.repeat) K.act('mode', { A: 'M', M: 'P', P: 'A' }[K.st.mode] || 'A'); }
     else if (c === 'Backquote') { if (!e.repeat) togglePanel(); }
     else if (c === 'Slash' || c === 'F1') toggleHelp();
     else used = false;

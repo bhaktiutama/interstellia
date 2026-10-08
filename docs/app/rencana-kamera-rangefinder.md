@@ -283,7 +283,7 @@ Permintaan pemilik sesudah K1-K9: detail LOD diperluas sesuai bidikan, tepi lemb
 | Tidak ikut | Rumput, jagung 3D dekat, rumput bukit (paling mahal), detail material `LIGHT_GLSL` (berisiko di M1), bayangan dekat |
 | Jagung kartu (pilihan A) | Hanya saat tangkap foto (dunia beku): `cornCapture(on)` menggeser pusat grid kartu `CORN.mid` ke bidikan (`lodShift(cornMid)`, radius maks 268 m, grid `sortedCells` kini 270 m), uniform `uCornCap` / `uCornC`, tanah jagung `uCornR` ikut; live view dan mode biasa tidak berubah (`uCornCap` 0 = perilaku lama) |
 | Subframe adaptif | `plan()`: jumlah sampel bukaan dari diameter blur terbesar D (px foto, latar tak hingga atau benda 3 m): 0,15 x D^2, min dasar preset, maks 8x dasar dan 512; dulu tetap 4-64 sehingga blur besar tampak sebagai salinan bertumpuk |
-| Bunyi rana | Tutup rana berbunyi tepat sesudah waktu rana nyata (min 70 ms), bukan sesudah olah subframe selesai; B: saat tombol dilepas |
+| Bunyi rana | Satu bunyi buka + tutup (55 ms) langsung saat klik, olah subframe menyusul tanpa bunyi; B: tutup saat tombol dilepas. Tombol M = mode A / M / P |
 | k = 1 | Perilaku lama: `uLodC` = mata tiap frame, radius dan pusat sama dengan sebelumnya |
 | Badan kamera | Dicoba lalu dihapus atas permintaan pemilik (live view kembali layar penuh seperti K6) |
 | Resolusi foto | Saat tangkap, render sementara diperbesar sampai tinggi foto per preset (`A.photoH()`: Ultra 2.160, Tinggi 1.800, Sedang 1.440, Rendah 1.200, Hemat 1.080 px; Gargantua 2.160 / 1.800 / 1.440 / 1.200), maks 3x dan dibatasi ukuran tekstur GPU, lalu dikembalikan (`CAMKIT.capScale()`). Contoh layar 1.920 x 1.080 di Ultra: foto 3.240 x 2.160 (7,0 MP), sebelumnya 1.620 x 1.080 (1,7 MP). Resolusi dinamis Copper dibekukan selama mode kamera |
