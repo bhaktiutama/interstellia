@@ -98,7 +98,7 @@ SIDIK = r"""
   const st = window.__station, out = [];
   const fnv = (arr) => { const u = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength); let h = 0x811c9dc5;
     for (let i = 0; i < u.length; i++) { h ^= u[i]; h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0') + ':' + arr.length; };
-  const geoHash = (g) => { const o = {}; for (const k of Object.keys(g.attributes).sort()) o[k] = fnv(g.attributes[k].array); o.index = g.index ? fnv(g.index.array) : null; return o; };
+  const geoHash = (g) => { const o = {}; for (const k of Object.keys(g.attributes).sort()) if (!g.attributes[k].isInstancedBufferAttribute) o[k] = fnv(g.attributes[k].array); o.index = g.index ? fnv(g.index.array) : null; return o; };
   st.TREES.templates.forEach((T, i) => out.push({ i, kind: T.kind, height: +T.height.toFixed(9), halfW: +T.halfW.toFixed(9), crownR: +T.crownR.toFixed(9),
     trunkR: T.trunkR, bark: geoHash(T.barkGeo), leaf: geoHash(T.leafGeo) }));
   return out;
@@ -131,6 +131,10 @@ async def main():
         # ?pohon=lama: 16 template identik dengan sebelum 25a
         pg = await buka(b, page_url + '?pohon=lama', errs)
         rows, base = await pg.evaluate(SIDIK), json.loads(here.joinpath('uji_pohon_lama.json').read_text(encoding='utf-8'))
+        # atribut per instance (aLeafC: warna musim per pohon) ikut jumlah pohon di dunia, bukan bentuk template: tidak dibandingkan
+        # (23i: pohon di jalur pipa pompa sungai tidak ditanam)
+        for q in base:
+            for g in ('bark', 'leaf'): q[g].pop('aLeafC', None)
         beda = [f"{r['i']} {r['kind']}" for r, q in zip(rows, base) if r != q]
         cetak({f"?pohon=lama: {len(rows)} template identik bit per bit dengan sebelum 25a (beda: {', '.join(beda) or 'tidak ada'})": len(rows) == len(base) == 16 and not beda})
         print('error:', errs[:10] or 'tidak ada')
