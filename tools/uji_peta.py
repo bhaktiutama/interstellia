@@ -49,6 +49,12 @@ UJI = r"""
   S.MAPV.hl = { s: p.s, za: p.za, h: 0, name: m.name, i: -1 }; for (let i = 0; i < 40; i++) S.drawHolo(0.1);   // langkah frame langsung (sandbox lambat)
   const o = S.holoP(p.s, p.za, 0, [0, 0, 0]), o2 = S.holoP(p.s + Math.PI * S.R, p.za, 0, [0, 0, 0]);   // titik di seberang keliling
   out[`sorot U: hologram berputar sampai tempat di sisi dekat (beda kedalaman dengan seberang ${(o[2] - o2[2]).toFixed(2)} dari maks 1,96)`] = o[2] - o2[2] > 1.8;
+  const cr = document.getElementById('mapCanvas').getBoundingClientRect(), hr = hc.getBoundingClientRect();
+  out[`hologram di atas peta 2D, selebar peta (${Math.round(hr.width)} vs ${Math.round(cr.width)} px)`] = hr.bottom <= cr.top + 1 && Math.abs(hr.width - cr.width) < 2;
+  const H0 = S.MAPV.H; document.getElementById('mapHoloBtn').click();
+  out[`tombol Hologram: sembunyi, peta 2D membesar (${H0} -> ${S.MAPV.H} px)`] = hc.hidden && S.MAPV.H > H0;
+  document.getElementById('mapHoloBtn').click();
+  out['tombol Hologram: tampil lagi'] = !hc.hidden && localStorage.getItem('cooperStation.mapHolo') === '1';
   S.MAPV.hl = null; S.mapTab('tempat'); S.toggleMap();
   S.setLang('en'); S.toggleMap(); await wait(300);
   const lh = [...document.querySelectorAll('#mapLegend .lh')].map((x) => x.textContent).join(' | ');

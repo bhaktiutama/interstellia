@@ -152,10 +152,13 @@
   #map canvas { display: block; flex: 1; min-width: 0; width: 100%; height: 100%; border-radius: 6px; background: #0b0d11; cursor: grab; touch-action: none; }
   #map canvas.drag { cursor: grabbing; }
   /* peta: kolom samping = hologram 3D + tab (Tempat, Fisika, Distrik, Legenda), daftar ringkas */
-  #mapSide { width: 300px; flex: none; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
-  #map #mapHolo { flex: none; width: 100%; height: 180px; border-radius: 6px; background: #04070c; cursor: grab; border: 1px solid rgba(111,227,255,0.18); }
+  #mapMain { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+  #map #mapCanvas { flex: 1; min-height: 0; height: auto; }
+  #mapSide { width: 280px; flex: none; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+  #map #mapHolo { flex: none; width: 100%; height: clamp(150px, 30vh, 300px); border-radius: 6px; background: #04070c; cursor: grab; border: 1px solid rgba(111,227,255,0.18); }
   #mapTabs { display: flex; gap: 4px; }
   #map #mapTabs button { flex: 1; padding: 4px 2px; font-size: 11.5px; }
+  #map .mbtns button.on { border-color: #6fe3ff; color: #6fe3ff; }
   #map #mapTabs button.on { background: var(--accent); color: #14171c; border-color: var(--accent); }
   #mapLegend { flex: 1; min-height: 0; overflow: auto; font-size: 12px; }
   #mapLegend .lh { color: var(--accent); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; margin: 6px 0 3px; }
@@ -168,7 +171,7 @@
   #mapLegend .sw { display: flex; gap: 6px; align-items: center; margin-bottom: 2px; color: var(--ink); font-size: 11.5px; }
   #mapLegend .sw i { flex: none; width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
   #map .mnote { color: var(--muted); font-size: 10.5px; margin-top: 6px; }
-  @media (max-width: 760px) { #map .mbody { flex-direction: column; } #mapSide { width: auto; max-height: 42vh; } #map #mapHolo { height: 110px; } }
+  @media (max-width: 760px) { #map .mbody { flex-direction: column; } #mapSide { width: auto; max-height: 38vh; } #map #mapHolo { height: 22vh; } }
   /* 12d: mode foto dan tur sinematik */
   body.photo #hud, body.photo #cross, body.photo #lab, body.photo #touchbtns, body.photo #prompt,
   body.tour #hud, body.tour #cross, body.tour #lab, body.tour #touchbtns, body.tour #prompt { display: none !important; }
@@ -212,8 +215,8 @@
 <div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><button id="tourStop" type="button">Berhenti (Y)</button></div></div>
 <div id="plaque" hidden><div class="card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
 <div id="map" hidden><div class="mcard">
-  <div class="mhead"><span>Peta silinder (dibuka)</span><span class="mbtns"><button id="mapZoomIn" type="button">+</button><button id="mapZoomOut" type="button">-</button><button id="mapMe" type="button">Posisi saya</button><button id="mapClose" type="button">Tutup (M)</button></span></div>
-  <div class="mbody"><canvas id="mapCanvas"></canvas><div id="mapSide"><canvas id="mapHolo"></canvas><div id="mapTabs"></div><div id="mapLegend"></div></div></div>
+  <div class="mhead"><span>Peta silinder (dibuka)</span><span class="mbtns"><button id="mapZoomIn" type="button">+</button><button id="mapZoomOut" type="button">-</button><button id="mapMe" type="button">Posisi saya</button><button id="mapHoloBtn" type="button">Hologram</button><button id="mapClose" type="button">Tutup (M)</button></span></div>
+  <div class="mbody"><div id="mapMain"><canvas id="mapHolo"></canvas><canvas id="mapCanvas"></canvas></div><div id="mapSide"><div id="mapTabs"></div><div id="mapLegend"></div></div></div>
   <div class="mnote">Kiri-kanan = sumbu 8 km dari end cap A · atas-bawah = keliling 6,28 km (tengah = rel trem, tepi atas dan bawah = Skyway) · roda atau cubit = zoom, seret = geser, klik penanda = pindah ke sana</div>
 </div></div>
 <div id="lab">
@@ -455,6 +458,7 @@ Object.assign(I18N.en, {
   "Tempat fisika (klik = pindah)": "Physics places (click = go there)",
   "Tempat fisika": "Physics places",
   "Pipa pompa sungai": "River pump pipes",
+  "Hologram": "Hologram",
   "Hologram 3D · seret = putar": "3D hologram · drag = rotate",
   "Dek pandang menara 175 m": "Tower observation deck 175 m",
   "g 0,825; bola jatuh melenceng 85,7 m melawan putaran": "g 0.825; a dropped ball drifts 85.7 m against the spin",
@@ -6191,7 +6195,7 @@ function buildMapLegend() {
    sudut a = s / R + rot, jari-jari R - h, x = za - L/2. Garis di sisi jauh lebih redup (4 tingkat). Diam = berputar pelan;
    saat satu tempat disorot, silinder berputar sampai tempat itu menghadap pengamat dan penandanya berkedip. Seret = putar. */
 const holoCv = document.getElementById('mapHolo');
-const HOLO = { W: 1, H: 1, dpr: 1, rot: 0, yaw: 0.36, pitch: 0.42, k: 1, cx: 0, cy: 0, xc: 0, t0: 0, drag: null, idle: 0 };
+const HOLO = { W: 1, H: 1, dpr: 1, rot: 0, yaw: 0.22, pitch: 0.42, k: 1, cx: 0, cy: 0, xc: 0, t0: 0, drag: null, idle: 0 };
 function holoP(s, za, h, o) {
   const a = s / R + HOLO.rot, r = R - h, x = za - HALF_L - HOLO.xc, y = -r * Math.cos(a), z = r * Math.sin(a);
   const cy = Math.cos(HOLO.yaw), sy = Math.sin(HOLO.yaw), cp = Math.cos(HOLO.pitch), sp = Math.sin(HOLO.pitch);
@@ -6281,7 +6285,15 @@ holoCv.addEventListener('pointermove', (e) => {
 });
 const holoUp = () => { HOLO.drag = null; holoCv.style.cursor = ''; };
 holoCv.addEventListener('pointerup', holoUp); holoCv.addEventListener('pointercancel', holoUp);
-holoCv.addEventListener('dblclick', () => { HOLO.yaw = 0.36; });
+holoCv.addEventListener('dblclick', () => { HOLO.yaw = 0.22; });
+// pita hologram di atas peta 2D bisa disembunyikan (diingat); peta 2D mengisi ruang yang tersisa
+try { holoCv.hidden = localStorage.getItem('cooperStation.mapHolo') === '0'; } catch (e) { /* tidak wajib */ }
+document.getElementById('mapHoloBtn').classList.toggle('on', !holoCv.hidden);
+document.getElementById('mapHoloBtn').addEventListener('click', (e) => {
+  holoCv.hidden = !holoCv.hidden; e.currentTarget.classList.toggle('on', !holoCv.hidden); e.currentTarget.blur();
+  try { localStorage.setItem('cooperStation.mapHolo', holoCv.hidden ? '0' : '1'); } catch (er) { /* tidak wajib */ }
+  sizeMap(); MAPV.k = mapK(); mapClamp(); drawMap();
+});
 LANG.hooks.push(() => { if (!mapEl.hidden) buildMapLegend(); });
 function mapGo(m) { toggleMap(); m.go(); }
 function mapCenterMe() { MAPV.zoom = 4; MAPV.k = mapK(); MAPV.cx = player.za; MAPV.cy = player.theta * R; mapClamp(); }
