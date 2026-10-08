@@ -6195,14 +6195,15 @@ function buildMapLegend() {
    saat satu tempat disorot, silinder berputar sampai tempat itu menghadap pengamat dan penandanya berkedip. Seret = putar. */
 // HOLO: on = tampil, ctl = kendali 3D (seret / roda / klik mengatur hologram, bukan peta 2D); yaw, pitch = arah pandang,
 // rot = putaran silinder pada sumbunya, zoom dan px / py = skala dan geser di layar (piksel kanvas)
-const HOLO = { on: true, ctl: false, rot: 0, yaw: 0.22, pitch: 0.42, zoom: 1, px: 0, py: 0, k: 1, cx: 0, cy: 0, xc: 0, t0: 0, hold: 0 };
+const HOLO = { on: true, ctl: false, rot: 0, yaw: 0.22, pitch: 0.42, zoom: 1, px: 0, py: 0, k: 1, dist: 1e9, cx: 0, cy: 0, xc: 0, t0: 0, hold: 0 };
 try { HOLO.on = localStorage.getItem('cooperStation.mapHolo') !== '0'; HOLO.ctl = localStorage.getItem('cooperStation.mapCtl') === '1'; } catch (e) { /* tidak wajib */ }
 const HOLO_HOME = { yaw: 0.22, pitch: 0.42, zoom: 1, px: 0, py: 0 };
 function holoP(s, za, h, o) {
   const a = s / R + HOLO.rot, r = R - h, x = za - HALF_L - HOLO.xc, y = -r * Math.cos(a), z = r * Math.sin(a);
   const cy = Math.cos(HOLO.yaw), sy = Math.sin(HOLO.yaw), cp = Math.cos(HOLO.pitch), sp = Math.sin(HOLO.pitch);
   const X = x * cy + z * sy, d = -x * sy + z * cy;
-  o[0] = HOLO.cx + X * HOLO.k; o[1] = HOLO.cy - (y * cp - d * sp) * HOLO.k;
+  const D = HOLO.dist, f = D / Math.max(D * 0.2, D - (y * sp + d * cp));   // perspektif: titik yang lebih dekat ke mata lebih besar
+  o[0] = HOLO.cx + X * HOLO.k * f; o[1] = HOLO.cy - (y * cp - d * sp) * HOLO.k * f;
   o[2] = (y * sp + z * cy * cp) / R;                                 // kedalaman bagian keliling saja: -1 sisi jauh .. 1 sisi dekat
   return o;
 }
@@ -6219,7 +6220,7 @@ function holoLines(g, list, col, w) {                               // list = [[
   g.globalAlpha = 1;
 }
 const holoRing = (za, h = 0, n = 72) => { const L = []; for (let i = 0; i <= n; i++) L.push([i / n * CIRC, za, h]); return L; };
-/* Hologram 3D tembus pandang digambar di atas peta 2D di kanvas yang sama (satu view). Proyeksi ortografik; skala dasar dari
+/* Hologram 3D tembus pandang digambar di atas peta 2D di kanvas yang sama (satu view). Proyeksi perspektif; skala dasar dari
    bola pembatas silinder (tidak berubah saat diputar), lalu zoom dan geser bebas. Diam = berputar pelan; saat satu tempat disorot,
    silinder berputar sampai tempat itu di sisi dekat dan penandanya berkedip. */
 function drawHolo(g, dt) {
@@ -6233,7 +6234,8 @@ function drawHolo(g, dt) {
     HOLO.rot += d * Math.min(1, dt * 4);
   } else if (!busy && !HOLO.hold) HOLO.rot += dt * 0.18;
   const xa = PORT.zDockPod - 80, hl2 = (HALF_L - xa) / 2; HOLO.xc = (xa + HALF_L) / 2;   // x = z dunia; dermaga (z < -L/2) ikut
-  HOLO.k = Math.min(W * 0.48, H * 0.75) / Math.hypot(hl2, R) * HOLO.zoom;
+  const Rb = Math.hypot(hl2, R); HOLO.dist = 3 * Rb;                // mata di 3x jari-jari bola pembatas: ujung dekat sekitar 2x ujung jauh
+  HOLO.k = Math.min(W * 0.48, H * 0.75) / Rb * HOLO.zoom;
   HOLO.cx = W / 2 + HOLO.px; HOLO.cy = H / 2 + HOLO.py; HOLO.alpha = HOLO.ctl ? 1 : 0.7;
   g.fillStyle = HOLO.ctl ? 'rgba(4,7,12,0.55)' : 'rgba(4,7,12,0.28)'; g.fillRect(0, 0, W, H);   // peta diredupkan agar hologram terbaca (lebih gelap saat kendali 3D)
   g.save(); g.globalCompositeOperation = 'lighter';
