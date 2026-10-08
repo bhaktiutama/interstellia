@@ -121,7 +121,8 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 | 25f | Selesai, menunggu uji visual Bhakti | Tekstur kulit per jenis `BARK_TEX` (7 kanvas 128 x 256 px, RNG sendiri, ukuran ulangan sama dengan kulit lama): putih berlentisel dan bercak hitam (birch), putih keabuan bermata wajik (aspen), halus berbintik (beech, fir), alur silang wajik (ash, walnut, hickory, chestnut, black locust), lempeng pipih beretak (pinus, hemlock, honey locust), serat mengelupas (redcedar, arborvitae), lentisel mendatar (pohon bunga). Field `barkT` per jenis; oak, elm, poplar, maple, willow, basswood tetap memakai kulit lama. Warna `K.bark` dan UV tidak berubah. Gambar: `docs/cooper-station/gambar/kulit-25f.webp` |
 | 25g | Selesai, menunggu uji visual Bhakti | Goyang daun per jenis: atribut `aFlex` per verteks daun (x = pengali goyang angin, y = getar cepat 11-13 rad/s), nilai dari field `flex`. Aspen 1,6 / 1,0 (bergetar), poplar 1,4 / 0,6, willow 1,5, honey locust 1,3 / 0,2, birch 1,2 / 0,3, jenis majemuk 1,1-1,2 / 0,15, oak dan chestnut 0,8, beech 0,9, konifer 0,3-0,6, lainnya 1. Di `LEAF_VS` dibungkus `#ifdef LEAF_FLEX` (daun, bayangan, bake); `?pohon=lama` tanpa define dan tanpa atribut = shader lama |
 | 25h | Selesai, menunggu uji visual Bhakti | Penahan angin luar kota dipilih per sel 80 m (satu ruas barisan seragam): poplar 40%, pinus 20%, redcedar 15%, aspen 10%, fir 10%, arborvitae 5%. Batas pangsa satu jenis per distrik 30% (di luar hutan 14a); kelebihan diganti jenis lain dari daftar zona pohon itu, urut hash posisi (113 pohon dipindah). Halaman Cooper, promenade Skyway, hutan tidak diganti |
-| 25i-25j | Belum dikerjakan | - |
+| 25i | Selesai (sandbox), FPS menunggu Bhakti | Diukur: waktu muat, draw call, segitiga, memori. Dua penghematan tanpa ubah gambar: (1) mesh kulit dan daun dekat tanpa pohon disembunyikan (`visible = false`, hemat persiapan program per pass); (2) bake impostor oktahedral memakai satu target ber-depth bersama `OCT.bake` lalu disalin ke tekstur per template tanpa depth: Ultra 392 -> 232 MB untuk 42 template (cara lama `?octkopi=0`; hasil identik byte per byte di 7 template yang diuji). Preset Hemat dan Rendah tidak perlu diubah |
+| 25j | Belum dikerjakan | - |
 
 ### Hasil terukur 25b (sandbox, di luar hutan 14a)
 
@@ -229,5 +230,45 @@ Catatan 25h:
 - Di luar distrik, poplar tepat 30% karena sebagian besar adalah barisan poplar halaman Cooper yang tidak boleh diganti.
 - Zona kota tetap 9 jenis (maple, birch, elm, oak, basswood, ash, beech, honey locust, pohon bunga); konifer tidak masuk kota (K2).
 - Uji: `tools/uji_pohon.py` menambah cek "jenis terbanyak per distrik <= 30%" (lolos, 21 cek), Campur 22,3%, Gugur 63,9%. `?pohon=lama` 0 beda. `tools/qc_load.py` tanpa error.
+
+### Hasil terukur 25i (sandbox SwiftShader, 640 x 360 px)
+
+Waktu muat sampai `__stationReady` (3 kali berurutan per mode):
+
+| Mode | Muat (s) | Rata-rata (s) |
+| --- | --- | --- |
+| `?pohon=lama` (16 template) | 5,58 / 5,76 / 5,62 | 5,65 |
+| bawaan (42 template) | 5,90 / 6,02 / 5,91 | 5,94 (+0,29 s, +5%) |
+
+Satu bingkai setelah teleport (10 bingkai tunggu), `renderer.info` dijumlah untuk semua pass (bayangan, adegan, post). Diukur sebelum penghematan 25i (penghematan tidak mengubah jumlah ini; lihat catatan).
+
+| Preset, lokasi | Draw call lama -> baru | Segitiga per bingkai (juta) | Pohon mesh penuh | Segitiga pohon mesh penuh (juta) |
+| --- | --- | --- | --- | --- |
+| Ultra, Cooper | 379 -> 405 | 4,89 -> 4,88 | 3 | 0,00 -> 0,00 |
+| Ultra, hutan | 278 -> 464 | 6,54 -> 7,28 | 256 | 0,34 -> 0,50 |
+| Ultra, bukit | 484 -> 758 | 6,73 -> 7,27 | 78 | 0,11 -> 0,16 |
+| Ultra, New York | 677 -> 711 | 4,04 -> 4,06 | 21 | 0,03 -> 0,03 |
+| Hemat, Cooper | 102 -> 128 | 1,64 -> 1,63 | 2 | 0,00 -> 0,00 |
+| Hemat, hutan | 136 -> 168 | 2,05 -> 2,07 | 28 | 0,04 -> 0,05 |
+| Hemat, bukit | 336 -> 380 | 2,34 -> 2,36 | 26 | 0,04 -> 0,05 |
+| Hemat, New York | 292 -> 319 | 1,95 -> 1,95 | 5 | 0,01 -> 0,01 |
+
+Memori GPU tambahan (dihitung dari ukuran tekstur; depth buffer dianggap 4 byte per piksel, tergantung driver):
+
+| Bagian | 16 template (lama) | 42 template (baru) |
+| --- | --- | --- |
+| Impostor oktahedral Ultra, sebelum 25i (1.024 px + mipmap + depth per template) | 149,3 MB | 392,0 MB |
+| Impostor oktahedral Ultra, sesudah 25i (tanpa depth per template + satu target bake bersama 8 MB) | 93,3 MB | 232,0 MB |
+| Impostor 256 px semua preset (0,58 MB per template) | 9,3 MB | 24,5 MB |
+| Atlas daun kedua (25c) | - | 10,7 MB |
+| Tekstur kulit (25f) | - | sekitar 1,2 MB |
+| Atribut `aFlex` (25g) | - | 0,78 MB |
+
+Catatan 25i:
+- Biaya terbesar 25b-25h adalah draw call di Ultra di hutan dan bukit (+67% dan +57%): tiap template punya mesh impostor sendiri yang memuat semua pohonnya (`frustumCulled` mati), jadi 26 template baru = 26 draw call impostor lagi per pass, ditambah kulit dan daun dekat konifer di pass adegan dan bayangan. Di Hemat tambahannya 26-44 draw call dan segitiga hampir tetap: preset Hemat dan Rendah tidak diubah.
+- Penghematan (1) tidak mengurangi angka draw call di tabel (three.js 0.186.1 sudah tidak memanggil gambar untuk mesh 0 instance), tetapi melewati persiapan program, uniform, dan atribut di CPU untuk template tanpa pohon dekat di tiap pass. Tidak bisa diukur di SwiftShader.
+- Penghematan (2) dicek di satu halaman dengan uTime dibekukan: cara lama dan cara salin identik byte per byte untuk oak, poplar, pine, aspen, ash, fir, arborvitae. Antar pemuatan halaman atlas tidak sama persis karena bake terjadi saat daun bergoyang (uTime berbeda); itu juga berlaku sebelum 25i.
+- Bila FPS Ultra di GTX 1060 turun terasa di hutan atau bukit, langkah berikut yang paling efektif: satu mesh impostor untuk semua template (atlas array, tanpa mengubah tampilan), atau `frond.n` lebih kecil di luar Ultra. Belum dikerjakan; perlu angka FPS dari Bhakti dulu.
+- FPS dan waktu GPU belum diukur (sandbox tanpa GPU). Alat ukur GPU di HUD lengkap (20a, `GPUT`) bisa dipakai di GTX 1060: baris sh / sc / po, banding dengan `?pohon=lama`.
 
 Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.
