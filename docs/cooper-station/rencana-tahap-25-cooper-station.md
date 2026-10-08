@@ -117,7 +117,8 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 | 25b | Selesai, menunggu uji visual Bhakti | 6 jenis baru (aspen, beech, basswood, chestnut, ash, walnut), 2 bentuk per jenis = template 16-27 di belakang template lama. Sebagian oak dan elm diganti per zona dari hash posisi sendiri `hsh3`: kota basswood 18%, ash 14%, beech 8%; taman beech 12%, chestnut 10%, basswood 8%, walnut 8%, ash 6%, aspen 6%; luar kota walnut 12%, ash 10%, aspen 10%, chestnut 8%, beech 6% (persen dari oak dan elm yang tersisa). Posisi, skala dasar, dan kolisi tetap. Halaman Cooper, promenade Skyway, dan hutan 14a tidak diganti. Warna musim per jenis dari field `fall`. `?pohon=lama` = 16 template, identik dengan sebelum 25a (0 beda) |
 | 25c | Selesai, menunggu uji visual Bhakti | Atlas daun kedua `leafTex2` (2.048 x 1.024 px, 4 x 2 sel 512 px, RNG sendiri) untuk 6 jenis 25b: bulat bertangkai (aspen), lonjong tepi rata (beech), hati (basswood), lonjong bergerigi (chestnut), majemuk 9 anak daun (ash), majemuk 15 anak daun (walnut); 2 sel dicadangkan untuk konifer 25e. Indeks atlas jenis 4-9; UV kartu daun atlas >= 4 dihitung ke sel 4 x 2, rumus atlas 0-3 tidak berubah. Warna musim beech ditambah perunggu (`LEAF_PAL.perunggu`). Gambar atlas: `docs/cooper-station/gambar/atlas-daun-25c.webp` |
 | 25d | Selesai, menunggu uji visual Bhakti | Daun majemuk sebagai geometri: tiap posisi kartu pada jenis majemuk diganti 4-6 tangkai daun (pita 2 ruas, 6 verteks, separuh ujung merunduk, helai hampir mendatar) bertekstur satu daun majemuk utuh. Sel atlas 4 dan 5 digambar ulang jadi 4 daun majemuk tunggal per setengah sel (ash / hickory 9 anak daun, black locust 17 anak daun kecil, walnut 17 anak daun, honey locust daun ganda halus). Ash dan walnut beralih ke tangkai daun; 3 jenis baru: hickory, black locust, honey locust (template 28-33, ditambah di akhir daftar zona: pilihan 25b tetap). Tanpa GLSL baru. Gambar: `docs/cooper-station/gambar/pohon-majemuk-25d.webp` |
-| 25e-25j | Belum dikerjakan | - |
+| 25e | Selesai, menunggu uji visual Bhakti | 4 konifer (total 21 jenis): fir (mewakili silver fir dan balsam fir), hemlock, arborvitae, redcedar, template 34-41. Semprot jarum (fir, hemlock) dan sisik (arborvitae, redcedar) digambar di sel cadangan 6-7 atlas kedua, dipasang dengan pita tangkai 25d (`frond.roll` memutar helai; arborvitae tegak). Mesin cabang kerucut / kolom dengan pengali panjang cabang `clK` (bawaan 1, jenis lama identik). Penempatan K2: tidak di jalan kota; taman 10% dan luar kota 14% dari oak / elm tersisa; hutan 14a: 40% pinus jadi fir (22%) atau hemlock (18%) dengan tinggi mutlak tiap pohon tetap. Tanpa GLSL baru. Gambar: `docs/cooper-station/gambar/konifer-25e.webp` |
+| 25f-25j | Belum dikerjakan | - |
 
 ### Hasil terukur 25b (sandbox, di luar hutan 14a)
 
@@ -162,5 +163,22 @@ Catatan 25d:
 - Uji: `?pohon=lama` identik dengan sebelum 25a (0 beda); template 0-15 di mode bawaan identik (selain panjang `aLeafC` karena jumlah oak dan elm berkurang lagi: elm 2.703 -> 2.379). Jumlah pohon 6 jenis 25b tidak berubah. `tools/uji_pohon.py` 17 jenis dan 9 cek tinggi lolos; Campur 22,2%, Gugur 65,0%. `tools/qc_load.py` tanpa error.
 - Ukuran tangkai daun dibesarkan sekitar 3 kali ukuran nyata (0,75-1,25 m) supaya tajuk terisi dengan jumlah verteks wajar; dari dekat sekali daun tampak besar.
 - Bentuk tajuk dicek dengan render adegan bake tiap template di sandbox (bukan uji visual di GPU nyata).
+
+### Hasil terukur 25e (sandbox)
+
+| Jenis | Jumlah pohon (di hutan) | Tinggi p10 / p50 / p90 (m) | Verteks daun per template | Segitiga daun per template |
+| --- | --- | --- | --- | --- |
+| pine (pembanding, kartu) | - | - | 816 | 408 |
+| fir | 591 (530) | 21,0 / 27,9 / 33,5 | 5.760 | 3.840 |
+| hemlock | 485 (449) | 22,4 / 28,1 / 33,2 | 5.328 | 3.552 |
+| arborvitae | 35 (0) | 7,2 / 8,5 / 9,6 | 2.808 | 1.872 |
+| redcedar | 47 (0) | 9,0 / 11,2 / 12,7 | 4.896 | 3.264 |
+
+Catatan 25e:
+- Berbeda dari rencana: tidak ada GLSL baru. Shader daun sudah punya translusensi dari bawah tajuk (`vBack`) dan normal tajuk (`aCn`); semprot konifer cukup memakai pita tangkai 25d. Risiko NaN baru di M1 nol karena tidak ada shader yang diubah.
+- Uji: `?pohon=lama` identik dengan sebelum 25a (0 beda). Template 0-33 identik dengan 25d (kecuali black locust yang dirapatkan di akhir 25d). `tools/uji_pohon.py` 21 jenis, konifer tidak di jalan kota (0 pohon), semua cek lolos; Campur 22,2%, Gugur 64,4%. `tools/uji_hutan.py` lolos (5.222 pohon, tinggi 22-35 m, jalan setapak kosong). `tools/qc_load.py` tanpa error.
+- Titik terendah daun semua konifer -0,41 m dari dasar template (sama seperti jenis lama). Hemlock sempat -1,7 m (cabang bawah menjuntai masuk tanah, diperbesar 1,9x di hutan); cabang terbawah dinaikkan.
+- Konifer memakai 5 sampai 7 kali verteks daun pinus kartu (816). Di hutan, pohon dalam 70 m (Ultra) memakai mesh penuh: sekitar 980 fir dan hemlock di hutan, sebagian kecil yang dekat. Dampak FPS belum diukur (25i).
+- Fir dari samping berbentuk kerucut sempit rapat, belum selebar fir dewasa di alam; bisa dilebarkan lewat `clK`.
 
 Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.

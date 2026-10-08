@@ -1,4 +1,4 @@
-"""Uji tahap 12b-2 + 25b (Copper Corn Station): 17 jenis pohon (8 lama + 6 jenis 25b + 3 jenis 25d; 8 dengan ?pohon=lama),
+"""Uji tahap 12b-2 + 25b (Copper Corn Station): 21 jenis pohon (8 lama + 6 jenis 25b + 3 jenis 25d + 4 konifer 25e; 8 dengan ?pohon=lama),
 tinggi jenis baru, persentase pohon berwarna per suasana daun, daun jatuh mati di preset Hemat dan bisa dinyalakan manual.
 Pakai: python tools/uji_pohon.py   (butuh: pip install playwright && playwright install chromium)"""
 import asyncio, pathlib
@@ -7,13 +7,20 @@ from playwright.async_api import async_playwright
 UJI = r"""
 (() => {
   const st = window.__station, T = st.TREES, out = {}, jenis = new Set(T.list.map((t) => T.templates[t.tpl].kind));
-  out['17 jenis pohon terpakai (' + [...jenis].join(', ') + ')'] = jenis.size === 17;
+  out['21 jenis pohon terpakai (' + [...jenis].join(', ') + ')'] = jenis.size === 21;
   // 25b: jumlah dan tinggi (persentil 10 / 50 / 90, m) per jenis; elm sebagai pembanding
   const pc = (a, q) => a[Math.min(a.length - 1, Math.floor(q * a.length))];
   for (const k of ['elm', 'aspen', 'beech', 'basswood', 'chestnut', 'ash', 'walnut', 'hickory', 'blacklocust', 'honeylocust']) {
     const hs = T.list.filter((t) => !t.forest && T.templates[t.tpl].kind === k).map((t) => T.templates[t.tpl].height * t.sc).sort((a, b) => a - b);
     out[`INFO ${k}: ${hs.length} pohon, tinggi ${[0.1, 0.5, 0.9].map((q) => hs.length ? pc(hs, q).toFixed(1) : '-').join(' / ')} m`] = true;
     if (k !== 'elm') out[`${k}: ada di kota/taman/luar, median tinggi 5-20 m`] = hs.length > 50 && pc(hs, 0.5) > 5 && pc(hs, 0.5) < 20;
+  }
+  // 25e: konifer tidak di jalan kota (za < 2600, di luar hutan); jumlah dan tinggi termasuk hutan 14a
+  for (const k of ['fir', 'hemlock', 'arborvitae', 'redcedar']) {
+    const all = T.list.filter((t) => T.templates[t.tpl].kind === k), hs = all.map((t) => T.templates[t.tpl].height * t.sc).sort((a, b) => a - b);
+    const kota = all.filter((t) => !t.forest && t.za < 2600).length, hutan = all.filter((t) => t.forest).length;
+    out[`INFO ${k}: ${all.length} pohon (hutan ${hutan}), tinggi ${[0.1, 0.5, 0.9].map((q) => hs.length ? pc(hs, q).toFixed(1) : '-').join(' / ')} m`] = true;
+    out[`${k}: ada, tidak di jalan kota (${kota}), median tinggi 4-35 m`] = all.length > 20 && kota === 0 && pc(hs, 0.5) > 4 && pc(hs, 0.5) < 35;
   }
   const pct = (m) => 100 * T.list.filter((t) => st.leafColorFor(t, m)).length / T.list.length;
   const [h, c, g] = [0, 1, 2].map(pct);
