@@ -151,14 +151,24 @@
   #map .mbody { flex: 1; min-height: 0; display: flex; gap: 12px; }
   #map canvas { display: block; flex: 1; min-width: 0; width: 100%; height: 100%; border-radius: 6px; background: #0b0d11; cursor: grab; touch-action: none; }
   #map canvas.drag { cursor: grabbing; }
-  #mapLegend { width: 220px; overflow: auto; font-size: 12px; }
-  #mapLegend .lh { color: var(--accent); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; margin: 8px 0 4px; }
-  #mapLegend button { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; margin-bottom: 4px; }
-  #mapLegend button b { display: inline-grid; place-items: center; min-width: 20px; height: 20px; border-radius: 50%; background: #e8b765; color: #14171c; font-size: 11px; }
-  #mapLegend .sw { display: flex; gap: 8px; align-items: center; margin-bottom: 3px; color: var(--ink); }
-  #mapLegend .sw i { width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
+  /* peta: kolom samping = hologram 3D + tab (Tempat, Fisika, Distrik, Legenda), daftar ringkas */
+  #mapSide { width: 300px; flex: none; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+  #map #mapHolo { flex: none; width: 100%; height: 180px; border-radius: 6px; background: #04070c; cursor: grab; border: 1px solid rgba(111,227,255,0.18); }
+  #mapTabs { display: flex; gap: 4px; }
+  #map #mapTabs button { flex: 1; padding: 4px 2px; font-size: 11.5px; }
+  #map #mapTabs button.on { background: var(--accent); color: #14171c; border-color: var(--accent); }
+  #mapLegend { flex: 1; min-height: 0; overflow: auto; font-size: 12px; }
+  #mapLegend .lh { color: var(--accent); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; margin: 6px 0 3px; }
+  #mapLegend .lh:first-child { margin-top: 0; }
+  #map #mapLegend button { display: flex; gap: 7px; align-items: center; width: 100%; text-align: left; margin-bottom: 2px; padding: 3px 6px; line-height: 1.25; }
+  #mapLegend button b { flex: none; display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 50%; background: #e8b765; color: #14171c; font-size: 10.5px; }
+  #mapLegend button.fis b { background: #6fe3ff; }
+  #mapLegend button span small { display: block; color: var(--muted); font-size: 10.5px; }
+  #mapLegend .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
+  #mapLegend .sw { display: flex; gap: 6px; align-items: center; margin-bottom: 2px; color: var(--ink); font-size: 11.5px; }
+  #mapLegend .sw i { flex: none; width: 14px; height: 10px; border-radius: 2px; display: inline-block; }
   #map .mnote { color: var(--muted); font-size: 10.5px; margin-top: 6px; }
-  @media (max-width: 760px) { #map .mbody { flex-direction: column; } #mapLegend { width: auto; max-height: 28vh; } }
+  @media (max-width: 760px) { #map .mbody { flex-direction: column; } #mapSide { width: auto; max-height: 42vh; } #map #mapHolo { height: 110px; } }
   /* 12d: mode foto dan tur sinematik */
   body.photo #hud, body.photo #cross, body.photo #lab, body.photo #touchbtns, body.photo #prompt,
   body.tour #hud, body.tour #cross, body.tour #lab, body.tour #touchbtns, body.tour #prompt { display: none !important; }
@@ -203,7 +213,7 @@
 <div id="plaque" hidden><div class="card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
 <div id="map" hidden><div class="mcard">
   <div class="mhead"><span>Peta silinder (dibuka)</span><span class="mbtns"><button id="mapZoomIn" type="button">+</button><button id="mapZoomOut" type="button">-</button><button id="mapMe" type="button">Posisi saya</button><button id="mapClose" type="button">Tutup (M)</button></span></div>
-  <div class="mbody"><canvas id="mapCanvas"></canvas><div id="mapLegend"></div></div>
+  <div class="mbody"><canvas id="mapCanvas"></canvas><div id="mapSide"><canvas id="mapHolo"></canvas><div id="mapTabs"></div><div id="mapLegend"></div></div></div>
   <div class="mnote">Kiri-kanan = sumbu 8 km dari end cap A · atas-bawah = keliling 6,28 km (tengah = rel trem, tepi atas dan bawah = Skyway) · roda atau cubit = zoom, seret = geser, klik penanda = pindah ke sana</div>
 </div></div>
 <div id="lab">
@@ -438,6 +448,34 @@ function setLang(c) {
 }
 
 const I18N = { en: {} };
+Object.assign(I18N.en, {
+  // peta A: tab, hologram, tempat fisika
+  "Tempat": "Places",
+  "Legenda": "Legend",
+  "Tempat fisika (klik = pindah)": "Physics places (click = go there)",
+  "Tempat fisika": "Physics places",
+  "Pipa pompa sungai": "River pump pipes",
+  "Hologram 3D · seret = putar": "3D hologram · drag = rotate",
+  "Dek pandang menara 175 m": "Tower observation deck 175 m",
+  "g 0,825; bola jatuh melenceng 85,7 m melawan putaran": "g 0.825; a dropped ball drifts 85.7 m against the spin",
+  "Hub nol-g di sumbu": "Zero-g hub on the axis",
+  "g 0 di sumbu: tanpa berat, benda melayang": "g 0 on the axis: weightless, things float",
+  "Hub nol-g di sumbu: tanpa berat, benda melayang.": "Zero-g hub on the axis: weightless, things float.",
+  "Akuaduk Skyway dan pipa pompa": "Skyway aqueduct and pump pipes",
+  "Sungai melingkar tidak menurun, jadi airnya dipompa (sekitar 15,7 MW)": "A ring river never runs downhill, so its water is pumped (about 15.7 MW)",
+  "Rumah pompa utilitas": "Utility pump house",
+  "2 pipa 3,6 m, panjang 4,2 dan 4,3 km": "2 pipes 3.6 m, 4.2 and 4.3 km long",
+  "Danau terbesar": "Largest lake",
+  "Muka air mengikuti lengkung silinder: lebar 440 m, melengkung 24 m": "The water surface follows the cylinder curve: 440 m wide, curved 24 m",
+  "Jalan cincin struktur": "Structural ring road",
+  "Motor 150 km/h: 2,02 g searah putaran, 0,34 g melawan": "Motorbike 150 km/h: 2.02 g with the spin, 0.34 g against",
+  "Jalan cincin struktur (C = motor)": "Structural ring road (C = motorbike)",
+  "Kapsul ke dermaga despun": "Capsule to the despun dock",
+  "Dermaga tidak ikut berputar (stasiun 63,4 s per putaran)": "The dock does not spin (station: 63.4 s per turn)",
+  "Tepi end cap B (sinar Matahari)": "End cap B edge (sunlight)",
+  "Sinar masuk 25 derajat dari sumbu, jangkauan 4,3 km": "Sunlight enters 25 degrees from the axis, reaching 4.3 km",
+  "Tepi end cap B": "End cap B edge",
+});
 // Kamus English (kunci = teks Indonesia persis seperti di kode/HTML)
 Object.assign(I18N.en, {
   "JARAK": "RANGE", "DEKAT": "CLOSE", "GESER": "DRIFT", "TERBANG": "FLIGHT", "SANDAR": "DOCKED", "LEPAS": "UNDOCK", "SANDAR...": "DOCKING...",
@@ -5632,6 +5670,17 @@ function enterLift() {
   player.theta = LIFT.theta; player.za = LIFT.za; player.h = 0;
   player.lift.r = R; player.lift.dir = 1; player.lift.v = 0; player.state = 'lift';
 }
+function goHub() {                                                 // peta H: langsung ke hub nol-g (seperti tiba dari lift)
+  if (MOTO.on) motoPark();
+  if (ext.active) toggleExterior();
+  plaqueEl.hidden = true; PORT.trip = false;
+  Object.assign(player, { theta: LIFT.theta, za: LIFT.za, h: R - LIFT.topR, deck: false, vA: 0, vT: 0 });
+  Object.assign(player.lift, { r: LIFT.topR, dir: 1, v: 0 }); player.body.done = true;
+  const F = player.float; groundPoint(LIFT.theta, LIFT.za, R - LIFT.topR + CONFIG.eye, F.pos); F.vel.set(0, 0, 0);
+  upAt(LIFT.theta, F.up); tanAt(LIFT.theta, F.tan);
+  player.state = 'float';
+  setLabText(t('Hub nol-g di sumbu: tanpa berat, benda melayang.'));
+}
 function stepLift(dt) {
   const L = player.lift;
   const fast = keys.has('ShiftLeft') || keys.has('ShiftRight') || input.run || PORT.trip ? 5 : 1;
@@ -5945,6 +5994,16 @@ const MAP_MARKS = [
   { key: 'N', name: 'Pusat New York', at: () => SPOTS.nyc, go: () => teleport('nyc') },
   { key: 'P', name: 'Pasar New York', at: () => SPOTS.market, go: () => teleport('market') },
   { key: 'T', name: 'Pasar tani Taman Nil', at: () => SPOTS.farmmarket, go: () => teleport('farmmarket') },
+  // peta A: tempat fisika yang sudah ada di dunia (docs/cooper-station/daftar-pintasan-peta.md); h = tinggi dari lantai untuk hologram,
+  // z3 = za sebenarnya bila di luar lantai (dermaga di depan end cap A)
+  { key: 'D', fis: 1, name: 'Dek pandang menara 175 m', note: 'g 0,825; bola jatuh melenceng 85,7 m melawan putaran', at: () => (DECK.h ? { s: DECK.s, za: DECK.za, h: DECK.h } : null), go: () => goDeck() },
+  { key: 'H', fis: 1, name: 'Hub nol-g di sumbu', note: 'g 0 di sumbu: tanpa berat, benda melayang', at: () => ({ s: LIFT.theta * R, za: LIFT.za + 40, h: R }), go: () => goHub() },
+  { key: 'A', fis: 1, name: 'Akuaduk Skyway dan pipa pompa', note: 'Sungai melingkar tidak menurun, jadi airnya dipompa (sekitar 15,7 MW)', at: () => ({ s: SKY_S, za: SKYX.riverZ }), go: () => teleport('aqueduct') },
+  { key: 'U', fis: 1, name: 'Rumah pompa utilitas', note: '2 pipa 3,6 m, panjang 4,2 dan 4,3 km', at: () => (PIPE.pump ? { s: PIPE.pump.s, za: PIPE.pump.za } : null), go: () => teleport('pump') },
+  { key: 'W', fis: 1, name: 'Danau terbesar', note: 'Muka air mengikuti lengkung silinder: lebar 440 m, melengkung 24 m', at: () => SPOTS.lake, go: () => teleport('lake') },
+  { key: 'J', fis: 1, name: 'Jalan cincin struktur', note: 'Motor 150 km/h: 2,02 g searah putaran, 0,34 g melawan', at: () => SPOTS.ring, go: () => teleport('ring') },
+  { key: 'K', fis: 1, name: 'Kapsul ke dermaga despun', note: 'Dermaga tidak ikut berputar (stasiun 63,4 s per putaran)', at: () => ({ s: LIFT.theta * R, za: 0, h: R, z3: PORT.zDockPod + HALF_L }), go: () => { goHub(); portEnterPod(-1); } },
+  { key: 'B', fis: 1, name: 'Tepi end cap B (sinar Matahari)', note: 'Sinar masuk 25 derajat dari sumbu, jangkauan 4,3 km', at: () => SPOTS.capB, go: () => teleport('capB') },
 ];
 // 16f: lapisan peta (distrik, fasilitas) dan ikon fasilitas: warna + bentuk, dijelaskan di legenda
 MAPV.layers = { dist: true, fac: true };
@@ -5990,6 +6049,7 @@ function mapZoomAt(f, px = MAPV.W / 2, py = MAPV.H / 2) {
 function mapClamp() { const half = MAPV.W / 2 / MAPV.k; MAPV.cx = CONFIG.L <= 2 * half ? CONFIG.L / 2 : Math.max(half, Math.min(CONFIG.L - half, MAPV.cx)); }
 function drawMap() {
   if (mapEl.hidden) return;
+  { const now = performance.now(), dt = HOLO.t0 ? Math.min(0.1, (now - HOLO.t0) / 1000) : 0; HOLO.t0 = now; drawHolo(dt); }
   const g = mapCv.getContext('2d'), W = MAPV.W, H = MAPV.H, d = MAPV.dpr; MAPV.k = mapK(); const k = MAPV.k;
   g.fillStyle = '#0b0d11'; g.fillRect(0, 0, W, H);
   const x0 = mapX(0), top = MAPV.H / 2 + (-CIRC / 2 - wrapS(MAPV.cy)) * k;   // latar statis mulai dari s = -keliling/2
@@ -6047,11 +6107,15 @@ function drawMap() {
   MAP_MARKS.forEach((m, i) => {
     const p = m.at(); if (!p) return;
     const r = (i === MAPV.hover ? 12 : 10) * d, px = mapX(p.za), py = Math.max(r + 2 * d, Math.min(H - r - 2 * d, mapY(p.s))); m.px = px; m.py = py;   // Skyway ada di tepi: tetap di dalam bingkai
-    g.fillStyle = i === MAPV.hover ? '#fff' : '#e8b765'; g.strokeStyle = '#14171c'; g.lineWidth = 2 * d;
+    g.fillStyle = i === MAPV.hover || (MAPV.hl && MAPV.hl.i === i) ? '#fff' : m.fis ? '#6fe3ff' : '#e8b765'; g.strokeStyle = '#14171c'; g.lineWidth = 2 * d;
     g.beginPath(); g.arc(px, py, r, 0, TAU); g.fill(); g.stroke();
     g.fillStyle = '#14171c'; g.textAlign = 'center'; g.fillText(m.key, px, py + 0.5 * d);
     if (MAPV.zoom >= 1.3 || i === MAPV.hover) { g.font = `600 ${11 * d}px system-ui, sans-serif`; text(t(m.name), px + r + 4 * d, py); g.font = `700 ${11 * d}px system-ui, sans-serif`; }
   });
+  if (MAPV.hl) {                                                      // sorotan dari daftar: cincin berkedip di peta 2D juga
+    const q = MAPV.hl, ph = (performance.now() / 1000 * 1.6) % 1, px = mapX(q.za), py = Math.max(8 * d, Math.min(H - 8 * d, mapY(q.s)));
+    g.strokeStyle = '#fff'; g.lineWidth = 2 * d; g.globalAlpha = 1 - ph; g.beginPath(); g.arc(px, py, (12 + 16 * ph) * d, 0, TAU); g.stroke(); g.globalAlpha = 1;
+  }
   // pemain: heading 0 = +za (kanan), 90 derajat = +s (bawah)
   const px = mapX(player.za), py = mapY(player.theta * R), hx = Math.cos(player.heading), hy = Math.sin(player.heading);
   g.fillStyle = '#ff5a3c'; g.strokeStyle = '#fff'; g.lineWidth = 1.5 * d;
@@ -6061,39 +6125,163 @@ function drawMap() {
   g.strokeStyle = '#fff'; g.lineWidth = 2 * d; g.beginPath(); g.moveTo(sx, sy); g.lineTo(sx + L1, sy); g.moveTo(sx, sy - 4 * d); g.lineTo(sx, sy + 4 * d); g.moveTo(sx + L1, sy - 4 * d); g.lineTo(sx + L1, sy + 4 * d); g.stroke();
   g.font = `${11 * d}px system-ui, sans-serif`; text('1 km', sx + L1 / 2, sy - 10 * d, '#fff', 'center');
 }
+// Kolom samping peta: tab Tempat / Fisika / Distrik / Legenda (tab diingat). Sorot satu baris = penanda berkedip di hologram dan peta.
+const MAP_TABS = [['tempat', 'Tempat'], ['fisika', 'Fisika'], ['distrik', 'Distrik'], ['legenda', 'Legenda']];
+const mapTabsEl = document.getElementById('mapTabs');
+try { MAPV.tab = localStorage.getItem('cooperStation.mapTab') || 'tempat'; } catch (e) { MAPV.tab = 'tempat'; }
+if (!MAP_TABS.some((x) => x[0] === MAPV.tab)) MAPV.tab = 'tempat';
+MAPV.hl = null;                                                      // { s, za, h, z3, name, i } yang sedang disorot
+const markHl = (m, i) => { const p = m.at(); return p ? { s: p.s, za: p.za, h: p.h || 0, z3: p.z3, name: m.name, i } : null; };
+function mapHover(el, fn) {
+  const on = () => { MAPV.hl = fn(); }, off = () => { MAPV.hl = null; };
+  el.addEventListener('pointerenter', on); el.addEventListener('focus', on);
+  el.addEventListener('pointerleave', off); el.addEventListener('blur', off);
+}
+function mapTab(id) {
+  MAPV.tab = id; try { localStorage.setItem('cooperStation.mapTab', id); } catch (e) { /* tidak wajib */ }
+  for (const b of mapTabsEl.children) b.classList.toggle('on', b.dataset.mtab === id);
+  for (const d of mapLegend.children) d.hidden = d.dataset.mpane !== id;
+  MAPV.hl = null;
+}
 function buildMapLegend() {
-  mapLegend.textContent = '';
-  const h = (tx) => { const d = document.createElement('div'); d.className = 'lh'; d.textContent = tx; mapLegend.appendChild(d); };
-  h(t('Lokasi (klik = pindah)'));
-  MAP_MARKS.forEach((m) => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<b>${m.key}</b>`; b.appendChild(document.createTextNode(t(m.name))); b.addEventListener('click', () => mapGo(m)); mapLegend.appendChild(b); });
-  h(t('Zona'));
-  for (const z of CONFIG.zones) { const d = document.createElement('div'); d.className = 'sw'; d.innerHTML = `<i style="background:${z.color}"></i>`; d.appendChild(document.createTextNode(t(z.name))); mapLegend.appendChild(d); }
-  h(t('Tanda'));
-  for (const [c, tx] of [['#ff5a3c', 'Anda'], ['#d8a24a', 'Rel trem dan halte'], ['#ffcf6a', 'Trem'], ['#10141c', 'Skyway (jendela kaca)'], ['#6d7680', 'Jembatan jalan'], ['#4c7d96', 'Sungai dan akuaduk']]) {
-    const d = document.createElement('div'); d.className = 'sw'; d.innerHTML = `<i style="background:${c};border:1px solid #555"></i>`; d.appendChild(document.createTextNode(t(tx))); mapLegend.appendChild(d);
+  mapLegend.textContent = ''; mapTabsEl.textContent = '';
+  for (const [id, tx] of MAP_TABS) {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.mtab = id; b.textContent = t(tx);
+    b.addEventListener('click', (e) => { mapTab(id); e.currentTarget.blur(); }); mapTabsEl.appendChild(b);
   }
-  { const d = document.createElement('div'); d.className = 'sw';   // 24d: tiga warna jalur bus
-    d.innerHTML = `<i style="background:linear-gradient(90deg,${BUS.lines.map((L, i) => `${L.color} ${i * 33.4}% ${(i + 1) * 33.3}%`).join(',')});border:1px solid #555"></i>`;
-    d.appendChild(document.createTextNode(t('Rute bus dan halte'))); mapLegend.appendChild(d); }
-  // 16f: lapisan, distrik (klik = pindah ke pusat distrik), fasilitas
-  h(t('Lapisan'));
+  const pane = (id) => { const d = document.createElement('div'); d.dataset.mpane = id; mapLegend.appendChild(d); return d; };
+  const h = (P, tx) => { const d = document.createElement('div'); d.className = 'lh'; d.textContent = tx; P.appendChild(d); };
+  const markBtn = (P, m, i) => {
+    const b = document.createElement('button'); b.type = 'button'; if (m.fis) b.className = 'fis';
+    b.innerHTML = `<b>${m.key}</b>`; const sp = document.createElement('span'); sp.textContent = t(m.name);
+    if (m.note) { const sm = document.createElement('small'); sm.textContent = t(m.note); sp.appendChild(sm); }
+    b.appendChild(sp); b.addEventListener('click', () => mapGo(m)); mapHover(b, () => markHl(m, i)); P.appendChild(b);
+  };
+  const P1 = pane('tempat'); h(P1, t('Lokasi (klik = pindah)'));
+  MAP_MARKS.forEach((m, i) => { if (!m.fis) markBtn(P1, m, i); });
+  const P2 = pane('fisika'); h(P2, t('Tempat fisika (klik = pindah)'));
+  MAP_MARKS.forEach((m, i) => { if (m.fis) markBtn(P2, m, i); });
+  // 16f: distrik (klik = pindah ke pusat distrik)
+  const P3 = pane('distrik'); h(P3, t('Distrik (klik = pindah)'));
+  for (const D of DISTRICTS) {
+    const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<b>${D.kind === 'mega' ? '★' : D.kind === 'astro' ? '•' : '◦'}</b>`;
+    b.appendChild(document.createTextNode(t(D.name))); b.addEventListener('click', () => { toggleMap(); goDistrict(D); });
+    mapHover(b, () => ({ s: D.c.s, za: D.c.za, h: 0, name: D.name, i: -1 })); P3.appendChild(b);
+  }
+  const P4 = pane('legenda');
+  h(P4, t('Lapisan'));
   for (const [key, tx] of [['dist', 'Distrik'], ['fac', 'Fasilitas']]) {
     const b = document.createElement('button'); b.type = 'button'; b.dataset.layer = key;
     b.innerHTML = `<b>${MAPV.layers[key] ? '✓' : '·'}</b>`; b.appendChild(document.createTextNode(t(tx)));
-    b.addEventListener('click', () => { MAPV.layers[key] = !MAPV.layers[key]; buildMapLegend(); drawMap(); }); mapLegend.appendChild(b);
+    b.addEventListener('click', () => { MAPV.layers[key] = !MAPV.layers[key]; buildMapLegend(); drawMap(); }); P4.appendChild(b);
   }
-  h(t('Distrik (klik = pindah)'));
-  for (const D of DISTRICTS) {
-    const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<b>${D.kind === 'mega' ? '★' : D.kind === 'astro' ? '•' : '◦'}</b>`;
-    b.appendChild(document.createTextNode(t(D.name))); b.addEventListener('click', () => { toggleMap(); goDistrict(D); }); mapLegend.appendChild(b);
-  }
-  h(t('Fasilitas'));
-  for (const [ty, [c, sh]] of Object.entries(FAC_ICON)) {
-    const d = document.createElement('div'); d.className = 'sw';
-    d.innerHTML = `<i style="background:${c};border:1px solid #333;${sh === 'ci' ? 'border-radius:50%;' : sh === 'dia' ? 'transform:rotate(45deg) scale(0.8);' : sh === 'tri' ? 'clip-path:polygon(50% 0,100% 100%,0 100%);' : ''}"></i>`;
-    d.appendChild(document.createTextNode(t(FAC_NAME[ty]))); mapLegend.appendChild(d);
-  }
+  const grid = (P) => { const g = document.createElement('div'); g.className = 'g2'; P.appendChild(g); return g; };
+  const sw = (G, style, tx) => { const d = document.createElement('div'); d.className = 'sw'; d.innerHTML = `<i style="${style}"></i>`; d.appendChild(document.createTextNode(t(tx))); G.appendChild(d); };
+  h(P4, t('Zona')); let G = grid(P4);
+  for (const z of CONFIG.zones) sw(G, `background:${z.color}`, z.name);
+  h(P4, t('Tanda')); G = grid(P4);
+  for (const [c, tx] of [['#ff5a3c', 'Anda'], ['#d8a24a', 'Rel trem dan halte'], ['#ffcf6a', 'Trem'], ['#10141c', 'Skyway (jendela kaca)'], ['#6d7680', 'Jembatan jalan'], ['#4c7d96', 'Sungai dan akuaduk'], ['#5f7d70', 'Pipa pompa sungai'], ['#6fe3ff', 'Tempat fisika']]) sw(G, `background:${c};border:1px solid #555`, tx);
+  sw(G, `background:linear-gradient(90deg,${BUS.lines.map((L, i) => `${L.color} ${i * 33.4}% ${(i + 1) * 33.3}%`).join(',')});border:1px solid #555`, 'Rute bus dan halte');   // 24d
+  h(P4, t('Fasilitas')); G = grid(P4);
+  for (const [ty, [c, sh]] of Object.entries(FAC_ICON)) sw(G, `background:${c};border:1px solid #333;${sh === 'ci' ? 'border-radius:50%;' : sh === 'dia' ? 'transform:rotate(45deg) scale(0.8);' : sh === 'tri' ? 'clip-path:polygon(50% 0,100% 100%,0 100%);' : ''}`, FAC_NAME[ty]);
+  mapTab(MAPV.tab);
 }
+
+/* Peta: HOLOGRAM 3D tembus pandang silinder (kanvas 2D, tanpa konteks WebGL kedua). Proyeksi ortografik dari titik (s, za, h):
+   sudut a = s / R + rot, jari-jari R - h, x = za - L/2. Garis di sisi jauh lebih redup (4 tingkat). Diam = berputar pelan;
+   saat satu tempat disorot, silinder berputar sampai tempat itu menghadap pengamat dan penandanya berkedip. Seret = putar. */
+const holoCv = document.getElementById('mapHolo');
+const HOLO = { W: 1, H: 1, dpr: 1, rot: 0, yaw: 0.36, pitch: 0.42, k: 1, cx: 0, cy: 0, xc: 0, t0: 0, drag: null, idle: 0 };
+function holoP(s, za, h, o) {
+  const a = s / R + HOLO.rot, r = R - h, x = za - HALF_L - HOLO.xc, y = -r * Math.cos(a), z = r * Math.sin(a);
+  const cy = Math.cos(HOLO.yaw), sy = Math.sin(HOLO.yaw), cp = Math.cos(HOLO.pitch), sp = Math.sin(HOLO.pitch);
+  const X = x * cy + z * sy, d = -x * sy + z * cy;
+  o[0] = HOLO.cx + X * HOLO.k; o[1] = HOLO.cy - (y * cp - d * sp) * HOLO.k; o[2] = (y * sp + d * cp) / R;   // o[2]: -1 jauh .. 1 dekat
+  return o;
+}
+const HOLO_A = [0.16, 0.3, 0.55, 0.9];
+function holoLines(g, list, col, w) {                               // list = [[s, za, h], ...] satu garis; diwarnai per kedalaman
+  const P = [new Path2D(), new Path2D(), new Path2D(), new Path2D()], a = [0, 0, 0], b = [0, 0, 0];
+  for (const L of list) for (let i = 0; i < L.length; i++) {
+    holoP(L[i][0], L[i][1], L[i][2] || 0, b);
+    if (i) { const q = P[Math.max(0, Math.min(3, Math.floor((a[2] + b[2] + 2) * 1.0)))]; q.moveTo(a[0], a[1]); q.lineTo(b[0], b[1]); }
+    a[0] = b[0]; a[1] = b[1]; a[2] = b[2];
+  }
+  g.strokeStyle = col; g.lineWidth = w * HOLO.dpr;
+  for (let i = 0; i < 4; i++) { g.globalAlpha = HOLO_A[i]; g.stroke(P[i]); }
+  g.globalAlpha = 1;
+}
+const holoRing = (za, h = 0, n = 72) => { const L = []; for (let i = 0; i <= n; i++) L.push([i / n * CIRC, za, h]); return L; };
+function drawHolo(dt) {
+  const r = holoCv.getBoundingClientRect(); if (r.width < 10) return;
+  const dpr = MAPV.dpr || 1, W = Math.round(r.width * dpr), H = Math.round(r.height * dpr);
+  if (holoCv.width !== W || holoCv.height !== H) { holoCv.width = W; holoCv.height = H; }
+  HOLO.W = W; HOLO.H = H; HOLO.dpr = dpr;
+  const hl = MAPV.hl || (MAPV.hover >= 0 && MAP_MARKS[MAPV.hover] ? markHl(MAP_MARKS[MAPV.hover], MAPV.hover) : null);
+  const cy = Math.cos(HOLO.yaw), sy = Math.sin(HOLO.yaw), cp = Math.cos(HOLO.pitch), sp = Math.sin(HOLO.pitch);
+  if (hl && !HOLO.drag) {                                            // putar sampai tempat itu di sisi dekat
+    const tgt = Math.atan2(cy * cp, -sp) - hl.s / R, d = Math.atan2(Math.sin(tgt - HOLO.rot), Math.cos(tgt - HOLO.rot));
+    HOLO.rot += d * Math.min(1, dt * 4);
+  } else if (!HOLO.drag) HOLO.rot += dt * 0.18;
+  const xa = PORT.zDockPod - 80, hl2 = (HALF_L - xa) / 2; HOLO.xc = (xa + HALF_L) / 2;   // x = z dunia; dermaga (z < -L/2) ikut di dalam bingkai
+  const halfW = hl2 * Math.abs(cy) + R * Math.abs(sy) + 40, halfH = R * Math.hypot(cp, cy * sp) + hl2 * Math.abs(sy) * sp;
+  HOLO.k = Math.min(W * 0.47 / halfW, H * 0.43 / halfH); HOLO.cx = W / 2; HOLO.cy = H / 2;
+  const g = holoCv.getContext('2d');
+  g.globalCompositeOperation = 'source-over'; g.fillStyle = '#04070c'; g.fillRect(0, 0, W, H);
+  g.globalCompositeOperation = 'lighter';
+  const C = '#6fe3ff';
+  // tutup ujung, sumbu, cincin struktur
+  for (const za of [0, CONFIG.L]) holoLines(g, [holoRing(za)], C, 1.2);
+  holoLines(g, [[[0, PORT.zDockPod + HALF_L, R], [0, CONFIG.L, R]]], C, 0.6);
+  holoLines(g, RINGS_Z.map((z) => holoRing(z, 0, 48)), C, 0.5);
+  // zona: garis sepanjang sumbu berwarna zona + batas zona
+  const lon = [], n = 16;
+  for (const z of CONFIG.zones) {
+    const L = []; for (let i = 0; i < n; i++) { const s = (i + 0.5) / n * CIRC, seg = []; for (let q = 0; q <= 4; q++) seg.push([s, z.from + (z.to - z.from) * q / 4, 0]); L.push(seg); }
+    holoLines(g, L, z.color, 0.9); lon.push(z.from);
+  }
+  holoLines(g, lon.slice(1).map((z) => holoRing(z, 0, 48)), C, 0.7);
+  // Skyway, rel trem, sungai, danau, lift
+  holoLines(g, [-1, 1].map((k) => [[SKY_S + k * WIN.width / 2, 0, 0], [SKY_S + k * WIN.width / 2, HALF_L, 0], [SKY_S + k * WIN.width / 2, CONFIG.L, 0]]), '#e9fbff', 1.4);
+  holoLines(g, [[[TRAM.s, 30, 0], [TRAM.s, HALF_L, 0], [TRAM.s, CONFIG.L - 30, 0]]], '#d8a24a', 1.1);
+  { const L = []; for (let i = 0; i <= 120; i++) { const s = i / 120 * CIRC; L.push([s, riverZ(s), 0]); } holoLines(g, [L], '#3fa9ff', 1.8); }
+  holoLines(g, LAKES.map((Lk) => { const L = []; for (let i = 0; i <= 24; i++) { const a = i / 24 * TAU; L.push([Lk.s + Lk.rs * Math.cos(a), Lk.za + Lk.rz * Math.sin(a), 0]); } return L; }), '#3fa9ff', 1.4);
+  holoLines(g, [[[LIFT.theta * R, LIFT.za, 0], [LIFT.theta * R, LIFT.za, R / 2], [LIFT.theta * R, LIFT.za, R - LIFT.topR]]], C, 1);
+  // dermaga despun di depan end cap A
+  { const zd = PORT.zDockPod + HALF_L, L = []; for (let i = 0; i <= 24; i++) L.push([i / 24 * CIRC, zd, R - 70]); holoLines(g, [L, [[0, zd, R], [0, 0, R]]], C, 1); }
+  // penanda tempat, pemain, sorotan
+  const o = [0, 0, 0], now = performance.now() / 1000;
+  MAP_MARKS.forEach((m) => {
+    const p = m.at(); if (!p) return; holoP(p.s, p.z3 ?? p.za, p.h || 0, o);
+    g.globalAlpha = 0.35 + 0.3 * (o[2] + 1); g.fillStyle = m.fis ? '#6fe3ff' : '#e8b765';
+    g.beginPath(); g.arc(o[0], o[1], 1.8 * dpr, 0, TAU); g.fill();
+  });
+  holoP(player.theta * R, player.za, Math.max(0, player.h), o);
+  g.globalAlpha = 0.6 + 0.4 * Math.sin(now * 6); g.fillStyle = '#ff5a3c'; g.beginPath(); g.arc(o[0], o[1], 2.6 * dpr, 0, TAU); g.fill();
+  g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+  if (hl) {
+    holoP(hl.s, hl.z3 ?? hl.za, hl.h, o);
+    const bl = 0.5 + 0.5 * Math.sin(now * 9), rr = (5 + 7 * ((now * 1.6) % 1)) * dpr;
+    g.strokeStyle = '#fff'; g.lineWidth = 1.5 * dpr; g.globalAlpha = 1 - ((now * 1.6) % 1);
+    g.beginPath(); g.arc(o[0], o[1], rr, 0, TAU); g.stroke();
+    g.globalAlpha = 0.4 + 0.6 * bl; g.fillStyle = '#fff'; g.beginPath(); g.arc(o[0], o[1], 3.2 * dpr, 0, TAU); g.fill();
+    g.globalAlpha = 1; g.font = `600 ${11 * dpr}px system-ui, sans-serif`; g.textBaseline = 'middle';
+    const tx = t(hl.name), right = o[0] < W * 0.6; g.textAlign = right ? 'left' : 'right';
+    const lx = o[0] + (right ? 10 : -10) * dpr, ly = Math.max(10 * dpr, Math.min(H - 10 * dpr, o[1] - 12 * dpr));
+    g.fillStyle = 'rgba(0,0,0,0.75)'; g.fillText(tx, lx + dpr, ly + dpr); g.fillStyle = '#e9fbff'; g.fillText(tx, lx, ly);
+  }
+  g.font = `${9.5 * dpr}px system-ui, sans-serif`; g.textAlign = 'left'; g.textBaseline = 'alphabetic'; g.fillStyle = 'rgba(111,227,255,0.6)';
+  g.fillText(t('Hologram 3D · seret = putar'), 6 * dpr, H - 6 * dpr);
+}
+holoCv.addEventListener('pointerdown', (e) => { holoCv.setPointerCapture(e.pointerId); HOLO.drag = [e.clientX, e.clientY]; holoCv.style.cursor = 'grabbing'; });
+holoCv.addEventListener('pointermove', (e) => {
+  if (!HOLO.drag) return;
+  const dx = e.clientX - HOLO.drag[0], dy = e.clientY - HOLO.drag[1]; HOLO.drag = [e.clientX, e.clientY];
+  HOLO.yaw = Math.max(-1.55, Math.min(1.55, HOLO.yaw + dx * 0.01)); HOLO.rot += dy * 0.012;
+});
+const holoUp = () => { HOLO.drag = null; holoCv.style.cursor = ''; };
+holoCv.addEventListener('pointerup', holoUp); holoCv.addEventListener('pointercancel', holoUp);
+holoCv.addEventListener('dblclick', () => { HOLO.yaw = 0.36; });
 LANG.hooks.push(() => { if (!mapEl.hidden) buildMapLegend(); });
 function mapGo(m) { toggleMap(); m.go(); }
 function mapCenterMe() { MAPV.zoom = 4; MAPV.k = mapK(); MAPV.cx = player.za; MAPV.cy = player.theta * R; mapClamp(); }
@@ -9402,6 +9590,14 @@ const SPOTS = {
   const mk = MARKET.list.find((m) => m.name === 'Pasar New York'), mf = MARKET.list.find((m) => m.farm);
   if (mk) SPOTS.market = { s: mk.spot.s, za: mk.spot.za, heading: 90, pitch: 0, name: 'Pasar New York' };
   if (mf) SPOTS.farmmarket = { s: mf.spot.s, za: mf.spot.za, heading: 90, pitch: 0, name: 'Pasar tani Taman Nil' };
+}
+{ // peta A: tempat fisika (heading 0 = +za, 90 = +s)
+  const as = SKY_S - 70, az = riverZ(as) - RIVER.width / 2 - 26;    // seberang tepi pipa isap, memandang akuaduk di atas jendela
+  SPOTS.aqueduct = { s: as, za: az, heading: Math.atan2(70, SKYX.riverZ - az) / DEG, pitch: 4, name: 'Akuaduk Skyway dan pipa pompa' };
+  if (PIPE.pump) SPOTS.pump = { s: PIPE.face + 14, za: PIPE.zT + 7, heading: -100, pitch: 5, name: 'Rumah pompa utilitas' };
+  const Lk = LAKES[2]; SPOTS.lake = { s: Lk.s, za: Lk.za - Lk.rz - 34, heading: 0, pitch: -3, name: 'Danau terbesar' };
+  SPOTS.ring = { s: 600, za: 5000, heading: 90, pitch: 2, name: 'Jalan cincin struktur (C = motor)' };
+  SPOTS.capB = { s: 300, za: 7800, heading: 0, pitch: 28, name: 'Tepi end cap B' };
 }
 function teleport(key) {
   const T = SPOTS[key];
@@ -14917,7 +15113,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 window.__stationReady = true;
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, mapTab, goHub, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE };
 requestAnimationFrame(frame);
 </script>
 </body>

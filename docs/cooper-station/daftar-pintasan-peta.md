@@ -1,6 +1,6 @@
 # Daftar usulan pintasan peta: tempat ikonik dan fisika (Copper Corn Station)
 
-Status: daftar untuk dipilih Bhakti, belum dikerjakan.
+Status: kelompok A selesai (penanda D H A U W J K B di peta, tab Fisika). Kelompok B tidak dibangun (keputusan Bhakti).
 
 ## Ringkasan
 
@@ -10,9 +10,11 @@ Status: daftar untuk dipilih Bhakti, belum dikerjakan.
 
 ## A. Sudah ada di dunia, belum ada pintasan
 
+Huruf penanda di peta: A1 = D, A2 = H, A3 = A, A4 = U, A5 = W, A6 = J, A7 = K, A8 = B. Angka A1 dikoreksi ke 85,7 m (uji dek pandang 23j, `tools/uji_menara.py`).
+
 | No | Tempat | Fisika yang terlihat | Angka |
 | --- | --- | --- | --- |
-| A1 | Dek pandang menara ikon (175 m) | g turun dengan ketinggian; bola dijatuhkan melenceng ke belakang putaran | g 0,825; jatuh 6,92 s; melenceng 84,4 m |
+| A1 | Dek pandang menara ikon (175 m) | g turun dengan ketinggian; bola dijatuhkan melenceng ke belakang putaran | g 0,825; jatuh 6,92 s; melenceng 85,7 m |
 | A2 | Hub nol-g di sumbu (ujung lift) | Tanpa berat di sumbu; benda melayang | g 0 |
 | A3 | Akuaduk Skyway + pipa pompa (23i) | Sungai melingkar tidak punya turunan, jadi airnya harus dipompa | angkat 4 m, debit 45 m3/s, sekitar 15,7 MW |
 | A4 | Rumah pompa di kompleks utilitas | Ujung pipa isap dan pipa dorong | 2 pipa diameter 3,6 m, panjang 4,2 dan 4,3 km |
@@ -40,3 +42,13 @@ Status: daftar untuk dipilih Bhakti, belum dikerjakan.
 - Angka A3 dan A4 dihitung untuk pipa baja (kekasaran 0,045 mm, Darcy-Weisbach) dengan angkat statis 4 m dan efisiensi pompa 80%.
 - Angka B2, B3, dan B4 dihitung dengan cara yang sama (B2: g' = (omega R + v)^2 / R) dan dihitung ulang saat dibangun.
 - Tombol angka 0-9 sudah terpakai. Pintasan baru cukup berupa penanda huruf di peta, seperti N, P, dan T.
+
+## Hasil kelompok A (peta)
+
+| Bagian | Isi |
+| --- | --- |
+| Penanda | 8 penanda cyan (D, H, A, U, W, J, K, B) di peta 2D dan hologram; klik = pindah. H langsung ke hub nol-g, K = hub lalu kapsul ke dermaga despun (berakhir di kokpit), D = dek pandang |
+| Lokasi tujuan | `SPOTS.aqueduct`, `pump`, `lake`, `ring`, `capB`; diuji tidak di dalam collider atau air |
+| Kolom samping | Tab Tempat, Fisika, Distrik, Legenda (tab diingat di localStorage `cooperStation.mapTab`); baris lebih rapat, legenda dua kolom |
+| Hologram 3D | Kanvas 2D (tanpa konteks WebGL kedua): silinder tembus pandang, zona berwarna, cincin struktur, Skyway, rel trem, sungai, danau, lift, sumbu, dermaga, penanda, posisi pemain; sisi jauh lebih redup; berputar pelan, seret = putar, klik ganda = sudut awal |
+| Sorot | Arahkan mouse ke baris tempat atau distrik (atau ke penanda di peta 2D): silinder berputar sampai tempat itu di sisi dekat, penanda berkedip dengan cincin dan nama; peta 2D ikut memberi cincin berkedip |

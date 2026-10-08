@@ -1,7 +1,7 @@
 """Uji M3 (Copper Corn Station): kamus English lengkap untuk semua teks statis dan semua t('...') di kode,
 label tombol ikut berganti bahasa tanpa muat ulang, kembali ke Indonesia utuh.
 Pakai: python tools/uji_bahasa.py   (butuh: pip install playwright && playwright install chromium)"""
-import asyncio, pathlib
+import asyncio, os, pathlib
 from playwright.async_api import async_playwright
 
 UJI = r"""
@@ -35,7 +35,7 @@ UJI = r"""
 async def main():
     page_url = pathlib.Path(__file__).resolve().parent.parent.joinpath('experiences/cooper-station/index.html').as_uri()
     async with async_playwright() as p:
-        b = await p.chromium.launch(args=['--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
+        b = await p.chromium.launch(args=['--use-angle=swiftshader', '--enable-unsafe-swiftshader'], **({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
         pg = await b.new_page(viewport={'width': 320, 'height': 200})
         errs = []
         pg.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))

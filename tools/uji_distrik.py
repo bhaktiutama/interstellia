@@ -1,7 +1,7 @@
 """Uji tahap 16 (Copper Corn Station): distrik. Tiap sel kota tepat satu distrik (14 distrik kota, nama unik), zona luar kota
 bernama (taman, pertanian), halte trem bernama distrik, notifikasi distrik muncul saat pemain pindah distrik.
 Pakai: python tools/uji_distrik.py   (butuh: pip install playwright && playwright install chromium)"""
-import asyncio, pathlib
+import asyncio, os, pathlib
 from playwright.async_api import async_playwright
 
 UJI = r"""
@@ -57,7 +57,7 @@ UJI = r"""
   const nFac = S.MAPV.fac ? S.MAPV.fac.length : 0;
   S.mapZoomAt(2); await wait(300);
   const nFac2 = S.MAPV.fac ? S.MAPV.fac.length : 0; S.toggleMap();
-  out[`peta: penanda ${S.MAP_MARKS.length}, ikon fasilitas ${nFac2}, legenda memuat distrik dan fasilitas`] = S.MAP_MARKS.length === 14 && nFac2 > 60 && /Kepler/.test(legText) && /Pasar/.test(legText);
+  out[`peta: penanda ${S.MAP_MARKS.length}, ikon fasilitas ${nFac2}, legenda memuat distrik dan fasilitas`] = S.MAP_MARKS.length === 22 && nFac2 > 60 && /Kepler/.test(legText) && /Pasar/.test(legText);
   S.setLang('id'); S.teleport('cooper'); await wait(1500); S.teleport('baseball');
   const here = S.districtAt(S.player.theta * S.R, S.player.za);
   let toast = ''; for (let q = 0; q < 40 && toast !== `Distrik ${here && here.name}`; q++) { await wait(250); toast = document.getElementById('toast').textContent; }   // HUD diperbarui berkala
@@ -69,7 +69,7 @@ UJI = r"""
 async def main():
     page_url = pathlib.Path(__file__).resolve().parent.parent.joinpath('experiences/cooper-station/index.html').as_uri()
     async with async_playwright() as p:
-        b = await p.chromium.launch(args=['--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
+        b = await p.chromium.launch(args=['--use-angle=swiftshader', '--enable-unsafe-swiftshader'], **({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
         pg = await b.new_page(viewport={'width': 320, 'height': 200})
         errs = []
         pg.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))
