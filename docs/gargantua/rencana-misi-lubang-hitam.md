@@ -48,6 +48,7 @@ Langkah mekanis di dalam tahap High (entri kamus, teks HUD, pembaruan dokumen) b
 | G5 | Selesai 4 Oktober 2026 (lihat bagian G5): skenario "Bidik tesseract (fiksi)", membidik sudut d dan bidang orbit dengan waktu beku, peta orbit, lintasan acuan yang dipakai saat terbang (prakiraan = hasil), gerbang fiksi di dalam horizon, adegan hiperkubus 4D, kartu akhir. Belum diuji di GTX 1060 dan M1 |
 | G6 | Berjalan per kelompok: uji G1 sampai G5 di `tools/uji_misi_gargantua.py`, kamus ID, CLAUDE.md, `tombol.md` |
 | G7 suara | Selesai 4 Oktober 2026 (lihat bagian G7): suara disintesis Web Audio, U nyala / mati, pilihan di panel. Belum didengar pemilik |
+| G8 peta corong | Selesai 8 Oktober 2026 (rumus: `docs/gargantua/rumus-peta-corong.md`): panel kanan bawah untuk semua misi, corong z = 2 sqrt(r) (irisan Eddington-Finkelstein, menembus horizon sampai singularitas) dengan riwayat, prakiraan, dan posisi live; tesseract tetap memakai peta orbit saat membidik, corong setelah Enter. Susur searah arus: partikel datang dari arah tampak lubang hitam (dulu 9-14 derajat di sampingnya); melawan arus tidak berubah. Uji kelompok 8. Belum diuji di GTX 1060 dan M1 |
 
 Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
 

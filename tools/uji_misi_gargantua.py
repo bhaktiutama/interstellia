@@ -41,6 +41,12 @@ Kelompok 5 (G5, sudut masuk tesseract, fiksi):
 Kelompok 7 (G7, suara disintesis):
 - campuran audioMix(): gemuruh piringan dekat piringan (lebih terang melawan arus), nol di jalur kutub, nada pasang surut hanya di dalam
   horizon, pendorong saat W/S (tidak saat membidik), akord tesseract; AudioContext dibuat setelah tombol, U bisu / nyala + localStorage, panel.
+Kelompok 8 (G8, peta corong dan arah partikel susur searah arus; docs/gargantua/rumus-peta-corong.md):
+- z(r) = 2 sqrt(r) dan l(r) = sqrt(r (r + 1)) + asinh(sqrt r) = integral sqrt(1 + 1/r) dr (irisan Eddington-Finkelstein),
+- riwayat dan prakiraan menyimpan posisi, peta corong tergambar untuk semua skenario tanpa error, tesseract: peta orbit saat membidik,
+  corong setelah Enter (HUD hidup),
+- susur searah arus: titik pancar partikel = arah tampak pusat lubang hitam (dicek lewat rumus aberasi shader, arah sebaliknya),
+  melawan arus: arah gas relatif tidak berubah.
 Pakai: python tools/uji_misi_gargantua.py   (butuh: pip install playwright; CHROMIUM=<jalur> opsional, default /opt/pw-browsers/chromium
 bila ada). Tanpa GPU dipakai SwiftShader."""
 import asyncio, os, pathlib, sys
@@ -499,5 +505,62 @@ async def kelompok7(pg):
       return { tabs: tabs.map((b) => b.textContent), n, vis, after, lbl, ls: localStorage.getItem('gargantua.panelTab') }; }''')
     cek('panel bertab: 7 tab, hanya satu pane tampil, tab diingat setelah ganti bahasa, semua kontrol tetap ada',
         len(t['tabs']) == 7 and t['vis'] == ['disk'] and t['after'] == 'disk' and t['lbl'] == 'Disk' and t['ls'] == 'disk' and t['n'] == 38, str(t))
+    await kelompok8(pg)
+
+async def kelompok8(pg):
+    m = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, out = {}; G.state.paused = true;
+      // l(r) vs integral numerik (r = u^2: dl = 2 sqrt(u^2 + 1) du, Simpson), z di titik penting
+      const L = (R) => { const n = 2000, b = Math.sqrt(R), h = b / n, f = (u) => 2 * Math.sqrt(u * u + 1); let s = f(0) + f(b);
+        for (let i = 1; i < n; i++) s += (i % 2 ? 4 : 2) * f(i * h); return s * h / 3; };
+      out.lerr = Math.max(...[0.6, 1, 3, 22].map((r) => Math.abs(G.funL(r) - L(r))));
+      out.z = [G.funZ(1), G.funZ(3), G.funZ(22)];
+      // semua skenario: riwayat dan prakiraan berisi posisi, peta corong tergambar ke kanvas uji
+      const cv = document.createElement('canvas'); cv.width = 290; cv.height = 313; const g = cv.getContext('2d', { willReadFrequently: true });
+      out.sc = {};
+      for (const sc of Object.keys(G.SCEN)) {
+        G.startMission(sc); if (M.tes) G.tesLaunch(); else G.misFly(2);
+        M.hist.push([M.tau, Math.hypot(...M.x), ...M.x]);
+        g.clearRect(0, 0, 290, 313); const d0 = G.FUN.drawn; let err = null;
+        try { G.drawFunnel(g, 0, 0, 290, 313, 1); } catch (e) { err = String(e); }
+        const px = g.getImageData(0, 0, 290, 313).data; let lit = 0; for (let i = 0; i < px.length; i += 4) if (px[i] + px[i + 1] + px[i + 2] > 150) lit++;   // garis terang (latar gelap)
+        out.sc[sc] = { err, drawn: G.FUN.drawn - d0, hist: M.hist.every((q) => q.length === 5), pred: !!M.pred && M.pred.pts.every((q) => q.length === 5), lit,
+          plane: Math.abs(G.FUN.n[1]) };
+      }
+      // arah partikel: searah arus = titik pancar di citra lubang hitam; melawan arus = gas relatif apa adanya
+      const ab = (R, d) => { const np = d.map((v) => -v), vn = np[0] * R.v[0] + np[1] * R.v[1] + np[2] * R.v[2];   // rumus skyShift: foton ke kerangka rain
+        const pr = np.map((v, i) => v + R.v[i] * (R.g + R.g * R.g / (R.g + 1) * vn)), l = Math.hypot(...pr); return pr.map((v) => v / l); };
+      const deg = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) * 180 / Math.PI;
+      out.pro = []; out.retro = [];
+      for (const r of [11, 8, 4]) {                              // > 12,6 rs tanpa debu (di luar piringan)
+        G.startMission('skimPro'); while (Math.hypot(...M.x) > r) if (G.misFly(0.1)) break;
+        let Gs = G.misGas(); const R = G.rainOf(M.x, M.xd), src = Gs.dir.map((v) => -v);
+        out.pro.push({ r: Math.hypot(...M.x), dens: Gs.dens, v: Gs.v, vRaw: G.gasRel().v, dev: deg(ab(R, src), R.rh), oldDev: deg(ab(R, G.gasRel().dir.map((v) => -v)), R.rh) });
+        G.startMission('skim'); while (Math.hypot(...M.x) > r) if (G.misFly(0.1)) break;
+        Gs = G.misGas(); const Gr = G.gasRel();
+        out.retro.push({ r: Math.hypot(...M.x), same: Gs.dir.every((v, i) => v === Gr.dir[i]) && Gs.v === Gr.v });
+      }
+      G.stopMission(); return out; }''')
+    cek('peta corong: l(r) = integral sqrt(1 + 1/r) dr, z = 2 sqrt(r) (2 di horizon, 3,464 di ISCO, 9,381 di 22 rs)',
+        m['lerr'] < 1e-6 and abs(m['z'][0] - 2) < 1e-12 and abs(m['z'][1] - 3.4641016) < 1e-6 and abs(m['z'][2] - 9.3808315) < 1e-6,
+        f"galat l {m['lerr']:.1e}, z {[round(v, 4) for v in m['z']]}")
+    sc = m['sc']
+    ok = all(v['err'] is None and v['drawn'] == 1 and v['hist'] and v['pred'] and v['lit'] > 300 for v in sc.values())
+    cek('peta corong: semua skenario tergambar tanpa error, riwayat dan prakiraan berisi posisi',
+        ok and len(sc) == 10, '; '.join(f"{k} {v['lit']}" + (f" {v['err']}" if v['err'] else '') for k, v in sc.items()))
+    cek('peta corong: susur di bidang piringan (cincin), jatuh kutub di bidang tegak (garis potong)',
+        sc['skim']['plane'] > 0.95 and sc['skimPro']['plane'] > 0.95 and sc['polar']['plane'] < 0.05, f"skim {sc['skim']['plane']:.3f}, kutub {sc['polar']['plane']:.3f}")
+    pro, retro = m['pro'], m['retro']
+    cek('susur searah arus: partikel datang dari citra lubang hitam (aberasi), laju tetap fisika',
+        all(q['dens'] > 0 and q['dev'] < 0.5 and q['oldDev'] > 5 and q['v'] == q['vRaw'] for q in pro),
+        '; '.join(f"r {q['r']:.1f}: {q['dev']:.2f} derajat (dulu {q['oldDev']:.1f})" for q in pro))
+    cek('susur melawan arus: arah dan laju gas relatif tidak berubah', all(q['same'] for q in retro), str(retro))
+    # HUD hidup: tesseract = peta orbit saat membidik, corong setelah Enter (layar cukup besar)
+    await pg.set_viewport_size({'width': 1280, 'height': 720})
+    a, b, c, d = await pg.evaluate('''() => { const G = window.__gargantua, F = G.FUN, n = []; let t = 1e12;
+      const dash = () => G.drawDash(t += 1000);                   // langsung (render SwiftShader 1280 x 720 lambat)
+      G.state.paused = true; G.startMission('tesseract'); n.push(F.drawn); dash(); dash(); n.push(F.drawn);
+      G.tesLaunch(); dash(); n.push(F.drawn); G.startMission('polar'); dash(); n.push(F.drawn); G.stopMission(); return n; }''')
+    await pg.set_viewport_size({'width': 320, 'height': 200})
+    cek('HUD: tesseract membidik = peta orbit (corong tidak), setelah Enter dan misi lain = peta corong', a == b and c == b + 1 and d == c + 1, f"{a} {b} {c} {d}")
 
 asyncio.run(main())

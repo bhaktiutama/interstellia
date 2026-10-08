@@ -928,6 +928,11 @@ const ID = {
   'Missed the tesseract gate by {e} degrees. The path continues to the singularity.': 'Meleset dari gerbang tesseract {e} derajat. Lintasan berlanjut ke singularitas.',
   'ON TARGET: gate error {e} degrees': 'TEPAT SASARAN: galat gerbang {e} derajat',
   'Orbit map: plane of the path, log radius': 'Peta orbit: bidang lintasan, jari-jari logaritmik',
+  'Funnel map: one time slice, true radius': 'Peta corong: satu irisan waktu, jari-jari sebenarnya',
+  'to the singularity along the slice': 'ke singularitas sepanjang irisan',
+  'z = 2 sqrt(r): Eddington-Finkelstein slice, same as the spacetime diagram': 'z = 2 sqrt(r): irisan Eddington-Finkelstein, sama dengan diagram ruang-waktu',
+  'r = 0 singularity': 'r = 0 singularitas',
+  'edge': 'tepi',
   'Swept {s} degrees around the hole ({n} turns) before reaching r = 0.6 rs; gate error {e} degrees (tolerance 5).': 'Menyapu {s} derajat mengitari lubang ({n} putaran) sebelum mencapai r = 0,6 rs; galat gerbang {e} derajat (toleransi 5).',
   'TESSERACT (fiction)': 'TESSERACT (fiksi)',
   'Time is frozen at 22 rs while you aim. W/S angle d from the radial (closer to the critical 24.62 degrees = more turns around 2 rs), A/D orbit plane, Shift coarse, Enter locks and goes. Find the fictional gate inside the horizon (5 degrees) without crossing the disk.': 'Waktu dibekukan di 22 rs selama membidik. W/S sudut d dari arah radial (makin dekat ke kritis 24,62 derajat = makin banyak putaran di sekitar 2 rs), A/D bidang orbit, Shift kasar, Enter kunci dan berangkat. Temukan gerbang fiksi di dalam horizon (5 derajat) tanpa menembus piringan.',
@@ -1365,12 +1370,12 @@ function main() {
       tes: S.aim ? { aim: { delta: 1e-2, psi: 0 }, ref: null, locked: false, i: 0, gateDone: false, miss: null, cool: 0, dirty: false } : null });
     tessStop();
     if (MIS.tes) tesApply();
-    relReset();
+    relReset(); funInit();
     misLockAtt();
     if (S.skim) {                                                // pandang sedikit ke arah lubang hitam (bayangan dan dinding cahaya di depan)
       MIS.look.yaw = 0.62 * (Math.sign(v3.dot(v3.mul(v3.norm(MIS.x), -1), MIS.att.r)) || 1); misLockAtt();
     }
-    MIS.gas = gasRel();
+    MIS.gas = misGas();
     SHIP.on = true; state.tween = null;
     $('#mend').hidden = true; $('#dash').hidden = false;
     if (!MIS.tes) misPredict();
@@ -1454,7 +1459,7 @@ function main() {
     for (let k = 0; k < 400 && !res; k++) {
       const r = Math.hypot(...st.x);
       res = misAdvance(st, Math.min(2 * Math.pow(r, 1.5), 40), 300);
-      pts.push([st.tau, Math.hypot(...st.x)]);
+      pts.push([st.tau, Math.hypot(...st.x), ...st.x]);
       if (st.tau - MIS.tau > 3000) break;
     }
     MIS.pred = { kind: res ? res.kind : 'bound', dTau: st.tau - MIS.tau, horizon: horizon === null ? null : horizon - MIS.tau, pts };
@@ -1527,6 +1532,20 @@ function main() {
     const Rs = rainOf(x, xd), Rg = rainOf(x, g.xd), uu = v3.dot(Rs.U, Rg.U);
     const Up = v3.add(Rg.U, v3.mul(Rs.U, uu / (Rs.g + 1) - Rg.g)), v = v3.mul(Up, 1 / (Rs.g * Rg.g - uu)), sp = Math.hypot(...v);
     return { v: sp, dir: sp > 1e-9 ? v3.mul(v, 1 / sp) : [0, 0, -1], dens: g.dens, H: g.H, y: x[1] };
+  }
+  /* G8: arah tampak pusat lubang hitam di kerangka wahana (docs/gargantua/rumus-peta-corong.md bagian 4). Foton radial keluar n = r_hat
+     (kerangka rain), wahana v: p' = n + v_hat ((gamma - 1)(n . v_hat) - gamma |v|). Kembali p' / |p'| = arah pancar dari citra lubang hitam. */
+  function bhRadiant(R) {
+    const vm = Math.hypot(...R.v); if (vm < 1e-9) return R.rh.slice();
+    const vh = v3.mul(R.v, 1 / vm), p = v3.add(R.rh, v3.mul(vh, (R.g - 1) * v3.dot(R.rh, vh) - R.g * vm));
+    return v3.norm(p);
+  }
+  // gas relatif untuk partikel, debu, dan tumbukan: searah putaran gas (susur searah arus) partikel datang dari citra lubang hitam
+  // (distilisasi, laju tetap fisika); melawan arus = kecepatan gas relatif apa adanya
+  function misGas() {
+    const G = gasRel(), x = MIS.x, rxz = Math.hypot(x[0], x[2]);
+    if (G.dens > 0 && rxz > 1e-6 && v3.dot(MIS.xd, [-x[2] / rxz, 0, x[0] / rxz]) > 0) G.dir = bhRadiant(rainOf(MIS.x, MIS.xd));
+    return G;
   }
   /* G4: informasi tidak bisa keluar. Waktu bersama = waktu Painleve-Gullstrand T (waktu wajar pengamat rain); dT/dtau wahana =
      gamma wahana thd kerangka rain = rainOf().g, reguler di horizon (diintegrasikan di misAdvance). Sinar radial (rs = 1):
@@ -1649,7 +1668,7 @@ function main() {
   }
   function tesPred() {
     const R = MIS.tes.ref, pts = [];
-    for (let i = MIS.tes.i, st = Math.max(1, Math.floor((R.n - MIS.tes.i) / 200)); i < R.n; i += st) pts.push([R.P[i * TES.stride], Math.hypot(R.P[i * TES.stride + 2], R.P[i * TES.stride + 3], R.P[i * TES.stride + 4])]);
+    for (let i = MIS.tes.i, st = Math.max(1, Math.floor((R.n - MIS.tes.i) / 200)); i < R.n; i += st) { const o = i * TES.stride; pts.push([R.P[o], Math.hypot(R.P[o + 2], R.P[o + 3], R.P[o + 4]), R.P[o + 2], R.P[o + 3], R.P[o + 4]]); }
     MIS.pred = { kind: R.hit ? 'tesseract' : R.end, dTau: (R.hit ? R.gate.tau : R.tauEnd) - MIS.tau, horizon: R.horizon === null ? null : R.horizon - MIS.tau, pts };
   }
   // membidik (waktu beku): W/S sudut d (eksponensial mendekati / menjauhi kritis), A/D bidang, Shift kasar; dihitung ulang paling cepat tiap 0,08 s
@@ -1666,7 +1685,7 @@ function main() {
   function tesLaunch() {
     if (!MIS.tes || MIS.tes.locked || MIS.end) return;
     if (MIS.tes.dirty) tesApply();
-    MIS.tes.locked = true; MIS.tes.i = 0;
+    MIS.tes.locked = true; MIS.tes.i = 0; funBasis();
     toast(txt('Aim locked: past the point of no return, engines locked. The vessel follows the predicted path.'), 4);
   }
   // terbang mengikuti lintasan acuan; kembali seperti misFly: null atau { kind }
@@ -1744,11 +1763,13 @@ function main() {
       const res = MIS.tes ? tesFollow(dTau, onH) : misFly(dTau, onH);
       const R = rainOf(MIS.x, MIS.xd); MIS.vMax = Math.max(MIS.vMax, Math.hypot(...R.v));
       const last = MIS.hist[MIS.hist.length - 1];
-      if (!last || MIS.tau - last[0] > 0.002 * Math.max(1, MIS.tau) || Math.abs(Math.log(R.r / last[1])) > 0.03) MIS.hist.push([MIS.tau, R.r]);
+      // G8: entri [tau, r, x, y, z] (posisi untuk peta corong); juga disimpan tiap 3 derajat putaran (orbit susur hampir melingkar)
+      if (!last || MIS.tau - last[0] > 0.002 * Math.max(1, MIS.tau) || Math.abs(Math.log(R.r / last[1])) > 0.03
+          || v3.dot(v3.norm(MIS.x), v3.norm(last.slice(2))) < 0.9986) MIS.hist.push([MIS.tau, R.r, ...MIS.x]);
       if (MIS.hist.length > 900) MIS.hist = MIS.hist.filter((_, i) => i % 2 === 0);
       if (res) { endMission(res.kind, res); return dTau; }
       // G3b: gas relatif, tumbukan debu di kaca (waktu nyata, distilisasi: laju ~ kerapatan debu x (v / 0,4)^2), guncangan
-      MIS.clock += dt; MIS.gas = gasRel();
+      MIS.clock += dt; MIS.gas = misGas();
       const G = MIS.gas;
       MIS.hitAcc += 30 * G.dens * Math.min(1, (G.v / 0.4) ** 2) * dt * (0.5 + Math.random());
       while (MIS.hitAcc >= 1) { MIS.hitAcc -= 1; spawnImpact(G); }
@@ -1843,7 +1864,7 @@ function main() {
     const R = rainOf(MIS.x, MIS.xd), A = MIS.att, r = R.r;
     const gs = r > 1 ? R.E / Math.sqrt(1 - 1 / r) : null, vs = gs ? Math.sqrt(Math.max(0, 1 - 1 / (gs * gs))) : null;
     return { R, r, km: r * RS_KM, inside: r < 1, vStatic: vs, vRain: Math.hypot(...R.v), ahead: skyShift(R, A.f), behind: skyShift(R, v3.mul(A.f, -1)),
-      tidal: 2 * C2 / (r * r * r * RS_M * RS_M) / 9.81, warp: misWarp(), dvLeft: Math.max(0, MIS.dvMax - MIS.dvUsed), gas: MIS.gas || gasRel() };
+      tidal: 2 * C2 / (r * r * r * RS_M * RS_M) / 9.81, warp: misWarp(), dvLeft: Math.max(0, MIS.dvMax - MIS.dvUsed), gas: MIS.gas || misGas() };
   }
   // G3: baris piringan dan autopilot (HUD dan MFD)
   function diskRow(D) {
@@ -2057,15 +2078,15 @@ function main() {
       // G4: jendela relai + diagram ruang-waktu di bawah HUD (M)
       const top = y0 + ph + 10 * s, rh = Math.min(380 * s, h - 44 * s - top), rw = Math.min(340 * s, w - 24 * s);
       if (REL.on && rh > 190 * s) drawRelay(g, x0, h - 44 * s - rh, rw, rh, s);
-      if (MIS.tes) {                                             // G5: peta orbit kanan bawah (besar saat membidik) + penanda gerbang
+      {                                                          // kanan bawah: G5 peta orbit saat membidik (besar), G8 peta corong untuk semua misi
         let mw = Math.min((aiming ? 400 : 290) * s, w * (aiming ? 0.42 : 0.32)), right = w - 12 * s;
         const ui = $('#ui'), ur = ui.getBoundingClientRect();     // panel kontrol terbuka: peta di kiri panel, tidak menimpa jendela relai
         if (!ui.classList.contains('collapsed') && !ui.classList.contains('hidden') && ur.bottom * s > h - 44 * s - mw) {
           right = ur.left * s - 12 * s; mw = Math.min(mw, right - (REL.on ? x0 + Math.min(340 * s, w - 24 * s) + 12 * s : x0));
         }
         const mh = Math.min(mw * 1.08, h - 100 * s);
-        if (mh > 150 * s && mw > 200 * s) drawTesMap(g, right - mw, h - 44 * s - mh, mw, mh, s);
-        drawGateMark(g, w, h, s);
+        if (mh > 150 * s && mw > 200 * s) (aiming ? drawTesMap : drawFunnel)(g, right - mw, h - 44 * s - mh, mw, mh, s, now);
+        if (MIS.tes) drawGateMark(g, w, h, s);
       }
     }
   }
@@ -2116,6 +2137,112 @@ function main() {
     const sp = P(MIS.x); g.fillStyle = 'rgba(255,255,255,1)'; g.beginPath(); g.arc(sp[0], sp[1], 3.5 * s, 0, 7); g.fill();
     g.font = `${9.5 * s}px ${mono}`; g.fillStyle = 'rgba(110,230,255,1)'; g.fillText(txt('gate'), gp[0] + 8 * s, gp[1]);
     g.fillStyle = 'rgba(240,164,90,0.9)'; g.fillText('2 rs', cx + f(2) * 0.72, cy + f(2) * 0.72);
+    g.restore();
+  }
+  /* G8: peta corong (docs/gargantua/rumus-peta-corong.md). Irisan Eddington-Finkelstein masuk t~ = v - r tetap: dl² = (1 + 1/r) dr² + r² dphi²,
+     disematkan di ruang datar: z(r) = 2 sqrt(r) (r = z² / 4, jarum ke singularitas), jarak wajar dari r = 0: l(r) = sqrt(r (r + 1)) + asinh(sqrt r).
+     Ruang-waktu statis: satu corong untuk seluruh misi, titik lintasan di (r, phi) bidang lintasan (basis FUN dari L awal). Bentuk sebenarnya,
+     zoom = REL.zoom (sama dengan diagram ruang-waktu), azimut pandang pelan mengikuti wahana. */
+  const FUN = { e1: [1, 0, 0], e2: [0, 0, 1], n: [0, 1, 0], az: null, t: 0, drawn: 0 };
+  const funZ = (r) => 2 * Math.sqrt(Math.max(r, 0));
+  const funL = (r) => Math.sqrt(r * (r + 1)) + Math.asinh(Math.sqrt(r));
+  function funBasis() {
+    let e1, n;
+    if (MIS.tes && MIS.tes.ref) { e1 = TES.rh0; n = v3.norm(v3.cross(TES.rh0, MIS.tes.ref.th)); }
+    else {
+      const L = v3.cross(MIS.x, MIS.xd); e1 = v3.norm(MIS.x);
+      n = Math.hypot(...L) > 1e-6 ? v3.norm(L) : v3.norm(v3.cross(e1, Math.abs(e1[1]) > 0.99 ? [1, 0, 0] : [0, 1, 0]));   // jatuh radial: bidang berisi sumbu putar
+    }
+    e1 = v3.norm(v3.sub(e1, v3.mul(n, v3.dot(e1, n))));
+    Object.assign(FUN, { e1, n, e2: v3.cross(n, e1), az: null });
+  }
+  function funInit() { funBasis(); MIS.hist.push([MIS.tau, Math.hypot(...MIS.x), ...MIS.x]); }
+  function drawFunnel(g, x, y, w, h, s, now = performance.now()) {
+    FUN.drawn++;
+    const mono = 'ui-monospace, Menlo, Consolas, monospace', Rv = REL.zoom, zTop = funZ(Rv), r0 = Math.hypot(...MIS.x);
+    const ang = (p) => Math.atan2(v3.dot(p, FUN.e2), v3.dot(p, FUN.e1)), phiS = ang(MIS.x);
+    const dt = Math.min(0.5, Math.max(0, (now - FUN.t) / 1000)); FUN.t = now;
+    const azT = phiS - 0.6;                                      // wahana di depan agak ke kiri, lintasan di belakangnya tampak
+    if (FUN.az === null) FUN.az = azT; else { const d = Math.atan2(Math.sin(azT - FUN.az), Math.cos(azT - FUN.az)); FUN.az += d * (1 - Math.exp(-1.5 * dt)); }
+    const el = 28 * Math.PI / 180, se = Math.sin(el), ce = Math.cos(el), top = 46 * s;
+    const W = w - 16 * s, H = h - top - 22 * s, span = Rv * se + Math.max(Rv * se, zTop * ce);
+    const S = Math.min(W / (2.2 * Rv), H / (1.12 * span)), cx = x + w / 2, cy = y + top + (H - span * S) / 2 + 4 * s + Rv * se * S, Dp = 4 * Rv;
+    // (r, phi) di corong -> layar; dep > 0 = dekat penonton
+    const P = (r, phi) => {
+      const th = phi - FUN.az, a = r * Math.cos(th), b = r * Math.sin(th), Z = funZ(r) - zTop;
+      const u = Z * ce - a * se, dep = a * ce + Z * se, k = Dp / (Dp - dep);
+      return [cx + S * b * k, cy - S * u * k, dep];
+    };
+    const fade = (dep) => 0.35 + 0.65 * Math.max(0, Math.min(1, 0.5 + dep / (2 * Rv)));
+    g.save();
+    g.fillStyle = 'rgba(6,8,11,0.66)'; g.fillRect(x, y, w, h); g.strokeStyle = 'rgba(240,164,90,0.35)'; g.lineWidth = s; g.strokeRect(x, y, w, h);
+    g.textBaseline = 'middle'; g.font = `bold ${11 * s}px ${mono}`; g.fillStyle = 'rgba(240,164,90,0.95)';
+    g.fillText(txt('Funnel map: one time slice, true radius'), x + 8 * s, y + 11 * s, w - 16 * s);
+    g.font = `${10 * s}px ${mono}`; g.fillStyle = r0 < 1 ? 'rgba(255,120,95,0.95)' : 'rgba(215,220,226,0.95)';
+    g.fillText(`r ${fmtN(r0, r0 < 0.1 ? 4 : 2)} rs · ${txt('to the singularity along the slice')} ${fmtN(funL(r0), 2)} rs`, x + 8 * s, y + 25 * s, w - 16 * s);
+    g.fillStyle = 'rgba(140,150,160,0.85)'; g.fillText(txt('z = 2 sqrt(r): Eddington-Finkelstein slice, same as the spacetime diagram'), x + 8 * s, y + 38 * s, w - 16 * s);
+    g.beginPath(); g.rect(x + 1, y + top, w - 2, h - top - 1); g.clip();
+    const seg = (pts, col, lw, dash) => {                        // garis per ruas, makin redup di sisi belakang
+      g.lineWidth = lw; g.setLineDash(dash || []); let Ld = 0;     // putus-putus menyambung antar ruas (fase = panjang terkumpul)
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i]; if (!a || !b) continue;
+        g.lineDashOffset = Ld; Ld += Math.hypot(b[0] - a[0], b[1] - a[1]);
+        g.strokeStyle = `rgba(${col},${fade((a[2] + b[2]) / 2).toFixed(3)})`; g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
+      }
+      g.setLineDash([]); g.lineDashOffset = 0;
+    };
+    const ring = (r, n = 72) => Array.from({ length: n + 1 }, (_, i) => P(r, i / n * 2 * Math.PI));
+    // kisi: cincin rata dalam z (jarum ikut berkisi), jari-jari tiap 30 derajat
+    for (let k = 1; k <= 10; k++) seg(ring((k / 10 * zTop / 2) ** 2, 64), '120,135,150', 0.8 * s);
+    for (let j = 0; j < 12; j++) seg(Array.from({ length: 25 }, (_, i) => P((i / 24 * zTop / 2) ** 2, j * Math.PI / 6)), '120,135,150', 0.8 * s);
+    // piringan: cincin di corong bila bidang lintasan = bidang piringan, selain itu garis potong
+    const d = CONFIG.disk, rO = Math.min(d.rOut, Rv);
+    if (d.rIn < Rv) {
+      if (Math.abs(FUN.n[1]) > 0.95) {
+        const o = ring(rO, 96), i = ring(d.rIn, 96).reverse();
+        g.fillStyle = 'rgba(255,110,50,0.16)'; g.beginPath(); o.forEach((q, k) => (k ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])));
+        i.forEach((q) => g.lineTo(q[0], q[1])); g.closePath(); g.fill('evenodd');
+        seg(ring(d.rIn, 96), '255,110,60', 1.2 * s); if (d.rOut <= Rv) seg(ring(d.rOut, 96), '255,110,60', 1.2 * s);
+      } else {
+        const u = v3.cross(FUN.n, [0, 1, 0]), ua = Math.atan2(v3.dot(u, FUN.e2), v3.dot(u, FUN.e1));
+        for (const a of [ua, ua + Math.PI]) seg(Array.from({ length: 17 }, (_, i) => P(d.rIn + (rO - d.rIn) * i / 16, a)), '255,80,50', 4 * s);
+      }
+    }
+    // cincin penting: horizon, bola foton, ISCO, relai
+    for (const [r, col, lw, dash] of [[1, '255,100,80', 1.6, 0], [1.5, '170,180,190', 1, 3], [3, '170,180,190', 1, 2], [REL.r, '120,220,170', 1.2, 2]])
+      if (r <= Rv) seg(ring(r), col, lw * s, dash ? [dash * s, dash * s] : null);
+    // titik lintasan -> layar; antara dua titik diisi di (r, phi) tiap 4 derajat (prakiraan jarang: tali busur akan memotong corong)
+    const pathPts = (list) => {
+      const out = []; let pr = null, pa = 0;
+      for (const q of list) {
+        const r = Math.hypot(q[2], q[3], q[4]), a = ang(q.slice(2, 5));
+        if (pr !== null) {
+          const da = Math.atan2(Math.sin(a - pa), Math.cos(a - pa)), k = Math.min(90, Math.ceil(Math.abs(da) / 0.07));
+          for (let j = 1; j < k; j++) { const rr = pr + (r - pr) * j / k; out.push(rr > Rv * 1.001 ? null : [...P(rr, pa + da * j / k), rr]); }
+        }
+        out.push(r > Rv * 1.001 ? null : [...P(r, a), r]); pr = r; pa = a;
+      }
+      return out;
+    };
+    const now5 = [MIS.tau, r0, ...MIS.x];
+    // riwayat (pucat di luar horizon, merah di dalam), prakiraan putus-putus
+    const H0 = pathPts(MIS.hist.concat([now5]));
+    for (let i = 1; i < H0.length; i++) { const a = H0[i - 1], b = H0[i]; if (a && b) seg([a, b], b[3] < 1 ? '255,90,70' : '225,230,236', 1.8 * s); }
+    if (MIS.pred && MIS.pred.pts.length) seg(pathPts([now5].concat(MIS.pred.pts)), MIS.ap.on ? '240,164,90' : '240,180,110', 1.4 * s, [4 * s, 3 * s]);
+    if (MIS.tes) {                                               // gerbang fiksi
+      const q = P(TES.rg, ang(TES.gate)), k = 5 * s; g.strokeStyle = 'rgba(110,230,255,1)'; g.lineWidth = 1.4 * s;
+      g.beginPath(); g.moveTo(q[0], q[1] - k); g.lineTo(q[0] + k, q[1]); g.lineTo(q[0], q[1] + k); g.lineTo(q[0] - k, q[1]); g.closePath(); g.stroke();
+    }
+    const tip = P(0, 0); g.fillStyle = 'rgba(255,100,80,0.95)'; g.beginPath(); g.arc(tip[0], tip[1], 2.5 * s, 0, 7); g.fill();
+    const sp = P(r0, phiS), gl2 = g.createRadialGradient(sp[0], sp[1], 0, sp[0], sp[1], 9 * s);   // posisi live
+    gl2.addColorStop(0, 'rgba(255,255,255,0.9)'); gl2.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gl2; g.beginPath(); g.arc(sp[0], sp[1], 9 * s, 0, 7); g.fill();
+    g.fillStyle = r0 < 1 ? 'rgba(255,120,95,1)' : 'rgba(255,255,255,1)'; g.beginPath(); g.arc(sp[0], sp[1], 3.5 * s, 0, 7); g.fill();
+    g.font = `${9.5 * s}px ${mono}`;
+    g.fillStyle = 'rgba(255,120,95,0.95)'; g.fillText(txt('r = 0 singularity'), tip[0] + 6 * s, tip[1]);
+    if (Rv >= 1) { const q = P(1, FUN.az + Math.PI / 2); g.fillText(txt('horizon'), q[0] + 4 * s, q[1] - 6 * s); }
+    if (REL.r <= Rv) { const q = P(REL.r, FUN.az + Math.PI / 2); g.fillStyle = 'rgba(120,220,170,0.95)'; g.fillText(txt('relay'), q[0] - 30 * s, q[1] - 7 * s); }
+    g.fillStyle = 'rgba(140,150,160,0.9)'; g.textAlign = 'right'; g.fillText(`${txt('edge')} ${fmtN(Rv, 1)} rs`, x + w - 6 * s, y + h - 9 * s); g.textAlign = 'left';
     g.restore();
   }
   // penanda gerbang di layar: proyeksi garis lurus dari wahana (pembelokan cahaya diabaikan; gerbang fiksi)
@@ -2895,7 +3022,8 @@ function main() {
     SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
     misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, AE, stepMission,
     REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,
-    TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound };   // debugging hook
+    TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound,
+    FUN, funZ, funL, drawFunnel, drawDash, bhRadiant, misGas };   // debugging hook
   requestAnimationFrame(frame);
 }
 
