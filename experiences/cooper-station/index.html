@@ -7332,7 +7332,8 @@ const leafTex = (() => {                                          // atlas gugus
 })();
 // 25c: atlas daun kedua, 4 x 2 sel 512 px, RNG sendiri (trr tidak disentuh: tekstur kulit dan jagung tetap). Indeks atlas jenis
 // 4 + j: j 0 bulat bertangkai (aspen), 1 lebar utuh lonjong (beech), 2 hati (basswood), 3 lonjong bergerigi (chestnut),
-// 4 majemuk kecil (ash), 5 majemuk besar (walnut), 6-7 cadangan konifer 25e. Sel j di kolom j % 4, baris floor(j / 4)
+// 4 dan 5 = 25d: daun majemuk tunggal per setengah sel (4 atas ash / hickory, 4 bawah black locust, 5 atas walnut,
+// 5 bawah honey locust), 6-7 cadangan konifer 25e. Sel j di kolom j % 4, baris floor(j / 4)
 // (baris 0 = setengah atas kanvas = v 0,5-1). Warna dasar hijau tetap dalam rentang yang diwarnai ulang LEAF_RECOLOR.
 const leafTex2 = (() => {
   let s2 = 25031; const lr = () => ((s2 = (s2 * 16807) % 2147483647) / 2147483647);
@@ -7364,28 +7365,33 @@ const leafTex2 = (() => {
       leaf(x, y, rot, L, L * wid, shape, hue + lr() * 24 - 12, sat0 + lr() * 22, lit0 + lr() * 18);
     }
   };
-  // gugus daun majemuk: tangkai utama dengan pasangan anak daun + satu anak daun ujung
-  const pinnate = (j, n, rach, pairs, lf, hue, sat0, lit0) => {
-    const [cx, cy] = origin(j); twigs(cx, cy, 4, 150);
-    for (let k = 0; k < n; k++) {
-      const a = lr() * TAU, r = 150 * Math.sqrt(lr()), x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r, rot = lr() * TAU, R = rach * (0.8 + 0.4 * lr());
-      const hue1 = hue + lr() * 20 - 10, sat = sat0 + lr() * 20, lit = lit0 + lr() * 14;
-      g.save(); g.translate(x, y); g.rotate(rot);
-      g.strokeStyle = `hsl(${hue1},30%,${lit - 4}%)`; g.lineWidth = 2.2; g.beginPath(); g.moveTo(-R / 2, 0); g.lineTo(R / 2, 0); g.stroke();
-      for (let p = 0; p < pairs; p++) {
-        const px = -R / 2 + R * (p + 0.7) / (pairs + 0.4), L = lf * (0.8 + 0.35 * p / pairs) * (0.9 + 0.2 * lr());
-        for (const sd of [-1, 1]) { g.save(); g.translate(px, 0); g.rotate(sd * (1.05 + (lr() - 0.5) * 0.3)); leaf(L * 0.5, 0, 0, L, L * 0.3, 'utuh', hue1, sat, lit + lr() * 6); g.restore(); }
+  // 25d: satu daun majemuk mendatar per setengah sel (sel j, setengah h 0 atas / 1 bawah), tangkai x 14-498 px, tengah tinggi
+  // setengah sel. Dipakai pita tangkai di makeTree() (field frond). bip = daun ganda (anak tangkai berisi anak daun kecil).
+  const frondTex = (j, h, pairs, lf, wid, ang, hue, sat, lit, term, bip) => {
+    const xa = (j % 4) * 512 + 14, R = 484, yc = Math.floor(j / 4) * 512 + h * 256 + 128;
+    g.strokeStyle = `hsl(${hue},28%,${lit - 8}%)`; g.lineWidth = 4; g.beginPath(); g.moveTo(xa, yc); g.lineTo(xa + R, yc); g.stroke();
+    for (let q = 0; q < pairs; q++) {
+      const px = xa + R * (q + 0.6) / (pairs + (term ? 0.5 : 0.1)), L = lf * (0.8 + 0.35 * Math.sin(Math.PI * (q + 0.5) / pairs)) * (0.92 + 0.16 * lr());
+      for (const sd of [-1, 1]) {
+        const a = sd * (ang + (lr() - 0.5) * 0.12), dx = Math.cos(a), dy = Math.sin(a);
+        if (!bip) { leaf(px + dx * L / 2, yc + dy * L / 2, a, L, L * wid, 'utuh', hue + lr() * 14 - 7, sat + lr() * 12, lit + lr() * 10); continue; }
+        g.strokeStyle = `hsl(${hue},26%,${lit - 6}%)`; g.lineWidth = 2; g.beginPath(); g.moveTo(px, yc); g.lineTo(px + dx * L, yc + dy * L); g.stroke();
+        for (let k = 0; k < 9; k++) for (const s2 of [-1, 1]) {           // anak daun kecil di anak tangkai
+          const t = (k + 0.7) / 9.4, qx = px + dx * L * t, qy = yc + dy * L * t, b = a + s2 * 1.25, l2 = 15 + lr() * 4;
+          leaf(qx + Math.cos(b) * l2 / 2, qy + Math.sin(b) * l2 / 2, b, l2, l2 * 0.42, 'utuh', hue + lr() * 12 - 6, sat + lr() * 12, lit + lr() * 10);
+        }
       }
-      leaf(R / 2 + lf * 0.45, 0, 0, lf * 1.05, lf * 0.3, 'utuh', hue1, sat, lit);
-      g.restore();
     }
+    if (term) leaf(xa + R - lf * 0.5, yc, 0, lf * 1.0, lf * wid, 'utuh', hue, sat + 6, lit + 4);   // anak daun ujung (menyirip ganjil)
   };
   simple(0, 120, 38, 0.95, 'bulat', 82, 36, 34, 0.45);           // aspen: kecil bulat, tangkai panjang pipih, hijau muda
   simple(1, 85, 54, 0.55, 'utuh', 104, 40, 24, 0);                // beech: lonjong tepi rata, hijau tua mengilap
   simple(2, 100, 64, 0.42, 'hati', 96, 38, 30, 0.2);              // basswood: hati, lebar sekitar 0,85 x panjang
   simple(3, 52, 96, 0.24, 'gerigi', 98, 40, 25, 0);               // chestnut: panjang ramping bergerigi
-  pinnate(4, 32, 110, 4, 34, 108, 34, 24);                        // ash: majemuk 9 anak daun, hijau tua
-  pinnate(5, 26, 150, 7, 36, 84, 38, 30);                         // walnut: majemuk 15 anak daun, hijau kekuningan
+  frondTex(4, 0, 4, 112, 0.3, 0.95, 106, 36, 25, true, false);   // ash / hickory: 9 anak daun lonjong, hijau tua
+  frondTex(4, 1, 8, 56, 0.5, 1.2, 96, 38, 30, true, false);      // black locust: 17 anak daun bulat telur kecil
+  frondTex(5, 0, 8, 92, 0.28, 0.9, 84, 40, 30, true, false);     // walnut: 17 anak daun, hijau kekuningan
+  frondTex(5, 1, 6, 100, 0, 0.85, 78, 42, 36, false, true);      // honey locust: daun ganda halus, hijau muda kekuningan
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 })();
@@ -7961,10 +7967,18 @@ const TREE_SPECIES = {
     hRel: 0.95, fall: { cols: ['kuning'], campur: 0.06, gugur: 0.7, k: 0.8 } },                  // lonjong rapat, pohon jalan
   chestnut: { ...TREE_DEF, trunk: [3.6, 0.4], kids: [5, 4], spread: [1.0, 0.9], lenR: [1.05, 0.55], leafLevel: 2, cards: 12, card: 1.8, atlas: 7, up: 0.2, bark: [0.36, 0.31, 0.27],
     hRel: 0.9, fall: { cols: ['kuning', 'cokelat'], campur: 0.06, gugur: 0.7, k: 0.8 } },        // kubah lebar, batang tebal
-  ash:      { ...TREE_DEF, trunk: [6.5, 0.3], kids: [5, 3], spread: [0.6, 0.8], lenR: [1.0, 0.55], leafLevel: 2, cards: 8, card: 1.5, atlas: 8, up: 0.5, bark: [0.50, 0.48, 0.44],
+  ash:      { ...TREE_DEF, trunk: [6.5, 0.3], kids: [5, 3], spread: [0.6, 0.8], lenR: [1.0, 0.55], leafLevel: 2, cards: 8, card: 1.5, atlas: 8, up: 0.5, bark: [0.50, 0.48, 0.44], frond: { n: 4, len: 1.0, wid: 0.5, j: 4, h: 0, droop: 0.4 },
     hRel: 0.95, fall: { cols: ['kuning', 'kuningHijau'], campur: 0.08, gugur: 0.75, k: 0.85 } }, // vas terbuka, kulit abu-abu
-  walnut:   { ...TREE_DEF, trunk: [3.2, 0.36], kids: [5, 3], spread: [0.95, 0.8], lenR: [1.1, 0.6], leafLevel: 2, cards: 9, card: 1.6, atlas: 9, up: 0.2, bark: [0.30, 0.27, 0.24],
+  walnut:   { ...TREE_DEF, trunk: [3.2, 0.36], kids: [5, 3], spread: [0.95, 0.8], lenR: [1.1, 0.6], leafLevel: 2, cards: 9, card: 1.6, atlas: 9, up: 0.2, bark: [0.30, 0.27, 0.24], frond: { n: 4, len: 1.25, wid: 0.5, j: 5, h: 0, droop: 0.5 },
     hRel: 0.85, fall: { cols: ['kuning', 'cokelat'], campur: 0.06, gugur: 0.7, k: 0.8 } },       // tajuk lebar terbuka, kulit gelap
+  // 25d: jenis berdaun majemuk (frond = n tangkai per posisi kartu, len m, wid lebar / panjang, j / h sel dan setengah sel leafTex2,
+  // droop = runduk separuh ujung). atlas >= 4 hanya memilih atlas kedua; posisi kartu tetap dari mesin cabang yang sama.
+  hickory:     { ...TREE_DEF, trunk: [7.5, 0.3], kids: [5, 3], spread: [0.5, 0.75], lenR: [0.8, 0.55], leafLevel: 2, cards: 8, card: 1.5, atlas: 8, up: 0.55, bark: [0.48, 0.46, 0.42],
+    frond: { n: 4, len: 1.1, wid: 0.5, j: 4, h: 0, droop: 0.35 }, hRel: 1.0, fall: { cols: ['kuning'], campur: 0.06, gugur: 0.8, k: 0.9 } },              // lonjong tinggi
+  blacklocust: { ...TREE_DEF, trunk: [5.0, 0.28], kids: [5, 3], spread: [0.85, 0.9], lenR: [0.9, 0.6], leafLevel: 2, cards: 7, card: 1.4, atlas: 8, up: 0.35, bark: [0.38, 0.33, 0.27],
+    frond: { n: 6, len: 0.8, wid: 0.55, j: 4, h: 1, droop: 0.45 }, hRel: 0.85, fall: { cols: ['kuning', 'kuningHijau'], campur: 0.05, gugur: 0.65, k: 0.8 } },   // terbuka tidak rata, kulit beralur
+  honeylocust: { ...TREE_DEF, trunk: [3.6, 0.3], kids: [5, 3], spread: [1.05, 0.8], lenR: [1.15, 0.6], leafLevel: 2, cards: 7, card: 1.4, atlas: 9, up: 0.2, bark: [0.33, 0.30, 0.27],
+    frond: { n: 5, len: 0.75, wid: 0.5, j: 5, h: 1, droop: 0.3 }, hRel: 0.85, fall: { cols: ['kuning'], campur: 0.08, gugur: 0.8, k: 0.9 } },          // lebar terbuka, daun halus
 };
 function makeTree(kindName, seed) {
   const K = TREE_SPECIES[kindName];
@@ -8042,6 +8056,26 @@ function makeTree(kindName, seed) {
     const a2 = u.clone().multiplyScalar(-Math.sin(rot)).addScaledVector(w, Math.cos(rot)).multiplyScalar(sz / 2);
     const v0 = lp.length / 3, cn = out.clone().multiplyScalar(0.8).addScaledVector(nn, 0.2).normalize();
     const ao = Math.min(1, 0.35 + 0.65 * dist / Math.max(rad, 1)) * (0.8 + 0.2 * Math.min(1, c.y / top));
+    if (K.frond) {                                                  // 25d: daun majemuk = n tangkai melengkung per posisi kartu
+      const F = K.frond, ua = (F.j % 4 + 14 / 512) * 0.25, ub = (F.j % 4 + 498 / 512) * 0.25;
+      const vLo = 1 - (Math.floor(F.j / 4) * 512 + F.h * 256 + 256) / 1024, vHi = vLo + 0.25;   // setengah sel di leafTex2
+      for (let f = 0; f < F.n; f++) {
+        const L = F.len * (sz / K.card) * (0.8 + 0.4 * r()), W = L * F.wid;
+        const b = c.clone().add(V(r() - 0.5, r() - 0.5, r() - 0.5).multiplyScalar(sz * 0.6));
+        const d = out.clone().multiplyScalar(0.7).add(V(r() - 0.5, (r() - 0.5) * 0.5, r() - 0.5));   // keluar dari tajuk + acak
+        if (d.lengthSq() < 1e-6) d.set(1, 0, 0); d.normalize();
+        const d2 = d.clone(); d2.y -= F.droop; d2.normalize();     // separuh ujung merunduk
+        const sd = V().crossVectors(d, V(0, 1, 0)); if (sd.lengthSq() < 1e-6) sd.set(1, 0, 0);
+        sd.normalize().applyAxisAngle(d, (r() - 0.5) * 1.2).multiplyScalar(W / 2);   // helai kira-kira mendatar, sedikit miring
+        const p1 = b.clone().addScaledVector(d, L / 2), p2 = p1.clone().addScaledVector(d2, L / 2), q0 = lp.length / 3;
+        for (const [pp, t] of [[b, 0], [p1, 0.5], [p2, 1]]) for (const k of [-1, 1]) {
+          lp.push(pp.x + sd.x * k, pp.y + sd.y * k, pp.z + sd.z * k); luv.push(ua + (ub - ua) * t, k < 0 ? vLo : vHi);
+          lcn.push(cn.x, cn.y, cn.z); lao.push(ao);
+        }
+        li.push(q0, q0 + 1, q0 + 2, q0 + 1, q0 + 3, q0 + 2, q0 + 2, q0 + 3, q0 + 4, q0 + 3, q0 + 5, q0 + 4);
+      }
+      continue;
+    }
     for (const [sa, sb, uu, vv] of [[-1, -1, 0, 0], [1, -1, 1, 0], [1, 1, 1, 1], [-1, 1, 0, 1]]) {
       const p = c.clone().addScaledVector(a1, sa).addScaledVector(a2, sb);
       lp.push(p.x, p.y, p.z);
@@ -8195,7 +8229,8 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
   kinds.forEach((k, i) => TREES.templates.push(makeTree(k, 1000 + i * 7919)));
   // 25b: 6 jenis baru x 2 bentuk = template 16-27, di belakang template lama agar indeks lama tidak bergeser
   const KINDS_25B = ['aspen', 'beech', 'basswood', 'chestnut', 'ash', 'walnut'];
-  if (!POHON.lama) for (const k of KINDS_25B) for (let v = 0; v < 2; v++) { const i = TREES.templates.length; TREES.templates.push(makeTree(k, 1000 + i * 7919)); }
+  const KINDS_25D = ['hickory', 'blacklocust', 'honeylocust'];       // 25d: template 28-33
+  if (!POHON.lama) for (const k of [...KINDS_25B, ...KINDS_25D]) for (let v = 0; v < 2; v++) { const i = TREES.templates.length; TREES.templates.push(makeTree(k, 1000 + i * 7919)); }
   let sd = 2468; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const hsh = (s, za) => { const x = Math.sin(s * 12.9898 + za * 78.233) * 43758.5453; return x - Math.floor(x); };
   const nCS = Math.ceil(CIRC / TREES.cell);
@@ -8305,9 +8340,9 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
     const hsh3 = (s, za) => { const x = Math.sin(s * 5.9137 + za * 11.3171 + 1.77) * 31718.927; return x - Math.floor(x); };
     const TI = {}; TREES.templates.forEach((T, i) => { if (TI[T.kind] === undefined) TI[T.kind] = i; });
     const MIX = {
-      kota:  [['basswood', 0.18], ['ash', 0.14], ['beech', 0.08]],
-      taman: [['beech', 0.12], ['chestnut', 0.1], ['basswood', 0.08], ['walnut', 0.08], ['ash', 0.06], ['aspen', 0.06]],
-      luar:  [['walnut', 0.12], ['ash', 0.1], ['aspen', 0.1], ['chestnut', 0.08], ['beech', 0.06]],
+      kota:  [['basswood', 0.18], ['ash', 0.14], ['beech', 0.08], ['honeylocust', 0.08]],   // 25d: jenis baru di akhir daftar (pilihan 25b tetap)
+      taman: [['beech', 0.12], ['chestnut', 0.1], ['basswood', 0.08], ['walnut', 0.08], ['ash', 0.06], ['aspen', 0.06], ['hickory', 0.05], ['honeylocust', 0.05]],
+      luar:  [['walnut', 0.12], ['ash', 0.1], ['aspen', 0.1], ['chestnut', 0.08], ['beech', 0.06], ['hickory', 0.06], ['blacklocust', 0.07]],
     };
     TREES.list.forEach((t, i) => {
       if ((i >= keep0 && i < keep1) || i >= keepF0 || t.tpl > 3) return;   // hanya oak / elm di luar halaman Cooper dan hutan 14a
@@ -8321,7 +8356,7 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
   const KSCALE = { maple: 2.0, bunga: 1.7, willow: 1.15 };
   // 25b: skala jenis baru dari hRel: rata-rata tinggi template jenis itu disamakan dengan hRel x rata-rata tinggi template elm
   const hAvg = (k) => { const a = TREES.templates.filter((T) => T.kind === k); return a.reduce((m, T) => m + T.height, 0) / a.length; };
-  if (!POHON.lama) for (const k of KINDS_25B) KSCALE[k] = TREE_SPECIES[k].hRel * hAvg('elm') / hAvg(k);
+  if (!POHON.lama) for (const k of [...KINDS_25B, ...KINDS_25D]) KSCALE[k] = TREE_SPECIES[k].hRel * hAvg('elm') / hAvg(k);
   TREES.list.forEach((t, i) => { if ((i >= keep0 && i < keep1) || i >= keepF0) return; const f = KSCALE[TREES.templates[t.tpl].kind]; if (f) t.sc *= f; });
   // bayangan tajuk dari sunline (tepat di bawah), 2 m per piksel, seluruh stasiun
   const W = 3142, Hh = 4000, px = CIRC / W, data = new Uint8Array(W * Hh);

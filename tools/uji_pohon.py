@@ -1,4 +1,4 @@
-"""Uji tahap 12b-2 + 25b (Copper Corn Station): 14 jenis pohon (8 lama + 6 jenis 25b; 8 dengan ?pohon=lama),
+"""Uji tahap 12b-2 + 25b (Copper Corn Station): 17 jenis pohon (8 lama + 6 jenis 25b + 3 jenis 25d; 8 dengan ?pohon=lama),
 tinggi jenis baru, persentase pohon berwarna per suasana daun, daun jatuh mati di preset Hemat dan bisa dinyalakan manual.
 Pakai: python tools/uji_pohon.py   (butuh: pip install playwright && playwright install chromium)"""
 import asyncio, pathlib
@@ -7,10 +7,10 @@ from playwright.async_api import async_playwright
 UJI = r"""
 (() => {
   const st = window.__station, T = st.TREES, out = {}, jenis = new Set(T.list.map((t) => T.templates[t.tpl].kind));
-  out['14 jenis pohon terpakai (' + [...jenis].join(', ') + ')'] = jenis.size === 14;
+  out['17 jenis pohon terpakai (' + [...jenis].join(', ') + ')'] = jenis.size === 17;
   // 25b: jumlah dan tinggi (persentil 10 / 50 / 90, m) per jenis; elm sebagai pembanding
   const pc = (a, q) => a[Math.min(a.length - 1, Math.floor(q * a.length))];
-  for (const k of ['elm', 'aspen', 'beech', 'basswood', 'chestnut', 'ash', 'walnut']) {
+  for (const k of ['elm', 'aspen', 'beech', 'basswood', 'chestnut', 'ash', 'walnut', 'hickory', 'blacklocust', 'honeylocust']) {
     const hs = T.list.filter((t) => !t.forest && T.templates[t.tpl].kind === k).map((t) => T.templates[t.tpl].height * t.sc).sort((a, b) => a - b);
     out[`INFO ${k}: ${hs.length} pohon, tinggi ${[0.1, 0.5, 0.9].map((q) => hs.length ? pc(hs, q).toFixed(1) : '-').join(' / ')} m`] = true;
     if (k !== 'elm') out[`${k}: ada di kota/taman/luar, median tinggi 5-20 m`] = hs.length > 50 && pc(hs, 0.5) > 5 && pc(hs, 0.5) < 20;

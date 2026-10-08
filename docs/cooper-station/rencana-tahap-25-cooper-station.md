@@ -116,7 +116,8 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 | 25a | Selesai, menunggu uji visual Bhakti | `TREE_KINDS` jadi `TREE_SPECIES` dengan nilai bawaan `TREE_DEF` (jit0, tpos, clMode, leader, crown). Cabang `kindName ===` di `makeTree()` hilang. Saklar `?pohon=lama` disiapkan (belum berefek, jenis baru di 25b). Uji: sidik jari FNV-1a dari 16 template (indeks, atribut, dan ukuran per template) sama dengan sebelum perubahan, 0 field berbeda, dengan dan tanpa `?pohon=lama`. Review terpisah: 336 pohon (16 template asli dan 40 benih tambahan per jenis) dibandingkan bit per bit dengan kode HEAD, 0 beda. `tools/qc_load.py` tanpa error; `tools/uji_pohon.py` 7 cek lolos |
 | 25b | Selesai, menunggu uji visual Bhakti | 6 jenis baru (aspen, beech, basswood, chestnut, ash, walnut), 2 bentuk per jenis = template 16-27 di belakang template lama. Sebagian oak dan elm diganti per zona dari hash posisi sendiri `hsh3`: kota basswood 18%, ash 14%, beech 8%; taman beech 12%, chestnut 10%, basswood 8%, walnut 8%, ash 6%, aspen 6%; luar kota walnut 12%, ash 10%, aspen 10%, chestnut 8%, beech 6% (persen dari oak dan elm yang tersisa). Posisi, skala dasar, dan kolisi tetap. Halaman Cooper, promenade Skyway, dan hutan 14a tidak diganti. Warna musim per jenis dari field `fall`. `?pohon=lama` = 16 template, identik dengan sebelum 25a (0 beda) |
 | 25c | Selesai, menunggu uji visual Bhakti | Atlas daun kedua `leafTex2` (2.048 x 1.024 px, 4 x 2 sel 512 px, RNG sendiri) untuk 6 jenis 25b: bulat bertangkai (aspen), lonjong tepi rata (beech), hati (basswood), lonjong bergerigi (chestnut), majemuk 9 anak daun (ash), majemuk 15 anak daun (walnut); 2 sel dicadangkan untuk konifer 25e. Indeks atlas jenis 4-9; UV kartu daun atlas >= 4 dihitung ke sel 4 x 2, rumus atlas 0-3 tidak berubah. Warna musim beech ditambah perunggu (`LEAF_PAL.perunggu`). Gambar atlas: `docs/cooper-station/gambar/atlas-daun-25c.webp` |
-| 25d-25j | Belum dikerjakan | - |
+| 25d | Selesai, menunggu uji visual Bhakti | Daun majemuk sebagai geometri: tiap posisi kartu pada jenis majemuk diganti 4-6 tangkai daun (pita 2 ruas, 6 verteks, separuh ujung merunduk, helai hampir mendatar) bertekstur satu daun majemuk utuh. Sel atlas 4 dan 5 digambar ulang jadi 4 daun majemuk tunggal per setengah sel (ash / hickory 9 anak daun, black locust 17 anak daun kecil, walnut 17 anak daun, honey locust daun ganda halus). Ash dan walnut beralih ke tangkai daun; 3 jenis baru: hickory, black locust, honey locust (template 28-33, ditambah di akhir daftar zona: pilihan 25b tetap). Tanpa GLSL baru. Gambar: `docs/cooper-station/gambar/pohon-majemuk-25d.webp` |
+| 25e-25j | Belum dikerjakan | - |
 
 ### Hasil terukur 25b (sandbox, di luar hutan 14a)
 
@@ -144,5 +145,22 @@ Catatan 25c:
 - Uji: `?pohon=lama` identik dengan sebelum 25a (16 template, 0 beda); di mode bawaan template 0-15 identik, template 16-27 hanya berubah UV daun. `tools/uji_pohon.py` semua lolos (angka sama dengan 25b), `tools/qc_load.py` tanpa error.
 - Warna musim tetap bekerja: kriteria hijau `LEAF_RECOLOR` (g - max(r, b) > 0,03 linear) dihitung untuk rentang warna atlas baru (rona HSL 70-120): selisih 0,055 sampai 0,11.
 - Memori: atlas kedua 2.048 x 1.024 RGBA = 8 MB, sekitar 10,7 MB dengan mipmap. Belum diukur di GPU.
+
+### Hasil terukur 25d (sandbox, di luar hutan 14a)
+
+| Jenis | Jumlah pohon | Tinggi p10 / p50 / p90 (m) | Verteks daun per template | Segitiga daun per template |
+| --- | --- | --- | --- | --- |
+| oak (pembanding, kartu) | - | - | 1.056 | 528 |
+| ash | 943 | 7,5 / 9,0 / 13,3 | 3.456 | 2.304 |
+| walnut | 157 | 10,6 / 12,8 / 14,9 | 3.888 | 2.592 |
+| hickory | 98 | 12,1 / 14,9 / 17,4 | 3.456 | 2.304 |
+| black locust | 71 | 10,6 / 12,8 / 15,3 | 4.536 | 3.024 |
+| honey locust | 452 | 6,1 / 7,8 / 9,9 | 3.780 | 2.520 |
+
+Catatan 25d:
+- Daun jenis majemuk 3,3 sampai 4,3 kali verteks oak per pohon dekat (hanya dalam radius LOD; jauh tetap impostor). Dampak FPS belum diukur (25i); bila berat, `frond.n` bisa diturunkan per preset.
+- Uji: `?pohon=lama` identik dengan sebelum 25a (0 beda); template 0-15 di mode bawaan identik (selain panjang `aLeafC` karena jumlah oak dan elm berkurang lagi: elm 2.703 -> 2.379). Jumlah pohon 6 jenis 25b tidak berubah. `tools/uji_pohon.py` 17 jenis dan 9 cek tinggi lolos; Campur 22,2%, Gugur 65,0%. `tools/qc_load.py` tanpa error.
+- Ukuran tangkai daun dibesarkan sekitar 3 kali ukuran nyata (0,75-1,25 m) supaya tajuk terisi dengan jumlah verteks wajar; dari dekat sekali daun tampak besar.
+- Bentuk tajuk dicek dengan render adegan bake tiap template di sandbox (bukan uji visual di GPU nyata).
 
 Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.
