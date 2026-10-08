@@ -114,6 +114,28 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 | Tahap | Status | Hasil |
 | --- | --- | --- |
 | 25a | Selesai, menunggu uji visual Bhakti | `TREE_KINDS` jadi `TREE_SPECIES` dengan nilai bawaan `TREE_DEF` (jit0, tpos, clMode, leader, crown). Cabang `kindName ===` di `makeTree()` hilang. Saklar `?pohon=lama` disiapkan (belum berefek, jenis baru di 25b). Uji: sidik jari FNV-1a dari 16 template (indeks, atribut, dan ukuran per template) sama dengan sebelum perubahan, 0 field berbeda, dengan dan tanpa `?pohon=lama`. Review terpisah: 336 pohon (16 template asli dan 40 benih tambahan per jenis) dibandingkan bit per bit dengan kode HEAD, 0 beda. `tools/qc_load.py` tanpa error; `tools/uji_pohon.py` 7 cek lolos |
-| 25b-25j | Belum dikerjakan | - |
+| 25b | Selesai, menunggu uji visual Bhakti | 6 jenis baru (aspen, beech, basswood, chestnut, ash, walnut), 2 bentuk per jenis = template 16-27 di belakang template lama. Sebagian oak dan elm diganti per zona dari hash posisi sendiri `hsh3`: kota basswood 18%, ash 14%, beech 8%; taman beech 12%, chestnut 10%, basswood 8%, walnut 8%, ash 6%, aspen 6%; luar kota walnut 12%, ash 10%, aspen 10%, chestnut 8%, beech 6% (persen dari oak dan elm yang tersisa). Posisi, skala dasar, dan kolisi tetap. Halaman Cooper, promenade Skyway, dan hutan 14a tidak diganti. Warna musim per jenis dari field `fall`. `?pohon=lama` = 16 template, identik dengan sebelum 25a (0 beda) |
+| 25c-25j | Belum dikerjakan | - |
+
+### Hasil terukur 25b (sandbox, di luar hutan 14a)
+
+| Jenis | Jumlah pohon | Tinggi p10 / p50 / p90 (m) | hRel (perkiraan) |
+| --- | --- | --- | --- |
+| elm (pembanding) | 2.703 | 7,9 / 9,9 / 13,6 | 1,0 |
+| basswood | 1.023 | 7,1 / 8,8 / 10,6 | 0,95 |
+| ash | 943 | 7,4 / 9,0 / 13,3 | 0,95 |
+| beech | 568 | 8,1 / 10,1 / 15,0 | 1,05 |
+| walnut | 157 | 10,5 / 13,1 / 14,9 | 0,85 |
+| aspen | 125 | 9,6 / 11,5 / 14,0 | 0,8 |
+| chestnut | 123 | 10,5 / 13,3 / 15,7 | 0,9 |
+
+Uji: `tools/uji_pohon.py` 14 jenis dan 6 cek tinggi jenis baru lolos; Campur 22,2% (sebelum 25b 22,3%), Gugur 64,6% (63,4%), Hijau 3,2%. `tools/qc_load.py` tanpa error. Geometri template 0-15 identik dengan sebelum 25a; yang berubah hanya panjang buffer warna per instance `aLeafC` oak dan elm, karena jumlah pohonnya berkurang.
+
+Catatan 25b:
+- hRel adalah perkiraan dari kisaran tinggi dewasa umum per jenis, bukan dari sumber terukur. Skala = hRel x rata-rata tinggi template elm / rata-rata tinggi template jenis itu.
+- Walnut, aspen, dan chestnut tampak lebih tinggi dari elm. Penyebabnya, mereka banyak ditempatkan di taman dan luar kota, yang skala dasarnya lebih besar (kota 0,72 sampai 0,85, luar kota 0,8 sampai 1,25). Di zona yang sama, urutan tingginya mengikuti hRel.
+- Kolisi batang pohon bukit dihitung dari template lama sebelum jenis diganti, sama seperti 12b-2. Bedanya beberapa sentimeter, sebab jari-jari batang template 0,2 sampai 0,4 m.
+- Tambah 12 template berarti tambah mesh instanced (kulit, daun, impostor) dan 12 bake impostor oktahedral di Ultra. Draw call, waktu muat, dan FPS belum diukur (25i).
+- Atlas daun masih 4 kolom. Bentuk daun jenis baru memakai kolom 0 dan 1 yang sudah ada; bentuk daun khas tiap jenis baru datang di 25c.
 
 Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.

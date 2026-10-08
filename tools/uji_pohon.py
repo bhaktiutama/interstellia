@@ -1,5 +1,5 @@
-"""Uji tahap 12b-2 (Copper Corn Station): 8 jenis pohon, persentase pohon berwarna per suasana daun,
-daun jatuh mati di preset Hemat dan bisa dinyalakan manual.
+"""Uji tahap 12b-2 + 25b (Copper Corn Station): 14 jenis pohon (8 lama + 6 jenis 25b; 8 dengan ?pohon=lama),
+tinggi jenis baru, persentase pohon berwarna per suasana daun, daun jatuh mati di preset Hemat dan bisa dinyalakan manual.
 Pakai: python tools/uji_pohon.py   (butuh: pip install playwright && playwright install chromium)"""
 import asyncio, pathlib
 from playwright.async_api import async_playwright
@@ -7,7 +7,14 @@ from playwright.async_api import async_playwright
 UJI = r"""
 (() => {
   const st = window.__station, T = st.TREES, out = {}, jenis = new Set(T.list.map((t) => T.templates[t.tpl].kind));
-  out['8 jenis pohon terpakai (' + [...jenis].join(', ') + ')'] = jenis.size === 8;
+  out['14 jenis pohon terpakai (' + [...jenis].join(', ') + ')'] = jenis.size === 14;
+  // 25b: jumlah dan tinggi (persentil 10 / 50 / 90, m) per jenis; elm sebagai pembanding
+  const pc = (a, q) => a[Math.min(a.length - 1, Math.floor(q * a.length))];
+  for (const k of ['elm', 'aspen', 'beech', 'basswood', 'chestnut', 'ash', 'walnut']) {
+    const hs = T.list.filter((t) => !t.forest && T.templates[t.tpl].kind === k).map((t) => T.templates[t.tpl].height * t.sc).sort((a, b) => a - b);
+    out[`INFO ${k}: ${hs.length} pohon, tinggi ${[0.1, 0.5, 0.9].map((q) => hs.length ? pc(hs, q).toFixed(1) : '-').join(' / ')} m`] = true;
+    if (k !== 'elm') out[`${k}: ada di kota/taman/luar, median tinggi 5-20 m`] = hs.length > 50 && pc(hs, 0.5) > 5 && pc(hs, 0.5) < 20;
+  }
   const pct = (m) => 100 * T.list.filter((t) => st.leafColorFor(t, m)).length / T.list.length;
   const [h, c, g] = [0, 1, 2].map(pct);
   out[`Hijau: hanya pohon bunga (${h.toFixed(1)}%)`] = h < 6;
@@ -32,7 +39,7 @@ async def main():
         await pg.goto(page_url)
         await pg.wait_for_function('window.__stationReady === true', timeout=240000)
         await pg.wait_for_timeout(3000)
-        for k, v in (await pg.evaluate(UJI)).items(): print(('OK   ' if v else 'GAGAL'), k)
+        for k, v in (await pg.evaluate(UJI)).items(): print('     ' + k[5:] if k.startswith('INFO ') else ('OK   ' if v else 'GAGAL') + ' ' + k)
         print('error:', errs[:10] or 'tidak ada')
         await b.close()
 

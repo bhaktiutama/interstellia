@@ -7891,6 +7891,21 @@ const TREE_SPECIES = {
   pine:   { ...TREE_DEF, trunk: [15, 0.32], kids: [22], spread: [1.35], lenR: [0.3], leafLevel: 1, cards: 9, card: 2.0, atlas: 2, up: 0.2, upL: [0.9, -0.25], bark: [0.36, 0.28, 0.22], jit0: 0.08, tpos: [0.18, 0.8, 0.5], clMode: 'cone', leader: false, crown: { n: 6, t0: 0.86, dt: 0.14, sz: 0.8, jx: 0.6, jy: 0.3 } },
   willow: { ...TREE_DEF, trunk: [4.2, 0.42], kids: [5, 5], spread: [0.9, 0.35], lenR: [1.0, 0.9], leafLevel: 2, cards: 16, card: 2.6, atlas: 3, up: 0.3, upL: [0.3, 0.2, -1.2], bark: [0.42, 0.38, 0.32] },
   bunga:  { ...TREE_DEF, trunk: [2.8, 0.24], kids: [5, 4], spread: [1.0, 0.85], lenR: [1.15, 0.55], leafLevel: 2, cards: 11, card: 1.45, atlas: 1, up: 0.15, bark: [0.34, 0.28, 0.25] },
+  // 25b: 6 jenis baru dengan bentuk dari mesin yang sama (hanya bila !POHON.lama). hRel = tinggi dewasa relatif elm
+  // (perkiraan dari kisaran umum jenis itu, belum dari sumber terukur), dipakai untuk skala per jenis di blok TREES.
+  // fall = warna musim: cols nama di LEAF_PAL, campur / gugur = bagian pohon berwarna di mode Campur / Gugur, k = kekuatan.
+  aspen:    { ...TREE_DEF, trunk: [11, 0.2], kids: [8, 3], spread: [0.45, 0.7], lenR: [0.42, 0.5], leafLevel: 2, cards: 6, card: 1.0, atlas: 1, up: 0.7, bark: [0.78, 0.80, 0.72],
+    hRel: 0.8, fall: { cols: ['kuning', 'jingga'], campur: 0.1, gugur: 0.85, k: 0.9 } },        // kolom ramping, kulit putih kehijauan
+  beech:    { ...TREE_DEF, trunk: [4.0, 0.36], kids: [6, 4], spread: [0.9, 0.85], lenR: [1.0, 0.55], leafLevel: 2, cards: 14, card: 1.55, atlas: 1, up: 0.3, bark: [0.56, 0.56, 0.53],
+    hRel: 1.05, fall: { cols: ['jingga', 'cokelat'], campur: 0.08, gugur: 0.8, k: 0.85 } },      // kubah rapat, kulit abu-abu halus
+  basswood: { ...TREE_DEF, trunk: [6.0, 0.32], kids: [6, 4], spread: [0.7, 0.8], lenR: [0.85, 0.5], leafLevel: 2, cards: 12, card: 1.7, atlas: 0, up: 0.4, bark: [0.42, 0.38, 0.33],
+    hRel: 0.95, fall: { cols: ['kuning'], campur: 0.06, gugur: 0.7, k: 0.8 } },                  // lonjong rapat, pohon jalan
+  chestnut: { ...TREE_DEF, trunk: [3.6, 0.4], kids: [5, 4], spread: [1.0, 0.9], lenR: [1.05, 0.55], leafLevel: 2, cards: 12, card: 1.8, atlas: 0, up: 0.2, bark: [0.36, 0.31, 0.27],
+    hRel: 0.9, fall: { cols: ['kuning', 'cokelat'], campur: 0.06, gugur: 0.7, k: 0.8 } },        // kubah lebar, batang tebal
+  ash:      { ...TREE_DEF, trunk: [6.5, 0.3], kids: [5, 3], spread: [0.6, 0.8], lenR: [1.0, 0.55], leafLevel: 2, cards: 8, card: 1.5, atlas: 1, up: 0.5, bark: [0.50, 0.48, 0.44],
+    hRel: 0.95, fall: { cols: ['kuning', 'kuningHijau'], campur: 0.08, gugur: 0.75, k: 0.85 } }, // vas terbuka, kulit abu-abu
+  walnut:   { ...TREE_DEF, trunk: [3.2, 0.36], kids: [5, 3], spread: [0.95, 0.8], lenR: [1.1, 0.6], leafLevel: 2, cards: 9, card: 1.6, atlas: 1, up: 0.2, bark: [0.30, 0.27, 0.24],
+    hRel: 0.85, fall: { cols: ['kuning', 'cokelat'], campur: 0.06, gugur: 0.7, k: 0.8 } },       // tajuk lebar terbuka, kulit gelap
 };
 function makeTree(kindName, seed) {
   const K = TREE_SPECIES[kindName];
@@ -8116,6 +8131,9 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
   const POHON = { lama: new URLSearchParams(location.search).get('pohon') === 'lama' };
   const kinds = ['oak', 'oak', 'elm', 'elm', 'poplar', 'poplar', 'maple', 'maple', 'birch', 'birch', 'pine', 'pine', 'willow', 'willow', 'bunga', 'bunga'];   // 12b-2: 6 lama + 10 baru
   kinds.forEach((k, i) => TREES.templates.push(makeTree(k, 1000 + i * 7919)));
+  // 25b: 6 jenis baru x 2 bentuk = template 16-27, di belakang template lama agar indeks lama tidak bergeser
+  const KINDS_25B = ['aspen', 'beech', 'basswood', 'chestnut', 'ash', 'walnut'];
+  if (!POHON.lama) for (const k of KINDS_25B) for (let v = 0; v < 2; v++) { const i = TREES.templates.length; TREES.templates.push(makeTree(k, 1000 + i * 7919)); }
   let sd = 2468; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const hsh = (s, za) => { const x = Math.sin(s * 12.9898 + za * 78.233) * 43758.5453; return x - Math.floor(x); };
   const nCS = Math.ceil(CIRC / TREES.cell);
@@ -8218,8 +8236,30 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
     else if (t.za < 3200) t.tpl = h < 0.2 ? 6 + v : h < 0.34 ? 8 + v : h < 0.44 ? 10 + v : h < 0.52 ? 14 + v : t.tpl;
     else t.tpl = h < 0.2 ? 6 + v : h < 0.3 ? 8 + v : h < 0.4 ? 10 + v : t.tpl;
   });
+  // 25b: sebagian oak dan elm (template 0-3) yang tersisa diganti 6 jenis baru, per zona. Hash posisi sendiri (hsh3,
+  // tidak berkorelasi dengan hsh2 yang memilih jenis 12b-2); posisi, skala dasar, dan kolisi tetap. Bagian = peluang per pohon.
+  // kota = pohon jalan (basswood, ash, beech), taman = campuran, luar kota (bukit, ladang) = walnut, ash, aspen, chestnut.
+  if (!POHON.lama) {
+    const hsh3 = (s, za) => { const x = Math.sin(s * 5.9137 + za * 11.3171 + 1.77) * 31718.927; return x - Math.floor(x); };
+    const TI = {}; TREES.templates.forEach((T, i) => { if (TI[T.kind] === undefined) TI[T.kind] = i; });
+    const MIX = {
+      kota:  [['basswood', 0.18], ['ash', 0.14], ['beech', 0.08]],
+      taman: [['beech', 0.12], ['chestnut', 0.1], ['basswood', 0.08], ['walnut', 0.08], ['ash', 0.06], ['aspen', 0.06]],
+      luar:  [['walnut', 0.12], ['ash', 0.1], ['aspen', 0.1], ['chestnut', 0.08], ['beech', 0.06]],
+    };
+    TREES.list.forEach((t, i) => {
+      if ((i >= keep0 && i < keep1) || i >= keepF0 || t.tpl > 3) return;   // hanya oak / elm di luar halaman Cooper dan hutan 14a
+      if (Math.abs(wrapS(t.s - SKY_S)) < 50) return;                       // jalur elm promenade Skyway tetap
+      const h = hsh3(t.s, t.za), v = pick2(hsh3(t.za, t.s));
+      let acc = 0;
+      for (const [k, p] of MIX[t.za < 2600 ? 'kota' : t.za < 3200 ? 'taman' : 'luar']) { acc += p; if (h < acc) { t.tpl = TI[k] + v; break; } }
+    });
+  }
   // skala per jenis baru: template maple dan pohon bunga pendek (8,4 dan 6,4 m), di kota dikali 0,72 jadi seperti tanaman hias
   const KSCALE = { maple: 2.0, bunga: 1.7, willow: 1.15 };
+  // 25b: skala jenis baru dari hRel: rata-rata tinggi template jenis itu disamakan dengan hRel x rata-rata tinggi template elm
+  const hAvg = (k) => { const a = TREES.templates.filter((T) => T.kind === k); return a.reduce((m, T) => m + T.height, 0) / a.length; };
+  if (!POHON.lama) for (const k of KINDS_25B) KSCALE[k] = TREE_SPECIES[k].hRel * hAvg('elm') / hAvg(k);
   TREES.list.forEach((t, i) => { if ((i >= keep0 && i < keep1) || i >= keepF0) return; const f = KSCALE[TREES.templates[t.tpl].kind]; if (f) t.sc *= f; });
   // bayangan tajuk dari sunline (tepat di bawah), 2 m per piksel, seluruh stasiun
   const W = 3142, Hh = 4000, px = CIRC / W, data = new Uint8Array(W * Hh);
@@ -8434,6 +8474,8 @@ function leafColorFor(t, mode) {                                     // [r, g, b
   if (kind === 'oak') return G ? (h < 0.6 ? c(h < 0.3 ? P.jingga : P.cokelat, 0.8) : null) : (h < 0.05 ? c(P.cokelat, 0.6) : null);
   if (kind === 'poplar') return G && h < 0.5 ? c(P.kuning, 0.85) : null;
   if (kind === 'willow') return G && h < 0.5 ? c(P.kuningHijau, 0.6) : null;
+  const F = TREE_SPECIES[kind].fall;                                 // 25b: jenis baru membaca warna musim dari tabel
+  if (F) { const lim = G ? F.gugur : F.campur; return h < lim ? c(P[F.cols[Math.min(F.cols.length - 1, Math.floor(h / lim * F.cols.length))]], G ? F.k : F.k * 0.85) : null; }
   return null;                                                       // pinus selalu hijau
 }
 function applyLeafMode() {
