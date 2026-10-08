@@ -37,6 +37,7 @@ Status: 23a sampai 23g selesai, menunggu uji visual dan FPS Bhakti (GTX 1060, M1
 | 23g | 6 | Merpati melipat sayap, bergerombol | Medium | Opus 5.5 subagent | medium | `BIRDS` |
 | 23h | revisi foto | Revisi air dari foto Bhakti: jagung di atas danau, bintang di bawah layar saat berenang, riak sungai tidak ikut alur, riak danau seperti arus | High | Opus 5.5 | high | tekstur ladang, `waterNear()`, `SWIM`, shader air |
 | 23i | revisi Bhakti | Pipa pompa sungai ke gudang utilitas, traktor tidak masuk danau, pagar dek pandang kabel + condong di pagar | High | Opus 5.5 | high | `PIPE`, `inPipeRoute()`, `UTIL_PLAN.foot`, `f.lake`, `deckLean()` |
+| 23j | revisi Bhakti | Pohon tidak di atas jendela Skyway, jalan mengitari danau, bola dek dilepas di luar lantai bawah dan menabrak menara bila mengenainya, keempat sisi dek bisa mepet pagar | High | Opus 5.5 | high | `tree()`, `roadZ()` / `ROAD_DETOURS`, `dropBall()`, `towerHit()`, `DECK.boxes`, `deckK()` |
 | - | - | Kamus English, label panel, CLAUDE.md | Low | Opus 5.5 subagent | low | `I18N.en` |
 
 ## Aturan
@@ -78,3 +79,14 @@ Fisika sungai di silinder O'Neill: permukaan air diam = silinder sejari (potensi
 Fisika pompa (pipa baja, kekasaran 0,045 mm, Darcy-Weisbach): debit sungai 45 m3/s, kecepatan di pipa 4,42 m/s, faktor gesek 0,009, rugi gesek kedua pipa 21,1 m, rugi lokal 3,3 m, angkat statis 4 m; tinggi total 28,4 m, daya sekitar 15,7 MW (efisiensi 80%). Pompa yang dipasang langsung di sungai cukup sekitar 3,0 MW, jadi 80% daya habis di pipa sepanjang 8,5 km.
 
 Batasan: tanjakan alur di hulu dan hilir akuaduk tampak sebagai batu kering (belum ada air terjun di hilir); kemiringan alur 1 x 10^-4 di sepanjang keliling tidak terlihat.
+
+## Revisi 23j (pohon Skyway, jalan danau, dek pandang)
+
+| Keluhan | Penyebab | Perbaikan |
+| --- | --- | --- |
+| Pohon di atas jendela Skyway | Barisan pohon penahan angin di tepi petak ladang melintang sampai ke atas kaca (31 pohon dalam 22 m dari tengah jendela) | `tree()` tidak menanam pohon dalam 25 m dari tengah jendela (kaca 15 m + jalur bangku) |
+| Jalan menabrak danau | Jalan searah sumbu digambar lurus di atas danau (jalan ladang di danau za 4.300, arteri taman di danau za 2.950, ujung danau za 5.600) | `roadZ()`: jalan membelok mengitari danau di sisi terdekat, sejauh tanggul + 4 m; busur juga bukan ladang dan bebas pohon |
+| Bola dari dek menembus lantai bawah | Dilepas 1 m di luar pagar, padahal tingkat bawah dan podium lebih lebar; bola tidak pernah menabrak menara | Bola dilepas dari ujung lengan pelepas di luar podium + 2 m (17,2 m di luar pagar ke arah s); bola berhenti bila mengenai atap atau dinding menara (`towerHit()`) |
+| Sisi dek yang menghadap lengkungan tidak bisa mepet | Posisi keliling memakai busur lantai (jari-jari 1.000 m), padahal di ketinggian 175 m satu meter busur lantai hanya 0,825 m: pemain tertahan 1,8 m sebelum pagar | Dek dihitung dalam meter sebenarnya di jari-jari dek (`deckK()`), langkah keliling di dek juga; keempat sisi berhenti 0,50 m dari pagar |
+
+Catatan fisika: dilepas ke arah melawan putaran, bola melenceng 85,7 m menjauhi menara dan sampai di tanah (sama dengan hitungan analitik). Dilepas ke arah searah putaran, bola melenceng ke belakang dan menabrak menara; untuk lolos perlu lengan sekitar 110 m, jadi tabrakan itu dibiarkan sebagai peragaan Coriolis.

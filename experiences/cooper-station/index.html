@@ -726,6 +726,8 @@ Object.assign(I18N.en, {
   "Naik ke dek pandang menara ({h} m)": "Go up to the tower observation deck ({h} m)",
   "Turun ke lobi menara": "Go down to the tower lobby",
   "Dek pandang {h} m · g lokal {g} · B lempar bola, G jatuhkan bola ke luar pagar": "Observation deck {h} m · local g {g} · B throw ball, G drop ball over the railing",
+  "Jatuhkan dari {h} m, {d} m di luar pagar": "Drop from {h} m, {d} m beyond the railing",
+  "Bola mengenai menara: melenceng {d} m melawan arah putaran sebelum sampai di tanah.": "The ball hit the tower: it drifted {d} m against the spin before reaching the ground.",
   "Musik: {m} (J)": "Music: {m} (J)",
   "generatif": "generative",
   "file sendiri": "own file",
@@ -2986,15 +2988,41 @@ for (const L of LAKES) {
   }
 }
 
-// 6) jalan arteri, boulevard trem, jalan ladang (digambar setelah air = jembatan)
+// 6) jalan arteri, boulevard trem, jalan ladang (digambar setelah air = jembatan sungai)
+// 23j: jalan searah sumbu yang memotong danau (dulu lurus di atas air) membelok mengitari danau di sisi terdekat: busur elips
+// sejauh tepi danau + 8 m tanggul + 4 m + setengah lebar jalan. Busur disimpan di ROAD_DETOURS (juga dikosongkan di tekstur ladang).
+const ROAD_DETOURS = [];
+function roadZ(s, width, z0, z1, col) {
+  let z = z0;
+  const hits = [];
+  for (const L of LAKES) {
+    const E = width / 2 + 12, a = L.rs + E, b = L.rz + E, ds = wrapS(s - L.s);
+    if (Math.abs(ds) >= a) continue;
+    const dz = b * Math.sqrt(1 - (ds / a) ** 2);
+    if (L.za + dz <= z0 || L.za - dz >= z1) continue;
+    hits.push({ L, a, b, ds, zA: L.za - dz, zB: L.za + dz });
+  }
+  hits.sort((p, q) => p.zA - q.zA);
+  for (const h of hits) {
+    if (h.zA > z) lstripS(s, width, z, h.zA, col);
+    const side = h.ds >= 0 ? 1 : -1, pts = [];
+    const p0 = Math.asin(Math.max(-1, Math.min(1, (h.zA - h.L.za) / h.b))), p1 = Math.asin(Math.max(-1, Math.min(1, (h.zB - h.L.za) / h.b)));
+    for (let k = 0; k <= 48; k++) { const ph = p0 + (p1 - p0) * k / 48; pts.push([h.L.s + side * h.a * Math.cos(ph), h.L.za + h.b * Math.sin(ph)]); }
+    lg.strokeStyle = col; lg.lineWidth = width * LK; lg.lineCap = 'butt'; lg.lineJoin = 'round';
+    lg.beginPath(); pts.forEach(([ps, pz], k) => (k ? lg.lineTo(LX(ps), LY(pz)) : lg.moveTo(LX(ps), LY(pz)))); lg.stroke();
+    ROAD_DETOURS.push({ width, pts });
+    z = h.zB;
+  }
+  if (z < z1) lstripS(s, width, z, z1, col);
+}
 for (let i = 0; i < 26; i++) {
   const s = i * ART;
   if (Math.abs(wrapS(s - SKY_S)) < 1) continue;                  // arteri di Skyway diganti promenade
   const isBlvd = Math.abs(wrapS(s - TRAM.s)) < 1;
   lstripS(s, isBlvd ? ROAD.boulevard : ROAD.art, 150, CITY.za1 + 100, PAL.art);
-  lstripS(s, isBlvd ? ROAD.boulevard : ROAD.art, CITY.za1 + 100, PARKZ.za1, PAL.art);
+  roadZ(s, isBlvd ? ROAD.boulevard : ROAD.art, CITY.za1 + 100, PARKZ.za1, PAL.art);
   if (isBlvd) lstripS(s, ROAD.boulevard, PARKZ.za1, 7970, PAL.art);
-  else if (i % 2 === 0) { lstripS(s, ROAD.farm, PARKZ.za1, 6400, PAL.farmRoad); lstripS(s, ROAD.farm, 6900, 7850, PAL.farmRoad); }
+  else if (i % 2 === 0) { roadZ(s, ROAD.farm, PARKZ.za1, 6400, PAL.farmRoad); roadZ(s, ROAD.farm, 6900, 7850, PAL.farmRoad); }
 }
 for (let zc = CITY.za0; zc <= CITY.za1; zc += ART_Z) lrect(0, zc - ROAD.art / 2, CIRC, zc + ROAD.art / 2, PAL.art);
 // promenade Skyway: taman memanjang 90 m dengan jalan setapak
@@ -3111,6 +3139,8 @@ LIGHT.uniforms.uL_Land.value = landTex;                            // 17d: pantu
   frect(COOPER.s - 72, COOPER.za - 47, COOPER.s + 92, COOPER.za + 62, '#000');
   for (const z of RINGS_Z) if (z > FZ0 - 20 && z < FZ1 + 20) frect(0, z - 14, CIRC, z + 14, '#000');   // cincin struktur bukan ladang
   frect(FOREST.s0, FOREST.z0, FOREST.s1, FOREST.z1, '#000');     // 14a: hutan bukan ladang (tanpa gandum dan jagung)
+  fg.strokeStyle = '#000'; fg.lineJoin = 'round';                 // 23j: busur jalan yang mengitari danau bukan ladang
+  for (const D of ROAD_DETOURS) { fg.lineWidth = (D.width + 2) * FK; fg.beginPath(); D.pts.forEach(([ps, pz], k) => (k ? fg.lineTo(FX(modS(ps)), FY(pz)) : fg.moveTo(FX(modS(ps)), FY(pz)))); fg.stroke(); }
   fg.fillStyle = '#000';                                           // 23h: danau dan tanggulnya bukan ladang (dulu jagung tumbuh di atas air)
   for (const L of LAKES) for (const o of [-CIRC, 0, CIRC]) { fg.beginPath(); fg.ellipse(FX(L.s + o), FY(L.za), (L.rs + 12) * FK, (L.rz + 12) * FK, 0, 0, TAU); fg.fill(); }
   const fieldTex = new THREE.CanvasTexture(fc);
@@ -3616,6 +3646,9 @@ function buildSite(site) {
         for (const [yy, th] of [[0.18, 0.012], [0.36, 0.012], [0.54, 0.012], [0.72, 0.012], [0.9, 0.012], [1.1, 0.07]]) add(ax ? new THREE.BoxGeometry(th, th, 2 * hw) : new THREE.BoxGeometry(2 * hw, th, th), RAIL, ax ? e * (hw - 0.1) : 0, F + yy, ax ? 0 : e * (hw - 0.1));
       }
       Object.assign(DECK, { s: bs, za: bz, h: F, half: hw, inner: top[0] / 2, podD: Math.min(bd - 4, 46) });
+      // 23j: kotak badan menara (setengah lebar searah s dan za dalam meter sebenarnya, rentang tinggi) untuk tabrakan bola dan titik lepas G
+      DECK.boxes = [{ hs: Math.min(bw - 4, 52) / 2, hz: Math.min(bd - 4, 46) / 2, h0: 0, h1: 9 }];
+      let y0 = 0; for (const [w, h] of tiers) { DECK.boxes.push({ hs: w / 2, hz: w / 2, h0: y0, h1: y0 + h }); y0 += h; }
     }
     LANDMARK.s = bs; LANDMARK.za = bz; LANDMARK.h = y + 36; return;
   }
@@ -4474,6 +4507,8 @@ function tree(s, za, k) {
   if (inReal(s, za, 3)) return;                                   // area uji memakai pohon prosedural sendiri
   if (inBallpark(s, za, 1)) return;
   if (inPipeRoute(s, za, 3.5)) return;                           // 23i: jalur pipa pompa sungai
+  if (Math.abs(wrapS(s - SKY_S)) < WIN.width / 2 + 10) return;   // 23j: tidak di atas jendela Skyway dan jalur bangku di tepinya (dulu barisan penahan angin melintang di atas kaca)
+  if (ROAD_DETOURS.some((D) => D.pts.some(([ps, pz]) => Math.hypot(wrapS(s - ps), za - pz) < D.width / 2 + 3))) return;   // 23j: busur jalan danau
   treeList.push([modS(s), za, k]);
 }
 // 21a-1: lokasi air mancur Coriolis (plaza pusat kota terdekat ke s 14, za 625) ditentukan sebelum pohon, pejalan kaki,
@@ -5353,7 +5388,7 @@ function stepGround(dt) {
   const dT = player.vT * dt;
   player.distance += Math.hypot(zaNew - player.za, dT);
   player.za = zaNew;
-  player.theta = (player.theta + dT / R + TAU) % TAU;
+  player.theta = (player.theta + dT / (player.deck ? R - DECK.h : R) + TAU) % TAU;   // 23j: di dek langkah keliling dihitung di jari-jari dek
   if (player.deck) { deckClamp(); player.h = DECK.h; return; }      // 18b: di dek pandang: di dalam pagar, tidak menembus rumah lift
   collide(0.35);
   waterH();                                                         // 23e: tanah, lereng tebing, atau air (dulu: air = penghalang)
@@ -5517,22 +5552,27 @@ function motoHorn() {
   motoHornSound();
 }
 // --- 18b: dek pandang menara ikon (18b-2: teras keliling tingkat 4, E langsung naik/turun tanpa lift) ------------------
+// 23j: s = busur di lantai (jari-jari R). Di ketinggian dek (jari-jari R - h) satu meter busur lantai hanya (R - h) / R meter
+// sebenarnya (0,825 di 175 m), padahal menara dan pagar dibangun dalam meter sebenarnya. Dulu sisi yang menghadap lengkungan
+// (+-s) tertahan 1,8 m sebelum pagar; kini semua sisi dihitung dalam meter sebenarnya (deckK).
+const deckK = () => (R - DECK.h) / R;
 function onDeck(s, za, m = 0) {
-  const q = Math.max(Math.abs(wrapS(s - DECK.s)), Math.abs(za - DECK.za));
+  const q = Math.max(Math.abs(wrapS(s - DECK.s) * deckK()), Math.abs(za - DECK.za));
   return q < DECK.half - m && q > DECK.inner + m;
 }
 function deckClamp() {                                             // di dalam pagar, tidak masuk badan tingkat puncak
-  let ds = wrapS(player.theta * R - DECK.s), dz = player.za - DECK.za;
+  const k = deckK();
+  let ds = wrapS(player.theta * R - DECK.s) * k, dz = player.za - DECK.za;
   const lim = DECK.half - 0.5, hs = DECK.inner + 0.35;
   ds = Math.max(-lim, Math.min(lim, ds)); dz = Math.max(-lim, Math.min(lim, dz));
   if (Math.abs(ds) < hs && Math.abs(dz) < hs) { if (hs - Math.abs(ds) < hs - Math.abs(dz)) ds = Math.sign(ds || 1) * hs; else dz = Math.sign(dz || 1) * hs; }
-  player.theta = modS(DECK.s + ds) / R; player.za = DECK.za + dz;
+  player.theta = modS(DECK.s + ds / k) / R; player.za = DECK.za + dz;
 }
 // 23i: condong di pagar dek. Bila pemain dekat pagar (< 1,3 m), menghadap ke luar, dan menunduk, mata bergeser ke luar sampai
 // 0,85 m dan turun 0,15 m (badan bersandar di pegangan 1,1 m), jadi kaki menara dan jatuhnya bola terlihat.
 const DECK_LEAN = { k: 0 };
 function deckLean(dt, eye) {
-  const ds = wrapS(player.theta * R - DECK.s), dz = player.za - DECK.za, alongS = Math.abs(ds) >= Math.abs(dz);
+  const ds = wrapS(player.theta * R - DECK.s) * deckK(), dz = player.za - DECK.za, alongS = Math.abs(ds) >= Math.abs(dz);
   const ns = alongS ? Math.sign(ds) : 0, nz = alongS ? 0 : Math.sign(dz), dist = DECK.half - Math.max(Math.abs(ds), Math.abs(dz));
   const face = Math.sin(player.heading) * ns + Math.cos(player.heading) * nz;
   const want = player.state === 'ground' && player.deck ? smooth01(1.3, 0.6, dist) * smooth01(0.2, 0.6, face) * smooth01(-0.15, -0.6, player.pitch) : 0;
@@ -5700,6 +5740,10 @@ function physicsStep(dt) {
       const bs = modS(Math.atan2(b.pos.y, b.pos.x) * R), bz = b.pos.z + HALF_L;
       if (R - Math.hypot(b.pos.x, b.pos.y) <= groundH(bs, bz)) b.done = true;
     }
+    if (!b.done && b.t > 0.05 && DECK.boxes && towerHit(b.pos)) {  // 23j: bola menabrak atap atau dinding menara ikon (dulu menembus)
+      b.done = true; b.hitTower = true;
+      if (b === lastBall) setLabText(t('Bola mengenai menara: melenceng {d} m melawan arah putaran sebelum sampai di tanah.', { d: fmtN(Math.abs(wrapPi(Math.atan2(b.pos.y, b.pos.x) - b.thetaLaunch) * R), 1) }));
+    }
     if (b === lastBall && (b.stepCount++ % 2 === 0 || b.done)) trailPush(b.pos);
     if (b.done && !b.inCabin) { _tmpL.copy(b.pos); addMark(Math.atan2(_tmpL.y, _tmpL.x), _tmpL.z + HALF_L, COL_LAND); }
   }
@@ -5711,12 +5755,19 @@ function physicsStep(dt) {
 const balls = [];
 let lastBall = null, ballN = 0;
 const lab = { speed: 40, elev: 45, drop: 100, last: null };
+// 23j: titik dalam kerangka berputar di dalam badan menara ikon? Kotak menara tegak di kerangka lokal pusat menara (dinding sejajar
+// arah atas di pusat), jadi posisi diukur di bidang singgung pusat: x = r sin(dtheta), tinggi = R - r cos(dtheta).
+function towerHit(p) {
+  const r = Math.hypot(p.x, p.y), dth = wrapPi(Math.atan2(p.y, p.x) - DECK.s / R);
+  const x = Math.abs(r * Math.sin(dth)), h = R - r * Math.cos(dth), z = Math.abs(p.z + HALF_L - DECK.za);
+  return DECK.boxes.some((q) => h >= q.h0 && h <= q.h1 && x <= q.hs && z <= q.hz);
+}
 function newBall() {
   let b;
   if (balls.length < MAX_BALLS) { b = makeBody(); balls.push(b); }
   else { b = balls[ballN % MAX_BALLS]; }
   ballN++;
-  b.stepCount = 0;
+  b.stepCount = 0; b.hitTower = false;
   return b;
 }
 function describe(kind, info) {
@@ -5759,15 +5810,20 @@ function dropBall() {
   const ch = Math.cos(player.heading), sh = Math.sin(player.heading);
   let th = player.theta + sh * 5 / R, za = Math.min(CONFIG.L - 2, Math.max(2, player.za + ch * 5));
   let h0 = Math.min(lab.drop, R - 5);
-  if (player.deck) {                                                // 18b: dari dek: 1 m di luar pagar searah pandang, setinggi tangan
-    const k = (DECK.half + 1) / Math.max(Math.abs(ch), Math.abs(sh));
-    th = modS(DECK.s + sh * k) / R; za = DECK.za + ch * k; h0 = DECK.h + PHYS.handH;
+  if (player.deck) {                                                // 18b: dari dek, setinggi tangan, searah pandang
+    // 23j: dilepas dari ujung lengan pelepas di luar lantai bawah yang paling lebar (podium) + 2 m, supaya bola jatuh bebas di
+    // udara (dulu 1 m di luar pagar: jatuh tegak lurus menembus atap tingkat bawah). Jarak dalam meter sebenarnya di ketinggian lepas.
+    const alongS = Math.abs(sh) >= Math.abs(ch), ext = Math.max(...DECK.boxes.filter((q) => q.h1 < DECK.h).map((q) => alongS ? q.hs : q.hz)) + 2;
+    const k = ext / Math.max(Math.abs(ch), Math.abs(sh));
+    h0 = DECK.h + PHYS.handH;
+    th = modS(DECK.s + sh * k * R / (R - h0)) / R; za = DECK.za + ch * k;
+    lab.dropOut = k - DECK.half;
   }
   groundPoint(th, za, h0, _v1);
   launchBody(b, _v1, _v2.set(0, 0, 0));
   lastBall = b; trailReset(); trailPush(_v1);
   addMark(th, za, COL_LAUNCH);
-  lab.last = describe(t('Jatuhkan dari {h} m', { h: h0 }), landingOf(b));
+  lab.last = describe(player.deck ? t('Jatuhkan dari {h} m, {d} m di luar pagar', { h: fmtN(h0, 1), d: fmtN(lab.dropOut, 1) }) : t('Jatuhkan dari {h} m', { h: h0 }), landingOf(b));
   setLabText(lab.last);
 }
 
