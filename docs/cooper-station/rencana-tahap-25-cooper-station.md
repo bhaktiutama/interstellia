@@ -119,7 +119,8 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 | 25d | Selesai, menunggu uji visual Bhakti | Daun majemuk sebagai geometri: tiap posisi kartu pada jenis majemuk diganti 4-6 tangkai daun (pita 2 ruas, 6 verteks, separuh ujung merunduk, helai hampir mendatar) bertekstur satu daun majemuk utuh. Sel atlas 4 dan 5 digambar ulang jadi 4 daun majemuk tunggal per setengah sel (ash / hickory 9 anak daun, black locust 17 anak daun kecil, walnut 17 anak daun, honey locust daun ganda halus). Ash dan walnut beralih ke tangkai daun; 3 jenis baru: hickory, black locust, honey locust (template 28-33, ditambah di akhir daftar zona: pilihan 25b tetap). Tanpa GLSL baru. Gambar: `docs/cooper-station/gambar/pohon-majemuk-25d.webp` |
 | 25e | Selesai, menunggu uji visual Bhakti | 4 konifer (total 21 jenis): fir (mewakili silver fir dan balsam fir), hemlock, arborvitae, redcedar, template 34-41. Semprot jarum (fir, hemlock) dan sisik (arborvitae, redcedar) digambar di sel cadangan 6-7 atlas kedua, dipasang dengan pita tangkai 25d (`frond.roll` memutar helai; arborvitae tegak). Mesin cabang kerucut / kolom dengan pengali panjang cabang `clK` (bawaan 1, jenis lama identik). Penempatan K2: tidak di jalan kota; taman 10% dan luar kota 14% dari oak / elm tersisa; hutan 14a: 40% pinus jadi fir (22%) atau hemlock (18%) dengan tinggi mutlak tiap pohon tetap. Tanpa GLSL baru. Gambar: `docs/cooper-station/gambar/konifer-25e.webp` |
 | 25f | Selesai, menunggu uji visual Bhakti | Tekstur kulit per jenis `BARK_TEX` (7 kanvas 128 x 256 px, RNG sendiri, ukuran ulangan sama dengan kulit lama): putih berlentisel dan bercak hitam (birch), putih keabuan bermata wajik (aspen), halus berbintik (beech, fir), alur silang wajik (ash, walnut, hickory, chestnut, black locust), lempeng pipih beretak (pinus, hemlock, honey locust), serat mengelupas (redcedar, arborvitae), lentisel mendatar (pohon bunga). Field `barkT` per jenis; oak, elm, poplar, maple, willow, basswood tetap memakai kulit lama. Warna `K.bark` dan UV tidak berubah. Gambar: `docs/cooper-station/gambar/kulit-25f.webp` |
-| 25g-25j | Belum dikerjakan | - |
+| 25g | Selesai, menunggu uji visual Bhakti | Goyang daun per jenis: atribut `aFlex` per verteks daun (x = pengali goyang angin, y = getar cepat 11-13 rad/s), nilai dari field `flex`. Aspen 1,6 / 1,0 (bergetar), poplar 1,4 / 0,6, willow 1,5, honey locust 1,3 / 0,2, birch 1,2 / 0,3, jenis majemuk 1,1-1,2 / 0,15, oak dan chestnut 0,8, beech 0,9, konifer 0,3-0,6, lainnya 1. Di `LEAF_VS` dibungkus `#ifdef LEAF_FLEX` (daun, bayangan, bake); `?pohon=lama` tanpa define dan tanpa atribut = shader lama |
+| 25h-25j | Belum dikerjakan | - |
 
 ### Hasil terukur 25b (sandbox, di luar hutan 14a)
 
@@ -187,5 +188,24 @@ Catatan 25f:
 - Mode bawaan memakai 8 tekstur kulit (lama + 7 baru), masing-masing 128 x 256 px (128 KB, sekitar 170 KB dengan mipmap): total tambahan sekitar 1,2 MB memori GPU.
 - Geometri tidak berubah (`?pohon=lama` 0 beda); `tools/uji_pohon.py` semua lolos, `tools/qc_load.py` tanpa error.
 - Tekstur dicek lewat pratinjau dan render batang dari dekat di sandbox; detail lentisel dan lempeng lebih kecil dari 1 piksel layar pada jarak lebih dari sekitar 30 m (mipmap menghaluskannya).
+
+### Hasil terukur 25g (sandbox)
+
+Uji goyang: adegan bake satu template dirender pada uTime 0 dan 0,37 s dengan angin 0,3, dihitung bagian piksel tajuk yang berubah (bukan amplitudo dalam meter; urutan yang diuji).
+
+| Jenis | flex | Piksel berubah, bawaan | Piksel berubah, `?pohon=lama` |
+| --- | --- | --- | --- |
+| aspen | 1,6 / 1,0 | 14,6% | - |
+| elm | 1 / 0 | 9,1% | 9,1% |
+| poplar | 1,4 / 0,6 | 6,7% | 5,7% |
+| oak | 0,8 / 0 | 4,1% | 5,3% |
+| fir | 0,35 / 0 | 2,1% | - |
+
+Catatan 25g:
+- Amplitudo goyang di puncak tajuk (tinggi >= 12 m dari dasar template): 5 cm x flex saat tenang, (5 + 20 x hembusan) cm x flex saat berangin; getar cepat 3,5 cm x getar x (0,4 + hembusan).
+- Shader hanya menambah sin / cos dikali konstanta (tanpa normalize, pow, sqrt): tidak ada jalur NaN baru untuk M1. `tools/qc_load.py` tanpa error atau peringatan kompilasi.
+- Elm (flex 1) sama persis di kedua mode, jadi jalur baru setara dengan lama untuk pengali 1. `?pohon=lama` geometri 0 beda, atribut `aFlex` tidak ditambahkan.
+- Tambahan memori: 2 float per verteks daun (sekitar 8 byte x 140 ribu verteks daun di 42 template = sekitar 1,1 MB).
+- Gerak nyata hanya bisa dinilai di GPU (sandbox menilai dua bingkai diam).
 
 Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.
