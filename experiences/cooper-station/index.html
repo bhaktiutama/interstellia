@@ -7330,6 +7330,65 @@ const leafTex = (() => {                                          // atlas gugus
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
   return t;
 })();
+// 25c: atlas daun kedua, 4 x 2 sel 512 px, RNG sendiri (trr tidak disentuh: tekstur kulit dan jagung tetap). Indeks atlas jenis
+// 4 + j: j 0 bulat bertangkai (aspen), 1 lebar utuh lonjong (beech), 2 hati (basswood), 3 lonjong bergerigi (chestnut),
+// 4 majemuk kecil (ash), 5 majemuk besar (walnut), 6-7 cadangan konifer 25e. Sel j di kolom j % 4, baris floor(j / 4)
+// (baris 0 = setengah atas kanvas = v 0,5-1). Warna dasar hijau tetap dalam rentang yang diwarnai ulang LEAF_RECOLOR.
+const leafTex2 = (() => {
+  let s2 = 25031; const lr = () => ((s2 = (s2 * 16807) % 2147483647) / 2147483647);
+  const cv = document.createElement('canvas'); cv.width = 2048; cv.height = 1024;
+  const g = cv.getContext('2d'); g.lineCap = 'round'; g.lineJoin = 'round';
+  // bentuk daun di koordinat lokal: pangkal di x = -L/2, ujung di x = +L/2, lebar setengah W
+  const SHAPE = {
+    bulat: (L, W) => { g.moveTo(-L / 2, 0); g.bezierCurveTo(-L / 2, -W * 1.25, L * 0.42, -W * 1.1, L / 2, 0); g.bezierCurveTo(L * 0.42, W * 1.1, -L / 2, W * 1.25, -L / 2, 0); },
+    utuh: (L, W) => { g.moveTo(-L / 2, 0); g.bezierCurveTo(-L * 0.3, -W * 1.2, L * 0.25, -W * 0.9, L / 2, 0); g.bezierCurveTo(L * 0.25, W * 0.9, -L * 0.3, W * 1.2, -L / 2, 0); },
+    hati: (L, W) => { g.moveTo(-L * 0.4, 0);                         // lekuk di pangkal, cuping bulat, lebar terbesar dekat pangkal, ujung runcing
+      for (const sd of [-1, 1]) { g.bezierCurveTo(-L * 0.62, sd * W * 0.5, -L * 0.45, sd * W * 1.05, -L * 0.15, sd * W); g.bezierCurveTo(L * 0.15, sd * W * 0.95, L * 0.35, sd * W * 0.45, L / 2, 0); if (sd < 0) g.moveTo(-L * 0.4, 0); } },
+    gerigi: (L, W) => { const n = 9; g.moveTo(-L / 2, 0);
+      for (const sd of [-1, 1]) { for (let i = 1; i <= n; i++) { const x = -L / 2 + L * i / n, w = W * Math.sin(Math.PI * i / n) ** 0.7; g.lineTo(x - L / n * 0.5, sd * w * 1.12); g.lineTo(x, sd * w * 0.9); } if (sd < 0) g.moveTo(-L / 2, 0); } },
+  };
+  const leaf = (x, y, rot, L, W, shape, hue, sat, lit) => {
+    g.save(); g.translate(x, y); g.rotate(rot);
+    g.fillStyle = `hsl(${hue},${sat}%,${lit}%)`; g.beginPath(); SHAPE[shape](L, W); g.fill();
+    g.strokeStyle = `hsla(${hue},28%,${lit + 16}%,0.55)`; g.lineWidth = 1.2; g.beginPath(); g.moveTo(-L / 2, 0); g.lineTo(L * 0.45, 0); g.stroke();
+    g.restore();
+  };
+  const origin = (j) => [(j % 4) * 512 + 256, Math.floor(j / 4) * 512 + 256];
+  const twigs = (cx, cy, n, len) => { g.strokeStyle = 'rgb(74,58,40)'; for (let k = 0; k < n; k++) { const a = lr() * TAU; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(a) * len, cy + Math.sin(a) * len); g.stroke(); } };
+  // gugus daun tunggal: n daun acak dalam radius 215 px
+  const simple = (j, n, len, wid, shape, hue, sat0, lit0, stalk) => {
+    const [cx, cy] = origin(j); twigs(cx, cy, 5, 170);
+    for (let k = 0; k < n; k++) {
+      const a = lr() * TAU, r = 215 * Math.sqrt(lr()), x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r, L = len * (0.75 + 0.5 * lr()), rot = lr() * TAU;
+      if (stalk) { g.strokeStyle = 'rgb(96,90,52)'; g.lineWidth = 2; g.beginPath(); g.moveTo(x - Math.cos(rot) * L * 0.5, y - Math.sin(rot) * L * 0.5); g.lineTo(x - Math.cos(rot) * L * (0.5 + stalk), y - Math.sin(rot) * L * (0.5 + stalk)); g.stroke(); }
+      leaf(x, y, rot, L, L * wid, shape, hue + lr() * 24 - 12, sat0 + lr() * 22, lit0 + lr() * 18);
+    }
+  };
+  // gugus daun majemuk: tangkai utama dengan pasangan anak daun + satu anak daun ujung
+  const pinnate = (j, n, rach, pairs, lf, hue, sat0, lit0) => {
+    const [cx, cy] = origin(j); twigs(cx, cy, 4, 150);
+    for (let k = 0; k < n; k++) {
+      const a = lr() * TAU, r = 150 * Math.sqrt(lr()), x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r, rot = lr() * TAU, R = rach * (0.8 + 0.4 * lr());
+      const hue1 = hue + lr() * 20 - 10, sat = sat0 + lr() * 20, lit = lit0 + lr() * 14;
+      g.save(); g.translate(x, y); g.rotate(rot);
+      g.strokeStyle = `hsl(${hue1},30%,${lit - 4}%)`; g.lineWidth = 2.2; g.beginPath(); g.moveTo(-R / 2, 0); g.lineTo(R / 2, 0); g.stroke();
+      for (let p = 0; p < pairs; p++) {
+        const px = -R / 2 + R * (p + 0.7) / (pairs + 0.4), L = lf * (0.8 + 0.35 * p / pairs) * (0.9 + 0.2 * lr());
+        for (const sd of [-1, 1]) { g.save(); g.translate(px, 0); g.rotate(sd * (1.05 + (lr() - 0.5) * 0.3)); leaf(L * 0.5, 0, 0, L, L * 0.3, 'utuh', hue1, sat, lit + lr() * 6); g.restore(); }
+      }
+      leaf(R / 2 + lf * 0.45, 0, 0, lf * 1.05, lf * 0.3, 'utuh', hue1, sat, lit);
+      g.restore();
+    }
+  };
+  simple(0, 120, 38, 0.95, 'bulat', 82, 36, 34, 0.45);           // aspen: kecil bulat, tangkai panjang pipih, hijau muda
+  simple(1, 85, 54, 0.55, 'utuh', 104, 40, 24, 0);                // beech: lonjong tepi rata, hijau tua mengilap
+  simple(2, 100, 64, 0.42, 'hati', 96, 38, 30, 0.2);              // basswood: hati, lebar sekitar 0,85 x panjang
+  simple(3, 52, 96, 0.24, 'gerigi', 98, 40, 25, 0);               // chestnut: panjang ramping bergerigi
+  pinnate(4, 32, 110, 4, 34, 108, 34, 24);                        // ash: majemuk 9 anak daun, hijau tua
+  pinnate(5, 26, 150, 7, 36, 84, 38, 30);                         // walnut: majemuk 15 anak daun, hijau kekuningan
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+})();
 const barkTex = (() => {
   const cv = document.createElement('canvas'); cv.width = 128; cv.height = 256;
   const g = cv.getContext('2d');
@@ -7894,17 +7953,17 @@ const TREE_SPECIES = {
   // 25b: 6 jenis baru dengan bentuk dari mesin yang sama (hanya bila !POHON.lama). hRel = tinggi dewasa relatif elm
   // (perkiraan dari kisaran umum jenis itu, belum dari sumber terukur), dipakai untuk skala per jenis di blok TREES.
   // fall = warna musim: cols nama di LEAF_PAL, campur / gugur = bagian pohon berwarna di mode Campur / Gugur, k = kekuatan.
-  aspen:    { ...TREE_DEF, trunk: [11, 0.2], kids: [8, 3], spread: [0.45, 0.7], lenR: [0.42, 0.5], leafLevel: 2, cards: 6, card: 1.0, atlas: 1, up: 0.7, bark: [0.78, 0.80, 0.72],
+  aspen:    { ...TREE_DEF, trunk: [11, 0.2], kids: [8, 3], spread: [0.45, 0.7], lenR: [0.42, 0.5], leafLevel: 2, cards: 6, card: 1.0, atlas: 4, up: 0.7, bark: [0.78, 0.80, 0.72],
     hRel: 0.8, fall: { cols: ['kuning', 'jingga'], campur: 0.1, gugur: 0.85, k: 0.9 } },        // kolom ramping, kulit putih kehijauan
-  beech:    { ...TREE_DEF, trunk: [4.0, 0.36], kids: [6, 4], spread: [0.9, 0.85], lenR: [1.0, 0.55], leafLevel: 2, cards: 14, card: 1.55, atlas: 1, up: 0.3, bark: [0.56, 0.56, 0.53],
-    hRel: 1.05, fall: { cols: ['jingga', 'cokelat'], campur: 0.08, gugur: 0.8, k: 0.85 } },      // kubah rapat, kulit abu-abu halus
-  basswood: { ...TREE_DEF, trunk: [6.0, 0.32], kids: [6, 4], spread: [0.7, 0.8], lenR: [0.85, 0.5], leafLevel: 2, cards: 12, card: 1.7, atlas: 0, up: 0.4, bark: [0.42, 0.38, 0.33],
+  beech:    { ...TREE_DEF, trunk: [4.0, 0.36], kids: [6, 4], spread: [0.9, 0.85], lenR: [1.0, 0.55], leafLevel: 2, cards: 14, card: 1.55, atlas: 5, up: 0.3, bark: [0.56, 0.56, 0.53],
+    hRel: 1.05, fall: { cols: ['jingga', 'perunggu', 'cokelat'], campur: 0.08, gugur: 0.8, k: 0.85 } },      // kubah rapat, kulit abu-abu halus
+  basswood: { ...TREE_DEF, trunk: [6.0, 0.32], kids: [6, 4], spread: [0.7, 0.8], lenR: [0.85, 0.5], leafLevel: 2, cards: 12, card: 1.7, atlas: 6, up: 0.4, bark: [0.42, 0.38, 0.33],
     hRel: 0.95, fall: { cols: ['kuning'], campur: 0.06, gugur: 0.7, k: 0.8 } },                  // lonjong rapat, pohon jalan
-  chestnut: { ...TREE_DEF, trunk: [3.6, 0.4], kids: [5, 4], spread: [1.0, 0.9], lenR: [1.05, 0.55], leafLevel: 2, cards: 12, card: 1.8, atlas: 0, up: 0.2, bark: [0.36, 0.31, 0.27],
+  chestnut: { ...TREE_DEF, trunk: [3.6, 0.4], kids: [5, 4], spread: [1.0, 0.9], lenR: [1.05, 0.55], leafLevel: 2, cards: 12, card: 1.8, atlas: 7, up: 0.2, bark: [0.36, 0.31, 0.27],
     hRel: 0.9, fall: { cols: ['kuning', 'cokelat'], campur: 0.06, gugur: 0.7, k: 0.8 } },        // kubah lebar, batang tebal
-  ash:      { ...TREE_DEF, trunk: [6.5, 0.3], kids: [5, 3], spread: [0.6, 0.8], lenR: [1.0, 0.55], leafLevel: 2, cards: 8, card: 1.5, atlas: 1, up: 0.5, bark: [0.50, 0.48, 0.44],
+  ash:      { ...TREE_DEF, trunk: [6.5, 0.3], kids: [5, 3], spread: [0.6, 0.8], lenR: [1.0, 0.55], leafLevel: 2, cards: 8, card: 1.5, atlas: 8, up: 0.5, bark: [0.50, 0.48, 0.44],
     hRel: 0.95, fall: { cols: ['kuning', 'kuningHijau'], campur: 0.08, gugur: 0.75, k: 0.85 } }, // vas terbuka, kulit abu-abu
-  walnut:   { ...TREE_DEF, trunk: [3.2, 0.36], kids: [5, 3], spread: [0.95, 0.8], lenR: [1.1, 0.6], leafLevel: 2, cards: 9, card: 1.6, atlas: 1, up: 0.2, bark: [0.30, 0.27, 0.24],
+  walnut:   { ...TREE_DEF, trunk: [3.2, 0.36], kids: [5, 3], spread: [0.95, 0.8], lenR: [1.1, 0.6], leafLevel: 2, cards: 9, card: 1.6, atlas: 9, up: 0.2, bark: [0.30, 0.27, 0.24],
     hRel: 0.85, fall: { cols: ['kuning', 'cokelat'], campur: 0.06, gugur: 0.7, k: 0.8 } },       // tajuk lebar terbuka, kulit gelap
 };
 function makeTree(kindName, seed) {
@@ -7985,7 +8044,10 @@ function makeTree(kindName, seed) {
     const ao = Math.min(1, 0.35 + 0.65 * dist / Math.max(rad, 1)) * (0.8 + 0.2 * Math.min(1, c.y / top));
     for (const [sa, sb, uu, vv] of [[-1, -1, 0, 0], [1, -1, 1, 0], [1, 1, 1, 1], [-1, 1, 0, 1]]) {
       const p = c.clone().addScaledVector(a1, sa).addScaledVector(a2, sb);
-      lp.push(p.x, p.y, p.z); luv.push((uu + K.atlas) * 0.25, vv); lcn.push(cn.x, cn.y, cn.z); lao.push(ao);
+      lp.push(p.x, p.y, p.z);
+      if (K.atlas < 4) luv.push((uu + K.atlas) * 0.25, vv);
+      else { const j = K.atlas - 4; luv.push((uu + j % 4) * 0.25, (vv + 1 - Math.floor(j / 4)) * 0.5); }   // 25c: atlas kedua leafTex2 (4 x 2)
+      lcn.push(cn.x, cn.y, cn.z); lao.push(ao);
     }
     li.push(v0, v0 + 1, v0 + 2, v0, v0 + 2, v0 + 3);
   }
@@ -8279,7 +8341,7 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
   // mesh per template: kulit kayu (MeshBasic + model cahaya) + daun (shader) + impostor (semua pohon, statis)
   TREES.templates.forEach((T, ti) => {
     const mine = TREES.list.filter((t) => t.tpl === ti), n = Math.max(1, mine.length);
-    const leafU = { uLeafTex: { value: leafTex } };
+    const leafU = { uLeafTex: { value: TREE_SPECIES[T.kind].atlas >= 4 ? leafTex2 : leafTex } };   // 25c: jenis 25b memakai atlas kedua
     T.bark = new THREE.InstancedMesh(T.barkGeo, new THREE.MeshBasicMaterial({ map: barkTex, vertexColors: true }), n);
     T.leafGeo.setAttribute('aLeafC', new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4).setUsage(THREE.DynamicDrawUsage));   // 12b-2
     T.leaf = new THREE.InstancedMesh(T.leafGeo, vegMaterial({ vertex: LEAF_VS, fragment: LEAF_FS, uniforms: leafU }), n);
@@ -8460,7 +8522,8 @@ const LEAF = { mode: 1, names: ['Hijau', 'Campur', 'Gugur'], fallUser: null, pre
 // Dulu nilai sRGB dipakai sebagai linear: kuning lemon pucat yang tampak zaitun saat redup, sakura magenta jenuh.
 const leafLin = (r, g, b) => [r, g, b].map((x) => Math.pow(x / 255, 2.2));
 const LEAF_PAL = { kuning: leafLin(232, 180, 30), jingga: leafLin(228, 112, 26), merah: leafLin(170, 38, 24), cokelat: leafLin(150, 92, 40),
-  kuningHijau: leafLin(172, 190, 62), pink: leafLin(242, 190, 208), api: leafLin(222, 128, 166) };   // pink = sakura pucat, api = sakura lebih tua
+  kuningHijau: leafLin(172, 190, 62), pink: leafLin(242, 190, 208), api: leafLin(222, 128, 166),   // pink = sakura pucat, api = sakura lebih tua
+  perunggu: leafLin(178, 104, 46) };                                   // 25c: perunggu = beech musim gugur
 try { const sv = JSON.parse(localStorage.getItem('cooperStation.leaf') || 'null'); if (sv) { if (sv.mode >= 0 && sv.mode < 3) LEAF.mode = sv.mode; if (sv.fall === true || sv.fall === false) LEAF.fallUser = sv.fall; } } catch (e) { /* penyimpanan tidak tersedia */ }
 function leafColorFor(t, mode) {                                     // [r, g, b, kekuatan] atau null (hijau)
   const kind = TREES.templates[t.tpl].kind, x = Math.sin(t.s * 7.123 + t.za * 3.917) * 91731.37, h = x - Math.floor(x), P = LEAF_PAL;

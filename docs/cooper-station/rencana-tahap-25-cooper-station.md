@@ -115,7 +115,8 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 | --- | --- | --- |
 | 25a | Selesai, menunggu uji visual Bhakti | `TREE_KINDS` jadi `TREE_SPECIES` dengan nilai bawaan `TREE_DEF` (jit0, tpos, clMode, leader, crown). Cabang `kindName ===` di `makeTree()` hilang. Saklar `?pohon=lama` disiapkan (belum berefek, jenis baru di 25b). Uji: sidik jari FNV-1a dari 16 template (indeks, atribut, dan ukuran per template) sama dengan sebelum perubahan, 0 field berbeda, dengan dan tanpa `?pohon=lama`. Review terpisah: 336 pohon (16 template asli dan 40 benih tambahan per jenis) dibandingkan bit per bit dengan kode HEAD, 0 beda. `tools/qc_load.py` tanpa error; `tools/uji_pohon.py` 7 cek lolos |
 | 25b | Selesai, menunggu uji visual Bhakti | 6 jenis baru (aspen, beech, basswood, chestnut, ash, walnut), 2 bentuk per jenis = template 16-27 di belakang template lama. Sebagian oak dan elm diganti per zona dari hash posisi sendiri `hsh3`: kota basswood 18%, ash 14%, beech 8%; taman beech 12%, chestnut 10%, basswood 8%, walnut 8%, ash 6%, aspen 6%; luar kota walnut 12%, ash 10%, aspen 10%, chestnut 8%, beech 6% (persen dari oak dan elm yang tersisa). Posisi, skala dasar, dan kolisi tetap. Halaman Cooper, promenade Skyway, dan hutan 14a tidak diganti. Warna musim per jenis dari field `fall`. `?pohon=lama` = 16 template, identik dengan sebelum 25a (0 beda) |
-| 25c-25j | Belum dikerjakan | - |
+| 25c | Selesai, menunggu uji visual Bhakti | Atlas daun kedua `leafTex2` (2.048 x 1.024 px, 4 x 2 sel 512 px, RNG sendiri) untuk 6 jenis 25b: bulat bertangkai (aspen), lonjong tepi rata (beech), hati (basswood), lonjong bergerigi (chestnut), majemuk 9 anak daun (ash), majemuk 15 anak daun (walnut); 2 sel dicadangkan untuk konifer 25e. Indeks atlas jenis 4-9; UV kartu daun atlas >= 4 dihitung ke sel 4 x 2, rumus atlas 0-3 tidak berubah. Warna musim beech ditambah perunggu (`LEAF_PAL.perunggu`). Gambar atlas: `docs/cooper-station/gambar/atlas-daun-25c.webp` |
+| 25d-25j | Belum dikerjakan | - |
 
 ### Hasil terukur 25b (sandbox, di luar hutan 14a)
 
@@ -137,5 +138,11 @@ Catatan 25b:
 - Kolisi batang pohon bukit dihitung dari template lama sebelum jenis diganti, sama seperti 12b-2. Bedanya beberapa sentimeter, sebab jari-jari batang template 0,2 sampai 0,4 m.
 - Tambah 12 template berarti tambah mesh instanced (kulit, daun, impostor) dan 12 bake impostor oktahedral di Ultra. Draw call, waktu muat, dan FPS belum diukur (25i).
 - Atlas daun masih 4 kolom. Bentuk daun jenis baru memakai kolom 0 dan 1 yang sudah ada; bentuk daun khas tiap jenis baru datang di 25c.
+
+Catatan 25c:
+- Berbeda dari rencana awal (satu atlas 4 -> 12 kolom): atlas lama tidak diubah, karena RNG penggambarnya (`trr`) juga dipakai tekstur kulit kayu dan jagung, dan mengubah ukuran atlas mengubah sampel tekstur 8 jenis lama. Jadi 8 jenis lama tetap memakai atlas lama (oak dan maple belum mendapat daun berlekuk baru); jenis 25b memakai atlas kedua.
+- Uji: `?pohon=lama` identik dengan sebelum 25a (16 template, 0 beda); di mode bawaan template 0-15 identik, template 16-27 hanya berubah UV daun. `tools/uji_pohon.py` semua lolos (angka sama dengan 25b), `tools/qc_load.py` tanpa error.
+- Warna musim tetap bekerja: kriteria hijau `LEAF_RECOLOR` (g - max(r, b) > 0,03 linear) dihitung untuk rentang warna atlas baru (rona HSL 70-120): selisih 0,055 sampai 0,11.
+- Memori: atlas kedua 2.048 x 1.024 RGBA = 8 MB, sekitar 10,7 MB dengan mipmap. Belum diukur di GPU.
 
 Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.
