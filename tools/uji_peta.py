@@ -47,8 +47,8 @@ UJI = r"""
   const cv2 = document.getElementById('mapCanvas'), g2 = cv2.getContext('2d'), snap = () => g2.getImageData(0, 0, cv2.width, cv2.height).data;
   S.HOLO.on = false; S.HOLO.ctl = false; S.drawMap(); const d0 = snap();
   S.HOLO.on = true; S.drawMap(); const d1 = snap();
-  let diff = 0; for (let i = 0; i < d0.length; i += 4) if (Math.abs(d0[i] - d1[i]) + Math.abs(d0[i + 1] - d1[i + 1]) + Math.abs(d0[i + 2] - d1[i + 2]) > 30) diff++;
-  out[`hologram tergambar di atas peta 2D (${diff} piksel berubah dari ${cv2.width * cv2.height})`] = diff > 3000 && diff < cv2.width * cv2.height * 0.5;
+  let diff = 0; for (let i = 0; i < d0.length; i += 4) if (d1[i] + d1[i + 1] + d1[i + 2] > (d0[i] + d0[i + 1] + d0[i + 2]) * 0.72 + 40) diff++;   // peta diredupkan 28%: hitung piksel garis hologram yang lebih terang
+  out[`hologram tergambar di atas peta 2D (${diff} piksel garis dari ${cv2.width * cv2.height})`] = diff > 3000 && diff < cv2.width * cv2.height * 0.5;
   const m = S.MAP_MARKS.find((x) => x.key === 'U'), p = m.at();
   S.MAPV.hl = { s: p.s, za: p.za, h: 0, name: m.name, i: -1 }; for (let i = 0; i < 40; i++) S.drawHolo(g2, 0.1);   // langkah frame langsung (sandbox lambat)
   const o = S.holoP(p.s, p.za, 0, [0, 0, 0]), o2 = S.holoP(p.s + Math.PI * S.R, p.za, 0, [0, 0, 0]);   // titik di seberang keliling
