@@ -120,7 +120,8 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 | 25e | Selesai, menunggu uji visual Bhakti | 4 konifer (total 21 jenis): fir (mewakili silver fir dan balsam fir), hemlock, arborvitae, redcedar, template 34-41. Semprot jarum (fir, hemlock) dan sisik (arborvitae, redcedar) digambar di sel cadangan 6-7 atlas kedua, dipasang dengan pita tangkai 25d (`frond.roll` memutar helai; arborvitae tegak). Mesin cabang kerucut / kolom dengan pengali panjang cabang `clK` (bawaan 1, jenis lama identik). Penempatan K2: tidak di jalan kota; taman 10% dan luar kota 14% dari oak / elm tersisa; hutan 14a: 40% pinus jadi fir (22%) atau hemlock (18%) dengan tinggi mutlak tiap pohon tetap. Tanpa GLSL baru. Gambar: `docs/cooper-station/gambar/konifer-25e.webp` |
 | 25f | Selesai, menunggu uji visual Bhakti | Tekstur kulit per jenis `BARK_TEX` (7 kanvas 128 x 256 px, RNG sendiri, ukuran ulangan sama dengan kulit lama): putih berlentisel dan bercak hitam (birch), putih keabuan bermata wajik (aspen), halus berbintik (beech, fir), alur silang wajik (ash, walnut, hickory, chestnut, black locust), lempeng pipih beretak (pinus, hemlock, honey locust), serat mengelupas (redcedar, arborvitae), lentisel mendatar (pohon bunga). Field `barkT` per jenis; oak, elm, poplar, maple, willow, basswood tetap memakai kulit lama. Warna `K.bark` dan UV tidak berubah. Gambar: `docs/cooper-station/gambar/kulit-25f.webp` |
 | 25g | Selesai, menunggu uji visual Bhakti | Goyang daun per jenis: atribut `aFlex` per verteks daun (x = pengali goyang angin, y = getar cepat 11-13 rad/s), nilai dari field `flex`. Aspen 1,6 / 1,0 (bergetar), poplar 1,4 / 0,6, willow 1,5, honey locust 1,3 / 0,2, birch 1,2 / 0,3, jenis majemuk 1,1-1,2 / 0,15, oak dan chestnut 0,8, beech 0,9, konifer 0,3-0,6, lainnya 1. Di `LEAF_VS` dibungkus `#ifdef LEAF_FLEX` (daun, bayangan, bake); `?pohon=lama` tanpa define dan tanpa atribut = shader lama |
-| 25h-25j | Belum dikerjakan | - |
+| 25h | Selesai, menunggu uji visual Bhakti | Penahan angin luar kota dipilih per sel 80 m (satu ruas barisan seragam): poplar 40%, pinus 20%, redcedar 15%, aspen 10%, fir 10%, arborvitae 5%. Batas pangsa satu jenis per distrik 30% (di luar hutan 14a); kelebihan diganti jenis lain dari daftar zona pohon itu, urut hash posisi (113 pohon dipindah). Halaman Cooper, promenade Skyway, hutan tidak diganti |
+| 25i-25j | Belum dikerjakan | - |
 
 ### Hasil terukur 25b (sandbox, di luar hutan 14a)
 
@@ -207,5 +208,26 @@ Catatan 25g:
 - Elm (flex 1) sama persis di kedua mode, jadi jalur baru setara dengan lama untuk pengali 1. `?pohon=lama` geometri 0 beda, atribut `aFlex` tidak ditambahkan.
 - Tambahan memori: 2 float per verteks daun, 8 byte x 101.800 verteks daun di 42 template = 0,78 MB (dihitung dari sidik jari geometri).
 - Gerak nyata hanya bisa dinilai di GPU (sandbox menilai dua bingkai diam).
+
+### Hasil terukur 25h (sandbox, di luar hutan 14a)
+
+| Zona / distrik | Pohon | Jenis | Terbanyak sebelum 25h | Terbanyak sesudah 25h |
+| --- | --- | --- | --- | --- |
+| zona luar kota | 5.030 | 17 | poplar 39,4% | poplar 24,8% |
+| zona kota | 10.452 | 9 | maple 22,2% | maple 22,2% (tidak berubah) |
+| zona taman | 927 | 18 | maple 19,2% | maple 19,2% |
+| zona tepi air | 377 | 19 -> 20 | willow 43,2% | willow 43,2% |
+| Iowa | 1.369 | 18 | poplar 33,8% | poplar 17,8% |
+| Pampas | 1.214 | 18 | poplar 34,4% | poplar 20,7% |
+| Punjab | 826 | 16 -> 17 | poplar 43,5% | poplar 29,9% |
+| Ukraina | 414 | 17 | poplar 43,0% | poplar 30,0% |
+| di luar distrik | 1.282 | 17 | poplar 44,1% | poplar 30,0% |
+| 14 distrik kota | 422-1.129 | 9-10 | 19,5-26,4% | sama |
+
+Catatan 25h:
+- Tepi air tetap didominasi willow (43%), sengaja: willow memang pohon tepi sungai; batas 30% dihitung per distrik, bukan per zona, dan tidak ada distrik yang melampauinya.
+- Di luar distrik, poplar tepat 30% karena sebagian besar adalah barisan poplar halaman Cooper yang tidak boleh diganti.
+- Zona kota tetap 9 jenis (maple, birch, elm, oak, basswood, ash, beech, honey locust, pohon bunga); konifer tidak masuk kota (K2).
+- Uji: `tools/uji_pohon.py` menambah cek "jenis terbanyak per distrik <= 30%" (lolos, 21 cek), Campur 22,3%, Gugur 63,9%. `?pohon=lama` 0 beda. `tools/qc_load.py` tanpa error.
 
 Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.

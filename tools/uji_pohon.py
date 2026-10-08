@@ -15,6 +15,11 @@ UJI = r"""
     out[`INFO ${k}: ${hs.length} pohon, tinggi ${[0.1, 0.5, 0.9].map((q) => hs.length ? pc(hs, q).toFixed(1) : '-').join(' / ')} m`] = true;
     if (k !== 'elm') out[`${k}: ada di kota/taman/luar, median tinggi 5-20 m`] = hs.length > 50 && pc(hs, 0.5) > 5 && pc(hs, 0.5) < 20;
   }
+  // 25h: pangsa jenis terbanyak per distrik (di luar hutan 14a) paling tinggi 30% (batas CAP; pembulatan ke bawah)
+  { const D = new Map(); for (const t of T.list) { if (t.forest) continue; const d = st.districtAt(t.s, t.za), key = d ? d.name : '-';
+      let e = D.get(key); if (!e) D.set(key, e = { n: 0, k: {} }); e.n++; const kd = T.templates[t.tpl].kind; e.k[kd] = (e.k[kd] || 0) + 1; }
+    let worst = ['', '', 0]; for (const [name, e] of D) for (const [kd, c] of Object.entries(e.k)) if (c / e.n > worst[2]) worst = [name, kd, c / e.n];
+    out[`25h: jenis terbanyak per distrik <= 30% (tertinggi ${worst[1]} ${(100 * worst[2]).toFixed(1)}% di ${worst[0]}; dipindah ${T.capMoved})`] = worst[2] <= 0.3 + 1e-9; }
   // 25e: konifer tidak di jalan kota (za < 2600, di luar hutan); jumlah dan tinggi termasuk hutan 14a
   for (const k of ['fir', 'hemlock', 'arborvitae', 'redcedar']) {
     const all = T.list.filter((t) => T.templates[t.tpl].kind === k), hs = all.map((t) => T.templates[t.tpl].height * t.sc).sort((a, b) => a - b);

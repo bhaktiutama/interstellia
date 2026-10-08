@@ -8467,6 +8467,32 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
       let acc = 0;
       for (const [k, p] of MIX[t.za < 2600 ? 'kota' : t.za < 3200 ? 'taman' : 'luar']) { acc += p; if (h < acc) { t.tpl = TI[k] + v; break; } }
     });
+    // 25h: penahan angin luar kota (pohon langkah 1, za >= 3200, poplar / pinus dari 12b-2) dipilih per sel 80 m, bukan per
+    // pohon: satu ruas barisan seragam, ruas lain bisa jenis lain (redcedar = penahan angin klasik). Peluang per sel.
+    const WB = [['poplar', 0.4], ['pine', 0.2], ['redcedar', 0.15], ['aspen', 0.1], ['fir', 0.1], ['arborvitae', 0.05]];
+    TREES.list.forEach((t, i) => {
+      if (i >= keep0 || t.za < 3200 || ![4, 5, 10, 11].includes(t.tpl)) return;
+      const cs = Math.floor(modS(t.s) / 80), cz = Math.floor(t.za / 80), h = hsh3(cs * 80 + 13.7, cz * 80 + 5.1);
+      let acc = 0; for (const [k, p] of WB) { acc += p; if (h < acc) { t.tpl = TI[k] + pick2(hsh3(t.za, t.s)); break; } }
+    });
+    // 25h: batas pangsa satu jenis per distrik (di luar hutan 14a). Kelebihan diganti jenis lain dari daftar zona pohon itu
+    // (MIX; tepi air dan luar kota memakai daftar luar), urut hash posisi. Halaman Cooper, promenade Skyway, hutan tidak diganti.
+    const CAP = 0.3, hsh4 = (s, za) => { const x = Math.sin(s * 9.2717 + za * 3.4417 + 0.91) * 18245.713; return x - Math.floor(x); };
+    const byD = new Map();
+    TREES.list.forEach((t, i) => { if (i >= keepF0) return; const D = districtAt(t.s, t.za), key = D ? D.name : '-';
+      let e = byD.get(key); if (!e) byD.set(key, e = { n: 0, k: new Map() }); e.n++;
+      const kind = TREES.templates[t.tpl].kind; if (!e.k.has(kind)) e.k.set(kind, []); e.k.get(kind).push([t, i]); });
+    let capMoved = 0;
+    for (const e of byD.values()) for (const [kind, arr] of e.k) {
+      const lim = Math.floor(CAP * e.n); if (arr.length <= lim) continue;
+      const free = arr.filter(([t, i]) => !(i >= keep0 && i < keep1) && Math.abs(wrapS(t.s - SKY_S)) >= 50).sort((a, b) => hsh4(a[0].s, a[0].za) - hsh4(b[0].s, b[0].za));
+      for (const [t] of free.slice(0, arr.length - lim)) {
+        const list = MIX[t.za < 2600 ? 'kota' : t.za < 3200 ? 'taman' : 'luar'].filter(([k]) => k !== kind), tot = list.reduce((m, [, p]) => m + p, 0);
+        let acc = 0; const h = hsh4(t.za, t.s) * tot;
+        for (const [k, p] of list) { acc += p; if (h < acc) { t.tpl = TI[k] + pick2(hsh3(t.za, t.s)); capMoved++; break; } }
+      }
+    }
+    TREES.capMoved = capMoved;
     // 25e: hutan lebat 14a: 40% pinus (template 10-11) jadi fir atau hemlock. Tinggi mutlak tiap pohon tetap (skala x tinggi
     // template lama / baru); posisi dan kolisi tetap.
     TREES.list.forEach((t, i) => {
