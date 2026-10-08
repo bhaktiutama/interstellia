@@ -123,6 +123,7 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 | 25h | Selesai, menunggu uji visual Bhakti | Penahan angin luar kota dipilih per sel 80 m (satu ruas barisan seragam): poplar 40%, pinus 20%, redcedar 15%, aspen 10%, fir 10%, arborvitae 5%. Batas pangsa satu jenis per distrik 30% (di luar hutan 14a); kelebihan diganti jenis lain dari daftar zona pohon itu, urut hash posisi (113 pohon dipindah). Halaman Cooper, promenade Skyway, hutan tidak diganti |
 | 25i | Selesai (sandbox), FPS menunggu Bhakti | Diukur: waktu muat, draw call, segitiga, memori. Dua penghematan tanpa ubah gambar: (1) mesh kulit dan daun dekat tanpa pohon disembunyikan (`visible = false`, hemat persiapan program per pass); (2) bake impostor oktahedral memakai satu target ber-depth bersama `OCT.bake` lalu disalin ke tekstur per template tanpa depth: Ultra 392 -> 232 MB untuk 42 template (cara lama `?octkopi=0`; hasil identik byte per byte di 7 template yang diuji). Preset Hemat dan Rendah tidak perlu diubah |
 | 25j | Belum dikerjakan | - |
+| 25k | Selesai, menunggu uji visual Bhakti | Tajuk padat (revisi dari 3 foto Bhakti: pinus acak, tajuk kurus dan jarang, belum seperti referensi). Semua 21 jenis kini dibangun dari amplop tajuk per kelompok bentuk: oval (oak, maple, birch, aspen, beech, basswood, chestnut, ash, hickory, black locust), kubah (walnut, pohon bunga), vas (elm), payung (honey locust), kolom (poplar, arborvitae), kerucut (pinus, fir, hemlock, redcedar), juntai (willow). Gugus daun mengisi amplop (70% di kulit luar, 30% di dalam), cabang utama dari batang ke dalam amplop, AO atas terang / dalam dan bawah gelap lewat atribut (tanpa shader baru). Pita tangkai (25d) dan semprot (25e) diganti gugus daun penuh di atlas kedua 4 x 3. Gambar: `docs/cooper-station/gambar/tajuk-padat-25k.webp` |
 
 ### Hasil terukur 25b (sandbox, di luar hutan 14a)
 
@@ -272,3 +273,40 @@ Catatan 25i:
 - FPS dan waktu GPU belum diukur (sandbox tanpa GPU). Alat ukur GPU di HUD lengkap (20a, `GPUT`) bisa dipakai di GTX 1060: baris sh / sc / po, banding dengan `?pohon=lama`.
 
 Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.
+
+### Hasil terukur 25k (sandbox)
+
+Penyebab tajuk jarang sebelum 25k: daun hanya di separuh luar ranting terakhir (celah antar ranting terlihat), pita tangkai sempit dan setengah transparan, bentuk tajuk hanya hasil cabang acak (tanpa siluet per jenis).
+
+| Jenis | Kelompok | Tinggi template (m) sebelum -> sesudah | Verteks daun sebelum -> sesudah |
+| --- | --- | --- | --- |
+| oak | oval | 9,4 -> 9,9 | 1.056 -> 1.092 |
+| elm | vas | 15,3 -> 14,5 | 800 -> 1.188 |
+| poplar | kolom | 19,8 -> 19,3 | 616 -> 1.680 |
+| maple | oval | 8,2 -> 8,3 | 1.344 -> 1.048 |
+| birch | oval | 18,5 -> 18,6 | 672 -> 1.680 |
+| pine | kerucut | 15,1 -> 15,6 | 816 -> 1.680 |
+| willow | juntai | 10,3 -> 12,0 | 1.920 -> 1.008 |
+| pohon bunga | kubah | 6,4 -> 6,5 | 1.056 -> 920 |
+| aspen | oval | 20,7 -> 13,9 | 648 -> 1.656 |
+| beech | oval | 9,8 -> 13,7 | 1.568 -> 1.452 |
+| basswood | oval | 13,4 -> 14,2 | 1.344 -> 1.576 |
+| chestnut | oval | 8,4 -> 11,8 | 1.152 -> 1.008 |
+| ash | oval | 13,7 -> 14,0 | 3.456 -> 1.164 |
+| walnut | kubah | 7,5 -> 12,2 | 3.888 -> 920 |
+| hickory | oval | 16,8 -> 15,2 | 3.456 -> 1.436 |
+| black locust | oval | 10,2 -> 12,8 | 4.536 -> 924 |
+| honey locust | payung | 8,2 -> 10,9 | 3.780 -> 680 |
+| fir | kerucut | 17,3 -> 16,1 | 5.760 -> 1.680 |
+| hemlock | kerucut | 15,0 -> 15,3 | 5.328 -> 1.680 |
+| arborvitae | kolom | 9,5 -> 9,1 | 2.808 -> 1.364 |
+| redcedar | kerucut | 11,8 -> 11,3 | 4.896 -> 1.512 |
+| total 42 template | | | 101.800 -> 54.696 |
+
+Catatan 25k:
+- Tinggi template 8 jenis lama dijaga (H = rata-rata tinggi 2 template lama), jadi tinggi dunia, `KSCALE`, dan hutan tidak bergeser; jenis baru diskalakan lewat `hRel` seperti sebelumnya (tinggi template tidak menentukan tinggi dunia).
+- `?pohon=lama` identik dengan sebelum 25a (0 beda). `tools/uji_pohon.py` 21 cek lolos (Campur 22,3%, Gugur 63,9%, distrik <= 30%), `tools/uji_hutan.py` lolos (5.222 pohon, 22-35 m), `tools/qc_load.py` tanpa error.
+- Verteks daun total turun 46% karena gugus besar menggantikan pita tangkai; draw call tidak berubah (jumlah template sama).
+- Render grid memakai cahaya bake (datar, lebih gelap dari dalam game) dan warna musim dinolkan; pohon bunga tampil merah muda di dalam game.
+- Willow: kubah dengan untaian tegak di 55% bawah tajuk; belum sehalus willow referensi.
+- Referensi adalah ilustrasi lukisan; 25k mengejar siluet dan kepadatannya, bukan gaya lukisan.
