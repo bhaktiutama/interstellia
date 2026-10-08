@@ -124,6 +124,7 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 | 25i | Selesai (sandbox), FPS menunggu Bhakti | Diukur: waktu muat, draw call, segitiga, memori. Dua penghematan tanpa ubah gambar: (1) mesh kulit dan daun dekat tanpa pohon disembunyikan (`visible = false`, hemat persiapan program per pass); (2) bake impostor oktahedral memakai satu target ber-depth bersama `OCT.bake` lalu disalin ke tekstur per template tanpa depth: Ultra 392 -> 232 MB untuk 42 template (cara lama `?octkopi=0`; hasil identik byte per byte di 7 template yang diuji). Preset Hemat dan Rendah tidak perlu diubah |
 | 25j | Belum dikerjakan | - |
 | 25k | Selesai, menunggu uji visual Bhakti | Tajuk padat (revisi dari 3 foto Bhakti: pinus acak, tajuk kurus dan jarang, belum seperti referensi). Semua 21 jenis kini dibangun dari amplop tajuk per kelompok bentuk: oval (oak, maple, birch, aspen, beech, basswood, chestnut, ash, hickory, black locust), kubah (walnut, pohon bunga), vas (elm), payung (honey locust), kolom (poplar, arborvitae), kerucut (pinus, fir, hemlock, redcedar), juntai (willow). Gugus daun mengisi amplop (70% di kulit luar, 30% di dalam), cabang utama dari batang ke dalam amplop, AO atas terang / dalam dan bawah gelap lewat atribut (tanpa shader baru). Pita tangkai (25d) dan semprot (25e) diganti gugus daun penuh di atlas kedua 4 x 3. Gambar: `docs/cooper-station/gambar/tajuk-padat-25k.webp` |
+| 25l | Selesai, menunggu uji visual Bhakti | Tajuk bergumpal dan beragam (revisi foto Bhakti: 25k terlalu seragam dan bulat). Amplop 25k kini hanya kerangka besar. Daun disusun sebagai gumpalan elipsoid di ujung cabang utama (`lob`), dengan celah yang memperlihatkan cabang. Konifer memakai karangan cabang mendatar berlapis dengan bantalan datar (`tier`). Willow memakai cabang melengkung dengan tirai untaian menjuntai (`hang`). Tiap template berbeda: tajuk tidak simetris, pangkal tajuk dan lebar acak, garpu batang (1-3) berganti pada varian kedua. Contohnya birch tunggal atau bercabang dua, dan oak 3 atau 2 batang. Pinus: varian 0 seperti Scots pine (batang tinggi telanjang, tajuk datar bergumpal), varian 1 kerucut muda bertingkat. Field per jenis `env.lob`, pinus `env.alt`. Tanpa GLSL baru. Gambar: `docs/cooper-station/gambar/tajuk-gumpal-25l.webp`, `docs/cooper-station/gambar/bukit-25l.webp` |
 
 ### Hasil terukur 25b (sandbox, di luar hutan 14a)
 
@@ -310,3 +311,28 @@ Catatan 25k:
 - Render grid memakai cahaya bake (datar, lebih gelap dari dalam game) dan warna musim dinolkan; pohon bunga tampil merah muda di dalam game.
 - Willow: kubah dengan untaian tegak di 55% bawah tajuk; belum sehalus willow referensi.
 - Referensi adalah ilustrasi lukisan; 25k mengejar siluet dan kepadatannya, bukan gaya lukisan.
+
+### Hasil terukur 25l (sandbox)
+
+Penyebab 25k terlalu seragam: kartu daun ditebar merata di seluruh amplop, jadi siluet = amplop itu sendiri (bulat licin), semua template satu jenis bersimetri putar, dan cabang tertutup penuh.
+
+| Mode | Dipakai | Cara | Parameter (`ENV_B`, ditimpa `env.lob`) |
+| --- | --- | --- | --- |
+| lob | oval, kubah, vas, payung, kolom | 5-28 gumpalan elipsoid di sekitar sumbu batang (sudut emas, tinggi sebanding lebar amplop), sebagian di dalam tajuk, gumpalan puncak, gumpalan anak di tengah cabang; cabang dari batang atau garpu terdekat | lr jari-jari gumpalan / R, fy pipih, fork, sub, asym, cov |
+| tier | kerucut (fir, hemlock, redcedar, pinus varian 1) | 7-10 karangan x 4-5 cabang mendatar, bantalan datar sepanjang 55% cabang, kartu dimiringkan keluar agar terbaca dari samping, pucuk | wh, per, fy, irr, up, droop |
+| hang | juntai (willow) | gumpalan di 55% atas tajuk + 9 cabang melengkung x 8 untaian, tiap untaian 1-4 kartu tegak sampai 1,2 m di atas tanah | nh, ns |
+
+| Ukuran | 25k | 25l |
+| --- | --- | --- |
+| Verteks daun 42 template | 54.696 | 66.504 (+22%, masih 35% di bawah 101.800 sebelum 25k) |
+| Segitiga kulit 42 template | 36.576 | 48.430 (+32%, cabang ke tiap gumpalan) |
+| Kartu daun per template | 170-420 | 375-528 (batas 380, konifer 440, willow 200 + untaian) |
+| Waktu muat (sandbox) | 5,94 s (25i) | 5,81 s |
+| Jumlah pohon | 22.008 | 22.008 |
+
+Catatan 25l:
+- Tinggi template tetap dekat H (tidak diacak), jadi tinggi dunia dan `KSCALE` tidak bergeser; lebar tajuk R (0,9-1,1x) dan pangkal tajuk (0,88-1,12x) diacak per template.
+- `makeTree(kind, seed, variant)`: varian = urutan template dalam jenis (0 / 1). Jalur `?pohon=lama` tidak memakai varian.
+- `?pohon=lama` identik dengan sebelum 25a (0 beda di 16 template). `tools/uji_pohon.py` lolos semua (21 jenis, Campur 22,3%, Gugur 63,9%, distrik <= 30%), `tools/uji_hutan.py` lolos, `tools/qc_load.py` tanpa error.
+- Willow varian 1 masih agak berbentuk payung (atas datar); untaian berupa kartu tegak bertumpuk.
+- FPS belum diukur; bila Ultra di GTX 1060 turun, batas kartu `cap` di `ENV_B` bisa diturunkan tanpa mengubah bentuk.
