@@ -47,6 +47,12 @@ Kelompok 8 (G8, peta corong dan arah partikel susur searah arus; docs/gargantua/
   corong setelah Enter (HUD hidup),
 - susur searah arus: titik pancar partikel = arah tampak pusat lubang hitam (dicek lewat rumus aberasi shader, arah sebaliknya),
   melawan arus: arah gas relatif tidak berubah.
+Kelompok 9 (G9, pandangan relai 22 rs; docs/gargantua/rumus-pandangan-relai.md):
+- V di misi: kamera luar -> kokpit -> relai -> kamera luar; kamera relai di |pos| = 22 tanpa wahana (eye null),
+- citra lensa: sinar shader dari arah hasil (balik aberasi diperiksa dengan rumus shader) melewati titik pancar (< 1e-4 rs),
+  titik segaris relai-pusat = arah ke pusat; titik di balik piringan ditandai,
+- render pandangan relai tanpa nilai tidak valid, titik wahana tergambar,
+- suar dari 10 rs diterima relai saat waktu relai >= waktu tiba; suar dari dalam horizon tidak pernah diterima.
 Pakai: python tools/uji_misi_gargantua.py   (butuh: pip install playwright; CHROMIUM=<jalur> opsional, default /opt/pw-browsers/chromium
 bila ada). Tanpa GPU dipakai SwiftShader."""
 import asyncio, os, pathlib, sys
@@ -564,5 +570,59 @@ async def kelompok8(pg):
     cek('HUD: panel corong seukuran jendela relai (lebar 340, tinggi sampai 380, rata bawah 44 px dari tepi)',
         abs(box[2] - 340) < 0.01 and 190 < box[3] <= 380 and abs(box[1] + box[3] - (720 - 44)) < 0.01, str([round(v, 1) for v in box]))
     cek('HUD: tesseract membidik = peta orbit (corong tidak), setelah Enter dan misi lain = peta corong', a == b and c == b + 1 and d == c + 1, f"{a} {b} {c} {d}")
+    await kelompok9(pg)
+
+async def kelompok9(pg):
+    m = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, out = {}; G.state.paused = true;
+      G.startMission('polar'); G.setShip(true, 'chase'); const seq = [];
+      for (let i = 0; i < 3; i++) { G.cycleShipView(); seq.push(G.SHIP.view); }
+      G.setShip(true, 'relay'); const b = G.viewBasis(); out.seq = seq; out.r = Math.hypot(...b.pos); out.eye = b.eye; out.relay = !!b.relay;
+      // sinar seperti shader: arah layar -> vel (aberasi ke kerangka rain) lalu x'' = -1,5 h^2 x / r^5, jarak terdekat ke titik pancar
+      const V = G.REL.view, vv = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], add = (a, b, k = 1) => a.map((x, i) => x + k * b[i]);
+      const shaderVel = (dir) => { const np = dir.map((x) => -x), o = V.obs, vn = vv(o.v, np), pr = add(np, o.v, o.g + o.g * o.g / (o.g + 1) * vn);
+        const pl = Math.hypot(...pr), nr = pr.map((x) => x / pl), rh = V.pos.map((x) => x / Math.hypot(...V.pos)), vel = add(nr.map((x) => -x), rh, o.beta), l = Math.hypot(...vel); return vel.map((x) => x / l); };
+      const miss = (vel, xe) => { let p = V.pos.slice(), v = vel.slice(); const L = [p[1] * v[2] - p[2] * v[1], p[2] * v[0] - p[0] * v[2], p[0] * v[1] - p[1] * v[0]], h2 = vv(L, L); let best = 1e9;
+        const acc = (p) => { const r2 = vv(p, p); return p.map((x) => -1.5 * h2 * x / (r2 * r2 * Math.sqrt(r2))); };
+        for (let i = 0; i < 300000; i++) { const r = Math.hypot(...p), ds = Math.min(0.002 * r, 0.05), q = p;
+          const a1 = acc(p), p2 = add(p, v, ds / 2), v2 = add(v, a1, ds / 2), a2 = acc(p2), p3 = add(p, v2, ds / 2), v3_ = add(v, a2, ds / 2), a3 = acc(p3), p4 = add(p, v3_, ds), v4 = add(v, a3, ds), a4 = acc(p4);
+          p = p.map((x, k) => x + ds / 6 * (v[k] + 2 * v2[k] + 2 * v3_[k] + v4[k])); v = v.map((x, k) => x + ds / 6 * (a1[k] + 2 * a2[k] + 2 * a3[k] + a4[k]));
+          const d = add(p, q, -1), t = Math.max(0, Math.min(1, vv(add(xe, q, -1), d) / Math.max(vv(d, d), 1e-30))); best = Math.min(best, Math.hypot(...add(add(q, d, t), xe, -1)));
+          if (Math.hypot(...p) < 1 || Math.hypot(...p) > 120) break; }
+        return best; };
+      const er = V.pos.map((x) => x / 22), side = (() => { const c = [er[1] * 0 - er[2] * 1, er[2] * 0 - er[0] * 0, er[0] * 1 - er[1] * 0], l = Math.hypot(...c); return c.map((x) => x / l); })();
+      const t0 = (() => { const c = [side[1] * er[2] - side[2] * er[1], side[2] * er[0] - side[0] * er[2], side[0] * er[1] - side[1] * er[0]], l = Math.hypot(...c); return c.map((x) => x / l); })();
+      out.pts = [[10, 0.4], [5, 1.3], [2, 2.9], [8, Math.PI - 1e-3], [1.05, 2.4], [40, 1.0]].map(([re, a]) => {
+        const xe = add(er.map((x) => x * Math.cos(a) * re), t0, Math.sin(a) * re), t = performance.now(), I = G.relImage(xe), ms = performance.now() - t;
+        const vel = shaderVel(I.d); return { re, a, miss: miss(vel, xe), dv: Math.hypot(...add(vel, I.vel0, -1)), ms }; });
+      const c = G.relImage(er.map((x) => x * 6)), cd = Math.hypot(...add(shaderVel(c.d), er, 1));
+      out.centre = cd; out.inside = G.relImage(er.map((x) => x * 0.8)) === null;
+      // titik di bawah piringan dilihat dari relai di atas piringan: tertutup piringan
+      const above = V.pos[1] > 0, xe = [6 * Math.cos(1), above ? -0.3 : 0.3, 6 * Math.sin(1)];
+      out.occ = G.relImage(xe).occ; out.free = G.relImage([0, above ? 8 : -8, 0]).occ;
+      // lapisan HUD: titik wahana tergambar
+      const cv = document.createElement('canvas'); cv.width = 1280; cv.height = 720; G.REL.view.cur = null; G.drawRelayView(cv.getContext('2d'), 1280, 720, 1, 1e12);
+      out.drawn = G.REL.view.drawn || 0;
+      // suar: dari 10 rs diterima saat waktu relai >= waktu tiba; dari dalam horizon tidak pernah
+      G.startMission('polar'); while (Math.hypot(...M.x) > 10) G.misFly(0.2);
+      G.fireFlare(); const F = G.REL.flares[G.REL.flares.length - 1]; G.relStep(0.01); out.before = F.seen;
+      while (!M.end && M.T < F.arr + 0.5) { const r = G.misFly(0.2); if (r) break; } G.relStep(0.01); out.after = F.seen; out.arr = F.arr;
+      G.startMission('polar'); while (Math.hypot(...M.x) > 0.5) G.misFly(0.05);
+      G.fireFlare(); const F2 = G.REL.flares[G.REL.flares.length - 1]; G.REL.Tx = 1e6; G.relStep(0.01); out.never = F2.seen; out.arr2 = F2.arr;
+      G.stopMission(); out.after_stop = G.SHIP.view; return out; }''')
+    cek('V di misi: kamera luar -> kokpit -> relai -> kamera luar; relai di 22 rs tanpa model wahana',
+        m['seq'] == ['cockpit', 'relay', 'chase'] and abs(m['r'] - 22) < 1e-9 and m['eye'] is None and m['relay'] and m['after_stop'] == 'chase', str({k: m[k] for k in ('seq', 'r', 'eye', 'after_stop')}))
+    pts = m['pts']
+    cek('citra lensa: sinar shader dari arah titik melewati titik pancar (depan, samping, di balik lubang hitam, r 1,05, r 40)',
+        all(q['miss'] < 1e-4 and q['dv'] < 1e-9 for q in pts), '; '.join(f"r {q['re']}: {q['miss']:.1e} rs {q['ms']:.0f} ms" for q in pts))
+    cek('citra lensa: segaris relai-pusat = arah pusat, dari dalam horizon tidak ada citra, di balik piringan ditandai',
+        m['centre'] < 1e-9 and m['inside'] and m['occ'] and not m['free'], f"pusat {m['centre']:.1e}, tertutup {m['occ']}, bebas {m['free']}")
+    cek('pandangan relai: titik wahana tergambar di lapisan HUD', m['drawn'] >= 1, str(m['drawn']))
+    cek('suar dari 10 rs diterima relai setelah waktu tiba; suar dari dalam horizon tidak pernah',
+        m['before'] is None and m['after'] is not None and m['after'] >= m['arr'] and m['never'] is None and (m['arr2'] is None or m['arr2'] == float('inf')),
+        f"tiba {m['arr']:.2f}, diterima {m['after']}, dalam horizon {m['never']}")
+    # render pandangan relai tanpa nilai tidak valid
+    st = await pg.evaluate('''() => new Promise((res) => { const G = window.__gargantua; G.state.paused = true; G.startMission('skim'); G.setShip(true, 'relay');
+      setTimeout(() => { G.state.readCb = (r) => { G.stopMission(); res(r); }; }, 600); })''')
+    cek('render pandangan relai tanpa nilai tidak valid', st['bad'] == 0 and st['mean'] > 0, str(st))
 
 asyncio.run(main())

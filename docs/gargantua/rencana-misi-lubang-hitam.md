@@ -49,6 +49,7 @@ Langkah mekanis di dalam tahap High (entri kamus, teks HUD, pembaruan dokumen) b
 | G6 | Berjalan per kelompok: uji G1 sampai G5 di `tools/uji_misi_gargantua.py`, kamus ID, CLAUDE.md, `tombol.md` |
 | G7 suara | Selesai 4 Oktober 2026 (lihat bagian G7): suara disintesis Web Audio, U nyala / mati, pilihan di panel. Belum didengar pemilik |
 | G8 peta corong | Selesai 8 Oktober 2026 (rumus: `docs/gargantua/rumus-peta-corong.md`): panel kanan bawah untuk semua misi, corong z = 2 sqrt(r) (irisan Eddington-Finkelstein, menembus horizon sampai singularitas) dengan riwayat, prakiraan, dan posisi live; tesseract tetap memakai peta orbit saat membidik, corong setelah Enter. Susur searah arus: partikel datang dari arah tampak lubang hitam (dulu 9-14 derajat di sampingnya); melawan arus tidak berubah. Uji kelompok 8. Belum diuji di GTX 1060 dan M1. Revisi 8 Oktober: panel corong seukuran jendela relai (340 x sampai 380 px), elevasi pandang 28-45 derajat agar panel terisi; informasi delta-v lolos di bagian "Bisakah lolos dari lubang hitam?" |
+| G9 pandangan relai | Selesai 8 Oktober 2026 (rumus: `docs/gargantua/rumus-pandangan-relai.md`): V saat misi = kamera luar, kokpit, relai 22 rs. Dari relai: lubang hitam dan piringan dengan aberasi orbit relai, wahana sebagai titik cahaya pulsa di citra lensa (tertunda, memerah, membeku di horizon, ditandai bila di balik piringan), jejak citra, suar E tampil sebagai kilat saat cahayanya tiba (dari dalam horizon tidak pernah). Uji kelompok 9. Belum diuji di GTX 1060 dan M1 |
 
 Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
 
@@ -345,7 +346,7 @@ Mengikuti `docs/app/tombol.md`: tidak ada huruf baru.
 | Tombol | Fungsi |
 | --- | --- |
 | Panel ` | Mulai misi, pilih skenario (G2: 7 skenario; G3: + 2 susur piringan) dan sikap; tombol autopilot susur |
-| V | Kokpit / kamera luar |
+| V | Kamera luar / kokpit / relai 22 rs (G9) |
 | Z | Kecepatan waktu (Otomatis, x4, x16, Lambat x0,25) |
 | W/S, A/D, R/F, Shift | Dorong maju-mundur, kiri-kanan, naik-turun; Shift = mesin utama (G2, mengikuti tombol pesawat Copper) |
 | Seret mouse, roda | Kamera luar: seret = kamera mengitari wahana (klik ganda kembali), seret kanan = arah hidung; kokpit: seret = arah hidung; roda = jarak kamera luar |
