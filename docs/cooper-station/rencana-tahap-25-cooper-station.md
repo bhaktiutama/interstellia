@@ -205,7 +205,7 @@ Catatan 25g:
 - Amplitudo goyang di puncak tajuk (tinggi >= 12 m dari dasar template): 5 cm x flex saat tenang, (5 + 20 x hembusan) cm x flex saat berangin; getar cepat 3,5 cm x getar x (0,4 + hembusan).
 - Shader hanya menambah sin / cos dikali konstanta (tanpa normalize, pow, sqrt): tidak ada jalur NaN baru untuk M1. `tools/qc_load.py` tanpa error atau peringatan kompilasi.
 - Elm (flex 1) sama persis di kedua mode, jadi jalur baru setara dengan lama untuk pengali 1. `?pohon=lama` geometri 0 beda, atribut `aFlex` tidak ditambahkan.
-- Tambahan memori: 2 float per verteks daun (sekitar 8 byte x 140 ribu verteks daun di 42 template = sekitar 1,1 MB).
+- Tambahan memori: 2 float per verteks daun, 8 byte x 101.800 verteks daun di 42 template = 0,78 MB (dihitung dari sidik jari geometri).
 - Gerak nyata hanya bisa dinilai di GPU (sandbox menilai dua bingkai diam).
 
 Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.
