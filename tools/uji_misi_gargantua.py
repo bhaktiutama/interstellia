@@ -624,5 +624,61 @@ async def kelompok9(pg):
     st = await pg.evaluate('''() => new Promise((res) => { const G = window.__gargantua; G.state.paused = true; G.startMission('skim'); G.setShip(true, 'relay');
       setTimeout(() => { G.state.readCb = (r) => { G.stopMission(); res(r); }; }, 600); })''')
     cek('render pandangan relai tanpa nilai tidak valid', st['bad'] == 0 and st['mean'] > 0, str(st))
+    # revisi G9: relai di atas piringan, jejak tanpa lompatan, sapuan acak, suar = posisi saat E, penanda sekarang, kartu akhir
+    m = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, out = {}; G.state.paused = true;
+      const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(a, b)))) * 180 / Math.PI;
+      out.above = Object.keys(G.SCEN).map((sc) => { G.startMission(sc); if (M.tes) G.tesLaunch(); return +G.REL.view.pos[1].toFixed(2); });
+      // jatuh lurus: sudut citra dari pusat turun monoton; susur searah arus: tanpa lompatan > 3 derajat antar sampel
+      const trace = (sc, dt, n) => { G.startMission(sc); G.setShip(true, 'relay'); for (let k = 0; k < n && !M.end; k++) if (G.misFly(dt)) break;
+        const c = G.REL.view.pos.map((x) => -x / 22), Tend = M.T, a = [], d = [];
+        for (let i = 0; i <= 60; i++) { const S = G.relSeen(Tend * i / 60); if (!S) continue; const I = G.relImage(S.x); if (I) { a.push(ang(I.d, c)); d.push(I.d); } }
+        let jump = 0; for (let i = 1; i < d.length; i++) jump = Math.max(jump, ang(d[i], d[i - 1]));
+        let mono = true; for (let i = 1; i < a.length; i++) if (a[i] > a[i - 1] + 1e-6) mono = false;
+        return { n: a.length, mono, jump, a0: a[0], a1: a[a.length - 1] }; };
+      out.polar = trace('polar', 0.5, 200); out.pro = trace('skimPro', 3, 80);
+      // 200 titik acak: sinar shader dari arah citra lewat titik pancar (pakai integrasi ulang sederhana di cabang 2D)
+      G.startMission('polar'); const V = G.REL.view; let worst = 0, nulls = 0;
+      for (let k = 0; k < 200; k++) { const re = 1.02 + Math.random() * 40, th = Math.random() * Math.PI, ph = Math.random() * 2 * Math.PI;
+        const xe = [re * Math.sin(th) * Math.cos(ph), re * Math.cos(th), re * Math.sin(th) * Math.sin(ph)], I = G.imageDir(V.pos, xe);
+        if (!I) { nulls++; continue; }
+        let p = V.pos.slice(), v = I.vel0.slice(); const L = [p[1] * v[2] - p[2] * v[1], p[2] * v[0] - p[0] * v[2], p[0] * v[1] - p[1] * v[0]], h2 = dot(L, L); let best = 1e9;
+        const acc = (p) => { const r2 = dot(p, p); return p.map((x) => -1.5 * h2 * x / (r2 * r2 * Math.sqrt(r2))); }, add = (a, b, k = 1) => a.map((x, i) => x + k * b[i]);
+        for (let i = 0; i < 300000; i++) { const r = Math.hypot(...p), ds = Math.min(0.002 * r, 0.05), q = p;
+          const a1 = acc(p), p2 = add(p, v, ds / 2), v2 = add(v, a1, ds / 2), a2 = acc(p2), p3 = add(p, v2, ds / 2), v3_ = add(v, a2, ds / 2), a3 = acc(p3), p4 = add(p, v3_, ds), v4 = add(v, a3, ds), a4 = acc(p4);
+          p = p.map((x, j) => x + ds / 6 * (v[j] + 2 * v2[j] + 2 * v3_[j] + v4[j])); v = v.map((x, j) => x + ds / 6 * (a1[j] + 2 * a2[j] + 2 * a3[j] + a4[j]));
+          const d = add(p, q, -1), t = Math.max(0, Math.min(1, dot(add(xe, q, -1), d) / Math.max(dot(d, d), 1e-30))); best = Math.min(best, Math.hypot(...add(add(q, d, t), xe, -1)));
+          if (Math.hypot(...p) < 1 || Math.hypot(...p) > 120) break; }
+        worst = Math.max(worst, best); }
+      out.worst = worst; out.nulls = nulls;
+      // suar: titik wahana yang terlihat saat suar tiba = posisi saat E
+      G.startMission('polar'); while (Math.hypot(...M.x) > 12) G.misFly(0.2); G.fireFlare(); const F = G.REL.flares[G.REL.flares.length - 1];
+      while (!M.end && M.T < F.arr + 0.2) { if (G.misFly(0.1)) break; G.relStep(0.001); }
+      const Sf = G.relSeen(F.arr); out.flare = { dtau: Math.abs(Sf.tau - F.tau), dx: Math.hypot(Sf.x[0] - F.x[0], Sf.x[1] - F.x[1], Sf.x[2] - F.x[2]), seen: F.seen !== null };
+      // penanda sekarang: ada di luar horizon, tidak ada di dalam
+      G.setShip(true, 'relay'); G.REL.view.nowT = -1e9; G.relUpdate(0.016); out.nowOut = !!G.REL.view.now;
+      while (Math.hypot(...M.x) > 0.6) G.misFly(0.05); G.REL.view.nowT = -1e9; G.relUpdate(0.016); out.nowIn = !!G.REL.view.now;
+      return out; }''')
+    cek('relai di atas piringan untuk semua skenario (y > 0)', all(y > 0 for y in m['above']), str(m['above']))
+    p, q = m['polar'], m['pro']
+    cek('jejak relai: jatuh lurus mendekat ke pusat monoton, susur searah arus tanpa lompatan',
+        p['mono'] and p['n'] > 40 and q['jump'] < 3 and q['n'] > 40, f"lurus {p['a0']:.1f} -> {p['a1']:.1f} derajat, lompatan susur maks {q['jump']:.2f} derajat")
+    cek('citra lensa: 200 titik acak, sinar shader lewat titik pancar', m['worst'] < 1e-4 and m['nulls'] == 0, f"selisih maks {m['worst']:.1e} rs")
+    f = m['flare']
+    cek('suar: saat tiba, titik wahana yang terlihat relai = posisi saat E ditekan', f['seen'] and f['dtau'] < 1e-9 and f['dx'] < 1e-6, str(f))
+    cek('penanda posisi sekarang: ada di luar horizon, tidak ada di dalam', m['nowOut'] and not m['nowIn'], f"{m['nowOut']} {m['nowIn']}")
+    await pg.evaluate("() => { const G = window.__gargantua, M = G.MIS; G.startMission('polar'); G.state.paused = false; for (let i = 0; i < 20000 && !M.end; i++) G.stepMission(0.1); G.state.paused = true; }")
+    await pg.wait_for_timeout(300)
+    k = await pg.evaluate('''() => { const r = {}; const m = document.getElementById('mend'), sh = document.getElementById('mendShow');
+      r.shown = !m.hidden; r.bg = getComputedStyle(m).pointerEvents;
+      document.getElementById('mendClose').click(); r.closed = m.hidden; r.btn = !sh.hidden;
+      sh.click(); r.reopen = !m.hidden && sh.hidden;
+      const hh = m.querySelector('.hh'), b = hh.getBoundingClientRect(), x = b.left + 20, y = b.top + 8;
+      return { r, x, y }; }''')
+    tr = await pg.evaluate('''([x, y]) => { const hh = document.querySelector('#mend .hh'), ev = (t, cx, cy) => hh.dispatchEvent(new PointerEvent(t, { clientX: cx, clientY: cy, pointerId: 7, bubbles: true }));
+      ev('pointerdown', x, y); ev('pointermove', x - 30, y + 20); ev('pointermove', x - 60, y + 40); ev('pointerup', x - 60, y + 40);
+      const t = document.querySelector('#mend .card').style.transform; window.__gargantua.stopMission(); return t; }''', [k['x'], k['y']])
+    r = k['r']
+    cek('kartu akhir: latar tembus, x menutup, tombol ringkasan membuka lagi, kepala bisa diseret',
+        r['shown'] and r['bg'] == 'none' and r['closed'] and r['btn'] and r['reopen'] and 'translate(' in tr and tr != 'translate(0px, 0px)', f"{r} {tr}")
 
 asyncio.run(main())
