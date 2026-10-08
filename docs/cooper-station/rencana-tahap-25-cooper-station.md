@@ -118,7 +118,8 @@ Risiko utama: memori atlas Ultra dan jumlah draw call. Kedua hal baru bisa dipas
 | 25c | Selesai, menunggu uji visual Bhakti | Atlas daun kedua `leafTex2` (2.048 x 1.024 px, 4 x 2 sel 512 px, RNG sendiri) untuk 6 jenis 25b: bulat bertangkai (aspen), lonjong tepi rata (beech), hati (basswood), lonjong bergerigi (chestnut), majemuk 9 anak daun (ash), majemuk 15 anak daun (walnut); 2 sel dicadangkan untuk konifer 25e. Indeks atlas jenis 4-9; UV kartu daun atlas >= 4 dihitung ke sel 4 x 2, rumus atlas 0-3 tidak berubah. Warna musim beech ditambah perunggu (`LEAF_PAL.perunggu`). Gambar atlas: `docs/cooper-station/gambar/atlas-daun-25c.webp` |
 | 25d | Selesai, menunggu uji visual Bhakti | Daun majemuk sebagai geometri: tiap posisi kartu pada jenis majemuk diganti 4-6 tangkai daun (pita 2 ruas, 6 verteks, separuh ujung merunduk, helai hampir mendatar) bertekstur satu daun majemuk utuh. Sel atlas 4 dan 5 digambar ulang jadi 4 daun majemuk tunggal per setengah sel (ash / hickory 9 anak daun, black locust 17 anak daun kecil, walnut 17 anak daun, honey locust daun ganda halus). Ash dan walnut beralih ke tangkai daun; 3 jenis baru: hickory, black locust, honey locust (template 28-33, ditambah di akhir daftar zona: pilihan 25b tetap). Tanpa GLSL baru. Gambar: `docs/cooper-station/gambar/pohon-majemuk-25d.webp` |
 | 25e | Selesai, menunggu uji visual Bhakti | 4 konifer (total 21 jenis): fir (mewakili silver fir dan balsam fir), hemlock, arborvitae, redcedar, template 34-41. Semprot jarum (fir, hemlock) dan sisik (arborvitae, redcedar) digambar di sel cadangan 6-7 atlas kedua, dipasang dengan pita tangkai 25d (`frond.roll` memutar helai; arborvitae tegak). Mesin cabang kerucut / kolom dengan pengali panjang cabang `clK` (bawaan 1, jenis lama identik). Penempatan K2: tidak di jalan kota; taman 10% dan luar kota 14% dari oak / elm tersisa; hutan 14a: 40% pinus jadi fir (22%) atau hemlock (18%) dengan tinggi mutlak tiap pohon tetap. Tanpa GLSL baru. Gambar: `docs/cooper-station/gambar/konifer-25e.webp` |
-| 25f-25j | Belum dikerjakan | - |
+| 25f | Selesai, menunggu uji visual Bhakti | Tekstur kulit per jenis `BARK_TEX` (7 kanvas 128 x 256 px, RNG sendiri, ukuran ulangan sama dengan kulit lama): putih berlentisel dan bercak hitam (birch), putih keabuan bermata wajik (aspen), halus berbintik (beech, fir), alur silang wajik (ash, walnut, hickory, chestnut, black locust), lempeng pipih beretak (pinus, hemlock, honey locust), serat mengelupas (redcedar, arborvitae), lentisel mendatar (pohon bunga). Field `barkT` per jenis; oak, elm, poplar, maple, willow, basswood tetap memakai kulit lama. Warna `K.bark` dan UV tidak berubah. Gambar: `docs/cooper-station/gambar/kulit-25f.webp` |
+| 25g-25j | Belum dikerjakan | - |
 
 ### Hasil terukur 25b (sandbox, di luar hutan 14a)
 
@@ -180,5 +181,11 @@ Catatan 25e:
 - Titik terendah daun semua konifer -0,41 m dari dasar template (sama seperti jenis lama). Hemlock sempat -1,7 m (cabang bawah menjuntai masuk tanah, diperbesar 1,9x di hutan); cabang terbawah dinaikkan.
 - Konifer memakai 5 sampai 7 kali verteks daun pinus kartu (816). Di hutan, pohon dalam 70 m (Ultra) memakai mesh penuh: sekitar 980 fir dan hemlock di hutan, sebagian kecil yang dekat. Dampak FPS belum diukur (25i).
 - Fir dari samping berbentuk kerucut sempit rapat, belum selebar fir dewasa di alam; bisa dilebarkan lewat `clK`.
+
+Catatan 25f:
+- Jenis lama yang tampilannya berubah di mode bawaan: birch (dulu alur abu-abu, kini putih berlentisel), pinus (lempeng), pohon bunga (lentisel). Ini memang isi rencana 25f; `?pohon=lama` tetap memakai kulit lama untuk semua jenis (dicek: 16 template, 1 tekstur kulit yang sama).
+- Mode bawaan memakai 8 tekstur kulit (lama + 7 baru), masing-masing 128 x 256 px (128 KB, sekitar 170 KB dengan mipmap): total tambahan sekitar 1,2 MB memori GPU.
+- Geometri tidak berubah (`?pohon=lama` 0 beda); `tools/uji_pohon.py` semua lolos, `tools/qc_load.py` tanpa error.
+- Tekstur dicek lewat pratinjau dan render batang dari dekat di sandbox; detail lentisel dan lempeng lebih kecil dari 1 piksel layar pada jarak lebih dari sekitar 30 m (mipmap menghaluskannya).
 
 Batasan 25a: FPS dan waktu muat belum diukur di GTX 1060 atau M1. Geometri pohon tidak berubah, jadi pohon tampil sama seperti sebelumnya; uji visual cukup memastikan tidak ada bagian lain yang ikut berubah.
