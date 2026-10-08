@@ -35,6 +35,7 @@ Status: 23a sampai 23g selesai, menunggu uji visual dan FPS Bhakti (GTX 1060, M1
 | 23e | 4 | Mengarung dan berenang | High | Opus 5.5 (orkestrator) | high | `stepGround()`, `player.state` `swim` |
 | 23f | 2 | Payung dan berteduh saat hujan | Medium | Opus 5.5 subagent | medium | `stepPeds()`, `updatePeds()`, `VIS` |
 | 23g | 6 | Merpati melipat sayap, bergerombol | Medium | Opus 5.5 subagent | medium | `BIRDS` |
+| 23h | revisi foto | Revisi air dari foto Bhakti: jagung di atas danau, bintang di bawah layar saat berenang, riak sungai tidak ikut alur, riak danau seperti arus | High | Opus 5.5 | high | tekstur ladang, `waterNear()`, `SWIM`, shader air |
 | - | - | Kamus English, label panel, CLAUDE.md | Low | Opus 5.5 subagent | low | `I18N.en` |
 
 ## Aturan
@@ -52,3 +53,15 @@ Status: 23a sampai 23g selesai, menunggu uji visual dan FPS Bhakti (GTX 1060, M1
 | 23e | Air sungai diwakili permukaan mesh alur; dalam air dihitung dari jarak ke tepi (tanpa kamera bawah air) |
 | 23f | Teduhan hanya kanopi kafe dan atap halte (pintu gedung belum); yang tidak mendapat teduhan membuka payung dan tetap duduk |
 | 23g | Merpati tidak menghindari orang atau benda selain kolam; tanpa miring saat belok di udara |
+| 23h | Lihat bagian Revisi 23h di bawah |
+
+## Revisi 23h (dari foto Bhakti)
+
+| Keluhan | Penyebab | Perbaikan |
+| --- | --- | --- |
+| Jagung tumbuh di atas danau | Tekstur petak ladang (`uFieldTex`) tidak dikosongkan di danau; danau za 4.300 dan 5.600 ada di zona ladang | Elips danau + 12 m dikosongkan di tekstur ladang (jagung, gandum, dan warna petak tidak lagi di air) |
+| Saat berenang bagian bawah layar hitam berbintang | Mata perenang 0,25 m di atas air, ayunan kayuhan +-5 cm, bidang dekat kamera 0,25 m: permukaan air tepat di bawah kamera terpotong, tembus ke luar silinder | Mata 0,3 m di atas air, bidang dekat 0,1 m selama di air (`SWIM.eye`, `SWIM.near`, `waterNear()`), kembali 0,25 m saat keluar |
+| Riak sungai jadi garis lurus panjang, tidak ikut alur | Pola digeser arus x waktu sampai 3.600 s; arus berbeda di tikungan dan tepi, jadi pola tertarik makin panjang | Peta aliran dua fase (geser maksimal 5 s, dua lapis berselang dicampur); arus 0,75 m/s di tengah, 0,15 m/s di tepi; arah gelombang diukur dari arah arus |
+| Riak danau terlalu kasar, seperti arus | Gelombang danau sama dengan sungai: panjang 7 m, kemiringan sampai sekitar 0,3 | Danau: gelombang 1,8 m ke bawah, kemiringan sekitar 4x lebih kecil, petak licin seperti kaca diselingi tiupan angin |
+
+Fisika sungai di silinder O'Neill: permukaan air diam = silinder sejari (potensial sentrifugal), jadi sungai yang mengelilingi keliling pada jari-jari tetap tidak punya turunan. Sungai melingkar penuh (panjang alur 6.662 m) hanya bisa mengalir dengan pompa: kemiringan Manning (n 0,03, penampang 82 m2, jari-jari hidrolik 2,0 m) untuk 0,5-0,6 m/s = 0,9-1,3 x 10^-4, beda tinggi 0,6-0,85 m per keliling, daya pompa sekitar 340-590 kW (efisiensi 70%). Coriolis untuk arus mendatar di lantai silinder selalu tegak (arus searah putaran 1,2% lebih berat pada 0,6 m/s), tidak mendorong ke tepi seperti di Bumi.

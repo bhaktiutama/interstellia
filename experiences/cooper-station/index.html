@@ -2181,40 +2181,58 @@ const groundMat = new THREE.ShaderMaterial({
         // 23b: riak tidak berulang. Sungai mengalir searah alurnya (riverZ, angka sama dengan RIVER: t = s / R), danau diam.
         // Domain dilengkungkan derau skala 30-80 m, arah riak diputar angin (uWind) dan per wilayah, kekasaran per petak
         // (tiupan angin menyapu permukaan, digeser uGustOff) jadi ada bagian licin dan bagian kasar. Dua set: 6 gelombang
-        // 0,8-7 m (dispersi air dalam) + 6 riak pendek 0,25-0,9 m. Kemiringan dipudarkan di bawah ukuran piksel (fp).
+        // panjang (dispersi air dalam) + 6 riak pendek 0,25-0,9 m. Kemiringan dipudarkan di bawah ukuran piksel (fp).
+        // 23h: (1) sungai = peta aliran dua fase: pola digeser arus paling lama TF detik lalu diulang, dua lapis berselang
+        // setengah periode dicampur (dulu digeser arus x uTime sampai 3.600 s: beda arus antar tempat (tikungan, tepi)
+        // menarik pola jadi garis lurus panjang yang tidak ikut alur). Arus 0,75 m/s di tengah, 0,15 m/s di tepi; arah
+        // gelombang diukur dari arah arus. (2) danau = air tenang: gelombang pendek (fetch 100-200 m), kemiringan kecil,
+        // petak licin seperti kaca diselingi tiupan angin.
         float rt = a;
         float rz = 2500.0 + 110.0 * sin(3.0 * rt + 0.7) + 55.0 * sin(7.0 * rt + 2.1);
         float rdz = (330.0 * cos(3.0 * rt + 0.7) + 385.0 * cos(7.0 * rt + 2.1)) / uR;   // dz/ds
         float rivK = 1.0 - smoothstep(22.0, 32.0, abs(za - rz));
-        vec2 flowD = vec2(1.0, rdz) * inversesqrt(1.0 + rdz * rdz);
-        vec2 flow = flowD * 0.6 * rivK;                                // arus 0,6 m/s di sungai
+        float rInv = inversesqrt(1.0 + rdz * rdz);
+        vec2 flowD = vec2(1.0, rdz) * rInv;
+        float across = clamp(abs(za - rz) * rInv / 20.0, 0.0, 1.0);   // jarak tegak lurus as / setengah lebar
+        vec2 flow = flowD * mix(0.15, 0.75, 1.0 - across * across) * rivK;
+        float fAng = atan(flowD.y, flowD.x);
         vec2 Pw = P + vec2(vnoise(P * 0.021), vnoise(P * 0.021 + 7.3)) * 9.0 - 4.5;
         Pw += vec2(vnoise(P * 0.09 + 3.1), vnoise(P * 0.09 + 11.7)) * 1.6;
         float wl = length(uWind.xy), wsp = clamp(wl / 3.0, 0.3, 1.7);
         float wAng = wl > 1e-3 ? atan(uWind.y, uWind.x) : 0.0;
         float rough = smoothstep(0.25, 0.8, fbm2(P * 0.018 - uGustOff * 0.06));
-        float ampK = mix(0.3, 1.35, rough) * wsp;
-        float regA = (vnoise(P * 0.006 + 2.0) - 0.5) * 1.6;
-        vec2 Pf = Pw - flow * uTime;
-        for (int i = 0; i < 6; i++) {
-          float fi = float(i);
-          float L = 7.0 * pow(0.66, fi);
-          float k = 2.0 * PI / L;
-          float an = mix(0.4 + fi * 2.1, wAng + (fi - 2.5) * 0.45, 0.6 * (1.0 - rivK)) + regA;
-          vec2 d = vec2(cos(an), sin(an));
-          float w = sqrt(9.81 * k);
-          float amp = 0.03 * ampK * (1.0 - smoothstep(0.15 * L, 0.5 * L, fp));
-          grad += amp * d * cos(k * dot(d, Pf) - w * uTime + fi * 1.7 + 6.0 * vnoise(P * 0.05 + fi));
-        }
-        for (int i = 0; i < 6; i++) {
-          float fi = float(i);
-          float L = 0.9 * pow(0.78, fi);
-          float k = 2.0 * PI / L;
-          float an = wAng + (fi - 2.5) * 0.7 + regA * 1.7 + 0.9 * fi * fi;
-          vec2 d = vec2(cos(an), sin(an));
-          float w = sqrt(9.81 * k);
-          float amp = 0.022 * ampK * rough * (1.0 - smoothstep(0.15 * L, 0.5 * L, fp));
-          grad += amp * d * cos(k * dot(d, Pf) - w * uTime + fi * 2.9);
+        float ampK = mix(mix(0.12, 1.0, rough), mix(0.45, 1.0, rough), rivK) * wsp;   // danau: petak kaca 0,12
+        float regA = (vnoise(P * 0.006 + 2.0) - 0.5) * mix(1.6, 0.5, rivK);
+        float L0 = mix(1.8, 3.2, rivK), A0 = mix(0.012, 0.024, rivK);   // gelombang panjang: danau 1,8 m landai, sungai 3,2 m
+        const float TF = 5.0;
+        float ph0 = fract(uTime / TF);
+        float lw0 = 1.0 - abs(1.0 - 2.0 * ph0);                      // bobot lapis 0: nol saat lapis itu diulang
+        int nLay = rivK > 0.001 ? 2 : 1;
+        for (int ly = 0; ly < 2; ly++) {
+          if (ly >= nLay) break;
+          float ph = ly == 0 ? ph0 : fract(ph0 + 0.5);
+          float lw = nLay == 1 ? 1.0 : (ly == 0 ? lw0 : 1.0 - lw0);
+          vec2 Pf = Pw - flow * (ph * TF) + float(ly) * vec2(13.7, 5.3);
+          for (int i = 0; i < 6; i++) {
+            float fi = float(i);
+            float L = L0 * pow(0.68, fi);
+            float k = 2.0 * PI / L;
+            float an = mix(wAng + (fi - 2.5) * 0.5, fAng + (fi - 2.5) * 0.55 + (mod(fi, 2.0) - 0.5) * 1.2, rivK) + regA;
+            vec2 d = vec2(cos(an), sin(an));
+            float w = sqrt(9.81 * k);
+            float amp = A0 * ampK * lw * (1.0 - smoothstep(0.15 * L, 0.5 * L, fp));
+            grad += amp * d * cos(k * dot(d, Pf) - w * uTime + fi * 1.7 + 6.0 * vnoise(P * 0.05 + fi));
+          }
+          for (int i = 0; i < 6; i++) {
+            float fi = float(i);
+            float L = 0.9 * pow(0.78, fi);
+            float k = 2.0 * PI / L;
+            float an = mix(wAng + (fi - 2.5) * 0.7 + 0.9 * fi * fi, fAng + (fi - 2.5) * 0.8 + 0.9 * fi * fi, rivK) + regA * 1.7;
+            vec2 d = vec2(cos(an), sin(an));
+            float w = sqrt(9.81 * k);
+            float amp = mix(0.010, 0.016, rivK) * ampK * rough * lw * (1.0 - smoothstep(0.15 * L, 0.5 * L, fp));
+            grad += amp * d * cos(k * dot(d, Pf) - w * uTime + fi * 2.9);
+          }
         }
         if (uSwimP.z > 0.01) {                                      // 23e: riak melingkar di sekitar pemain yang mengarung / berenang
           vec2 dP = vec2(s - uSwimP.x, za - uSwimP.y); dP.x -= 2.0 * PI * uR * floor(dP.x / (2.0 * PI * uR) + 0.5);
@@ -3087,6 +3105,8 @@ LIGHT.uniforms.uL_Land.value = landTex;                            // 17d: pantu
   frect(COOPER.s - 72, COOPER.za - 47, COOPER.s + 92, COOPER.za + 62, '#000');
   for (const z of RINGS_Z) if (z > FZ0 - 20 && z < FZ1 + 20) frect(0, z - 14, CIRC, z + 14, '#000');   // cincin struktur bukan ladang
   frect(FOREST.s0, FOREST.z0, FOREST.s1, FOREST.z1, '#000');     // 14a: hutan bukan ladang (tanpa gandum dan jagung)
+  fg.fillStyle = '#000';                                           // 23h: danau dan tanggulnya bukan ladang (dulu jagung tumbuh di atas air)
+  for (const L of LAKES) for (const o of [-CIRC, 0, CIRC]) { fg.beginPath(); fg.ellipse(FX(L.s + o), FY(L.za), (L.rs + 12) * FK, (L.rz + 12) * FK, 0, 0, TAU); fg.fill(); }
   const fieldTex = new THREE.CanvasTexture(fc);
   fieldTex.colorSpace = THREE.NoColorSpace;
   fieldTex.minFilter = fieldTex.magFilter = THREE.NearestFilter; fieldTex.generateMipmaps = false;
@@ -5266,7 +5286,16 @@ function waterAt(s, za) {
   }
   return null;
 }
-const SWIM = { depth: 1.25, wadeK: 0.45, speed: 1.1, fast: 1.7 };   // 23e
+const SWIM = { depth: 1.25, wadeK: 0.45, speed: 1.1, fast: 1.7, eye: 0.3, near: 0.1 };   // 23e; 23h: mata 0,3 m di atas air, bidang dekat kamera di air
+// 23h: bidang dekat kamera 0,25 m memotong permukaan air tepat di bawah mata perenang (0,25 m di atas air, ayunan kayuhan
+// +-5 cm): bagian bawah layar tembus ke luar silinder (bintang). Selama di air bidang dekat diturunkan ke SWIM.near.
+function waterNear() {
+  const want = player.state === 'ground' && !MOTO.on && !ext.active && (player.swim || player.wade > 0.15) ? SWIM.near : 0.25;
+  if (want === SWIM.near ? camera.near !== want : SWIM.nearOn) {
+    SWIM.nearOn = want === SWIM.near;
+    if (SWIM.nearOn || (player.state === 'ground' && !ext.active)) { camera.near = want; camera.updateProjectionMatrix(); }
+  }
+}
 function stepGround(dt) {
   if (ext.active) { player.vA = player.vT = 0; return; }           // WASD dipakai kamera luar
   const [f, s, len] = readMoveInput();
@@ -5296,7 +5325,7 @@ function waterH() {                                                // 23e: tingg
   const s = player.theta * R, W = waterAt(s, player.za);
   player.swim = !!W && W.depth > SWIM.depth;
   player.wade = W ? Math.min(W.depth, SWIM.depth) : 0;
-  player.h = W ? (player.swim ? W.surf - (CONFIG.eye - 0.25) : W.surf - W.depth) : groundH(s, player.za);
+  player.h = W ? (player.swim ? W.surf - (CONFIG.eye - SWIM.eye) : W.surf - W.depth) : groundH(s, player.za);
   const U = groundMat.uniforms.uSwimP.value;                        // riak di sekitar pemain (shader air)
   U.set(s, player.za, W ? Math.min(1, 0.25 + Math.hypot(player.vA, player.vT) * 0.6) : 0, player.swim ? 1 : 0);
 }
@@ -6074,6 +6103,7 @@ function updateCamera() {
     groundPoint(player.theta, player.za, player.h + (player.state === 'tram' ? 1.2 : CONFIG.eye) + BOB.oy, _eye);   // duduk: mata 1,2 m di atas lantai
     if (BOB.ox) _eye.addScaledVector(_right, BOB.ox);
   }
+  waterNear();                                                     // 23h
   updateFov(dt);
   motoVisual();                                                    // 19b: motor (dikendarai atau diparkir), lampu depan, dasbor
   if (!ext.active) {
