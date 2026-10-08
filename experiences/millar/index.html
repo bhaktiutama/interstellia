@@ -3885,9 +3885,19 @@ const M_CPY = pmat(`uniform sampler2D tSrc; uniform float uS; varying vec2 vUv; 
 const CAMX = { final: false, ex: 0, ey: 0, prevVP: new THREE.Matrix4(), pos: new THREE.Vector3(), q: new THREE.Quaternion(), w: 1, n: 0, reading: false, lumT: 0,
   float: renderer.extensions.has('EXT_float_blend'), px: new Uint16Array(4), lum: new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false }) };
 CAMX.acc = new THREE.WebGLRenderTarget(4, 4, { type: CAMX.float ? THREE.FloatType : THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false });
+// autofocus: jarak terdekat di patch tengah dari kedalaman frame ini (kedalaman dibuat makePost() saat kamera)
+const M_AF = pmat(CAMKIT.AF_FS, { tDepth: { value: null }, uPI: { value: new THREE.Matrix4() }, uR: { value: new THREE.Vector2() } });
+CAMX.afT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false }); CAMX.afPx = new Uint16Array(4);
+function camAfProbe() {
+  if (!POST.hdr.depthTexture || (CINE.on && CINE.orbit)) { CAMKIT.afResult(Infinity); return; }
+  const U = M_AF.uniforms; U.tDepth.value = POST.hdr.depthTexture; U.uPI.value.copy(camera.projectionMatrixInverse); U.uR.value.set(0.035 / camera.aspect, 0.035);
+  pass(M_AF, CAMX.afT); renderer.setRenderTarget(null); CAMX.afBusy = true;
+  renderer.readRenderTargetPixelsAsync(CAMX.afT, 0, 0, 1, 1, CAMX.afPx).then(() => CAMKIT.afResult(THREE.DataUtils.fromHalfFloat(CAMX.afPx[0])))
+    .catch(() => CAMKIT.afResult(Infinity)).finally(() => { CAMX.afBusy = false; });
+}
 const _kR = new THREE.Vector3(), _kU = new THREE.Vector3(), _kQ = new THREE.Quaternion(), _kCC = new THREE.Color(), _kX = new THREE.Vector3(1, 0, 0), _kY = new THREE.Vector3(0, 1, 0);
 CAMKIT.init({
-  app: 'millar', canvas, ev0: 12, key: 0.232 / CONFIG.exposure, minFocus: 0.7,
+  app: 'millar', canvas, ev0: 12, key: 0.232 / CONFIG.exposure, minFocus: 0.7, afProbe: true,
   lang: () => LANG, exit: () => togglePhoto(false), freeMode: () => { togglePhoto(false); togglePhoto(true, 'bebas'); },
   isLocked: () => document.pointerLockElement === canvas, unlock: () => { if (document.pointerLockElement) document.exitPointerLock(); },
   audio: () => (AUDIO.ctx && AUDIO.master ? { ctx: AUDIO.ctx, node: AUDIO.master } : null),
@@ -3928,6 +3938,7 @@ function camFrame() {
 function camAfterFrame() {
   CAMX.prevVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
   if (!CAMKIT.on) return;
+  if (CAMKIT.afWant && !CAMX.afBusy) camAfProbe();
   if (!CAMX.reading && performance.now() - CAMX.lumT > 200 && !(CINE.on && CINE.orbit)) {   // meter: HDR frame ini masih utuh
     M_LUM.uniforms.tHdr.value = POST.hdr.texture; pass(M_LUM, CAMX.lum);
     CAMX.reading = true; CAMX.lumT = performance.now();

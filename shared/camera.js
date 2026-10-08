@@ -70,7 +70,7 @@
   // ---------- teks (dua bahasa, tidak lewat kamus experience) ----------
   const STR = {
     title: ['Kamera rangefinder', 'Rangefinder camera'], mode: ['Mode', 'Mode'], lens: ['Lensa', 'Lens'], ap: ['Aperture', 'Aperture'],
-    sh: ['Rana', 'Shutter'], iso: ['ISO', 'ISO'], comp: ['Kompensasi', 'Compensation'], focus: ['Fokus', 'Focus'],
+    sh: ['Rana', 'Shutter'], iso: ['ISO', 'ISO'], comp: ['Kompensasi', 'Compensation'], focus: ['Fokus', 'Focus'], afSh: ['AF saat rana', 'AF on shutter'],
     kind: ['Rekam', 'Capture'], photo: ['Foto', 'Photo'], video: ['Video', 'Video'], view: ['Tampilan', 'View'],
     finder: ['Jendela bidik', 'Viewfinder'], live: ['Live view', 'Live view'], mag: ['Pembesaran', 'Magnification'],
     tripod: ['Tripod', 'Tripod'], hint: ['? tombol kamera', '? camera keys'], keysHead: ['Kamera rangefinder (F)', 'Rangefinder camera (F)'], shake: ['Getar tangan', 'Hand shake'], fmt: ['Format', 'Format'], fps: ['Video fps', 'Video fps'],
@@ -81,14 +81,14 @@
     helpTitle: ['Tombol kamera', 'Camera keys'],
     keys: [[
       ['Klik kiri / Enter', 'Rana (foto) atau mulai / berhenti rekam (video); rana B: tahan'],
-      ['Roda mouse', 'Cincin fokus: satukan dua gambar di patch tengah'], ['Shift + roda, atau , .', 'Aperture'],
+      ['Roda mouse', 'Cincin fokus: satukan dua gambar di patch tengah'], ['Klik tengah', 'Autofocus ke benda di patch tengah (bip saat terkunci)'], ['Shift + roda, atau , .', 'Aperture'],
       ['[ ]', 'Kecepatan rana (mode A / P pindah ke M)'], ['- =', 'ISO'], ['Shift + - =', 'Kompensasi eksposur (mode A dan P)'],
       ['M', 'Mode eksposur A / M / P (berganti)'], ['1-6', 'Lensa 21 / 28 / 35 / 50 / 75 / 90 mm'], ['Tab', 'Foto / video'], ['V', 'Jendela bidik optik / live view'],
       ['Klik kanan tahan', 'Kunci eksposur (AE-L)'], ['H', 'Sembunyikan HUD'], ['`', 'Panel kamera'], ['WASD, Shift, mouse, Z', 'Tetap: jalan, lari, menoleh, kecepatan waktu'],
       ['F / Esc', 'Keluar mode kamera'],
     ], [
       ['Left click / Enter', 'Shutter (photo) or start / stop recording (video); B shutter: hold'],
-      ['Mouse wheel', 'Focus ring: merge the two images in the centre patch'], ['Shift + wheel, or , .', 'Aperture'],
+      ['Mouse wheel', 'Focus ring: merge the two images in the centre patch'], ['Middle click', 'Autofocus on the object in the centre patch (beep when locked)'], ['Shift + wheel, or , .', 'Aperture'],
       ['[ ]', 'Shutter speed (A / P mode switches to M)'], ['- =', 'ISO'], ['Shift + - =', 'Exposure compensation (A and P)'],
       ['M', 'Exposure mode A / M / P (cycle)'], ['1-6', 'Lens 21 / 28 / 35 / 50 / 75 / 90 mm'], ['Tab', 'Photo / video'], ['V', 'Optical viewfinder / live view'],
       ['Right click hold', 'Exposure lock (AE-L)'], ['H', 'Hide HUD'], ['`', 'Camera panel'], ['WASD, Shift, mouse, Z', 'Unchanged: walk, run, look, time speed'],
@@ -101,7 +101,7 @@
     ev100, cocMM, hyperfocal, apertureR, fovV, fovH, rfShift, dofRange, halton, bladeSample, shutterLabel,
     on: false, A: null, cap: null, rec: null, L: null, lock: null, hud: true, panel: false, helpOn: false, seed: 0,
     st: { lens: 3, N: 2.8, sh: 5, iso: 200, mode: 'A', comp: 0, invS: 1 / 3, video: false, live: false, mag: 0.72,
-      tripod: false, shake: true, fmt: 'png', fps: 30, mbps: 8 },
+      tripod: false, shake: true, afShutter: false, fmt: 'png', fps: 30, mbps: 8 },
     U: { E: [0, 1, 0, 0], L: [0, 0, 0, 0], R: [0, 0, 0, 0], M: [0, 0, 0, 0] },
   };
   try { const s = JSON.parse(localStorage.getItem('lazarus.camera') || 'null'); if (s && typeof s === 'object') Object.assign(K.st, s); } catch (e) { /* abaikan */ }
@@ -163,6 +163,7 @@
   // Parameter render frame ini. W, H = ukuran target render (piksel). Keluaran: vfov (derajat), eye (offset lensa m
   // dalam basis kamera: kanan, atas), live, dan K.U terisi untuk shader.
   K.view = function (W, H, capturing) {
+    if (!capturing) afStep();
     const s = K.st, c = cur(), live = capturing || s.live || s.video, A = K.A, U = K.U;
     const cw = A.canvas.clientWidth || W, ch = A.canvas.clientHeight || H, G = finderGeo(cw, ch);
     let tanV, eye = [0, 0];
@@ -250,11 +251,45 @@
     return max(x + sg * (vec3(g) + gc * 1.2), vec3(0.0));
   }`;
 
+  // ---------- autofocus: host membaca jarak terdekat di patch tengah (AF_FS, tDepth + uPI) lalu memanggil afResult ----------
+  K.AF_FS = /* glsl */`uniform sampler2D tDepth; uniform mat4 uPI; uniform vec2 uR; varying vec2 vUv;
+  void main() {
+    float m = 6e4;
+    for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
+      vec2 uv = vec2(0.5) + vec2(float(i), float(j)) * 0.5 * uR;
+      float d = textureLod(tDepth, uv, 0.0).r;
+      if (d < 0.99999) { vec4 v = uPI * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); float L = length(v.xyz / v.w); if (L == L) m = min(m, L); }
+    }
+    gl_FragColor = vec4(m, 0.0, 0.0, 1.0);
+  }`;
+  K.afWant = false; K.afTo = null;
+  K.af = function (shoot) {                                          // klik tengah: AF-S; shoot = AF lalu rana (opsi panel)
+    if (!K.on || K.cap) return;
+    K.afShoot = !!shoot;
+    if (K.A.afProbe) K.afWant = true; else K.afResult(Infinity);    // tanpa kedalaman (Gargantua): tak hingga
+  };
+  K.afResult = function (d) {
+    K.afWant = false;
+    if (!K.on) { K.afShoot = false; return; }
+    const iv = Math.max(0, Math.min(1 / lens().minF, d > 5000 || !(d > 0) ? 0 : 1 / d));
+    if (K.afShoot) { K.afShoot = false; K.st.invS = iv; K.afTo = null; save(); if (K.panel) buildPanel(); K.armed = true; return; }
+    K.afTo = iv; K.afT = performance.now();
+  };
+  function afStep() {                                                // cincin fokus berputar halus ke sasaran (~0,3 s), bip saat terkunci
+    if (K.afTo == null) return;
+    const now = performance.now(), dt = Math.min(0.1, (now - K.afT) / 1000); K.afT = now;
+    const e = K.afTo - K.st.invS;
+    if (Math.abs(e) < 0.004) { K.st.invS = K.afTo; K.afTo = null; save(); if (K.panel) buildPanel(); beep(2200); setTimeout(() => beep(2200), 90); return; }
+    K.st.invS += e * Math.min(1, dt * 12);
+  }
+
   // ---------- tangkap foto: rencana subframe ----------
   K.shutterPress = function () {
-    if (!K.on || K.cap || K.armed) return;
+    if (!K.on || K.cap || K.armed || K.afShoot) return;
     if (K.st.video) { K.rec ? K.recStop() : K.recStart(); return; }
-    K.armed = true; click(0);
+    click(0);
+    if (K.st.afShutter) { if (!cur().bulb) click(1, 0.055); K.af(true); return; }   // bunyi tetap langsung; tangkap sesudah AF (1 frame)
+    K.armed = true;
     if (!cur().bulb) click(1, 0.055);        // satu bunyi "cekrek" langsung saat klik; olah subframe menyusul tanpa bunyi
   };
   K.shutterRelease = function () { if (K.cap && K.cap.bulb && !K.cap.done) { K.cap.release = true; if (!K.cap.clicked) { K.cap.clicked = true; click(1); } } };
@@ -487,7 +522,7 @@
     const fr = document.createElement('input'); fr.type = 'range'; fr.min = 0; fr.max = 1; fr.step = 0.001; fr.value = s.invS * c.minF;
     const fo = out(fmtDist(s.invS > 0 ? 1 / s.invS : Infinity));
     fr.addEventListener('input', () => { K.st.invS = parseFloat(fr.value) / lens().minF; fo.textContent = fmtDist(K.st.invS > 0 ? 1 / K.st.invS : Infinity); save(); });
-    row(T('focus'), fo); panelEl.appendChild(fr);
+    row(T('focus'), fo, b('AF', false, () => K.af(false)), b(T('afSh'), !!s.afShutter, () => { K.st.afShutter = !K.st.afShutter; })); panelEl.appendChild(fr);
     row(T('kind'), b(T('photo'), !s.video, () => { if (K.rec) K.recStop(); K.st.video = false; }), b(T('video'), s.video, () => { K.st.video = true; }));
     row(T('view'), b(T('finder'), !s.live && !s.video, () => { K.st.live = false; }), b(T('live'), s.live || s.video, () => { K.st.live = true; }));
     row(T('mag'), ...[0.58, 0.72, 0.85].map((m) => b(String(m).replace('.', ','), s.mag === m, () => { K.st.mag = m; })));
@@ -675,10 +710,12 @@
     if (!K.on || !onCanvas(e) || K.panel || K.helpOn) return;
     if (e.button === 0 && K.A.isLocked && K.A.isLocked()) { K.shutterPress(); e.preventDefault(); e.stopImmediatePropagation(); }
     else if (e.button === 2) { K.lock = K.L || K.A.key; e.preventDefault(); e.stopImmediatePropagation(); }
+    else if (e.button === 1) { K.af(false); e.preventDefault(); e.stopImmediatePropagation(); }
   }
   function onUp(e) {
     if (!K.on) return;
     if (e.button === 0) K.shutterRelease();
+    if (e.button === 1) e.stopImmediatePropagation();
     if (e.button === 2 && K.lock != null) { K.lock = null; e.stopImmediatePropagation(); }
   }
   function onWheel(e) {

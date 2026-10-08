@@ -13856,6 +13856,7 @@ CAMKIT.init({
   audio: () => (AUDIO.ctx && AUDIO.master ? { ctx: AUDIO.ctx, node: AUDIO.master } : null),
   quality: () => [32, 24, 16, 8, 8][PRESET.idx] || 16,
   photoH: () => [2160, 1800, 1440, 1200, 1080][PRESET.idx] || 1080,   // tinggi foto tersimpan (px) per preset
+  afProbe: true,                                                     // autofocus dari kedalaman (camAfProbe)
 });
 function camAllowed() {
   return !ext.active && !MOTO.on && !TOUR.on && ['ground', 'air', 'lift', 'float', 'tram', 'pod'].includes(player.state);
@@ -13880,6 +13881,17 @@ function camOffset(dx, dy) {                                         // geser ka
   _kR.setFromMatrixColumn(camera.matrix, 0); _kU.setFromMatrixColumn(camera.matrix, 1);
   camera.position.addScaledVector(_kR, dx).addScaledVector(_kU, dy);
 }
+// autofocus: jarak terdekat di patch tengah dari kedalaman frame ini (1 x 1 half float, baca asinkron)
+const camAfMat = fsMat(CAMKIT.AF_FS, { tDepth: { value: null }, uPI: { value: new THREE.Matrix4() }, uR: { value: new THREE.Vector2() } });
+CAMX.afT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false }); CAMX.afPx = new Uint16Array(4);
+function camAfProbe() {
+  if (!POST_R.hdr.depthTexture) { CAMKIT.afResult(Infinity); return; }
+  const U = camAfMat.uniforms; U.tDepth.value = POST_R.hdr.depthTexture; U.uPI.value.copy(camera.projectionMatrixInverse);
+  U.uR.value.set(0.035 / camera.aspect, 0.035);                     // patch tengah (bagian tinggi layar)
+  fsPass(camAfMat, CAMX.afT); renderer.setRenderTarget(null); CAMX.afBusy = true;
+  renderer.readRenderTargetPixelsAsync(CAMX.afT, 0, 0, 1, 1, CAMX.afPx).then(() => CAMKIT.afResult(THREE.DataUtils.fromHalfFloat(CAMX.afPx[0])))
+    .catch(() => CAMKIT.afResult(Infinity)).finally(() => { CAMX.afBusy = false; });
+}
 function camMeter() {                                                // meter berbobot tengah = luminans adaptasi seketika (kanal g)
   if (CAMX.reading || ADAPT.init || performance.now() - CAMX.lumT < 200) return;
   CAMX.reading = true; CAMX.lumT = performance.now();
@@ -13901,6 +13913,7 @@ function camFrame() {                                                // tiap fra
 function camAfterFrame() {
   CAMX.prevVP.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
   if (!CAMKIT.on) return;
+  if (CAMKIT.afWant && !CAMX.afBusy) camAfProbe();
   CAMKIT.afterFrame(canvas);
   CAMKIT.draw();
 }
