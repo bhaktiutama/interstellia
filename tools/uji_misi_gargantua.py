@@ -556,11 +556,13 @@ async def kelompok8(pg):
     cek('susur melawan arus: arah dan laju gas relatif tidak berubah', all(q['same'] for q in retro), str(retro))
     # HUD hidup: tesseract = peta orbit saat membidik, corong setelah Enter (layar cukup besar)
     await pg.set_viewport_size({'width': 1280, 'height': 720})
-    a, b, c, d = await pg.evaluate('''() => { const G = window.__gargantua, F = G.FUN, n = []; let t = 1e12;
+    a, b, c, d, box = await pg.evaluate('''() => { const G = window.__gargantua, F = G.FUN, n = []; let t = 1e12;
       const dash = () => G.drawDash(t += 1000);                   // langsung (render SwiftShader 1280 x 720 lambat)
       G.state.paused = true; G.startMission('tesseract'); n.push(F.drawn); dash(); dash(); n.push(F.drawn);
-      G.tesLaunch(); dash(); n.push(F.drawn); G.startMission('polar'); dash(); n.push(F.drawn); G.stopMission(); return n; }''')
+      G.tesLaunch(); dash(); n.push(F.drawn); G.startMission('polar'); dash(); n.push(F.drawn); n.push(F.box.slice()); G.stopMission(); return n; }''')
     await pg.set_viewport_size({'width': 320, 'height': 200})
+    cek('HUD: panel corong seukuran jendela relai (lebar 340, tinggi sampai 380, rata bawah 44 px dari tepi)',
+        abs(box[2] - 340) < 0.01 and 190 < box[3] <= 380 and abs(box[1] + box[3] - (720 - 44)) < 0.01, str([round(v, 1) for v in box]))
     cek('HUD: tesseract membidik = peta orbit (corong tidak), setelah Enter dan misi lain = peta corong', a == b and c == b + 1 and d == c + 1, f"{a} {b} {c} {d}")
 
 asyncio.run(main())
