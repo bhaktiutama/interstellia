@@ -3359,6 +3359,7 @@ function flyAudio() {                                   // dengung mesin: noise 
    Keberangkatan (misi berhasil): naik menembus awan 5 s, keluar atmosfer, lalu pandangan jauh dengan hasil misi.
    Pandangan orbit dari panel (`): bergantian jauh dan dekat, tombol apa saja kembali. */
 const ORB = { Rp: 8282, alt: 350 };
+ORB.v = Math.sqrt(CONFIG.g * (ORB.Rp * 1e3) ** 2 / ((ORB.Rp + ORB.alt) * 1e3)) / 1e3;   // laju orbit lingkaran di 350 km = 10,07 km/s (dulu sinematik memakai 7,6 km/s, laju orbit Bumi)
 const orbScene = new THREE.Scene(), orbCam = new THREE.PerspectiveCamera(50, 1, 0.002, 5e6);
 const ORB_E1 = GDIR.clone(), ORB_E2 = new THREE.Vector3().crossVectors(GDIR, new THREE.Vector3(0, 1, 0)).normalize(), ORB_E3 = new THREE.Vector3().crossVectors(ORB_E2, GDIR);
 const ORB_U = { uGCube: SKYU.uGCube, uL: { value: GDIR }, uLc: { value: new THREE.Color(1.0, 0.78, 0.58).multiplyScalar(2.2) }, uCam: { value: new THREE.Vector3() },
@@ -3672,13 +3673,13 @@ function cineStep(dt) {
       CINE.orbit = true; CINE.world = false; orbPlaceShip(ORB.alt, 0, 0); orbWideCam(62000 - 18000 * sm01(0, 7, t2), 36 * DEG);
       cineCaption("Millar's World", t('Planet air di dekat Gargantua · 1 jam di sini = 7 tahun di luar')); cineAudio(0, 0);
     } else if (t2 < 14) {
-      CINE.orbit = true; orbPlaceShip(ORB.alt, (t2 - 7) * 7.6, 0); orbShipCam(0.022, 2.0 + 0.6 * sm01(7, 14, t2), 0.42, -0.08);
+      CINE.orbit = true; orbPlaceShip(ORB.alt, (t2 - 7) * ORB.v, 0); orbShipCam(0.022, 2.0 + 0.6 * sm01(7, 14, t2), 0.42, -0.08);
       cineCaption('KS-07', t('Orbit 350 km · turun ke titik pendaratan')); cineAudio(0, 0);
       ORB.glow.color.setRGB(0.25, 0.1, 0.03);
     } else if (t2 < 21) {
       const u = sm01(14, 21, t2), alt = ORB.alt - 280 * u * u, pl = sm01(14.5, 18.5, t2);
       const aoa = 0.6 * sm01(14, 16, t2);                  // M5d: hidung mendongak, perut menghadap aliran (sudut serang 34 derajat)
-      CINE.orbit = true; orbPlaceShip(alt, 53 + (t2 - 14) * 7.6, -aoa);
+      CINE.orbit = true; orbPlaceShip(alt, 7 * ORB.v + (t2 - 14) * ORB.v, -aoa);
       if (CINE.flow !== 'in') { CINE.flow = 'in'; ORB.setFlow(new THREE.Vector3(0, -Math.sin(0.68), -Math.cos(0.68))); }
       ORB.plasma.visible = pl > 0.01; ORB_U.uPlasma.value = pl; shake = pl * 0.004;
       orbShipCam(0.036, Math.PI * 0.6, 0.14, -0.06);       // samping-atas: perut dan tepi depan menyala, planet di latar
@@ -3696,7 +3697,7 @@ function cineStep(dt) {
       cineCaption('', '');
     } else if (t2 < 14) {
       const u = sm01(5, 14, t2), pl = 1 - sm01(5, 7.5, t2);
-      CINE.world = false; CINE.orbit = true; CLK.white = 1 - sm01(5, 6.4, t2); orbPlaceShip(60 + 260 * u, 20 + (t2 - 5) * 7.6, -0.35 * (1 - u));
+      CINE.world = false; CINE.orbit = true; CLK.white = 1 - sm01(5, 6.4, t2); orbPlaceShip(60 + 260 * u, 20 + (t2 - 5) * ORB.v, -0.35 * (1 - u));
       if (CINE.flow !== 'out') { CINE.flow = 'out'; ORB.setFlow(new THREE.Vector3(0, -0.12, -1)); }
       ORB.plasma.visible = pl > 0.01; ORB_U.uPlasma.value = pl * 0.6; shake = pl * 0.002; ORB.glow.color.setRGB(3.2, 1.1, 0.35);
       orbShipCam(0.03, Math.PI - 0.7 + 0.3 * u, 0.12, 0.14);
@@ -3708,7 +3709,7 @@ function cineStep(dt) {
   } else {                                           // pandangan orbit dari panel: jauh dan dekat bergantian tiap 12 s
     CINE.orbit = true; const ph = Math.floor(t2 / 12) % 2, u = (t2 % 12) / 12;
     if (ph === 0) { orbPlaceShip(ORB.alt, 0, 0); orbWideCam(60000 - 14000 * u, (30 + 12 * u) * DEG); }
-    else { orbPlaceShip(ORB.alt, t2 * 7.6, 0); orbShipCam(0.022, 1.8 + 1.2 * u, 0.42, -0.08); ORB.glow.color.setRGB(0.25, 0.1, 0.03); }
+    else { orbPlaceShip(ORB.alt, t2 * ORB.v, 0); orbShipCam(0.022, 1.8 + 1.2 * u, 0.42, -0.08); ORB.glow.color.setRGB(0.25, 0.1, 0.03); }
     cineCaption('', t('Pandangan orbit · tombol apa saja untuk kembali')); cineAudio(0, 0);
   }
   if (shake > 0) { orbCam.position.x += (Math.random() - 0.5) * shake; orbCam.position.y += (Math.random() - 0.5) * shake; orbCam.position.z += (Math.random() - 0.5) * shake; }
