@@ -386,6 +386,8 @@
     if (!window.__stationBoot) window.__showErr('three.js belum termuat setelah 15 detik.\n\nPeriksa koneksi internet: library dimuat dari cdn.jsdelivr.net.');   // M1: modul sudah jalan = three.js termuat
   }, 15000);
 </script>
+<script src="../../shared/prof.js"></script>
+<script src="../../shared/warm.js"></script>
 <script src="../../shared/kestrel.js"></script>
 <script src="../../shared/post.js"></script>
 <script src="../../shared/camera.js"></script>
@@ -499,6 +501,7 @@ Object.assign(I18N.en, {
   "Langit, awan, bayangan...": "Sky, clouds, shadows...",
   "Lift dan hub...": "Lift and hub...",
   "Menyiapkan shader...": "Preparing shaders...",
+  "Pemanasan GPU...": "Warming up the GPU...",
   "Mesh tanah...": "Ground mesh...",
   "Mesin ladang...": "Farm machines...",
   "Pejalan kaki...": "Pedestrians...",
@@ -900,7 +903,7 @@ window.__stationBoot = true;
 const BOOT_W = [0.017, 0.018, 0.029, 0.038, 0.045, 0.096, 0.097, 0.103, 0.103, 0.572, 0.64, 0.643, 0.647, 0.649, 0.803, 0.815, 0.876, 0.877, 0.877, 0.879, 0.892, 0.91, 0.915, 0.952, 0.953, 0.954];   // bagian muat yang selesai (0-1)
 const BOOT = { t0: performance.now(), log: [], done: 0 };
 async function bootStep(frac, label, sub) {
-  if (!sub) BOOT.log.push([label, Math.round(performance.now() - BOOT.t0)]);
+  if (!sub) { BOOT.log.push([label, Math.round(performance.now() - BOOT.t0)]); PROFKIT.mark(label); }   // P0: alat ukur (?prof=1)
   BOOT.done = frac;
   document.querySelector('#boot .bar i').style.width = `${Math.round(frac * 100)}%`;
   document.getElementById('bootPct').textContent = `${Math.round(frac * 100)}%`;
@@ -10140,7 +10143,8 @@ LIGHT.uniforms.uL_Ssr.value = POST_R.ssr.texture;
 const fsScene = new THREE.Scene(), fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); fsQuad.frustumCulled = false; fsScene.add(fsQuad);
 const FS_VS = /* glsl */`varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
-const fsMat = (frag, uniforms) => new THREE.ShaderMaterial({ vertexShader: FS_VS, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false });
+const FS_MATS = [];                                                // P1: semua material layar penuh, dikompilasi di layar muat (warmShaders)
+const fsMat = (frag, uniforms) => { const m = new THREE.ShaderMaterial({ vertexShader: FS_VS, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false }); FS_MATS.push(m); return m; };
 function fsPass(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target); renderer.render(fsScene, fsCam); }
 // --- SSAO: 8 sampel hemisfer, radius 1 m, memudar sampai 150 m ---
 const AO_KERNEL = [];
@@ -15124,12 +15128,44 @@ function frame(now) {
 }
 respawn();
 updateCamera();
-// M1: kompilasi shader sebelum tombol Mulai (tidak patah-patah di detik pertama); dibatasi 12 s
+// M1: kompilasi shader sebelum tombol Mulai (tidak patah-patah di detik pertama).
+// P1 (docs/app/rencana-performa.md): kunci program three.js ikut target render (kanvas = keluaran sRGB, target HDR = linear),
+// jadi scene dikompilasi dengan target yang sama dengan postBegin(); dulu varian kanvas yang dibuat, lalu 76 program
+// dikompilasi ulang di frame pertama (halaman beku di 100%). Pass layar penuh ikut semua (FS_MATS), lalu satu frame
+// pemanasan (bayangan, impostor, efek layar, unggah buffer) di balik layar muat. Keadaan antarframe dikembalikan.
+const FS_TO_CANVAS = new Set([taaOutMat, fxaaMat]);                 // pass akhir ke kanvas; pass lain ke target
+const POST_TGT = () => (POST.mode !== 2 ? POST_R.hdr : null);       // target scene saat bermain (sama dengan postBegin())
+const sceneJobs = (t) => [{ scene, camera, target: t }, { scene: farScene, camera: farCam, target: t }];
+const fsJobs = () => FS_MATS.map((m) => ({ scene: fsScene, camera: fsCam, target: FS_TO_CANVAS.has(m) ? null : POST_R.ldr,
+  before: () => { fsJobs.q0 = fsQuad.material; fsQuad.material = m; }, after: () => { fsQuad.material = fsJobs.q0; } }));
+async function warmShaders(f0, f1, label) {
+  return WARMKIT.compile(renderer, [...sceneJobs(POST_TGT()), ...fsJobs()], (k) => bootStep(f0 + (f1 - f0) * k, label, true));
+}
+function warmFrame() {
+  const A = { cur: ADAPT.cur, init: ADAPT.init, t: ADAPT.t }, T = { act: TAA.act, valid: TAA.valid, cur: TAA.cur, i: TAA.i, jx: TAA.jx, jy: TAA.jy, prev: TAA.prevVP.clone() }, ssr = SSR.ready;
+  try {
+    octStep();
+    shadowPass(); sunShadowPass();
+    const post = postBegin();
+    if (post) taaBegin(); else TAA.act = false;
+    renderer.clear(); renderer.render(farScene, farCam); renderer.clearDepth(); renderer.render(scene, camera);
+    if (post) { postEnd(); taaEnd(); }
+  } catch (e) { /* lanjut: sisanya dikompilasi di frame pertama seperti dulu */ }
+  renderer.setRenderTarget(null);
+  Object.assign(ADAPT, A); SSR.ready = ssr;
+  TAA.act = T.act; TAA.valid = T.valid; TAA.cur = T.cur; TAA.i = T.i; TAA.jx = T.jx; TAA.jy = T.jy; TAA.prevVP.copy(T.prev);
+}
 await bootStep(0.96, 'Menyiapkan shader...');
-try {
-  if (renderer.extensions.has('KHR_parallel_shader_compile')) await Promise.race([renderer.compileAsync(scene, camera), renderer.compileAsync(farScene, farCam), new Promise((r) => setTimeout(r, 12000))]);
-  else { renderer.compile(scene, camera); renderer.compile(farScene, farCam); }
-} catch (e) { /* lanjut tanpa pra-kompilasi */ }
+try { await warmShaders(0.96, 0.985, 'Menyiapkan shader...'); } catch (e) { /* lanjut tanpa pra-kompilasi */ }
+await bootStep(0.985, 'Pemanasan GPU...');
+warmFrame();
+// P4: varian target yang lain (P = tanpa efek layar menggambar langsung ke kanvas sRGB; efek layar = target HDR linear)
+// dikompilasi di latar belakang setelah muat, hanya bila GPU bisa mengompilasi paralel (tanpa itu kompilasi memblokir frame).
+// Program yang sudah ada tidak dikompilasi ulang (cache three.js per kunci program).
+function warmLater(force) {                                         // force: uji di sandbox tanpa kompilasi paralel
+  const other = POST.mode !== 2 ? null : POST_R.hdr;               // varian lain dulu, varian yang sedang dipakai terakhir
+  return WARMKIT.background(renderer, [...sceneJobs(other), ...sceneJobs(POST_TGT())], force);
+}
 await bootStep(1, 'Siap');
 BOOT.ms = Math.round(performance.now() - BOOT.t0);
 {
@@ -15148,8 +15184,10 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
   document.getElementById('go').focus();
 }
 window.__stationReady = true;
+setTimeout(warmLater, 1500);                       // P4
+PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
-window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
+window.__station = { warmLater, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
   jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE };
 requestAnimationFrame(frame);
 </script>

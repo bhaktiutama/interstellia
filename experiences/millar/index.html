@@ -64,6 +64,13 @@
   #go { margin-top: 16px; width: 100%; font: inherit; font-size: 15px; padding: 10px; border-radius: 8px; border: 1px solid var(--accent);
     background: rgba(232,183,101,0.2); color: #fff; cursor: pointer; }
   #start .links { margin-top: 10px; font-size: 12.5px; }
+  /* P2: bar muat di kartu awal; pilihan dan tombol Mulai aktif setelah shader siap */
+  #mboot { margin-top: 14px; } #mboot[hidden] { display: none; }
+  #mboot .bar { height: 4px; border-radius: 2px; background: rgba(255,255,255,0.12); overflow: hidden; }
+  #mboot .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s; }
+  #mboot .row { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 4px; }
+  #start.loading .pick, #start.loading label { pointer-events: none; opacity: 0.55; }
+  #go:disabled { opacity: 0.45; cursor: wait; }
   #start .links a { color: var(--muted); }
   #lab { right: 16px; top: 60px; width: 290px; padding: 10px 12px; z-index: 6; }
   #lab[hidden], #help[hidden] { display: none; }
@@ -131,7 +138,7 @@
 <div id="msg"></div>
 <div id="cine"><div class="t1"></div><div class="t2"></div></div>
 <div id="cineSkip" data-t="Spasi / Enter / klik: lewati">Spasi / Enter / klik: lewati</div>
-<div id="start">
+<div id="start" class="loading">
   <div class="card">
     <h2>Millar's World</h2>
     <div class="sub" data-t="Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar">Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar</div>
@@ -147,12 +154,15 @@
     <div class="pick m3" id="levelPick"></div>
     <div class="pnote" data-t="Misi: temukan 3 pecahan pesawat dengan radar (M), ambil barangnya (tahan E), lalu kembali ke KS-07 sebelum gelombang tiba.">Misi: temukan 3 pecahan pesawat dengan radar (M), ambil barangnya (tahan E), lalu kembali ke KS-07 sebelum gelombang tiba.</div>
     <label><input id="cineOn" type="checkbox" checked> <span data-t="Sinematik kedatangan dari orbit">Sinematik kedatangan dari orbit</span></label>
-    <button id="go" type="button" data-t="Mulai">Mulai</button>
+    <div id="mboot"><div class="bar"><i></i></div><div class="row"><span id="mbootTxt" data-t="Memuat...">Memuat...</span><span id="mbootPct">0%</span></div></div>
+    <button id="go" type="button" data-t="Mulai" disabled>Mulai</button>
     <div class="links"><a id="menuLink" href="../../index.html" data-t="Kembali ke menu utama">Kembali ke menu utama</a></div>
   </div>
 </div>
 <pre id="err" hidden></pre>
 
+<script src="../../shared/prof.js"></script>
+<script src="../../shared/warm.js"></script>
 <script src="../../shared/kestrel.js"></script>
 <script src="../../shared/post.js"></script>
 <script src="../../shared/camera.js"></script>
@@ -170,6 +180,7 @@
    Prototipe low poly lama: prototipe.html. Semua angka yang bisa diatur ada di CONFIG.
    ===================================================================== */
 import * as THREE from 'three';
+PROFKIT.mark('Modul dimulai');                        // P0: alat ukur (?prof=1)
 
 const CONFIG = {
   R: 8282e3,            // radius planet (m), asumsi massa jenis seperti Bumi: 1,3 x 6.371 km
@@ -273,6 +284,7 @@ let LANG = 'id';
 const KEYS_ID = '<b>Klik</b> kunci mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat<br><b>M</b> radar &middot; <b>E</b> ambil / naik &middot; <b>V</b> tampilan &middot; <b>G</b> panggil gelombang &middot; <b>Z</b> kecepatan waktu &middot; <b>N</b> suasana<br><b>Q</b> grafik &middot; <b>P</b> efek layar &middot; <b>U</b> suara &middot; <b>F</b> foto &middot; <b>R</b> kembali &middot; <b>H</b> sembunyikan<br><b>`</b> panel &middot; <b>?</b> bantuan';
 const I18N = { en: {
   '< Menu': '< Menu', 'Kembali ke menu utama': 'Back to main menu', 'Mulai': 'Start',
+  'Memuat...': 'Loading...', 'Menyiapkan shader...': 'Preparing shaders...', 'Langit dan lensa Gargantua...': 'Sky and Gargantua lens...', 'Pemanasan GPU...': 'Warming up the GPU...', 'Siap': 'Ready',
   'Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar': 'Water planet near Gargantua · 1.3 g · 1 hour = 7 years outside',
   'Kualitas grafik': 'Graphics quality', 'Turunkan otomatis bila FPS di bawah 30': 'Lower automatically when FPS drops below 30',
   'Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.': 'Saver: for laptops without a dedicated GPU (MacBook M1). Change any time with Q.',
@@ -790,7 +802,8 @@ try { OCEAN.ok = renderer.extensions.has('EXT_color_buffer_float'); } catch (e) 
 const FFT_VS = 'precision highp float; in vec3 position; void main() { gl_Position = vec4(position.xy, 0.0, 1.0); }';
 const FFT_HEAD = 'precision highp float; precision highp int; precision highp sampler2D;\n' +
   'vec2 cm(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }\nvec2 ci(vec2 a) { return vec2(-a.y, a.x); }\n';
-const fftMat = (fs, uniforms) => new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, uniforms, vertexShader: FFT_VS, fragmentShader: FFT_HEAD + fs, depthTest: false, depthWrite: false });
+const FS_MATS = [];                                                // P2: semua material layar penuh (ombak FFT, riak, efek layar), dikompilasi di layar muat
+const fftMat = (fs, uniforms) => { const m = new THREE.RawShaderMaterial({ glslVersion: THREE.GLSL3, uniforms, vertexShader: FFT_VS, fragmentShader: FFT_HEAD + fs, depthTest: false, depthWrite: false }); FS_MATS.push(m); return m; };
 const M_SPEC = fftMat(/* glsl */`
   uniform sampler2D tH0; uniform float uL, uN, uT, uG, uD;
   layout(location = 0) out vec4 oA; layout(location = 1) out vec4 oB;
@@ -1516,7 +1529,7 @@ const fsGeo = new THREE.BufferGeometry(); fsGeo.setAttribute('position', new THR
 const fsq = new THREE.Mesh(fsGeo); fsq.frustumCulled = false;
 const postScene = new THREE.Scene(); postScene.add(fsq);
 const postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-const pmat = (fs, uniforms, defines = {}) => new THREE.ShaderMaterial({ uniforms, defines, vertexShader: FSV, fragmentShader: fs, depthTest: false, depthWrite: false });
+const pmat = (fs, uniforms, defines = {}) => { const m = new THREE.ShaderMaterial({ uniforms, defines, vertexShader: FSV, fragmentShader: fs, depthTest: false, depthWrite: false }); FS_MATS.push(m); return m; };
 const POST = { hdr: null, ldr: null, down: [], up: [], w: 0, h: 0, levels: 6, mode: 0 };
 // Efek layar (tombol P, seperti Copper Corn Station): pengali bloom, butiran, vinyet; tone mapping dan FXAA selalu jalan
 const POST_MODES = [{ name: 'Tinggi', bloom: 1, grain: 1, vig: 1 }, { name: 'Sedang', bloom: 0.5, grain: 0, vig: 1 }, { name: 'Mati', bloom: 0, grain: 0, vig: 0 }];
@@ -4012,7 +4025,43 @@ function camFinish(W, H, now) {
   camera.position.copy(CAMX.pos); camera.quaternion.copy(CAMX.q); camera.updateMatrixWorld();
   TAA.valid = false;
 }
-try { renderer.compile(scene, camera); renderer.compile(skyScene, camera); renderer.compile(gScene, camera); renderer.compile(orbScene, orbCam); } catch (e) { /* lanjut tanpa pra-kompilasi */ }
+PROFKIT.mark('Kompilasi shader');
+/* P2 (docs/app/rencana-performa.md): layar muat. Dulu kompilasi sinkron di sini lalu frame pertama mengompilasi sisa
+   pass layar penuh dan merender semua sisi langit sekaligus (halaman beku, kartu Mulai sudah tampil tetapi tidak bereaksi).
+   Kini: semua program dikompilasi (paralel bila GPU mendukung) dengan bar progres, sisi lensa Gargantua dan langit dirender
+   di sini satu per langkah, lalu satu render pemanasan (bayangan, dunia, efek layar, adegan orbit sinematik) sebelum Mulai aktif. */
+const MBOOT = { bar: document.querySelector('#mboot .bar i'), pct: document.getElementById('mbootPct'), txt: document.getElementById('mbootTxt') };
+function mBoot(frac, label) {
+  const p = `${Math.round(frac * 100)}%`; MBOOT.bar.style.width = p; MBOOT.pct.textContent = p;
+  if (label) { MBOOT.label = label; MBOOT.txt.textContent = t(label); PROFKIT.mark(label); }
+  return new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+}
+async function millarWarm() {
+  const fsJobs = FS_MATS.map((m) => ({ scene: postScene, camera: postCam, target: m === M_FINAL ? null : POST.ldr,
+    before: () => { fsJobs.q0 = fsq.material; fsq.material = m; }, after: () => { fsq.material = fsJobs.q0; } }));
+  const jobs = [{ scene, camera, target: POST.hdr }, { scene: skyScene, camera: SKYCUBE.cam.children[0], target: SKYCUBE.rt },
+    { scene: gScene, camera: GCUBE.cam.children[0], target: GCUBE.rt }, { scene: orbScene, camera: orbCam, target: POST.hdr }, ...fsJobs];
+  await mBoot(0.05, 'Menyiapkan shader...');
+  try { await WARMKIT.compile(renderer, jobs, (k) => mBoot(0.05 + 0.55 * k)); } catch (e) { /* sisanya dikompilasi saat dipakai */ }
+  await mBoot(0.6, 'Langit dan lensa Gargantua...');
+  try {
+    const n = GCUBE.pending.length;
+    while (GCUBE.pending.length) { updateGCube(); await mBoot(0.6 + 0.25 * (n - GCUBE.pending.length) / Math.max(1, n)); }
+    updateSkyCube();
+  } catch (e) { /* frame pertama melanjutkan seperti dulu */ }
+  await mBoot(0.88, 'Pemanasan GPU...');
+  const act = TAA.act;
+  try {
+    if (SHD.rt) { scene.overrideMaterial = SHD.mat; renderer.setRenderTarget(SHD.rt); renderer.clear(); renderer.render(scene, SHD.cam); scene.overrideMaterial = null; }
+    TAA.act = false;                                                  // riwayat TAA tidak disentuh
+    renderer.setRenderTarget(POST.hdr); renderer.clear(); renderer.render(scene, camera); postRender(0);
+    if (CINE.enabled && !CINE.played) { await mBoot(0.94); renderOrbit(0); }   // sinematik kedatangan: adegan orbit pertama kali di sini, bukan saat Mulai
+  } catch (e) { /* lanjut */ } finally { scene.overrideMaterial = null; TAA.act = act; renderer.setRenderTarget(null); }
+  await mBoot(1, 'Siap');
+  document.getElementById('mboot').hidden = true; document.getElementById('start').classList.remove('loading');
+  document.getElementById('go').disabled = false;
+}
+await millarWarm();
 requestAnimationFrame(frame);
 window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
   frontX, waveTop, waterAt, drawdown, seabed, chopAt, CHOP, stepPlayer, simStep, start: () => start(true), startWithCine: start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_, OCEAN, makeOcean, updateOcean,
@@ -4025,6 +4074,7 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip, CK, COCKPIT, cockpitUpdate,
   CINE, startCine, cineStep, cineStop, cineSkip, ORB, orbScene, orbCam, orbShip, orbPlanet, renderOrbit, beginPlay, orbPlaceShip, orbShipCam, ORB_U, SEA_ROT,
   SHD, SHD_SIZE, makeShadow, updateShadow, playerAtDoor };
+PROFKIT.mark('Siap'); PROFKIT.ready();
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>
 </body>
