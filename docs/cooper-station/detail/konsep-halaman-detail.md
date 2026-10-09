@@ -236,7 +236,7 @@ Dibangkitkan oleh `tools/diagram_detail_copper.py` (Python, tanpa library luar);
 | Trik dicoba | Suar ke relai, autopilot susur, tesseract | Radar, lolos sebelum gelombang |
 | Di balik layar | Penelusuran sinar di shader, peta corong | Ombak FFT di GPU, langit cubemap |
 
-Rumus Gargantua sudah ada di `docs/gargantua/rumus-peta-corong.md` dan `rumus-pandangan-relai.md`.
+Rumus Gargantua sudah ada di `docs/gargantua/rumus-peta-corong.md` dan `rumus-pandangan-relai.md`. Konsep halaman detail Gargantua: `docs/gargantua/detail/konsep-halaman-detail.md` (8 diagram `gg-*.svg`).
 
 ## 5. Tahap implementasi
 
