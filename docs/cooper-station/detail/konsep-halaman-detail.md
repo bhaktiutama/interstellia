@@ -254,7 +254,9 @@ Rumus Gargantua sudah ada di `docs/gargantua/rumus-peta-corong.md` dan `rumus-pa
 | D1 | Selesai | `experiences/cooper-station/detail.html`, teks ID + EN |
 | D2 | Selesai | Simulasi interaktif di semua bab fisika (lihat di bawah) |
 | D3 | Sebagian | Tombol "Pelajari fisikanya" di bagian Copper menu; strip `FACTS` belum |
-| D4 | Selesai | `tools/uji_detail_copper.cjs` (17 cek lulus) |
+| D4 | Selesai | `tools/uji_detail_copper.cjs` (22 cek lulus) |
+
+Revisi dari screenshot Bhakti: tombol tanpa garis bawah (detail dan menu), toggle hero jadi "Dilihat dari luar / dari dalam" dengan keterangan dan jejak bintang, bab 9 Di balik layar dan kuis tebak Coriolis dihapus (ditunda).
 
 Isi interaktif yang dibangun (lebih dari rencana awal):
 

@@ -1,12 +1,19 @@
 // Uji halaman detail Copper Corn Station (experiences/cooper-station/detail.html) + tautan Pelajari di menu.
 // Pakai: node tools/uji_detail_copper.cjs   (butuh paket playwright; CHROMIUM opsional = path executable Chromium)
-// Cek: termuat tanpa error di desktop dan ponsel, tanpa gulir mendatar, angka fisika cocok dengan rumus dan teks game,
+// Cek: termuat tanpa error di desktop dan ponsel, tanpa gulir mendatar, tanpa tombol bergaris bawah (juga di menu), angka fisika cocok dengan rumus dan teks game,
 // simulasi Coriolis dan lift berjalan, ganti bahasa, tautan menu ke halaman detail.
 const { chromium } = require('playwright');
 const path = require('path');
 const root = path.resolve(__dirname, '..');
 const url = (p) => 'file://' + path.join(root, p);
 let fail = 0;
+// tombol (a / button berlatar, bersudut bulat, atau berpadding) yang teksnya bergaris bawah
+const underlined = (pg) => pg.evaluate(() => [...document.querySelectorAll('a, button')].filter((e) => {
+  const cs = getComputedStyle(e), r = e.getBoundingClientRect();
+  if (!r.width || cs.display === 'none') return false;
+  const btn = parseFloat(cs.borderRadius) > 4 || cs.backgroundColor !== 'rgba(0, 0, 0, 0)' || parseFloat(cs.paddingLeft) > 4;
+  return btn && [e, ...e.querySelectorAll('*')].some((c) => getComputedStyle(c).textDecorationLine.includes('underline'));
+}).map((e) => `${e.tagName.toLowerCase()}.${e.className} "${e.textContent.trim().slice(0, 30)}"`));
 const ok = (name, cond, info = '') => { console.log(`${cond ? 'OK   ' : 'GAGAL'} ${name}${info ? ' · ' + info : ''}`); if (!cond) fail++; };
 
 (async () => {
@@ -30,9 +37,12 @@ const ok = (name, cond, info = '') => { console.log(`${cond ? 'OK   ' : 'GAGAL'}
       ok('lift mengerem di 950 m: terangkat ke langit-langit', n.ceil.down < 0, n.ceil.down.toFixed(3) + ' m/s2');
     }
     await pg.evaluate(() => document.getElementById('coriolis').scrollIntoView({ behavior: 'instant' }));
-    await pg.click('[data-gs="-1"]'); await pg.waitForTimeout(4500);
-    const v = await pg.evaluate(() => document.getElementById('cVerd').textContent);
-    ok(`${tag}: tebakan Coriolis dinilai`, /benar|right/.test(v), v);
+    await pg.click('#cPlay'); await pg.waitForTimeout(4500);
+    const done = await pg.evaluate(() => window.__detail.CS.done);
+    ok(`${tag}: simulasi Coriolis selesai`, done === true);
+    for (const v of ['in', 'out']) await pg.evaluate((v) => document.querySelector(`[data-hv="${v}"]`).click(), v);
+    const cap = await pg.evaluate(() => document.getElementById('heroCap').textContent);
+    ok(`${tag}: keterangan mode hero`, cap.length > 20, cap.slice(0, 50));
     await pg.evaluate(() => document.getElementById('lift').scrollIntoView({ behavior: 'instant' }));
     await pg.click('#lUp'); await pg.waitForTimeout(2500);
     const h = await pg.evaluate(() => parseFloat(document.getElementById('lH').textContent.replace(/[^\d,.]/g, '').replace(',', '.')));
@@ -43,6 +53,7 @@ const ok = (name, cond, info = '') => { console.log(`${cond ? 'OK   ' : 'GAGAL'}
     const title = await pg.title();
     ok(`${tag}: ganti bahasa`, lang === 'id' ? /Physics/.test(title) : /Fisika/.test(title), title);
     ok(`${tag}: tanpa error`, errs.length === 0, errs.slice(0, 3).join(' | '));
+    ok(`${tag}: tanpa tombol bergaris bawah`, (await underlined(pg)).length === 0, (await underlined(pg)).join(' | '));
     await pg.close();
   }
   const pg = await b.newPage(); const errs = [];
@@ -51,6 +62,7 @@ const ok = (name, cond, info = '') => { console.log(`${cond ? 'OK   ' : 'GAGAL'}
   const href = await pg.getAttribute('a.learn', 'href');
   ok('menu: tautan Pelajari', href === 'experiences/cooper-station/detail.html?lang=en', href);
   ok('menu: tanpa error', errs.length === 0, errs.join(' | '));
+  ok('menu: tanpa tombol bergaris bawah', (await underlined(pg)).length === 0, (await underlined(pg)).join(' | '));
   await b.close();
   console.log(fail ? `${fail} GAGAL` : 'semua lulus');
   process.exit(fail ? 1 : 0);
