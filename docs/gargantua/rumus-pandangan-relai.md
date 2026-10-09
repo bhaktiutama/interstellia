@@ -16,6 +16,8 @@ Satuan: rs = 1, c = 1, M = 0,5. Kode: `relViewInit()`, `relUpdate()`, `relImage(
 | Jarak | 22 rs, ditahan tetap selama misi (orbit relai 2 pi sqrt(r³ / M) = 917 rs/c = 10,4 hari; misi 1 sampai 150 rs/c) |
 | Kecepatan (untuk aberasi) | orbit melingkar searah putaran piringan: L = sqrt(M r² / (r - 1,5)) = 3,436, dx/dtau = L / r; kerangka rain dari `rainOf()` |
 | Arah kamera | otomatis ke garis bagi antara pusat lubang hitam dan citra wahana (dihaluskan), FOV 70 derajat, jadi keduanya di layar; seret = manual, klik ganda = otomatis lagi |
+| Posisi bebas (revisi 2) | seret kiri = relai berpindah di bola 22 rs (azimut bebas, elevasi -85 sampai 85 derajat, juga di bawah piringan); seret kanan / Ctrl + seret = arah pandang; roda = zoom FOV 25-100 derajat; klik ganda = posisi, FOV, dan arah awal. Jarak tetap 22 rs, jadi jam relai dan waktu tiba (model G4) tidak berubah; citra dihitung ulang dari posisi baru, jejak dibangun ulang dari log setelah seret dilepas (`relPlace()`) |
+| Warna jejak | ungu muda di atas garis gelap lebar, beda dari piringan (jingga-putih), suar (cyan), dan relai (hijau) |
 | Jam relai | sqrt(1 - 1,5 / 22) = 0,9653 (sama dengan G4) |
 
 ## 2. Citra wahana (gambar primer)

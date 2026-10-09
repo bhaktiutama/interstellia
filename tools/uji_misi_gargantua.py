@@ -678,6 +678,30 @@ async def kelompok9(pg):
       ev('pointerdown', x, y); ev('pointermove', x - 30, y + 20); ev('pointermove', x - 60, y + 40); ev('pointerup', x - 60, y + 40);
       const t = document.querySelector('#mend .card').style.transform; window.__gargantua.stopMission(); return t; }''', [k['x'], k['y']])
     r = k['r']
+    # revisi 2: relai bisa diputar (seret kiri), arah pandang (seret kanan), zoom roda, klik ganda awal; citra tetap benar
+    await pg.set_viewport_size({'width': 900, 'height': 500})
+    await pg.evaluate("() => { const G = window.__gargantua, M = G.MIS; G.state.paused = true; G.startMission('slant'); for (let i = 0; i < 40; i++) G.misFly(0.5); G.setShip(true, 'relay'); }")
+    await pg.wait_for_timeout(300)
+    a0 = await pg.evaluate("() => { const V = window.__gargantua.REL.view; return { pos: V.pos.slice(), fov: window.__gargantua.REL.fov }; }")
+    await pg.mouse.move(450, 250); await pg.mouse.down(); await pg.mouse.move(350, 100, steps=5)   # seret ke atas = relai turun (seperti kamera biasa)
+    mv = await pg.evaluate("() => ({ moving: window.__gargantua.REL.view.moving, n: window.__gargantua.REL.view.imgs.length })")
+    await pg.mouse.up(); await pg.wait_for_timeout(200)
+    a1 = await pg.evaluate("() => { const V = window.__gargantua.REL.view; return { pos: V.pos.slice(), moving: V.moving, li: V.li, manual: V.manual }; }")
+    await pg.mouse.move(450, 250); await pg.mouse.down(button='right'); await pg.mouse.move(500, 220, steps=3); await pg.mouse.up(button='right')
+    await pg.mouse.wheel(0, -400)   # roda ke atas = zoom masuk; await pg.wait_for_timeout(200)
+    a2 = await pg.evaluate('''() => { const G = window.__gargantua, V = G.REL.view, S = G.relSeen(G.MIS.T), I = G.imageDir(V.pos, S.x);
+      return { pos: V.pos.slice(), manual: V.manual, fov: G.REL.fov, ok: !!I }; }''')
+    await pg.mouse.dblclick(450, 250); await pg.wait_for_timeout(200)
+    a3 = await pg.evaluate("() => { const G = window.__gargantua, V = G.REL.view; const r = { pos: V.pos.slice(), manual: V.manual, fov: G.REL.fov }; G.stopMission(); return r; }")
+    await pg.set_viewport_size({'width': 320, 'height': 200})
+    import math
+    nrm = lambda v: math.sqrt(sum(x * x for x in v))
+    cek('pandangan relai: seret kiri memutar relai (tetap 22 rs, bisa ke bawah piringan), jejak disembunyikan lalu dibangun ulang',
+        abs(nrm(a1['pos']) - 22) < 1e-9 and a1['pos'][1] < 0 and mv['moving'] and not a1['moving'] and not a1['manual'],
+        f"y {a0['pos'][1]:.2f} -> {a1['pos'][1]:.2f}, saat seret moving {mv['moving']}")
+    cek('pandangan relai: seret kanan = arah pandang (posisi tetap), roda = zoom, klik ganda = posisi dan FOV awal',
+        a2['pos'] == a1['pos'] and a2['manual'] and 25 <= a2['fov'] < 70 and a2['ok'] and abs(a3['pos'][1] - a0['pos'][1]) < 1e-9 and a3['fov'] == 70 and not a3['manual'],
+        f"fov {a2['fov']:.1f}, awal y {a3['pos'][1]:.2f}")
     cek('kartu akhir: latar tembus, x menutup, tombol ringkasan membuka lagi, kepala bisa diseret',
         r['shown'] and r['bg'] == 'none' and r['closed'] and r['btn'] and r['reopen'] and 'translate(' in tr and tr != 'translate(0px, 0px)', f"{r} {tr}")
 
