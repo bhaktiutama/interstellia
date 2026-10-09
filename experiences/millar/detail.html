@@ -1,0 +1,1141 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Millar's World: Fisika</title>
+<style>
+  /* Halaman detail Millar's World (konsep docs/millar/detail/konsep-halaman-detail.md). Satu file, tanpa library, jalan dari file://.
+     Angka fisika kembaran CONFIG experiences/millar/index.html (g 12,75, R 8.282 km, dilatasi 61.362, waveG / drawdown / currentAt).
+     Label kanvas English saja; teks halaman ID + EN (kamus S). Kanvas simulasi tetap beranimasi walau prefers-reduced-motion
+     (permintaan pemilik). */
+  :root { --ink: #e8ecf2; --muted: #9aa2ae; --line: rgba(255,255,255,0.10); --glass: rgba(8,16,20,0.72);
+    --ac: #8fd3dc; --ac2: #d4f3f7; --te: #8fd3dc; --vi: #b79cff; --red: #ff6b5a; --bar: 58px; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--bar) + 12px); }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  html, body { margin: 0; color: var(--ink); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
+  body { background: radial-gradient(circle 90vmax at 75% 0%, #0b2228 0%, #050b0e 42%, #030507 100%) fixed #030507; }
+  a { color: var(--ac2); }
+  b, strong { color: #fff; font-weight: 650; }
+  kbd { display: inline-block; min-width: 1.9em; padding: 1px 7px; border-radius: 6px; text-align: center; font: 600 12.5px/1.6 ui-monospace, Menlo, Consolas, monospace;
+    color: #fff; background: linear-gradient(#2b2a33, #19181f); border: 1px solid rgba(255,255,255,0.18); border-bottom-width: 3px; }
+  .fic { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #0b0b0b; background: var(--vi); border-radius: 99px; padding: 1px 8px; margin-left: 4px; vertical-align: 2px; }
+
+  /* ===== bilah atas ===== */
+  .bar { position: fixed; inset: 0 0 auto 0; height: var(--bar); z-index: 50; display: flex; align-items: center; gap: 10px; padding: 0 14px;
+    background: rgba(4,9,11,0.8); backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3); border-bottom: 1px solid var(--line); }
+  .bar .back { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; padding: 6px 10px; border-radius: 99px; border: 1px solid var(--line); white-space: nowrap; }
+  .bar .back:hover { border-color: var(--ac); }
+  .bar .brand { font-weight: 700; letter-spacing: 0.04em; font-size: 14px; white-space: nowrap; color: var(--ac); }
+  .bar nav { flex: 1; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent); padding: 0 8px; }
+  .bar nav::-webkit-scrollbar { display: none; }
+  .bar nav a { flex: none; color: var(--muted); font-size: 12.5px; padding: 6px 10px; border-radius: 99px; transition: all .25s; white-space: nowrap; }
+  .bar nav a b { color: inherit; opacity: 0.6; margin-right: 5px; font-weight: 600; }
+  .bar nav a:hover { color: #fff; }
+  .bar nav a.on { color: #0b0b0b; background: var(--ac); }
+  .bar .lang { display: flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .bar .lang button { font: 600 12px system-ui, sans-serif; color: var(--muted); background: none; border: 0; padding: 6px 10px; cursor: pointer; }
+  .bar .lang button.on { color: #0b0b0b; background: var(--ac); }
+  .play { display: inline-flex; align-items: center; gap: 8px; background: var(--ac); color: #0b0b0b; font-weight: 700; border-radius: 99px; padding: 8px 16px; font-size: 13.5px; white-space: nowrap;
+    box-shadow: 0 6px 26px rgba(143,211,220,0.25); transition: transform .2s, box-shadow .2s; }
+  .play:hover { transform: translateY(-1px); box-shadow: 0 8px 34px rgba(143,211,220,0.45); }
+  .play svg { width: 13px; height: 13px; }
+  .prog { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: linear-gradient(90deg, var(--red), var(--ac), var(--ac2)); box-shadow: 0 0 10px var(--ac); }
+  @media (max-width: 760px) { .bar .brand, .bar .back span { display: none; } .bar .play span { display: none; } .bar .play { padding: 8px 11px; } }
+
+  /* ===== umum ===== */
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px; }
+  @media (max-width: 600px) { .wrap { padding: 0 16px; } }
+  .kick { color: var(--ac); font-size: 12px; letter-spacing: 0.28em; text-transform: uppercase; font-weight: 600; }
+  .rv { opacity: 0; transform: translateY(24px); transition: opacity .9s ease, transform .9s cubic-bezier(.2,.7,.2,1); transition-delay: var(--d, 0s); }
+  .rv.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .rv { opacity: 1; transform: none; transition: none; } }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: 600 13px/1.4 system-ui, sans-serif; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); border-radius: 99px; padding: 7px 14px; cursor: pointer; transition: all .2s; white-space: nowrap; }
+  a.btn, a.play, a.back, .chip, .stamp, .bar nav a { text-decoration: none; }
+  .btn:hover { border-color: var(--ac); color: #fff; }
+  .btn.on, .btn.main { background: var(--ac); border-color: var(--ac); color: #0b0b0b; }
+  .btn.main:hover { box-shadow: 0 0 22px rgba(143,211,220,0.4); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+
+  /* ===== hero ===== */
+  .hero { min-height: 100vh; padding: calc(var(--bar) + 40px) 0 50px; display: flex; align-items: center; position: relative; }
+  .hero .wrap { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; width: 100%; }
+  .hero h1 { margin: 10px 0 0; font-size: clamp(40px, 7vw, 84px); line-height: 0.98; letter-spacing: -0.02em; font-weight: 750;
+    background: linear-gradient(100deg, #fff 10%, #d4f3f7 45%, #8fd3dc 75%, #ff6b5a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero .lead { color: #c3cdd0; font-size: clamp(16px, 1.6vw, 19px); max-width: 56ch; margin: 18px 0 26px; }
+  .hero .cta { display: flex; gap: 10px; flex-wrap: wrap; }
+  .orb { position: relative; aspect-ratio: 1; width: 100%; max-width: 560px; justify-self: center; margin-bottom: 64px; }
+  .orb canvas { width: 100%; height: 100%; display: block; border-radius: 50%; cursor: grab; touch-action: none;
+    -webkit-mask-image: radial-gradient(circle, #000 64%, transparent 71%); mask-image: radial-gradient(circle, #000 64%, transparent 71%); }
+  .orb canvas:active { cursor: grabbing; }
+  .orb .tog { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); display: flex; gap: 6px; background: var(--glass); padding: 5px; border-radius: 99px; border: 1px solid var(--line); backdrop-filter: blur(8px); }
+  .orb .tog .btn { padding: 5px 12px; font-size: 12px; }
+  .orb .hcap { position: absolute; left: 0; right: 0; bottom: -64px; margin: 0; text-align: center; font-size: 13.5px; color: #c3cdd0; min-height: 42px; }
+  .orb .turn { position: absolute; top: 4px; right: 0; font-size: 12px; color: var(--muted); text-align: right; }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 34px; }
+  .stat { background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015)); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 23px; color: var(--ac); font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .stat b small { font-size: 12px; color: var(--ink); font-weight: 500; margin-left: 3px; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  @media (max-width: 900px) { .hero .wrap { grid-template-columns: 1fr; } .orb { max-width: 440px; } .stats { grid-template-columns: repeat(2, 1fr); } }
+  .scrollhint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); color: var(--muted); font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; }
+
+  /* ===== bab ===== */
+  section.ch { padding: 90px 0 40px; position: relative; }
+  section.ch::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(143,211,220,0.25), transparent); }
+  .chh { display: grid; grid-template-columns: auto 1fr; gap: 0 24px; align-items: end; margin-bottom: 28px; }
+  .chh .n { font-size: 76px; line-height: 0.85; font-weight: 200; color: var(--ac); opacity: 0.55; font-variant-numeric: tabular-nums; }
+  .chh h2 { margin: 4px 0 0; font-size: clamp(28px, 4vw, 46px); line-height: 1.08; letter-spacing: -0.01em; }
+  .chh .hook { grid-column: 1 / -1; margin: 12px 0 0; font-size: clamp(17px, 1.8vw, 21px); font-weight: 300; color: #fff; max-width: 62ch; }
+  .cols { display: grid; grid-template-columns: 5fr 7fr; gap: 36px; align-items: start; }
+  .cols.flip { grid-template-columns: 7fr 5fr; }
+  .cols.flip > .txt { order: 2; }
+  .cols.even { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 960px) { .cols, .cols.flip, .cols.even { grid-template-columns: 1fr; } .cols.flip > .txt { order: 0; } }
+  .txt p { margin: 0 0 14px; color: #c3cdd0; }
+  .formula { margin: 18px 0; padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(143,211,220,0.25); background: rgba(143,211,220,0.05); }
+  .formula .f { font: 600 16px ui-monospace, Menlo, Consolas, monospace; color: var(--ac2); }
+  .formula .w { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .tryit { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: rgba(143,211,220,0.06); border: 1px solid rgba(143,211,220,0.22); font-size: 14px; color: #cfe9ec; }
+  .tryit::before { content: ''; flex: none; width: 8px; height: 8px; margin-top: 8px; border-radius: 50%; background: var(--te); box-shadow: 0 0 0 4px rgba(143,211,220,0.18), 0 0 12px var(--te); }
+  .fact { display: flex; gap: 10px; margin: 10px 0; font-size: 14.5px; color: #c3cdd0; }
+  .fact i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--ac); margin-top: 9px; box-shadow: 0 0 8px var(--ac); }
+  .note { font-size: 13px; color: var(--muted); border-left: 2px solid rgba(183,156,255,0.5); padding-left: 10px; margin: 14px 0; }
+
+  /* ===== lab (panel simulasi) ===== */
+  .lab { background: linear-gradient(180deg, rgba(24,20,26,0.92), rgba(10,9,12,0.94)); border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05); }
+  .lab canvas { display: block; width: 100%; background: #070609; }
+  @media (max-width: 600px) { #cvPl, #cvTime, #cvGrav, #cvHz, #cvWave, #cvLib { aspect-ratio: 4 / 3 !important; } #cvSpin { aspect-ratio: 1 / 1 !important; } #cvOrb { aspect-ratio: 4 / 5 !important; } }
+  .ctrl { padding: 14px 16px 6px; display: grid; gap: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row .lbl { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; margin-right: 4px; }
+  .row .aside { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  .chip { font: 600 12.5px system-ui, sans-serif; color: var(--ink); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14); border-radius: 99px; padding: 5px 12px; cursor: pointer; transition: all .2s; }
+  .chip:hover { border-color: var(--ac); }
+  .chip.on { background: rgba(143,211,220,0.18); border-color: var(--ac); color: #fff; }
+  .slide { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; font-size: 13.5px; }
+  .slide span { color: var(--muted); white-space: nowrap; }
+  .slide output { font-variant-numeric: tabular-nums; color: #fff; font-weight: 650; min-width: 92px; text-align: right; }
+  @media (max-width: 600px) { .slide { grid-template-columns: 1fr auto; gap: 2px 12px; } .slide > span { grid-column: 1 / -1; } }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; background: transparent; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--ac) var(--p, 50%), rgba(255,255,255,0.14) var(--p, 50%)); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 4px; background: rgba(255,255,255,0.14); }
+  input[type=range]::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--ac); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%; background: #fff; border: 3px solid var(--ac); box-shadow: 0 0 12px rgba(143,211,220,0.6); }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid var(--ac); box-shadow: 0 0 12px rgba(143,211,220,0.6); }
+  .ro { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1px; background: rgba(255,255,255,0.07); border-top: 1px solid rgba(255,255,255,0.07); }
+  .ro div { background: #0c0b0f; padding: 11px 14px; }
+  .ro b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; line-height: 1.25; color: var(--ac); }
+  .ro b.t { color: var(--te); } .ro b.v { color: var(--vi); } .ro b.w { color: #fff; } .ro b.r { color: var(--red); } .ro b.y { color: var(--ac2); }
+  .ro span { font-size: 12px; color: var(--muted); }
+  .verdict { margin: 0 16px 14px; padding: 10px 14px; border-radius: 10px; font-size: 14px; background: rgba(255,255,255,0.04); border-left: 3px solid var(--ac); color: #ddd8d4; min-height: 22px; }
+  .verdict:empty { display: none; }
+
+  /* ===== paspor ===== */
+  .pass { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .stamp { position: relative; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 16px 16px 14px; border-radius: 16px; border: 1px dashed rgba(255,255,255,0.18);
+    background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.01)); transition: all .3s; }
+  .stamp:hover { border-color: var(--ac); transform: translateY(-2px); }
+  .stamp h4 { margin: 0 46px 6px 0; font-size: 16px; }
+  .stamp p { margin: 0 0 10px; font-size: 13.5px; color: #c0bab6; }
+  .stamp .k { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--muted); }
+  .stamp .k a { color: var(--ac2); text-decoration: none; border-bottom: 1px dashed rgba(255,208,138,0.4); }
+  .stamp .seal { position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; border-radius: 50%; border: 2px dashed rgba(255,255,255,0.22); display: grid; place-items: center; transition: all .35s cubic-bezier(.3,1.6,.5,1); }
+  .stamp .seal svg { width: 20px; height: 20px; opacity: 0; transition: opacity .2s; }
+  .stamp.done { border-style: solid; border-color: rgba(143,211,220,0.55); background: linear-gradient(180deg, rgba(143,211,220,0.12), rgba(143,211,220,0.02)); }
+  .stamp.done .seal { border: 2px solid var(--ac); background: var(--ac); transform: rotate(-12deg) scale(1.08); box-shadow: 0 0 18px rgba(143,211,220,0.5); }
+  .stamp.done .seal svg { opacity: 1; }
+  .passhead { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .passhead .meter { flex: 1; min-width: 200px; max-width: 360px; }
+  .passhead .meter div { height: 6px; border-radius: 6px; background: rgba(255,255,255,0.1); overflow: hidden; margin-top: 6px; }
+  .passhead .meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--red), var(--ac)); transition: width .5s; }
+  .passhead .meter span { font-size: 13px; color: var(--muted); }
+  .fig { margin: 0; }
+  .fig img { width: 100%; height: auto; display: block; border-radius: 14px; border: 1px solid var(--line); }
+  .fig figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  /* ===== galeri ===== */
+  .gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .gal button { padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: none; cursor: zoom-in; transition: transform .25s, border-color .25s; text-align: left; color: inherit; font: inherit; }
+  .gal button:hover { transform: translateY(-3px); border-color: var(--ac); }
+  .gal img { width: 100%; height: auto; display: block; aspect-ratio: 16 / 9; object-fit: cover; }
+  .gal span { display: block; padding: 8px 12px; font-size: 13px; color: #c3cdd0; background: rgba(255,255,255,0.03); }
+  .lb { position: fixed; inset: 0; z-index: 80; background: rgba(3,3,5,0.92); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; padding: 70px 16px 40px; }
+  .lb.on { display: flex; }
+  .lb img { max-width: min(1200px, 100%); max-height: 100%; border-radius: 14px; box-shadow: 0 30px 90px rgba(0,0,0,0.6); }
+  .lb .x, .lb .pv, .lb .nx { position: absolute; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #fff; border-radius: 99px; width: 44px; height: 44px; font-size: 20px; cursor: pointer; }
+  .lb .x { top: 16px; right: 16px; } .lb .pv { left: 12px; top: 50%; } .lb .nx { right: 12px; top: 50%; }
+  .lb .cap { position: absolute; top: 22px; left: 20px; right: 80px; color: var(--muted); font-size: 14px; }
+  .lb .cap a { margin-left: 10px; }
+
+  footer { padding: 70px 0 60px; color: var(--muted); font-size: 13px; text-align: center; }
+  footer .end { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 22px; }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <a class="back" id="backLink" href="../../index.html"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3L5 8l5 5"/></svg><span data-t="menu"></span></a>
+  <div class="brand">Millar's World</div>
+  <nav id="nav"></nav>
+  <div class="lang" id="lang"></div>
+  <a class="play" id="playTop" href="index.html"><svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg><span data-t="play"></span></a>
+  <div class="prog" id="prog"></div>
+</header>
+
+<!-- ================= HERO ================= -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div>
+      <div class="kick rv" data-t="h_kick"></div>
+      <h1 class="rv" style="--d:.08s" data-t="h_title"></h1>
+      <p class="lead rv" style="--d:.16s" data-t="h_lead"></p>
+      <div class="cta rv" style="--d:.24s"><a class="btn main" href="#planet" data-t="h_go"></a><a class="btn" id="playHero" href="index.html" data-t="play"></a></div>
+      <div class="stats rv" style="--d:.32s" id="stats"></div>
+    </div>
+    <div class="orb rv" style="--d:.2s">
+      <canvas id="cvHero" role="img" aria-label="Shallow sea under Gargantua with a giant wave approaching"></canvas>
+      <div class="turn" id="heroTurn"></div>
+      <div class="tog"><button class="btn" data-hv="1" type="button" data-t="h_real"></button><button class="btn on" data-hv="20" type="button" data-t="h_fast"></button></div>
+      <p class="hcap" id="heroCap"></p>
+    </div>
+  </div>
+  <div class="scrollhint" data-t="scroll"></div>
+</section>
+
+<!-- ================= 01 PLANET ================= -->
+<section class="ch" id="planet">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">01</div><div><div class="kick" data-t="c1_k"></div><h2 data-t="c1_t"></h2></div><p class="hook" data-t="c1_h"></p></div>
+    <div class="cols">
+      <div class="txt rv"><p data-t="c1_p1"></p><p data-t="c1_p2"></p>
+        <div class="fact"><i></i><span data-t="c1_f1"></span></div><div class="fact"><i></i><span data-t="c1_f2"></span></div><div class="fact"><i></i><span data-t="c1_f3"></span></div>
+        <div class="tryit"><span data-t="c1_try"></span></div></div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvPl" style="aspect-ratio: 16 / 10" role="img" aria-label="Earth and Millar to scale, knee-deep water"></canvas>
+        <div class="ro"><div><b id="pG"></b><span data-t="ro_g"></span></div><div><b class="w" id="pR"></b><span data-t="ro_rad"></span></div><div><b class="t" id="pD"></b><span data-t="ro_depth"></span></div><div><b class="y" id="pE"></b><span data-t="ro_esc"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02 WAKTU ================= -->
+<section class="ch" id="waktu">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">02</div><div><div class="kick" data-t="c2_k"></div><h2 data-t="c2_t"></h2></div><p class="hook" data-t="c2_h"></p></div>
+    <div class="lab rv">
+      <canvas id="cvTime" style="aspect-ratio: 16 / 7" role="img" aria-label="Planet clock and outside calendar"></canvas>
+      <div class="ctrl">
+        <div class="slide"><span data-t="c2_sd"></span><input type="range" id="tD" min="0" max="1" step="0.001" value="0.6"><output id="tDo"></output></div>
+        <div class="row"><span class="lbl" data-t="preset"></span><span id="tPre"></span></div>
+        <div class="row"><button class="btn main" id="tPlay" type="button"></button><span class="aside" id="tSpeed"></span></div>
+      </div>
+      <div class="verdict" id="tVerd"></div>
+      <div class="ro"><div><b id="tPlanet"></b><span data-t="ro_planet"></span></div><div><b class="r" id="tOut"></b><span data-t="ro_out"></span></div><div><b class="w" id="tEarth"></b><span data-t="ro_earth"></span></div></div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c2_p1"></p><p data-t="c2_p2"></p></div>
+      <div class="txt rv" style="--d:.1s"><div class="formula" style="margin-top:0"><div class="f">t<sub>luar</sub> = 61.362 × t<sub>planet</sub></div><div class="w" data-t="c2_fw"></div></div><div class="tryit"><span data-t="c2_try"></span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 PUTARAN ================= -->
+<section class="ch" id="putaran">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">03</div><div><div class="kick" data-t="c3_k"></div><h2 data-t="c3_t"></h2></div><p class="hook" data-t="c3_h"></p></div>
+    <div class="cols flip">
+      <div class="txt rv"><p data-t="c3_p1"></p><p data-t="c3_p2"></p>
+        <div class="formula"><div class="f">u<sup>t</sup> = (r<sup>3/2</sup> + a) / (r<sup>3/4</sup> √(r<sup>3/2</sup> − 3r<sup>1/2</sup> + 2a))</div><div class="w" data-t="c3_fw"></div></div>
+        <p class="note" data-t="c3_note"></p></div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvSpin" style="aspect-ratio: 16 / 10" role="img" aria-label="Time dilation of the innermost stable orbit against black hole spin"></canvas>
+        <div class="ctrl">
+          <div class="slide"><span data-t="c3_ss"></span><input type="range" id="sE" min="0" max="16" step="0.01" value="4"><output id="sEo"></output></div>
+          <div class="row"><button class="btn main" id="sPlay" type="button"></button><button class="chip" id="sMillar" type="button" data-t="c3_millar"></button><button class="chip" id="sZero" type="button" data-t="c3_zero"></button></div>
+        </div>
+        <div class="ro"><div><b class="w" id="sA"></b><span data-t="ro_a"></span></div><div><b class="t" id="sR"></b><span data-t="ro_isco"></span></div><div><b id="sD"></b><span data-t="ro_dil"></span></div><div><b class="r" id="sY"></b><span data-t="ro_hour"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04 GRAVITASI ================= -->
+<section class="ch" id="gravitasi">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">04</div><div><div class="kick" data-t="c4_k"></div><h2 data-t="c4_t"></h2></div><p class="hook" data-t="c4_h"></p></div>
+    <div class="cols">
+      <div class="txt rv"><p data-t="c4_p1"></p><p data-t="c4_p2"></p>
+        <div class="formula"><div class="f">h = v² / 2g &nbsp;·&nbsp; t = 2v / g</div><div class="w" data-t="c4_fw"></div></div>
+        <div class="tryit"><span data-t="c4_try"></span></div></div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvGrav" style="aspect-ratio: 16 / 10" role="img" aria-label="Jumping on Earth and on Millar"></canvas>
+        <div class="ctrl"><div class="row"><span class="lbl" data-t="mass"></span><input type="number" id="gM" min="20" max="200" value="70"> kg</div></div>
+        <div class="ro"><div><b id="gH"></b><span data-t="ro_jump"></span></div><div><b class="w" id="gAir"></b><span data-t="ro_air"></span></div><div><b class="t" id="gKg"></b><span data-t="ro_scale"></span></div><div><b class="r" id="gOut"></b><span data-t="ro_jumpout"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 05 CAKRAWALA ================= -->
+<section class="ch" id="cakrawala">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">05</div><div><div class="kick" data-t="c5_k"></div><h2 data-t="c5_t"></h2></div><p class="hook" data-t="c5_h"></p></div>
+    <div class="lab rv">
+      <canvas id="cvHz" style="aspect-ratio: 16 / 6.5" role="img" aria-label="Line of sight over the curve of the planet"></canvas>
+      <div class="ctrl">
+        <div class="slide"><span data-t="c5_se"></span><input type="range" id="hE" min="0" max="1" step="0.001" value="0.3"><output id="hEo"></output></div>
+        <div class="slide"><span data-t="c5_sw"></span><input type="range" id="hW" min="100" max="2000" step="10" value="1200"><output id="hWo"></output></div>
+        <div class="slide"><span data-t="time"></span><input type="range" id="hTs" min="0" max="1" step="0.0005" value="0"><output id="hTso"></output></div>
+        <div class="row"><button class="btn main" id="hPlay" type="button"></button><span class="aside" data-t="c5_hint"></span></div>
+      </div>
+      <div class="verdict" id="hVerd"></div>
+      <div class="ro"><div><b class="w" id="hHor"></b><span data-t="ro_hor"></span></div><div><b id="hVis"></b><span data-t="ro_vis"></span></div><div><b class="t" id="hWarn"></b><span data-t="ro_warn"></span></div><div><b class="r" id="hOut"></b><span data-t="ro_warnout"></span></div><div><b class="y" id="hDist"></b><span data-t="ro_dist"></span></div></div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c5_p1"></p><p data-t="c5_p2"></p></div>
+      <div class="txt rv" style="--d:.1s"><div class="formula" style="margin-top:0"><div class="f">d = √(2 R h<sub>mata</sub>) + √(2 R H)</div><div class="w" data-t="c5_fw"></div></div><div class="tryit"><span data-t="c5_try"></span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 06 GELOMBANG ================= -->
+<section class="ch" id="gelombang">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">06</div><div><div class="kick" data-t="c6_k"></div><h2 data-t="c6_t"></h2></div><p class="hook" data-t="c6_h"></p></div>
+    <div class="lab rv">
+      <canvas id="cvWave" style="aspect-ratio: 16 / 7" role="img" aria-label="Cross-section of the giant wave arriving"></canvas>
+      <div class="ctrl">
+        <div class="slide"><span data-t="time"></span><input type="range" id="wTs" min="0" max="1" step="0.0005" value="0"><output id="wTso"></output></div>
+        <div class="row"><button class="btn main" id="wPlay" type="button"></button><span class="lbl" style="margin-left:8px" data-t="c6_you"></span><button class="chip on" data-wr="0" type="button" data-t="c6_stand"></button><button class="chip" data-wr="1" type="button" data-t="c6_run"></button><span class="aside" id="wSpeed"></span></div>
+      </div>
+      <div class="verdict" id="wVerd"></div>
+      <div class="ro"><div><b class="w" id="wDist"></b><span data-t="ro_face"></span></div><div><b id="wCur"></b><span data-t="ro_cur"></span></div><div><b class="t" id="wDep"></b><span data-t="ro_feet"></span></div><div><b class="r" id="wOut"></b><span data-t="ro_outnow"></span></div></div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c6_p1"></p><p data-t="c6_p2"></p></div>
+      <div class="txt rv" style="--d:.1s"><div class="formula" style="margin-top:0"><div class="f">h(u) = H · waveG(u) − <span id="fW">0,2</span> m · e<sup>−((u + 6 km) / 6 km)²</sup></div><div class="w" data-t="c6_fw"></div></div><div class="tryit"><span data-t="c6_try"></span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 07 GOYANG ================= -->
+<section class="ch" id="goyang">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">07</div><div><div class="kick" data-t="c7_k"></div><h2 data-t="c7_t"></h2></div><p class="hook" data-t="c7_h"></p></div>
+    <div class="cols flip">
+      <div class="txt rv"><p data-t="c7_p1"></p><p data-t="c7_p2"></p>
+        <div class="formula"><div class="f">c = √(g d) = <span id="fL1">2,9</span> m/s &nbsp;·&nbsp; √(g (d + a)) = <span id="fL2">123,7</span> m/s</div><div class="w" data-t="c7_fw"></div></div>
+        <div class="tryit"><span data-t="c7_try"></span></div></div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvLib" style="aspect-ratio: 16 / 10" role="img" aria-label="Tidally locked planet rocking and its ocean sloshing"></canvas>
+        <div class="ctrl"><div class="slide"><span data-t="c7_sa"></span><input type="range" id="lA" min="0.35" max="6" step="0.05" value="1.75"><output id="lAo"></output></div></div>
+        <div class="ro"><div><b class="w" id="lS1"></b><span data-t="ro_shallow"></span></div><div><b class="y" id="lS2"></b><span data-t="ro_sol"></span></div><div><b id="lS3"></b><span data-t="ro_game"></span></div><div><b class="t" id="lS4"></b><span data-t="ro_need"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 08 ORBIT ================= -->
+<section class="ch" id="orbit">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">08</div><div><div class="kick" data-t="c8_k"></div><h2 data-t="c8_t"></h2></div><p class="hook" data-t="c8_h"></p></div>
+    <div class="lab rv">
+      <canvas id="cvOrb" style="aspect-ratio: 16 / 7" role="img" aria-label="KS-07 climbing over the wave and orbiting"></canvas>
+      <div class="ctrl">
+        <div class="slide"><span data-t="time"></span><input type="range" id="oTs" min="0" max="1" step="0.0005" value="0"><output id="oTso"></output></div>
+        <div class="row"><button class="btn main" id="oPlay" type="button"></button><button class="chip on" id="oShift" type="button" data-t="c8_shift"></button><span class="aside" id="oSpeed"></span></div>
+      </div>
+      <div class="verdict" id="oVerd"></div>
+      <div class="ro"><div><b class="w" id="oAlt"></b><span data-t="ro_alt"></span></div><div><b id="oV"></b><span data-t="ro_speed"></span></div><div><b class="t" id="oPl"></b><span data-t="ro_planet"></span></div><div><b class="r" id="oOut"></b><span data-t="ro_out"></span></div></div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c8_p1"></p><p data-t="c8_p2"></p></div>
+      <div class="txt rv" style="--d:.1s"><div class="formula" style="margin-top:0"><div class="f">v = √(g R² / r) = <span id="fO1">10,07</span> km/s &nbsp;·&nbsp; P = <span id="fO2">89,8</span> min</div><div class="w" data-t="c8_fw"></div></div><div class="tryit"><span data-t="c8_try"></span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 09 COBA ================= -->
+<section class="ch" id="coba">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">09</div><div><div class="kick" data-t="c9_k"></div><h2 data-t="c9_t"></h2></div><p class="hook" data-t="c9_h"></p></div>
+    <div class="passhead rv"><div class="meter"><span id="passCount"></span><div><i id="passBar"></i></div></div><button class="btn" id="passReset" type="button" data-t="c9_reset"></button></div>
+    <div class="pass" id="pass"></div>
+  </div>
+</section>
+
+<!-- ================= GALERI ================= -->
+<section class="ch" id="galeri">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">+</div><div><div class="kick" data-t="gl_k"></div><h2 data-t="gl_t"></h2></div><p class="hook" data-t="gl_h"></p></div>
+    <div class="gal rv" id="gal"></div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <div class="end"><a class="play" id="playEnd" href="index.html"><svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg><span data-t="play_long"></span></a><a class="btn" id="backEnd" href="../../index.html" data-t="menu"></a></div>
+  <div data-t="footer"></div>
+</div></footer>
+
+<div class="lb" id="lb" role="dialog" aria-modal="true"><div class="cap" id="lbCap"></div><button class="x" id="lbX" type="button" aria-label="close">×</button><button class="pv" id="lbP" type="button" aria-label="previous">‹</button><img id="lbImg" alt=""><button class="nx" id="lbN" type="button" aria-label="next">›</button></div>
+<script>
+/* =====================================================================
+   Konstanta (kembaran CONFIG experiences/millar/index.html)
+   ===================================================================== */
+const G = 12.75, G_E = 9.80665, R_P = 8282e3, DIL = 61362, JUMP_V = 3.13, EYE = 1.7, DEPTH = 0.66, YEAR = 365.25 * 86400;
+const WV = { H: 1200, v: 125, wf: 80, wr: 30, wb: 1100, bk: 0.8, wt: 6000, dd: 0.2, ddL: 6000 };
+const CURW = { max: 1.6, at: 2500, w: 3500, push: 0.35 };
+const TAU = Math.PI * 2, DEG = Math.PI / 180;
+const COL = { ac: '#8fd3dc', ac2: '#d4f3f7', or: '#f3a55a', red: '#ff6b5a', vi: '#b79cff', ink: '#e8ecf2', mu: '#9aa2ae', bg: '#060b0d', sea: '#2d6b78' };
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;   // hanya untuk efek muncul saat digulir dan gulir halus; kanvas tetap beranimasi
+const waveG = (u) => { const r = Math.sqrt(u * u + WV.wr * WV.wr) - WV.wr; return u < 0 ? Math.exp(-r / WV.wf) : WV.bk * Math.exp(-((u / WV.wb) ** 2)) + (1 - WV.bk) * Math.exp(-r / WV.wt); };   // = waveG() game
+const drawdown = (u) => -WV.dd * Math.exp(-(((u + WV.ddL) / WV.ddL) ** 2));                                         // = drawdown() game
+const current = (u) => { if (u >= 0) return 0; const k = (u + CURW.at) / CURW.w, sm = Math.min(1, Math.max(0, -u / 150)); return CURW.max * Math.exp(-k * k) * sm * sm * (3 - 2 * sm); };   // = currentAt() game
+const horizon = (h) => Math.sqrt(2 * R_P * h);
+const outS = (s) => s * DIL;
+const V_ORB = Math.sqrt(G * R_P * R_P / (R_P + 350e3)), P_ORB = TAU * (R_P + 350e3) / V_ORB;
+const climbT = (h, v, a = 22) => v / a + (h - v * v / (2 * a)) / v;
+const climbZ = (t, v, a = 22) => (t < v / a ? 0.5 * a * t * t : v * v / (2 * a) + v * (t - v / a));
+// dilatasi orbit ISCO Kerr (pengamat jauh), 1 - a = e; Bardeen-Press-Teukolsky, ditulis dalam e agar stabil sampai e 1e-16
+function kerrIsco(e) {
+  const a = 1 - e, c = Math.cbrt, Z1 = 1 + c(e * (2 - e)) * (c(2 - e) + c(e)), Z2 = Math.sqrt(3 * a * a + Z1 * Z1);
+  const r = 3 + Z2 - Math.sqrt((3 - Z1) * (3 + Z1 + 2 * Z2)), x = Math.sqrt(r), D = (x - 1) * (x - 1) * (x + 2) - 2 * e;
+  return { r, ut: (r * x + a) / (x ** 1.5 * Math.sqrt(D)), rh: 1 + Math.sqrt(e * (2 - e)) };
+}
+const cssA = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+
+/* =====================================================================
+   Teks: [Indonesia, English]. Label di kanvas English saja.
+   ===================================================================== */
+const S = {
+  menu: ['Menu utama', 'Main menu'], play: ['Mulai', 'Play'], play_long: ["Masuk ke Millar's World", "Enter Millar's World"], scroll: ['Gulir', 'Scroll'],
+  preset: ['Coba', 'Try'], time: ['Waktu', 'Time'], mass: ['Massamu', 'Your mass'],
+  run: ['Jalankan', 'Run'], pause: ['Jeda', 'Pause'], resume: ['Lanjut', 'Resume'],
+  h_kick: ["Millar's World · panduan fisika", "Millar's World · physics guide"],
+  h_title: ['Satu jam, tujuh tahun', 'One hour, seven years'],
+  h_lead: ['Laut dangkal di planet berat yang mengorbit sangat dekat dengan Gargantua. Yang tampak seperti pegunungan di cakrawala adalah gelombang, dan tiap detik di sini 17 jam berlalu di Bumi. Halaman ini membedah fisikanya, dengan simulasi yang memakai angka yang sama dengan game.',
+    'A shallow sea on a heavy planet orbiting very close to Gargantua. What looks like mountains on the horizon is a wave, and every second here 17 hours pass on Earth. This page takes the physics apart, with simulations that use the same numbers as the game.'],
+  h_go: ['Mulai menjelajah', 'Start exploring'], h_real: ['Waktu nyata', 'Real time'], h_fast: ['Dipercepat 20x', '20x faster'],
+  h_cap: ['Di planet {p} · di luar {o}. Gelombang {d}.', 'On the planet {p} · outside {o}. The wave is {d}.'],
+  h_far: ['masih di balik cakrawala', 'still behind the horizon'], h_near: ['{k} km lagi', '{k} km away'], h_hit: ['tiba!', 'arriving!'],
+  h_turn: ['ombak dari mata 1,7 m', 'the sea from eye height 1.7 m'],
+  st_g: ['gravitasi', 'gravity'], st_h: ['tinggi gelombang', 'wave height'], st_v: ['laju gelombang', 'wave speed'], st_s: ['di luar per detik', 'outside per second'], st_d: ['waktu lebih cepat di luar', 'faster outside'],
+  nav: [['Planet', 'Waktu', 'Putaran', 'Gravitasi', 'Cakrawala', 'Gelombang', 'Goyangan', 'Orbit', 'Paspor', 'Galeri'], ['Planet', 'Time', 'Spin', 'Gravity', 'Horizon', 'The wave', 'Rocking', 'Orbit', 'Passport', 'Gallery']],
+
+  c1_k: ['Bentuk dan ukuran', 'Shape and size'], c1_t: ['Planet sekilas', 'The planet at a glance'],
+  c1_h: ['Planet 1,3 kali lebih besar dari Bumi, seluruhnya laut setinggi lutut.', 'A planet 1.3 times the size of Earth, covered by a knee-deep sea.'],
+  c1_p1: ['Dengan kepadatan yang sama dengan Bumi, jari-jari 1,3 kali memberi gravitasi <b>1,3 g</b>. Game memakai jari-jari <b>8.282 km</b>, jadi cakrawala dari mata 1,7 m hanya 5,3 km jauhnya.',
+    'With the same density as Earth, 1.3 times the radius gives <b>1.3 g</b>. The game uses a radius of <b>8,282 km</b>, so the horizon from eye height 1.7 m is only 5.3 km away.'],
+  c1_p2: ['Tidak ada daratan. Dasar laut ada di sekitar <b>0,66 m</b> (0,48-0,84 m), dan ombak angin setinggi 0,35 m bergulir di sekitar lututmu.',
+    'There is no land. The seabed lies about <b>0.66 m</b> down (0.48-0.84 m), and 0.35 m wind chop rolls around your knees.'],
+  c1_f1: ['Laju lepas 14,5 km/s, lebih tinggi dari Bumi (11,2 km/s).', 'Escape speed 14.5 km/s, higher than Earth (11.2 km/s).'],
+  c1_f2: ['Jari-jari dan kedalaman laut adalah asumsi desain game.', 'The radius and the sea depth are design assumptions of the game.'],
+  c1_f3: ['Gargantua menggantung di langit dengan bayangan selebar 18 derajat.', 'Gargantua hangs in the sky with a shadow 18 degrees wide.'],
+  c1_try: ['Di game: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> berjalan di air; HUD menulis gravitasi dan kedalaman air.', 'In the game: <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> to walk in the water; the HUD shows gravity and water depth.'],
+  ro_g: ['gravitasi permukaan', 'surface gravity'], ro_rad: ['jari-jari planet', 'planet radius'], ro_depth: ['kedalaman laut', 'sea depth'], ro_esc: ['laju lepas', 'escape speed'],
+
+  c2_k: ['Dilatasi waktu', 'Time dilation'], c2_t: ['Satu jam, tujuh tahun', 'One hour, seven years'],
+  c2_h: ['Pilih berapa lama kamu di planet, lalu jalankan dua jam berdampingan.', 'Pick how long you stay on the planet, then run the two clocks side by side.'],
+  c2_sd: ['Lama di planet', 'Time on the planet'],
+  c2_pre: [['1 detik', 'Satu lompatan', 'Misi 5 menit', 'Tersapu', 'Jalan 1 km', 'Menunggu gelombang', 'Satu orbit', '1 jam'], ['1 second', 'One jump', '5 min mission', 'Getting swept', 'Walk 1 km', 'Waiting for the wave', 'One orbit', '1 hour']],
+  ro_planet: ['jam planet (jammu)', 'planet clock (yours)'], ro_out: ['berlalu di luar', 'passed outside'], ro_earth: ['Bumi mengitari Matahari', 'Earth around the Sun'],
+  t_speed: ['diputar {k}x lebih cepat dari jam planet', 'played {k}x faster than the planet clock'],
+  t_done: ['Selesai: {p} di planet = {o} di luar.', 'Done: {p} on the planet = {o} outside.'],
+  c2_p1: ['Dekat Gargantua, waktu berjalan <b>61.362 kali</b> lebih lambat daripada di tempat yang jauh. Jammu terasa normal, tetapi satu detikmu sama dengan <b>17 jam</b> di Bumi.',
+    'Near Gargantua, time runs <b>61,362 times</b> slower than far away. Your clock feels normal, yet each of your seconds is <b>17 hours</b> on Earth.'],
+  c2_p2: ['Misi radar 5 menit menghabiskan 213 hari di luar. Tersapu gelombang menambah 400 detik di planet: 0,78 tahun yang hilang.',
+    'A 5 minute radar mission costs 213 days outside. Getting swept by a wave adds 400 seconds on the planet: 0.78 years lost.'],
+  c2_fw: ['1 jam = 7 × 365,25 × 24 jam (CONFIG.dil di game).', '1 hour = 7 × 365.25 × 24 hours (CONFIG.dil in the game).'],
+  c2_try: ['Di game: HUD menulis "Waktu planet" dan "Waktu di luar"; <kbd>Z</kbd> mempercepat waktu.', 'In the game: the HUD shows "Planet time" and "Time outside"; <kbd>Z</kbd> speeds time up.'],
+
+  c3_k: ['Relativitas umum', 'General relativity'], c3_t: ['Kenapa Gargantua harus berputar', 'Why Gargantua must spin'],
+  c3_h: ['Lubang hitam yang diam tidak bisa memperlambat waktu sebanyak ini. Geser putarannya dan lihat kapan 61.362x tercapai.', 'A non-spinning black hole cannot slow time this much. Slide its spin and see when 61,362x is reached.'],
+  c3_ss: ['Jarak dari putaran maksimum, 1 − a', 'Gap to maximum spin, 1 − a'], c3_millar: ['Angka Millar', "Millar's number"], c3_zero: ['Tanpa putaran', 'No spin'],
+  ro_a: ['putaran a (maksimum 1)', 'spin a (maximum 1)'], ro_isco: ['orbit stabil terdalam', 'innermost stable orbit'], ro_dil: ['waktu di sana lebih lambat', 'time runs slower there by'], ro_hour: ['1 jam di sana = di luar', '1 hour there = outside'],
+  c3_p1: ['Planet harus mengorbit di orbit stabil. Untuk lubang hitam tanpa putaran, orbit stabil terdalam ada di 6 GM/c², dan di sana waktu hanya <b>1,41 kali</b> lebih lambat.',
+    'The planet must sit on a stable orbit. For a non-spinning black hole the innermost stable orbit is at 6 GM/c², where time is only <b>1.41 times</b> slower.'],
+  c3_p2: ['Lubang hitam yang berputar menyeret ruang di sekitarnya, dan orbit stabilnya bisa turun hampir ke horizon. Agar waktu <b>61.362 kali</b> lebih lambat, putarannya harus kurang dari maksimum hanya sekitar <b>1,3e-14</b>, cocok dengan angka Kip Thorne (1 per 100 triliun).',
+    'A spinning black hole drags space around it, and its stable orbit can sink almost to the horizon. For time to run <b>61,362 times</b> slower, its spin must be short of the maximum by only about <b>1.3e-14</b>, matching Kip Thorne\'s figure (1 part in 100 trillion).'],
+  c3_fw: ['r dan a dalam satuan GM/c². Dilatasi untuk pengamat jauh pada orbit prograde di ISCO (Bardeen, Press, Teukolsky 1972).', 'r and a in units of GM/c². Dilation seen from far away for a prograde orbit at the ISCO (Bardeen, Press, Teukolsky 1972).'],
+  c3_note: ['Experience Gargantua di aplikasi ini memakai lubang hitam tanpa putaran supaya shader lebih sederhana. Angka Millar membutuhkan versi yang berputar.', 'The Gargantua experience in this app uses a non-spinning black hole to keep the shader simple. Millar\'s numbers need the spinning version.'],
+
+  c4_k: ['Gravitasi buatan alam', "Nature's gravity"], c4_t: ['Gravitasi 1,3 g', 'Gravity at 1.3 g'],
+  c4_h: ['Dorongan kaki yang sama, dua planet. Lompatan di Millar lebih rendah dan lebih singkat.', 'The same leg push on two planets. On Millar the jump is lower and shorter.'],
+  ro_jump: ['tinggi lompatan (Bumi 0,50 m)', 'jump height (Earth 0.50 m)'], ro_air: ['lama di udara (Bumi 0,64 s)', 'time in the air (Earth 0.64 s)'], ro_scale: ['angka di timbangan', 'scale reading'], ro_jumpout: ['berlalu di luar selama satu lompatan', 'passes outside during one jump'],
+  c4_p1: ['Game memberi laju lompat <b>3,13 m/s</b>. Di Bumi itu 0,50 m, di Millar hanya <b>0,384 m</b>: 77%. Kamu juga turun lebih cepat, 0,49 detik di udara.',
+    'The game gives a jump speed of <b>3.13 m/s</b>. On Earth that is 0.50 m, on Millar only <b>0.384 m</b>: 77%. You also come down sooner, 0.49 seconds in the air.'],
+  c4_p2: ['Tubuh dan pakaian astronaut 30% lebih berat. Helm yang jatuh dari 1,7 m menyentuh air setelah 0,52 detik (Bumi 0,59).',
+    'Body and suit weigh 30% more. A helmet dropped from 1.7 m hits the water after 0.52 seconds (Earth 0.59).'],
+  c4_fw: ['v = 3,13 m/s (CONFIG.jumpV), g = 12,75 m/s² (CONFIG.g).', 'v = 3.13 m/s (CONFIG.jumpV), g = 12.75 m/s² (CONFIG.g).'],
+  c4_try: ['Di game: <kbd>Space</kbd> melompat. Bantuan game menulis "77% lompatan di Bumi".', 'In the game: <kbd>Space</kbd> jumps. The game help says "77% of an Earth jump".'],
+
+  c5_k: ['Lengkung planet', 'Curvature'], c5_t: ['Gunung di cakrawala', 'Mountains on the horizon'],
+  c5_h: ['Gelombang datang dari 200 km. Kapan puncaknya muncul di balik lengkung planet?', 'The wave comes from 200 km away. When does its crest rise over the curve of the planet?'],
+  c5_se: ['Tinggi mata', 'Eye height'], c5_sw: ['Tinggi gelombang', 'Wave height'], c5_hint: ['Ketinggian dibesar-besarkan; jarak berskala', 'Heights exaggerated; distances to scale'],
+  ro_hor: ['cakrawala laut', 'sea horizon'], ro_vis: ['puncak terlihat dari', 'crest visible from'], ro_warn: ['peringatan sampai tiba', 'warning until it arrives'], ro_warnout: ['berlalu di luar selama itu', 'pass outside meanwhile'], ro_dist: ['jarak gelombang sekarang', 'wave distance now'],
+  z_hidden: ['Gelombang masih di balik lengkung planet. Laut tampak tenang.', 'The wave is still behind the curve. The sea looks calm.'],
+  z_seen: ['Puncak terlihat! Tiba dalam {m} menit ({y} di luar).', 'The crest is visible! It arrives in {m} minutes ({y} outside).'],
+  z_hit: ['Gelombang tiba.', 'The wave arrives.'],
+  c5_p1: ['Planet melengkung, jadi laut yang kamu lihat berakhir 5,3 km jauhnya. Benda tinggi di baliknya tetap terlihat: puncak setinggi <b>1.200 m</b> muncul dari <b>146 km</b>.',
+    'The planet curves, so the sea you can see ends 5.3 km away. Tall things beyond it still show: a <b>1,200 m</b> crest appears from <b>146 km</b>.'],
+  c5_p2: ['Pada 125 m/s, itu memberi <b>19,5 menit</b> peringatan, cukup untuk mencari pecahan dan kembali ke KS-07. Di Bumi, 2,28 tahun berlalu selama kamu menunggu.',
+    'At 125 m/s that gives <b>19.5 minutes</b> of warning, enough to find the wreckage and get back to KS-07. On Earth, 2.28 years pass while you wait.'],
+  c5_fw: ['R = 8.282 km. Pembiasan udara diabaikan.', 'R = 8,282 km. Atmospheric refraction is ignored.'],
+  c5_try: ['Di game: tunggu sampai puncak muncul di cakrawala; HUD "Tiba dalam" menghitung mundur.', 'In the game: wait until the crest shows on the horizon; the HUD "Arrives in" counts down.'],
+
+  c6_k: ['Gelombang raksasa', 'The giant wave'], c6_t: ['Gelombang 1,2 km', 'The 1.2 km wave'],
+  c6_h: ['Laut surut, arus menarikmu, lalu dinding air 1.200 m datang 125 m/s. Penampang ini memakai rumus bentuk yang sama dengan game.', 'The sea drops, a current pulls you, then a 1,200 m wall arrives at 125 m/s. This cross-section uses the same shape formula as the game.'],
+  c6_you: ['Kamu', 'You'], c6_stand: ['Diam', 'Stand still'], c6_run: ['Lari menjauh', 'Run away'],
+  ro_face: ['jarak ke muka gelombang', 'distance to the face'], ro_cur: ['arus di kakimu', 'current at your feet'], ro_feet: ['air di kakimu', 'water at your feet'], ro_outnow: ['berlalu di luar sejak mulai', 'passed outside since start'],
+  w_start: ['Tekan Jalankan. Muka gelombang mulai 6 km di depanmu.', 'Press Run. The wave face starts 6 km in front of you.'],
+  w_dd: ['Air surut di kakimu dan arus menarikmu ke arah gelombang.', 'The water drops at your feet and the current pulls you toward the wave.'],
+  w_swept: ['Tersapu. Buih, gelap di bawah air, lalu putih: +400 detik di planet, 0,78 tahun di luar.', 'Swept away. Foam, darkness underwater, then white: +400 seconds on the planet, 0.78 years outside.'],
+  w_run: ['Lari 4,2 m/s tidak berarti melawan 125 m/s. Satu-satunya jalan keluar adalah KS-07.', 'Running at 4.2 m/s means nothing against 125 m/s. The only way out is KS-07.'],
+  c6_p1: ['Sebelum tiba, gelombang menarik air: laut <b>surut 20 cm</b> sampai 6 km di depannya, dan <b>arus balik</b> hingga 1,6 m/s menyeretmu ke arahnya.',
+    'Before it arrives, the wave draws water in: the sea <b>drops 20 cm</b> up to 6 km ahead, and a <b>backwash</b> of up to 1.6 m/s drags you toward it.'],
+  c6_p2: ['Mukanya cekung hampir tegak, puncaknya membulat, lalu badan tebal yang turun ke 20% dalam 2 km dan ekor 6 km. Tingginya 984-1.200 m sepanjang muka.',
+    'Its face is concave and nearly vertical, the crest rounded, then a thick body that falls to 20% within 2 km and a 6 km tail. It stands 984-1,200 m along the front.'],
+  c6_fw: ['waveG: muka exp(−r/80 m), puncak bulat 30 m, badan Gauss 1.100 m (80%), ekor 6 km. Arus: puncak 1,6 m/s di 2,5 km depan muka, lebar 3,5 km.', 'waveG: face exp(−r/80 m), crest radius 30 m, Gaussian body 1,100 m (80%), 6 km tail. Current: 1.6 m/s peak 2.5 km ahead of the face, 3.5 km wide.'],
+  c6_try: ['Di game: <kbd>G</kbd> memanggil gelombang (160 detik lagi); HUD menulis arus "ke arah gelombang".', 'In the game: <kbd>G</kbd> summons a wave (160 seconds away); the HUD shows the current "toward the wave".'],
+
+  c7_k: ['Pasang surut', 'Tides'], c7_t: ['Kenapa ada gelombang', 'Why the waves come'],
+  c7_h: ['Planet selalu menghadap Gargantua, tetapi sedikit bergoyang. Lautnya ikut berayun.', 'The planet always faces Gargantua, but rocks a little. Its sea sloshes along.'],
+  c7_sa: ['Goyangan', 'Rocking'],
+  ro_shallow: ['laju air dangkal √(g d)', 'shallow-water speed √(g d)'], ro_sol: ['rumus soliter √(g (d + a))', 'solitary formula √(g (d + a))'], ro_game: ['gelombang di game', 'the game wave'], ro_need: ['kedalaman untuk 125 m/s', 'depth needed for 125 m/s'],
+  c7_p1: ['Gaya pasang Gargantua menarik planet menjadi lonjong dan menguncinya menghadap satu arah. Bila planet sedikit <b>bergoyang</b> (libration), tonjolan pasang ikut berayun, dan laut dangkal bergolak menjadi gelombang raksasa. Ini penjelasan Kip Thorne.',
+    'Gargantua\'s tides stretch the planet and lock it facing one way. If the planet <b>rocks</b> a little (libration), the tidal bulge swings with it, and the shallow sea sloshes into giant waves. This is Kip Thorne\'s explanation.'],
+  c7_p2: ['Laju 125 m/s di game adalah angka desain. Gelombang biasa di air setinggi lutut hanya merambat 2,9 m/s. Rumus gelombang soliter memberi 123,7 m/s, tetapi rumus itu hanya berlaku untuk gelombang kecil, jadi kedekatannya kebetulan.',
+    'The 125 m/s in the game is a design value. An ordinary wave in knee-deep water travels only 2.9 m/s. The solitary-wave formula gives 123.7 m/s, but it only holds for small waves, so the match is a coincidence.'],
+  c7_fw: ['d = 0,66 m, a = 1.200 m. Gelombang di game datang tiap 28 menit (3,3 tahun di luar).', 'd = 0.66 m, a = 1,200 m. In the game a wave comes every 28 minutes (3.3 years outside).'],
+  c7_try: ['Di game: perhatikan kamera bergoyang pelan (periode 40 detik), makin kuat saat gelombang mendekat.', 'In the game: notice the view rock gently (40 second period), stronger as the wave nears.'],
+
+  c8_k: ['Terbang', 'Flight'], c8_t: ['Lolos ke orbit', 'Escape to orbit'],
+  c8_h: ['KS-07 harus naik di atas puncak 1.200 m sebelum gelombang tiba, lalu mengorbit planet.', 'KS-07 must climb above the 1,200 m crest before the wave arrives, then orbit the planet.'],
+  c8_shift: ['Shift (65 m/s)', 'Shift (65 m/s)'],
+  ro_alt: ['ketinggian', 'altitude'], ro_speed: ['laju', 'speed'],
+  o_start: ['Tekan Jalankan: KS-07 lepas landas saat gelombang 4 km lagi.', 'Press Run: KS-07 lifts off with the wave 4 km away.'],
+  o_safe: ['Di atas puncak, gelombang lewat di bawah. Lolos.', 'Above the crest, the wave passes below. Escaped.'],
+  o_hit: ['Terlalu lambat: gelombang menelan KS-07. Coba dengan Shift.', 'Too slow: the wave swallows KS-07. Try with Shift.'],
+  o_orbit: ['Di orbit 350 km: satu putaran 89,8 menit di jammu, 10,5 tahun di Bumi.', 'In orbit at 350 km: one lap takes 89.8 minutes on your clock, 10.5 years on Earth.'],
+  c8_p1: ['Dengan Shift, KS-07 naik 65 m/s dan mencapai 1.300 m dalam <b>21,5 detik</b>; tanpa Shift 33,4 detik. Game menganggap lolos bila kapal 300 m di depan muka gelombang.',
+    'With Shift, KS-07 climbs at 65 m/s and reaches 1,300 m in <b>21.5 seconds</b>; without Shift 33.4 seconds. The game counts it as escaped once the ship is 300 m clear of the face.'],
+  c8_p2: ['Di orbit 350 km, laju lingkaran untuk planet ini <b>10,07 km/s</b>, lebih cepat dari orbit Bumi karena gravitasi lebih kuat. Satu putaran 89,8 menit: <b>10,5 tahun</b> di Bumi.',
+    'At 350 km the circular speed for this planet is <b>10.07 km/s</b>, faster than Earth orbit because gravity is stronger. One lap takes 89.8 minutes: <b>10.5 years</b> on Earth.'],
+  c8_fw: ['Percepatan naik 22 m/s² (CONFIG.fly). Sinematik orbit game kini juga memakai 10,07 km/s (dulu 7,6 km/s, laju orbit Bumi).', 'Climb acceleration 22 m/s² (CONFIG.fly). The game\'s orbit cinematic now also uses 10.07 km/s (it used 7.6 km/s, Earth\'s orbital speed).'],
+  c8_try: ['Di game: <kbd>E</kbd> di tangga naik ke KS-07, <kbd>R</kbd>/<kbd>F</kbd> naik-turun, <kbd>Shift</kbd> dorongan penuh, <kbd>V</kbd> kokpit.', 'In the game: <kbd>E</kbd> at the ladder to board KS-07, <kbd>R</kbd>/<kbd>F</kbd> up and down, <kbd>Shift</kbd> full thrust, <kbd>V</kbd> cockpit.'],
+
+  c9_k: ['Trik untuk dicoba', 'Tricks to try'], c9_t: ['Paspor fisika', 'Physics passport'],
+  c9_h: ['Sepuluh hal yang bisa kamu rasakan di planet. Tandai yang sudah dicoba.', 'Ten things you can feel on the planet. Stamp the ones you have tried.'],
+  c9_count: ['{n} dari {m} cap', '{n} of {m} stamps'], c9_reset: ['Hapus cap', 'Clear stamps'], c9_all: ['Lengkap! Sayangnya tujuh tahun sudah berlalu di rumah.', 'Complete! Sadly, seven years have passed back home.'],
+
+  gl_k: ['Diagram', 'Diagrams'], gl_t: ['Galeri diagram', 'Diagram gallery'], gl_h: ['Delapan diagram untuk dibagikan. Ketuk untuk memperbesar.', 'Eight diagrams to share. Tap to enlarge.'], gl_open: ['buka file', 'open file'],
+  footer: ["Proyek penggemar untuk belajar fisika dan grafis 3D. Tidak berafiliasi dengan studio film mana pun. Angka di halaman ini sama dengan CONFIG Millar's World: g 12,75 m/s², R 8.282 km, dilatasi 61.362.",
+    "A fan project for learning physics and 3D graphics. Not affiliated with any film studio. Numbers on this page match Millar's World CONFIG: g 12.75 m/s², R 8,282 km, dilation 61,362."],
+};
+const PASS = [
+  [['Lompat di 1,3 g', 'Jump at 1.3 g'], ['Lompatanmu hanya 77% lompatan di Bumi.', 'Your jump is only 77% of an Earth jump.'], ['<kbd>Space</kbd>', '<kbd>Space</kbd>'], 'gravitasi'],
+  [['Jam yang berlari', 'The racing clock'], ['Berdiri satu menit: 42,6 hari berlalu di Bumi.', 'Stand still one minute: 42.6 days pass on Earth.'], ['HUD "Waktu di luar"', 'HUD "Time outside"'], 'waktu'],
+  [['Gunung yang bergerak', 'The moving mountain'], ['Tunggu puncak muncul di cakrawala, lalu hitung mundur.', 'Wait for the crest to rise on the horizon, then count down.'], ['HUD "Tiba dalam"', 'HUD "Arrives in"'], 'cakrawala'],
+  [['Air surut', 'The drawdown'], ['Kedalaman turun sekitar 20 cm saat gelombang dekat.', 'The depth drops about 20 cm as the wave nears.'], ['HUD kedalaman air', 'HUD water depth'], 'gelombang'],
+  [['Arus balik', 'The backwash'], ['Rasakan arus menyeretmu ke arah gelombang.', 'Feel the current drag you toward the wave.'], ['HUD arus', 'HUD current'], 'gelombang'],
+  [['Tersapu', 'Swept away'], ['Diam saat gelombang tiba: 0,78 tahun hilang.', 'Stand still as the wave arrives: 0.78 years lost.'], ['<kbd>G</kbd> lalu tunggu', '<kbd>G</kbd> then wait'], 'gelombang'],
+  [['Radar', 'Radar'], ['Temukan tiga pecahan dengan radar (galat 5% + 2 m).', 'Find three pieces of wreckage with the radar (5% + 2 m error).'], ['<kbd>M</kbd>', '<kbd>M</kbd>'], 'cakrawala'],
+  [['Lolos', 'Escape'], ['Terbangkan KS-07 300 m melewati muka gelombang.', 'Fly KS-07 300 m clear of the wave face.'], ['<kbd>E</kbd>, <kbd>R</kbd>, <kbd>Shift</kbd>', '<kbd>E</kbd>, <kbd>R</kbd>, <kbd>Shift</kbd>'], 'orbit'],
+  [['Orbit', 'Orbit'], ['Lihat sinematik keberangkatan sampai orbit 350 km.', 'Watch the departure cinematic up to the 350 km orbit.'], ['misi lolos', 'mission escaped'], 'orbit'],
+  [['Planet bergoyang', 'The rocking planet'], ['Perhatikan pandangan bergoyang pelan, makin kuat saat gelombang dekat.', 'Notice the view rock gently, stronger as the wave nears.'], ['diam dan lihat', 'stand and watch'], 'goyang'],
+];
+const GAL = [
+  ['mi-01-planet.svg', ['Planet sekilas', 'The planet at a glance']], ['mi-02-time.svg', ['Satu jam, tujuh tahun', 'One hour, seven years']],
+  ['mi-03-spin.svg', ['Kenapa Gargantua harus berputar', 'Why Gargantua must spin']], ['mi-04-gravity.svg', ['Gravitasi 1,3 g', 'Gravity at 1.3 g']],
+  ['mi-05-horizon.svg', ['Gunung di cakrawala', 'Mountains on the horizon']], ['mi-06-wave.svg', ['Gelombang 1,2 km', 'The 1.2 km wave']],
+  ['mi-07-libration.svg', ['Kenapa ada gelombang', 'Why the waves come']], ['mi-08-escape-orbit.svg', ['Lolos ke orbit', 'Escape to orbit']],
+];
+const CH_IDS = ['planet', 'waktu', 'putaran', 'gravitasi', 'cakrawala', 'gelombang', 'goyang', 'orbit', 'coba', 'galeri'];
+/* =====================================================================
+   Bahasa (dibagi dengan semua halaman: localStorage lazarus.lang, ?lang=)
+   ===================================================================== */
+let LANG = 'id';
+{
+  const ok = (c) => c === 'id' || c === 'en'; let c = null;
+  try { c = new URLSearchParams(location.search).get('lang'); } catch (e) { /* abaikan */ }
+  if (!ok(c)) try { c = localStorage.getItem('lazarus.lang'); } catch (e) { c = null; }
+  if (!ok(c)) c = (navigator.language || 'id').slice(0, 2).toLowerCase();
+  LANG = ok(c) ? c : 'id';
+}
+const L = () => (LANG === 'en' ? 1 : 0);
+const T = (k, v) => { let s = S[k] ? S[k][L()] : k; if (v) for (const n in v) s = s.split('{' + n + '}').join(v[n]); return s; };
+const fmt = (n, d = 0) => n.toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtE = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });   // label kanvas
+const sci = (x, d = 1) => { const e = Math.floor(Math.log10(Math.abs(x))), m = x / 10 ** e; return (LANG === 'en' ? m.toFixed(d) : m.toFixed(d).replace('.', ',')) + 'e' + e; };
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const hms = (s) => { s = Math.max(0, s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = Math.floor(s % 60); return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; };
+const dur = (s) => (s >= 3 * 86400 ? fmt(s / 86400, 1) + (LANG === 'en' ? ' days' : ' hari') : s >= 7200 ? fmt(s / 3600, 2) + (LANG === 'en' ? ' h' : ' jam') : s >= 120 ? fmt(s / 60, 1) + (LANG === 'en' ? ' min' : ' menit') : fmt(s, 1) + ' s');
+function setP(inp) { const p = ((+inp.value - +inp.min) / (+inp.max - +inp.min)) * 100; inp.style.setProperty('--p', p + '%'); }
+
+/* =====================================================================
+   Kanvas: ukuran ikut CSS + DPR, satu loop animasi; simulasi berjalan walau panelnya tergulir keluar
+   ===================================================================== */
+const PANELS = [], SIMS = [];
+function panel(id, draw, step) {
+  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, vis: false, step };
+  o.draw = (p) => { if (p.w > 20 && p.h > 20) draw(p); };
+  const fit = () => {
+    const r = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+    if (r.width < 2) return;
+    o.w = r.width; o.h = r.height; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
+    ctx.setTransform(d, 0, 0, d, 0, 0); o.draw(o);
+  };
+  new ResizeObserver(fit).observe(el);
+  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; }, { rootMargin: '80px' }).observe(el);
+  PANELS.push(o); return o;
+}
+let lastT = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  for (const s of SIMS) s.tick(dt);
+  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) p.draw(p);
+  requestAnimationFrame(loop);
+}
+// pemutar umum: Jalankan / Jeda / Lanjut + slider waktu + label kecepatan (pola bab Coriolis Copper)
+function player(key, opt) {
+  const s = { t: 0, T: opt.T, play: false, done: false, opt };
+  s.btn = () => { if (opt.btn) $(opt.btn).textContent = T(s.play ? 'pause' : s.done || s.t === 0 ? 'run' : 'resume'); };
+  s.sync = () => { if (opt.slider) { const el = $(opt.slider); el.value = s.T ? s.t / s.T : 0; setP(el); } if (opt.update) opt.update(); };
+  s.go = () => { s.t = 0; s.done = false; s.play = true; if (opt.reset) opt.reset(); s.btn(); s.sync(); };
+  s.toggle = () => { if (s.play) { s.play = false; s.btn(); return; } if (s.done || s.t >= s.T || s.t === 0) { s.go(); return; } s.play = true; s.btn(); };
+  s.seek = (f) => { s.play = false; s.t = clamp(f, 0, 1) * s.T; s.done = s.t >= s.T; if (opt.seek) opt.seek(); s.btn(); s.sync(); };
+  s.tick = (dt) => {
+    if (!s.play) return;
+    s.t = Math.min(s.T, s.t + dt * opt.rate(s.t));
+    if (opt.during) opt.during();
+    if (s.t >= s.T) { s.play = false; s.done = true; if (opt.end) opt.end(); s.btn(); }
+    s.sync();
+  };
+  if (opt.btn) $(opt.btn).addEventListener('click', s.toggle);
+  if (opt.slider) $(opt.slider).addEventListener('input', (e) => s.seek(+e.target.value));
+  SIMS.push(s); return s;
+}
+// alat gambar
+function txt(c, x, y, s, col = COL.ink, size = 12, align = 'left', weight = 500) {
+  c.font = `${weight} ${size}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`; c.fillStyle = col; c.textAlign = align; c.textBaseline = 'alphabetic'; c.fillText(s, x, y);
+}
+function pillC(c, x, y, s, col = COL.ink, size = 11.5, align = 'left') {
+  c.font = `600 ${size}px system-ui, sans-serif`; const w = c.measureText(s).width + 16, h = size + 10;
+  const x0 = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+  c.fillStyle = 'rgba(8,7,10,0.85)'; c.strokeStyle = 'rgba(255,255,255,0.16)'; c.lineWidth = 1;
+  c.beginPath(); c.roundRect ? c.roundRect(x0, y - h / 2, w, h, h / 2) : c.rect(x0, y - h / 2, w, h); c.fill(); c.stroke();
+  c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s, x0 + w / 2, y + 0.5); c.textBaseline = 'alphabetic';
+}
+function glow(c, col, blur) { c.shadowColor = col; c.shadowBlur = blur; }
+function noGlow(c) { c.shadowBlur = 0; }
+function corner(c, s, x = 14) { txt(c, x, 22, s, COL.mu, 10.5, 'left', 650); }
+function cornerR(c, w, s, col = COL.mu) { txt(c, w - 14, 22, s, col, 10.5, 'right', 650); }
+function arrow(c, x0, y0, x1, y1, col, w = 2) {
+  c.strokeStyle = col; c.fillStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+  const a = Math.atan2(y1 - y0, x1 - x0), L_ = 7 + w * 1.5;
+  c.beginPath(); c.moveTo(x1 + Math.cos(a) * 2, y1 + Math.sin(a) * 2); c.lineTo(x1 - Math.cos(a - 0.45) * L_, y1 - Math.sin(a - 0.45) * L_); c.lineTo(x1 - Math.cos(a + 0.45) * L_, y1 - Math.sin(a + 0.45) * L_); c.closePath(); c.fill();
+}
+function bgStars(c, w, h, seed, n = 70) {
+  let s = seed; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < n; i++) { const x = rnd() * w, y = rnd() * h, r = 0.3 + rnd() ** 3 * 1.2; c.globalAlpha = 0.12 + rnd() * 0.5; c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
+  c.globalAlpha = 1;
+}
+function holeC(c, x, y, r) {   // lubang hitam kecil: halo jingga + bayangan hitam
+  const g = c.createRadialGradient(x, y, r * 0.9, x, y, r * 2.2); g.addColorStop(0, 'rgba(243,165,90,0.35)'); g.addColorStop(1, 'rgba(243,165,90,0)');
+  c.fillStyle = g; c.beginPath(); c.arc(x, y, r * 2.2, 0, TAU); c.fill();
+  c.fillStyle = '#000'; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+}
+// waktu luar dalam kata (dua bahasa)
+function human(s) {
+  const en = LANG === 'en';
+  if (s < 3600) return fmt(s / 60, 1) + (en ? ' min' : ' menit');
+  if (s < 86400) return fmt(s / 3600, 1) + (en ? ' hours' : ' jam');
+  if (s < YEAR) return fmt(s / 86400, s < 10 * 86400 ? 1 : 0) + (en ? ' days' : ' hari');
+  return fmt(s / YEAR, 2) + (en ? ' years' : ' tahun');
+}
+const humanE = (s) => (s < 3600 ? fmtE(s / 60, 1) + ' min' : s < 86400 ? fmtE(s / 3600, 1) + ' h' : s < YEAR ? fmtE(s / 86400, 0) + ' days' : fmtE(s / YEAR, 2) + ' years');
+const clockS = (s) => { const m = Math.floor(s / 60), x = Math.floor(s % 60); return `${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; };
+function person(c, x, y, s, col, lean = 0) {   // astronaut sederhana berdiri di (x, y), tinggi s piksel
+  c.save(); c.translate(x, y); c.rotate(lean); c.strokeStyle = col; c.lineWidth = Math.max(1.5, s * 0.045); c.lineCap = 'round';
+  c.beginPath(); c.moveTo(-s * 0.07, 0); c.lineTo(-s * 0.03, -s * 0.48); c.lineTo(s * 0.03, -s * 0.48); c.lineTo(s * 0.07, 0);
+  c.moveTo(0, -s * 0.48); c.lineTo(0, -s * 0.8); c.moveTo(-s * 0.13, -s * 0.6); c.lineTo(0, -s * 0.78); c.lineTo(s * 0.13, -s * 0.6); c.stroke();
+  c.fillStyle = '#1b2a30'; c.beginPath(); c.arc(0, -s * 0.9, s * 0.09, 0, TAU); c.fill(); c.stroke();
+  c.fillStyle = COL.ac; c.fillRect(-s * 0.01, -s * 0.93, s * 0.08, s * 0.04); c.restore();
+}
+
+/* =====================================================================
+   HERO: laut dari mata 1,7 m di bawah Gargantua; gelombang naik dari balik cakrawala
+   ===================================================================== */
+const HERO = { t: 0, k: 20, d0: 150e3, white: 0 };
+const heroD = () => HERO.d0 - WV.v * HERO.t;                         // jarak muka gelombang (m)
+const hero = panel('cvHero', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, hy = h * 0.6, fov = 62 * DEG, pxRad = h / fov;
+  // langit mendung
+  const sky = c.createLinearGradient(0, 0, 0, hy); sky.addColorStop(0, '#2b3a44'); sky.addColorStop(0.7, '#5d7480'); sky.addColorStop(1, '#8aa1aa');
+  c.fillStyle = sky; c.fillRect(0, 0, w, hy);
+  // Gargantua: bayangan radius 9 derajat, piringan miring 9 derajat, busur di atas dan bawah
+  const gx = w * 0.64, gy = hy - 22 * DEG * pxRad, rs = 9 * DEG * pxRad, sh = 0.5 + 0.5 * Math.sin(HERO.t * 0.05);
+  const halo = c.createRadialGradient(gx, gy, rs * 0.9, gx, gy, rs * 3.2); halo.addColorStop(0, 'rgba(255,214,160,0.55)'); halo.addColorStop(1, 'rgba(255,214,160,0)');
+  c.fillStyle = halo; c.beginPath(); c.arc(gx, gy, rs * 3.2, 0, TAU); c.fill();
+  c.save(); c.translate(gx, gy); c.rotate(-9 * DEG);
+  const band = (ry, a0, a1, alpha, lw) => { c.strokeStyle = `rgba(255,${200 + 30 * sh | 0},150,${alpha})`; c.lineWidth = lw; c.beginPath(); c.ellipse(0, 0, rs * 2.6, ry, 0, a0, a1); c.stroke(); };
+  band(rs * 0.22, Math.PI, TAU, 0.7, rs * 0.28);                     // sisi jauh piringan (di belakang)
+  c.strokeStyle = 'rgba(255,226,180,0.8)'; c.lineWidth = rs * 0.2; c.beginPath(); c.arc(0, 0, rs * 1.28, Math.PI * 1.05, Math.PI * 1.95); c.stroke();   // busur atas (lensa)
+  c.strokeStyle = 'rgba(255,200,150,0.45)'; c.lineWidth = rs * 0.12; c.beginPath(); c.arc(0, 0, rs * 1.18, Math.PI * 0.12, Math.PI * 0.88); c.stroke();
+  c.fillStyle = '#000'; c.beginPath(); c.arc(0, 0, rs, 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(255,240,220,0.9)'; c.lineWidth = 1.5; c.beginPath(); c.arc(0, 0, rs * 1.02, 0, TAU); c.stroke();
+  band(rs * 0.22, 0, Math.PI, 0.9, rs * 0.3);                        // sisi dekat (di depan bayangan)
+  c.restore();
+  // awan tipis
+  c.fillStyle = 'rgba(220,232,236,0.06)'; for (let i = 0; i < 6; i++) { const x = ((i * 173 + HERO.t * 0.8) % (w + 300)) - 150; c.beginPath(); c.ellipse(x, hy * (0.25 + 0.1 * (i % 3)), 160, 18, 0, 0, TAU); c.fill(); }
+  // gelombang: tinggi tampak dari jarak d (puncak tersembunyi oleh lengkung (d - 5,3 km)^2 / 2R)
+  const d = heroD();
+  if (d > 0) {
+    const hid = Math.max(0, d - horizon(EYE)) ** 2 / (2 * R_P), vis = WV.H - hid;
+    if (vis > 0) {
+      const top = hy - Math.atan(vis / d) * pxRad;
+      const wg = c.createLinearGradient(0, top, 0, hy); wg.addColorStop(0, '#c9e3e8'); wg.addColorStop(0.08, '#6f97a2'); wg.addColorStop(1, '#2f5560');
+      c.fillStyle = wg; c.beginPath(); c.moveTo(0, hy);
+      for (let x = 0; x <= w; x += 6) { const vv = 0.82 + 0.18 * Math.sin(x * 0.006 + 1.3) + 0.04 * Math.sin(x * 0.031); c.lineTo(x, hy - (hy - top) * vv); }
+      c.lineTo(w, hy); c.closePath(); c.fill();
+      c.strokeStyle = 'rgba(240,250,252,0.7)'; c.lineWidth = 1.2; c.beginPath();
+      for (let x = 0; x <= w; x += 6) { const vv = 0.82 + 0.18 * Math.sin(x * 0.006 + 1.3) + 0.04 * Math.sin(x * 0.031); x ? c.lineTo(x, hy - (hy - top) * vv) : c.moveTo(x, hy - (hy - top) * vv); }
+      c.stroke();
+    }
+  }
+  // laut
+  const sea = c.createLinearGradient(0, hy, 0, h); sea.addColorStop(0, '#6c8f98'); sea.addColorStop(1, '#16343c'); c.fillStyle = sea; c.fillRect(0, hy, w, h - hy);
+  c.strokeStyle = 'rgba(230,245,248,0.22)'; c.lineWidth = 1;
+  for (let k = 1; k < 26; k++) {
+    const zz = k * k * 0.6, y = hy + (EYE / zz) * pxRad * 1.2; if (y > h) break;
+    const off = ((HERO.t * 1.1 + k * 0.7) % 1) * 60;
+    c.beginPath(); for (let x = -60 + off; x < w; x += 60) { c.moveTo(x, y); c.lineTo(x + 22 + k, y); } c.stroke();
+  }
+  // tersapu: putih
+  if (HERO.white > 0) { c.fillStyle = `rgba(245,250,252,${HERO.white})`; c.fillRect(0, 0, w, h); }
+  // garis sudut pandang Gargantua
+  txt(c, w / 2, h * 0.93, `GARGANTUA 9° SHADOW RADIUS · ${HERO.k === 1 ? 'REAL TIME' : HERO.k + 'x'}`, 'rgba(232,236,242,0.7)', 10.5, 'center', 650);
+}, (dt) => {
+  HERO.t += dt * HERO.k;
+  if (heroD() < 0) { HERO.white = 1; HERO.t = 0; }
+  HERO.white = Math.max(0, HERO.white - dt * 0.6);
+  return true;
+});
+document.querySelectorAll('[data-hv]').forEach((b) => b.addEventListener('click', () => { HERO.k = +b.dataset.hv; document.querySelectorAll('[data-hv]').forEach((x) => x.classList.toggle('on', x === b)); }));
+function heroCap() {
+  const d = heroD(), hid = Math.max(0, d - horizon(EYE)) ** 2 / (2 * R_P);
+  const ds = d < 300 ? T('h_hit') : hid >= WV.H ? T('h_far') : T('h_near', { k: fmt(d / 1e3, 1) });
+  $('heroCap').textContent = T('h_cap', { p: clockS(HERO.t), o: human(outS(HERO.t)), d: ds });
+  $('heroTurn').textContent = T('h_turn');
+}
+SIMS.push({ tick: (() => { let acc = 0; return (dt) => { acc += dt; if (acc > 0.25) { acc = 0; heroCap(); } }; })() });
+
+/* =====================================================================
+   01 PLANET: Bumi vs Millar berskala, astronaut di air dengan ombak bergerak
+   ===================================================================== */
+const PL = { t: 0 };
+const pl = panel('cvPl', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, half = w * 0.48;
+  c.clearRect(0, 0, w, h); bgStars(c, half, h, 3, 50);
+  const s = Math.min(half / 5.3, h / 3) / 6371e3, rE = 6371e3 * s, rM = R_P * s;
+  const ball = (x, y, r, c1, c2, label, col) => {
+    const g = c.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.1, x, y, r); g.addColorStop(0, c1); g.addColorStop(1, c2); c.fillStyle = g; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+    c.save(); c.beginPath(); c.arc(x, y, r, 0, TAU); c.clip(); c.strokeStyle = 'rgba(255,255,255,0.12)'; c.lineWidth = 1;
+    for (let k = -3; k <= 3; k++) { const yy = y + (k / 4) * r; c.beginPath(); c.ellipse(x + ((PL.t * 8 + k * 13) % (2 * r)) - r, yy, r * 0.5, r * 0.06, 0, 0, TAU); c.stroke(); }
+    c.restore(); txt(c, x, h * 0.48 + rM + 20, label, col, 11.5, 'center', 600);
+  };
+  ball(half * 0.06 + rE, h * 0.48, rE, '#5b8fd6', '#0d1d33', 'Earth 6,371 km', COL.ink);
+  ball(half * 0.97 - rM, h * 0.48, rM, '#bfe7ee', '#14323a', 'Millar 8,282 km', COL.ac);
+  corner(c, 'SIZE · TO SCALE');
+  // air setinggi lutut
+  const x0 = half + 16, x1 = w - 12, yb = h * 0.84, m = (h * 0.62) / 1.9, ys = yb - DEPTH * m;
+  c.fillStyle = '#3a3326'; c.fillRect(x0, yb, x1 - x0, h - yb);
+  const L = 4.5, k = TAU / L, om = Math.sqrt(G * k * Math.tanh(k * 0.6)), A = 0.35 / 2;
+  const surf = (x) => ys - A * m * Math.sin(k * ((x - x0) / m) - om * PL.t) - 0.4 * A * m * Math.sin(2.3 * k * ((x - x0) / m) + 1.2 * om * PL.t);
+  const sea = c.createLinearGradient(0, ys - 20, 0, yb); sea.addColorStop(0, 'rgba(127,196,210,0.85)'); sea.addColorStop(1, 'rgba(29,75,86,0.95)');
+  const pc = (x0 + x1) / 2;
+  person(c, pc, yb, 1.75 * m, COL.ink);
+  c.fillStyle = sea; c.beginPath(); c.moveTo(x0, yb); for (let x = x0; x <= x1; x += 4) c.lineTo(x, surf(x)); c.lineTo(x1, yb); c.closePath(); c.fill();
+  c.strokeStyle = '#e6f8fb'; c.lineWidth = 1.4; c.beginPath(); for (let x = x0; x <= x1; x += 4) x === x0 ? c.moveTo(x, surf(x)) : c.lineTo(x, surf(x)); c.stroke();
+  c.strokeStyle = COL.ac; c.lineWidth = 1.2; c.beginPath(); c.moveTo(x1 - 26, yb); c.lineTo(x1 - 26, ys); c.stroke();
+  pillC(c, x1 - 32, (yb + ys) / 2, '0.66 m', COL.ac, 10.5, 'right');
+  txt(c, x0 + 6, 22, 'KNEE-DEEP · TO SCALE · CHOP Hs 0.35 m', COL.mu, 10.5, 'left', 650);
+}, (dt) => { PL.t += dt; return true; });
+
+/* =====================================================================
+   02 WAKTU: jam planet dan kalender luar (Bumi mengitari Matahari)
+   ===================================================================== */
+const TPRE = [1, 2 * JUMP_V / G, 300, 400, 1000 / 1.5, horizon(WV.H) / WV.v + horizon(EYE) / WV.v, P_ORB, 3600];
+const tD = (f) => Math.pow(10, f * Math.log10(7200));                 // 1 s sampai 2 jam
+const tF = (s) => Math.log10(s) / Math.log10(7200);
+const TM = { target: 3600 * Math.pow(10, 0.6 * Math.log10(7200)) / 3600 };
+const TS = player('time', { T: 60, btn: 'tPlay', rate: () => TS.T / 5, reset: () => { TS.T = TM.target; $('tVerd').textContent = ''; },
+  update: () => { timeRead(); tm.draw(tm); }, end: () => { $('tVerd').textContent = T('t_done', { p: human(TS.T), o: human(outS(TS.T)) }); } });
+function timeRead() {
+  const t = TS.t;
+  $('tPlanet').textContent = t < 120 ? fmt(t, 1) + ' s' : human(t); $('tOut').textContent = human(outS(t)); $('tEarth').textContent = fmt(outS(t) / YEAR, 2) + (LANG === 'en' ? ' laps' : ' putaran');
+  $('tDo').textContent = TM.target < 120 ? fmt(TM.target, 2) + ' s' : human(TM.target); setP($('tD'));
+  $('tSpeed').textContent = T('t_speed', { k: fmt(TS.T / 5, TS.T / 5 < 10 ? 1 : 0) });
+}
+function timeSet(s, go) { TM.target = s; $('tD').value = tF(s); TS.T = s; TS.t = 0; TS.done = false; TS.play = false; TS.btn(); timeRead(); tm.draw(tm); if (go) TS.go(); }
+$('tD').addEventListener('input', (e) => timeSet(tD(+e.target.value), false));
+const tm = panel('cvTime', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, t = TS.t;
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 9, 90);
+  // jam planet
+  const cx = w * 0.2, cy = h * 0.52, R0 = Math.min(w * 0.15, h * 0.36);
+  c.fillStyle = '#0b1418'; c.strokeStyle = COL.ac; c.lineWidth = 3; glow(c, COL.ac, 14); c.beginPath(); c.arc(cx, cy, R0, 0, TAU); c.fill(); c.stroke(); noGlow(c);
+  for (let i = 0; i < 60; i++) { const a = (i / 60) * TAU, l = i % 5 ? 0.94 : 0.86; c.strokeStyle = i % 5 ? 'rgba(255,255,255,0.3)' : COL.ink; c.lineWidth = i % 5 ? 1 : 2; c.beginPath(); c.moveTo(cx + Math.sin(a) * R0 * l, cy - Math.cos(a) * R0 * l); c.lineTo(cx + Math.sin(a) * R0 * 0.98, cy - Math.cos(a) * R0 * 0.98); c.stroke(); }
+  const hand = (frac, len, lw, col) => { const a = frac * TAU; c.strokeStyle = col; c.lineWidth = lw; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.sin(a) * R0 * len, cy - Math.cos(a) * R0 * len); c.stroke(); };
+  hand((t / 3600) % 1, 0.55, 4, COL.ink); hand((t / 60) % 1, 0.8, 2.5, COL.ink); hand(t % 1, 0.9, 1.4, COL.ac);
+  txt(c, cx, cy + R0 + 24, w < 600 ? 'PLANET CLOCK' : 'YOUR CLOCK ON THE PLANET', COL.ac, 10.5, 'center', 650);
+  // Matahari dan Bumi (satu putaran = 1 tahun luar)
+  const sx = w * 0.62, sy = h * 0.52, Ro = Math.min(w * 0.17, h * 0.36), yrs = outS(t) / YEAR, a = yrs * TAU;
+  const sun = c.createRadialGradient(sx, sy, 2, sx, sy, 26); sun.addColorStop(0, '#fff6d6'); sun.addColorStop(1, 'rgba(255,200,110,0)'); c.fillStyle = sun; c.beginPath(); c.arc(sx, sy, 26, 0, TAU); c.fill();
+  c.strokeStyle = 'rgba(255,255,255,0.15)'; c.lineWidth = 1; c.beginPath(); c.arc(sx, sy, Ro, 0, TAU); c.stroke();
+  const fr = yrs % 1; c.strokeStyle = COL.red; c.lineWidth = 2.5; c.beginPath(); c.arc(sx, sy, Ro, -Math.PI / 2, -Math.PI / 2 + fr * TAU); c.stroke();
+  const ex = sx + Math.cos(a - Math.PI / 2) * Ro, ey = sy + Math.sin(a - Math.PI / 2) * Ro;
+  glow(c, '#5b8fd6', 10); c.fillStyle = '#5b8fd6'; c.beginPath(); c.arc(ex, ey, 6, 0, TAU); c.fill(); noGlow(c);
+  txt(c, sx, sy + Ro + 24, w < 600 ? 'EARTH ORBIT' : 'EARTH AROUND THE SUN', COL.red, 10.5, 'center', 650);
+  // angka besar
+  const bx = w * 0.84;
+  txt(c, bx, h * 0.36, fmtE(Math.floor(yrs), 0), COL.red, Math.min(56, w * 0.06), 'center', 700);
+  txt(c, bx, h * 0.36 + 18, 'years', COL.mu, 11, 'center');
+  txt(c, bx, h * 0.62, fmtE(Math.floor((outS(t) % YEAR) / 86400), 0), COL.ink, Math.min(34, w * 0.04), 'center', 650);
+  txt(c, bx, h * 0.62 + 16, 'days', COL.mu, 11, 'center');
+  txt(c, bx, h * 0.8, fmtE(Math.floor((outS(t) % 86400) / 3600), 0) + ' h', COL.mu, 14, 'center', 600);
+  corner(c, 'TWO CLOCKS · ×61,362');
+}, () => false);
+
+/* =====================================================================
+   03 PUTARAN: dilatasi ISCO Kerr vs 1 - a
+   ===================================================================== */
+const SP = { q: 4 };                                                  // q = -log10(1 - a)
+const spE = () => Math.pow(10, -SP.q);
+const SPS = player('spin', { T: 16, btn: 'sPlay', rate: () => 2, reset: () => {}, update: () => { SP.q = SPS.t; spRead(); }, });
+function spRead() {
+  const e = spE(), k = kerrIsco(e);
+  $('sE').value = SP.q; setP($('sE')); $('sEo').textContent = SP.q < 0.01 ? '1' : '1e-' + fmt(SP.q, 2);
+  $('sA').textContent = SP.q < 0.01 ? '0' : SP.q > 6 ? '1 − ' + sci(e) : fmt(1 - e, Math.min(8, Math.ceil(SP.q) + 1));
+  $('sR').textContent = fmt(k.r, k.r < 1.01 ? 5 : 3) + ' GM/c²'; $('sD').textContent = fmt(k.ut, k.ut < 10 ? 2 : 0) + 'x';
+  $('sY').textContent = human(3600 * k.ut);
+}
+$('sE').addEventListener('input', (e) => { SPS.play = false; SPS.btn(); SP.q = +e.target.value; spRead(); spp.draw(spp); });
+$('sMillar').addEventListener('click', () => { SPS.play = false; SPS.btn(); SP.q = -Math.log10(1.333e-14); spRead(); spp.draw(spp); });
+$('sZero').addEventListener('click', () => { SPS.play = false; SPS.btn(); SP.q = 0; spRead(); spp.draw(spp); });
+const SPT = { t: 0 };
+const spp = panel('cvSpin', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, e = spE(), k = kerrIsco(e);
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 13, 60);
+  // grafik log-log
+  const x0 = 54, y0 = 34, gw = w * 0.55 - 70, gh = h - 80, X = (q) => x0 + (q / 16) * gw, Y = (v) => y0 + gh - (Math.log10(v) / 6) * gh;
+  c.strokeStyle = 'rgba(255,255,255,0.07)'; c.lineWidth = 1;
+  for (const q of [0, 4, 8, 12, 16]) { c.beginPath(); c.moveTo(X(q), y0); c.lineTo(X(q), y0 + gh); c.stroke(); txt(c, X(q), y0 + gh + 14, q ? '1e-' + q : '1', COL.mu, 10, 'center'); }
+  for (let p = 0; p <= 6; p += 2) { c.beginPath(); c.moveTo(x0, Y(10 ** p)); c.lineTo(x0 + gw, Y(10 ** p)); c.stroke(); txt(c, x0 - 6, Y(10 ** p) + 3, p < 4 ? String(10 ** p) : '1e' + p, COL.mu, 10, 'right'); }
+  txt(c, x0 + gw / 2, y0 + gh + 30, '1 − a (gap to maximum spin)', COL.mu, 10, 'center');
+  c.strokeStyle = COL.red; c.setLineDash([6, 4]); c.beginPath(); c.moveTo(x0, Y(DIL)); c.lineTo(x0 + gw, Y(DIL)); c.stroke(); c.setLineDash([]);
+  txt(c, x0 + 6, Y(DIL) - 6, 'Millar 61,362x', COL.red, 10.5, 'left', 650);
+  c.strokeStyle = COL.ac; c.lineWidth = 2.4; glow(c, COL.ac, 8); c.beginPath(); for (let i = 0; i <= 160; i++) { const q = i / 10, p = [X(q), Y(kerrIsco(10 ** -q).ut)]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); noGlow(c);
+  glow(c, '#fff', 14); c.fillStyle = '#fff'; c.beginPath(); c.arc(X(SP.q), Y(k.ut), 5, 0, TAU); c.fill(); noGlow(c);
+  txt(c, x0, 22, 'DILATION ON THE INNERMOST STABLE ORBIT', COL.mu, 10.5, 'left', 650);
+  // pandangan atas: horizon dan ISCO (skala log agar terlihat)
+  const cx = w * 0.79, cy = h * 0.5, S = Math.min(w * 0.19, h * 0.4) / 6, rr = (r) => S * (1 + 5 * Math.log(r) / Math.log(6));
+  c.strokeStyle = 'rgba(255,255,255,0.1)'; c.beginPath(); c.arc(cx, cy, rr(6), 0, TAU); c.stroke();
+  holeC(c, cx, cy, rr(k.rh));
+  c.strokeStyle = COL.ac; c.lineWidth = 2; c.beginPath(); c.arc(cx, cy, rr(k.r), 0, TAU); c.stroke();
+  const pa = SPT.t * 2.2 / Math.sqrt(k.r ** 3 / 1) * 3; c.fillStyle = '#fff'; glow(c, COL.ac, 12); c.beginPath(); c.arc(cx + rr(k.r) * Math.cos(pa), cy - rr(k.r) * Math.sin(pa), 4, 0, TAU); c.fill(); noGlow(c);
+  txt(c, cx, cy + rr(6) + 18, `ISCO ${fmtE(k.r, k.r < 1.01 ? 5 : 2)} · horizon ${fmtE(k.rh, k.rh < 1.01 ? 5 : 2)} GM/c²`, COL.mu, 10, 'center');
+  txt(c, cx, 22, 'TOP VIEW · LOG RADIUS', COL.mu, 10.5, 'center', 650);
+}, (dt) => { SPT.t += dt; return true; });
+
+/* =====================================================================
+   04 GRAVITASI: dua astronaut melompat berulang
+   ===================================================================== */
+const GV = { t: 0, mass: 70 };
+const gv = panel('cvGrav', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, yb = h * 0.82, m = (h * 0.55) / 2.4;
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 17, 40);
+  for (const [gg, x, lab, col] of [[G_E, w * 0.28, 'Earth 1 g', COL.ink], [G, w * 0.72, 'Millar 1.3 g', COL.ac]]) {
+    const T_ = 2 * JUMP_V / gg, cyc = T_ + 0.5, tt = GV.t % cyc, up = tt < T_ ? JUMP_V * tt - 0.5 * gg * tt * tt : 0, hmax = JUMP_V ** 2 / (2 * gg);
+    c.strokeStyle = cssA(col, 0.35); c.setLineDash([4, 4]); c.beginPath(); c.moveTo(x - 50, yb - hmax * m); c.lineTo(x + 50, yb - hmax * m); c.stroke(); c.setLineDash([]);
+    pillC(c, x + 54, yb - hmax * m, `${fmtE(hmax, 2)} m`, col, 10.5);
+    c.fillStyle = cssA(col, 0.25); c.fillRect(x - 60, yb, 120, 3);
+    person(c, x, yb - up * m, 1.75 * m * 0.55, col);
+    txt(c, x, yb + 24, lab, col, 12, 'center', 650);
+    txt(c, x, yb + 40, `${fmtE(T_, 2)} s in the air`, COL.mu, 10.5, 'center');
+  }
+  corner(c, 'SAME LEG PUSH 3.13 m/s · HEIGHTS TO SCALE');
+}, (dt) => { GV.t += dt; return true; });
+function gravRead() {
+  $('gH').textContent = fmt(JUMP_V ** 2 / (2 * G), 3) + ' m'; $('gAir').textContent = fmt(2 * JUMP_V / G, 2) + ' s';
+  $('gKg').textContent = fmt(GV.mass * G / G_E, 0) + ' kg'; $('gOut').textContent = human(outS(2 * JUMP_V / G));
+}
+$('gM').addEventListener('input', (e) => { const v = +e.target.value; if (v >= 20 && v <= 200) { GV.mass = v; gravRead(); } });
+
+/* =====================================================================
+   05 CAKRAWALA: garis pandang di atas lengkung, gelombang dari 200 km
+   ===================================================================== */
+const HZ = { eye: EYE, H: WV.H, flag: '' };
+const hzE = (f) => Math.pow(10, Math.log10(0.5) + f * (Math.log10(50) - Math.log10(0.5)));
+const hzF = (v) => (Math.log10(v) - Math.log10(0.5)) / (Math.log10(50) - Math.log10(0.5));
+const HZ_D0 = 200e3;
+const HZS = player('hz', { T: HZ_D0 / WV.v, btn: 'hPlay', slider: 'hTs', rate: () => 100, reset: () => { HZ.flag = ''; },
+  update: () => { hzRead(); hz.draw(hz); } });
+const hzVis = () => horizon(HZ.eye) + horizon(HZ.H);
+function hzRead() {
+  const d = HZ_D0 - WV.v * HZS.t, vis = hzVis(), warn = vis / WV.v;
+  $('hEo').textContent = fmt(HZ.eye, HZ.eye < 10 ? 1 : 0) + ' m'; setP($('hE')); $('hWo').textContent = fmt(HZ.H, 0) + ' m'; setP($('hW'));
+  $('hHor').textContent = fmt(horizon(HZ.eye) / 1e3, 1) + ' km'; $('hVis').textContent = fmt(vis / 1e3, 0) + ' km';
+  $('hWarn').textContent = fmt(warn / 60, 1) + (LANG === 'en' ? ' min' : ' menit'); $('hOut').textContent = human(outS(warn));
+  $('hDist').textContent = fmt(Math.max(0, d) / 1e3, 1) + ' km'; $('hTso').textContent = clockS(HZS.t);
+  $('hVerd').textContent = d <= 0 ? T('z_hit') : d <= vis ? T('z_seen', { m: fmt(d / WV.v / 60, 1), y: human(outS(d / WV.v)) }) : T('z_hidden');
+}
+$('hE').addEventListener('input', (e) => { HZ.eye = hzE(+e.target.value); hzRead(); hz.draw(hz); });
+$('hW').addEventListener('input', (e) => { HZ.H = +e.target.value; hzRead(); hz.draw(hz); });
+const hz = panel('cvHz', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, d = HZ_D0 - WV.v * HZS.t, vis = hzVis();
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 21, 50);
+  // skala: jarak 0-210 km mendatar; tinggi dan turun lengkung memakai SATU skala tegak (dibesarkan), jadi garis pandang tetap benar
+  const x0 = w < 600 ? 22 : 50, sx = (w - x0 - 40) / 210e3, base = h * 0.3, vy = (h * 0.56) / 2700;   // 1 m tegak = vy piksel
+  const Xp = (x) => x0 + x * sx, Yz = (z) => base - z * vy;                      // z = tinggi di atas bidang singgung di kaki pengamat
+  const surf = (x) => -(x * x) / (2 * R_P);
+  c.fillStyle = '#14323a'; c.beginPath(); c.moveTo(Xp(-5e3), h); for (let x = -5e3; x <= 215e3; x += 1e3) c.lineTo(Xp(x), Yz(surf(x))); c.lineTo(Xp(215e3), h); c.closePath(); c.fill();
+  c.strokeStyle = COL.ac; c.lineWidth = 1.6; c.beginPath(); for (let x = -5e3; x <= 215e3; x += 1e3) x === -5e3 ? c.moveTo(Xp(x), Yz(surf(x))) : c.lineTo(Xp(x), Yz(surf(x))); c.stroke();
+  // garis pandang menyinggung permukaan di cakrawala akar(2 R h)
+  const e = HZ.eye, sl = Math.sqrt((2 * e) / R_P), xh = horizon(e), line = (x) => e - x * sl;
+  c.strokeStyle = cssA(COL.ac2, 0.55); c.setLineDash([6, 4]); c.lineWidth = 1.2; c.beginPath(); c.moveTo(Xp(0), Yz(e)); c.lineTo(Xp(212e3), Yz(line(212e3))); c.stroke(); c.setLineDash([]);
+  c.fillStyle = COL.ac2; c.beginPath(); c.arc(Xp(xh), Yz(surf(xh)), 3, 0, TAU); c.fill();
+  txt(c, Xp(xh) + 4, Yz(surf(xh)) + 16, `horizon ${fmtE(xh / 1e3, 1)} km`, COL.ac2, 10.5);
+  txt(c, Xp(140e3), Yz(line(140e3)) - 8, 'line of sight', cssA(COL.ac2, 0.8), 10.5, 'center');
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(Xp(0), Yz(e), 4, 0, TAU); c.fill();
+  txt(c, Xp(0) - 4, Yz(e) - 10, `eye ${fmtE(e, e < 10 ? 1 : 0)} m`, COL.ink, 10.5, 'left');
+  // gelombang: profil waveG yang sama dengan game (u < 0 = di depan muka gelombang)
+  if (d > -2e3) {
+    const top = (x) => surf(x) + HZ.H * waveG(x - d), shown = d <= vis;
+    c.fillStyle = shown ? '#cfeff4' : 'rgba(207,239,244,0.45)'; c.beginPath(); c.moveTo(Xp(d - 3e3), Yz(surf(d - 3e3)));
+    for (let x = d - 3e3; x <= d + 9e3; x += 150) c.lineTo(Xp(x), Yz(top(x)));
+    for (let x = d + 9e3; x >= d - 3e3; x -= 1e3) c.lineTo(Xp(x), Yz(surf(x)));
+    c.closePath(); c.fill();
+    if (shown && d > 0) { c.strokeStyle = COL.ac2; c.lineWidth = 1.4; c.beginPath(); c.moveTo(Xp(0), Yz(e)); c.lineTo(Xp(d), Yz(top(d))); c.stroke(); }
+    pillC(c, Xp(Math.max(d, 0)), Yz(top(Math.max(d, 0))) - 16, `${fmtE(Math.max(0, d) / 1e3, 0)} km`, shown ? COL.ac2 : COL.mu, 10.5, 'center');
+  }
+  // batas terlihat
+  c.strokeStyle = cssA(COL.or, 0.6); c.setLineDash([3, 5]); c.beginPath(); c.moveTo(Xp(vis), base - 40); c.lineTo(Xp(vis), h - 20); c.stroke(); c.setLineDash([]);
+  txt(c, Xp(vis) - 4, base - 44, `crest visible from ${fmtE(vis / 1e3, 0)} km`, COL.or, 10.5, 'right');
+  for (const km of [0, 50, 100, 150, 200]) txt(c, Xp(km * 1e3), h - 8, km + ' km', COL.mu, 10, 'center');
+  corner(c, w < 600 ? `HEIGHTS ${fmtE(vy / sx, 0)}x` : `HEIGHTS ${fmtE(vy / sx, 0)}x EXAGGERATED · CURVE TRUE`); cornerR(c, w, '100x faster', COL.mu);
+}, () => false);
+
+/* =====================================================================
+   06 GELOMBANG: penampang 1:1 bergerak 125 m/s, air surut, arus balik
+   ===================================================================== */
+const WVX = { run: 0, x0: 6000, swept: false };
+const WVS = player('wave', { T: WVX.x0 / WV.v + 4, btn: 'wPlay', slider: 'wTs', rate: () => 4, reset: () => { WVX.swept = false; $('wVerd').textContent = T('w_start'); },
+  during: () => waveEvents(), seek: () => { WVX.swept = false; waveEvents(); }, update: () => { waveRead(); wvp.draw(wvp); } });
+const wvPlayer = (t) => (WVX.run ? -Math.min(t, WVX.x0 / WV.v) * 4.2 : 0);   // posisi pemain (m, negatif = menjauh)
+const wvFront = (t) => WVX.x0 - WV.v * t;                                     // muka gelombang (m, gelombang bergerak ke -x... ke arah pemain di 0)
+function waveState(t) {
+  const p = wvPlayer(t), u = p - wvFront(t) <= 0 ? -(wvFront(t) - p) : p - wvFront(t);
+  const top = WV.H * waveG(-(wvFront(t) - p)) + drawdown(-(wvFront(t) - p));
+  return { p, dist: wvFront(t) - p, cur: current(-(wvFront(t) - p)), feet: DEPTH + top };
+}
+function waveEvents() {
+  const s = waveState(WVS.t);
+  if (s.feet - DEPTH > EYE && !WVX.swept) { WVX.swept = true; $('wVerd').textContent = WVX.run ? T('w_run') + ' ' + T('w_swept') : T('w_swept'); }
+  else if (!WVX.swept) $('wVerd').textContent = s.cur > 0.3 ? T('w_dd') : WVS.t > 0 ? T('w_dd') : T('w_start');
+}
+function waveRead() {
+  const s = waveState(WVS.t);
+  $('wDist').textContent = s.dist > 0 ? fmt(s.dist / 1e3, 2) + ' km' : '0';
+  $('wCur').textContent = fmt(s.cur, 2) + ' m/s'; $('wDep').textContent = s.feet < 3 ? fmt(s.feet, 2) + ' m' : fmt(s.feet, 0) + ' m';
+  $('wOut').textContent = human(outS(WVS.t + (WVX.swept ? 400 : 0))); $('wTso').textContent = fmt(WVS.t, 1) + ' s';
+  $('wSpeed').textContent = '4x';
+}
+document.querySelectorAll('[data-wr]').forEach((b) => b.addEventListener('click', () => { WVX.run = +b.dataset.wr; document.querySelectorAll('[data-wr]').forEach((x) => x.classList.toggle('on', x === b)); WVS.go(); }));
+const wvp = panel('cvWave', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, t = WVS.t, s = waveState(t);
+  c.clearRect(0, 0, w, h);
+  const sky = c.createLinearGradient(0, 0, 0, h); sky.addColorStop(0, '#22323a'); sky.addColorStop(1, '#0a1215'); c.fillStyle = sky; c.fillRect(0, 0, w, h);
+  const U0 = -2500, U1 = 9000, yb = h * 0.86, sc = (w - 40) / (U1 - U0), X = (x) => 20 + (x - U0) * sc, Y = (z) => yb - z * sc;
+  // laut dan gelombang (x = posisi; pemain di p)
+  const F = wvFront(t), top = (x) => WV.H * waveG(x - F) + drawdown(x - F);
+  c.fillStyle = '#7fb9c4'; c.beginPath(); c.moveTo(X(U0), yb); for (let x = U0; x <= U1; x += (U1 - U0) / 700) c.lineTo(X(x), Y(top(x))); c.lineTo(X(U1), yb); c.closePath(); c.fill();
+  c.strokeStyle = '#eafcff'; c.lineWidth = 1.4; c.beginPath(); for (let x = U0; x <= U1; x += (U1 - U0) / 700) x === U0 ? c.moveTo(X(x), Y(top(x))) : c.lineTo(X(x), Y(top(x))); c.stroke();
+  c.fillStyle = '#2f2a20'; c.fillRect(0, yb, w, h - yb);
+  // menara 828 m untuk skala (di belakang pemain, dilihat dari arah gelombang)
+  c.fillStyle = 'rgba(108,117,133,0.75)'; c.fillRect(X(-1800) - 3, Y(828), 6, 828 * sc); txt(c, X(-1800), Y(828) - 6, '828 m tower', COL.mu, 10, 'center');
+  // pemain (titik + panah arus)
+  const px = X(s.p); c.fillStyle = WVX.swept ? COL.red : '#fff'; glow(c, '#fff', 10); c.beginPath(); c.arc(px, yb - 4, 4, 0, TAU); c.fill(); noGlow(c);
+  pillC(c, px, yb + 16, 'you', WVX.swept ? COL.red : COL.ink, 10, 'center');
+  if (s.cur > 0.05 && !WVX.swept) arrow(c, px + 8, yb - 14, px + 8 + s.cur * 22, yb - 14, COL.or, 2);
+  // pengukur kedalaman kaki (sisipan)
+  const gx = w - 150, gy = w < 600 ? 52 : 30; c.fillStyle = 'rgba(8,12,15,0.8)'; c.fillRect(gx, gy, 130, 70); c.strokeStyle = 'rgba(255,255,255,0.15)'; c.strokeRect(gx, gy, 130, 70);
+  txt(c, gx + 8, gy + 16, 'AT YOUR FEET', COL.mu, 9.5, 'left', 650);
+  const fd = Math.min(s.feet, 3); c.fillStyle = COL.ac; c.fillRect(gx + 8, gy + 60 - fd * 14, 20, fd * 14);
+  txt(c, gx + 36, gy + 40, `${fmtE(s.feet, s.feet < 3 ? 2 : 0)} m water`, COL.ink, 11, 'left', 600);
+  txt(c, gx + 36, gy + 56, `${fmtE(s.cur, 2)} m/s pull`, COL.or, 11, 'left', 600);
+  if (WVX.swept) { const k = Math.min(1, (t - (WVX.x0 / WV.v - 0.5)) / 3); c.fillStyle = `rgba(240,250,252,${Math.max(0, Math.min(0.9, k))})`; c.fillRect(0, 0, w, h); }
+  corner(c, w < 600 ? 'CROSS-SECTION 1:1' : 'CROSS-SECTION 1:1 · SAME waveG AS THE GAME'); if (w < 600) txt(c, 14, 40, '← wave 125 m/s', COL.ac, 10.5, 'left', 650); else cornerR(c, w - 160, '← wave 125 m/s', COL.ac);
+}, () => false);
+
+/* =====================================================================
+   07 GOYANGAN: planet terkunci pasang surut bergoyang, air berayun
+   ===================================================================== */
+const LB = { amp: 1.75, t: 0 };
+const lb = panel('cvLib', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, cx = w * 0.4, cy = h * 0.52, R0 = Math.min(w, h) * 0.3, t = LB.t;
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 25, 60);
+  const gx = w * 0.88; holeC(c, gx, cy, 16); txt(c, gx, cy + 40, 'Gargantua', COL.or, 10.5, 'center');
+  const rock = LB.amp * DEG * 6 * Math.sin(t * TAU / 4);              // goyangan diperbesar 6x agar terlihat, periode diputar 4 s
+  const slosh = (th) => 0.05 * (LB.amp / 1.75) * Math.sin(th * 2 - t * TAU / 4 - 1.2);   // air tertinggal fase
+  c.save(); c.translate(cx, cy);
+  c.fillStyle = cssA(COL.ac, 0.85); c.beginPath();
+  for (let i = 0; i <= 180; i++) { const th = (i / 180) * TAU, r = R0 * (1.06 + 0.07 * Math.cos(2 * (th - rock)) + slosh(th)); const p = [r * Math.cos(th), -r * Math.sin(th)]; i ? c.lineTo(...p) : c.moveTo(...p); }
+  c.closePath(); c.fill();
+  c.rotate(-rock); c.fillStyle = '#14323a'; c.beginPath(); c.ellipse(0, 0, R0 * 1.04, R0 * 0.98, 0, 0, TAU); c.fill();
+  c.strokeStyle = COL.or; c.lineWidth = 2; c.beginPath(); c.moveTo(R0 * 0.2, 0); c.lineTo(R0 * 0.95, 0); c.stroke();   // penanda "menghadap Gargantua"
+  c.restore();
+  arrow(c, cx + R0 * 1.25 * Math.cos(0.5), cy - R0 * 1.25 * Math.sin(0.5), cx + R0 * 1.25 * Math.cos(0.2), cy - R0 * 1.25 * Math.sin(0.2), COL.ac2, 1.6);
+  corner(c, `ROCKING ±${fmtE(LB.amp, 2)}° (DRAWN 6x) · BULGE AND SLOSH`);
+}, (dt) => { LB.t += dt; return true; });
+$('lA').addEventListener('input', (e) => { LB.amp = +e.target.value; $('lAo').textContent = fmt(LB.amp, 2) + '°'; setP($('lA')); });
+
+/* =====================================================================
+   08 ORBIT: naik melewati gelombang, lalu orbit 350 km berskala
+   ===================================================================== */
+const OB = { shift: true, wave0: 4000 };
+const obClimb = () => climbT(1300, OB.shift ? 65 : 40);
+const OBS = player('orb', { T: 40 + P_ORB, btn: 'oPlay', slider: 'oTs', rate: (t) => (t < 40 ? 2 : 450), reset: () => { $('oVerd').textContent = T('o_start'); },
+  during: () => obEvents(), seek: () => obEvents(), update: () => { obRead(); obp.draw(obp); } });
+const obAlt = (t) => Math.min(1300, climbZ(Math.min(t, 40), OB.shift ? 65 : 40));
+const obWaveT = () => OB.wave0 / WV.v;                                   // 32 s sampai gelombang tiba
+function obEvents() {
+  const t = OBS.t, safe = climbZ(obWaveT(), OB.shift ? 65 : 40) > WV.H + 50;
+  $('oVerd').textContent = t < obWaveT() ? T('o_start') : t < 40 ? (safe ? T('o_safe') : T('o_hit')) : safe ? T('o_orbit') : T('o_hit');
+}
+function obRead() {
+  const t = OBS.t, inOrb = t >= 40;
+  $('oAlt').textContent = inOrb ? '350 km' : fmt(obAlt(t), 0) + ' m';
+  $('oV').textContent = inOrb ? fmt(V_ORB / 1e3, 2) + ' km/s' : fmt(Math.min(OB.shift ? 65 : 40, 22 * t), 0) + ' m/s';
+  $('oPl').textContent = t < 120 ? fmt(t, 1) + ' s' : human(t); $('oOut').textContent = human(outS(t)); $('oTso').textContent = clockS(t);
+  $('oSpeed').textContent = t < 40 ? '2x' : '450x';
+}
+$('oShift').addEventListener('click', () => { OB.shift = !OB.shift; $('oShift').classList.toggle('on', OB.shift); OBS.go(); });
+const obp = panel('cvOrb', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, t = OBS.t, narrow = w < 560;
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 31, 80);
+  // kiri: ketinggian vs waktu dan gelombang
+  const x0 = 50, y0 = 30, gw = (narrow ? w : w * 0.52) - 70, gh = (narrow ? h * 0.5 : h) - 70, X = (tt) => x0 + (tt / 40) * gw, Y = (z) => y0 + gh - (z / 1500) * gh;
+  c.strokeStyle = 'rgba(255,255,255,0.07)'; c.lineWidth = 1;
+  for (const tt of [0, 10, 20, 30, 40]) { c.beginPath(); c.moveTo(X(tt), y0); c.lineTo(X(tt), y0 + gh); c.stroke(); txt(c, X(tt), y0 + gh + 14, tt + ' s', COL.mu, 10, 'center'); }
+  for (const z of [0, 500, 1000, 1500]) { c.beginPath(); c.moveTo(x0, Y(z)); c.lineTo(x0 + gw, Y(z)); c.stroke(); txt(c, x0 - 6, Y(z) + 3, String(z), COL.mu, 10, 'right'); }
+  const wt = obWaveT();
+  c.fillStyle = 'rgba(127,185,196,0.25)'; c.fillRect(X(Math.min(t, 40) >= wt ? wt : wt), Y(WV.H), X(40) - X(wt), Y(0) - Y(WV.H));
+  c.strokeStyle = COL.red; c.setLineDash([6, 4]); c.beginPath(); c.moveTo(x0, Y(WV.H)); c.lineTo(x0 + gw, Y(WV.H)); c.stroke(); c.setLineDash([]);
+  txt(c, x0 + 4, Y(WV.H) - 6, 'crest 1,200 m · wave arrives at ' + fmtE(wt, 0) + ' s', COL.red, 10);
+  c.strokeStyle = OB.shift ? COL.ac : COL.ac2; c.lineWidth = 2.4; glow(c, COL.ac, 8); c.beginPath();
+  for (let i = 0; i <= 200; i++) { const tt = (Math.min(t, 40) * i) / 200, p = [X(tt), Y(obAlt(tt))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); noGlow(c);
+  c.fillStyle = '#fff'; c.beginPath(); c.arc(X(Math.min(t, 40)), Y(obAlt(t)), 4.5, 0, TAU); c.fill();
+  txt(c, x0, 18, 'CLIMB · ' + (OB.shift ? '65' : '40') + ' m/s', COL.mu, 10.5, 'left', 650);
+  // kanan: orbit berskala
+  const cx = narrow ? w / 2 : w * 0.78, cy = narrow ? h * 0.75 : h * 0.5, Rp = narrow ? h * 0.17 : Math.min(w * 0.17, h * 0.38), ro = Rp * (8632 / 8282);
+  const g = c.createRadialGradient(cx - Rp * 0.3, cy - Rp * 0.3, Rp * 0.1, cx, cy, Rp); g.addColorStop(0, '#bfe7ee'); g.addColorStop(1, '#14323a'); c.fillStyle = g; c.beginPath(); c.arc(cx, cy, Rp, 0, TAU); c.fill();
+  c.strokeStyle = cssA(COL.ac2, 0.7); c.setLineDash([4, 4]); c.beginPath(); c.arc(cx, cy, ro, 0, TAU); c.stroke(); c.setLineDash([]);
+  const a = t >= 40 ? ((t - 40) / P_ORB) * TAU : 0; const sx = cx + ro * Math.cos(-Math.PI / 2 + a), sy = cy + ro * Math.sin(-Math.PI / 2 + a);
+  c.strokeStyle = COL.ac; c.lineWidth = 2.4; c.beginPath(); c.arc(cx, cy, ro, -Math.PI / 2, -Math.PI / 2 + a); c.stroke();
+  glow(c, '#fff', 12); c.fillStyle = '#fff'; c.beginPath(); c.arc(sx, sy, 4.5, 0, TAU); c.fill(); noGlow(c);
+  txt(c, cx, cy + ro + 18, 'ORBIT 350 km · TO SCALE', COL.mu, 10.5, 'center', 650);
+}, () => false);
+
+/* =====================================================================
+   Paspor (localStorage per penonton; aman bila diblokir)
+   ===================================================================== */
+let STAMP = [];
+try { STAMP = JSON.parse(localStorage.getItem('millar.passport') || '[]'); if (!Array.isArray(STAMP)) STAMP = []; } catch (e) { STAMP = []; }
+const saveStamp = () => { try { localStorage.setItem('millar.passport', JSON.stringify(STAMP)); } catch (e) { /* abaikan */ } };
+function renderPass() {
+  const box = $('pass'); box.textContent = '';
+  PASS.forEach((p, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'stamp' + (STAMP.includes(i) ? ' done' : '');
+    b.innerHTML = `<div class="seal"><svg viewBox="0 0 24 24" fill="none" stroke="#0b0b0b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></div><h4></h4><p></p><div class="k">${p[2][L()]} · <a href="#${p[3]}"></a></div>`;
+    b.querySelector('h4').textContent = p[0][L()]; b.querySelector('p').textContent = p[1][L()];
+    const a = b.querySelector('a'); a.textContent = S.nav[L()][CH_IDS.indexOf(p[3])]; a.addEventListener('click', (e) => e.stopPropagation());
+    b.addEventListener('click', () => { const j = STAMP.indexOf(i); j < 0 ? STAMP.push(i) : STAMP.splice(j, 1); saveStamp(); renderPass(); });
+    box.appendChild(b);
+  });
+  const n = STAMP.length; $('passCount').textContent = n === PASS.length ? T('c9_all') : T('c9_count', { n, m: PASS.length }); $('passBar').style.width = (n / PASS.length) * 100 + '%';
+}
+$('passReset').addEventListener('click', () => { STAMP = []; saveStamp(); renderPass(); });
+
+/* =====================================================================
+   Galeri + lightbox
+   ===================================================================== */
+let LB_ = 0;
+function lbShow(i) { LB_ = (i + GAL.length) % GAL.length; const g = GAL[LB_]; $('lbImg').src = 'detail/' + g[0]; $('lbImg').alt = g[1][1]; $('lbCap').innerHTML = `${LB_ + 1} / ${GAL.length} · ${g[1][L()]} <a href="detail/${g[0]}" target="_blank" rel="noopener">${T('gl_open')}</a>`; $('lb').classList.add('on'); }
+const lbHide = () => $('lb').classList.remove('on');
+$('lbX').addEventListener('click', lbHide); $('lbP').addEventListener('click', () => lbShow(LB_ - 1)); $('lbN').addEventListener('click', () => lbShow(LB_ + 1));
+$('lb').addEventListener('click', (e) => { if (e.target === $('lb')) lbHide(); });
+addEventListener('keydown', (e) => { if (!$('lb').classList.contains('on')) return; if (e.key === 'Escape') lbHide(); if (e.key === 'ArrowRight') lbShow(LB_ + 1); if (e.key === 'ArrowLeft') lbShow(LB_ - 1); });
+
+/* =====================================================================
+   Render teks (ulang saat ganti bahasa)
+   ===================================================================== */
+function chips(box, labels, fn) {
+  const el = $(box); el.textContent = '';
+  labels.forEach((lab, i) => { const b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.textContent = lab; b.addEventListener('click', () => fn(i)); el.appendChild(b); el.append(' '); });
+}
+function render() {
+  document.documentElement.lang = LANG; document.title = LANG === 'en' ? "Millar's World: Physics" : "Millar's World: Fisika";
+  document.querySelectorAll('[data-t]').forEach((el) => { el.innerHTML = T(el.dataset.t); });
+  const q = '?lang=' + LANG;
+  ['backLink', 'backEnd'].forEach((id) => { $(id).href = '../../index.html' + q; });
+  ['playTop', 'playHero', 'playEnd'].forEach((id) => { $(id).href = 'index.html' + q; });
+  const nav = $('nav'); nav.textContent = '';
+  CH_IDS.forEach((id, i) => { const a = document.createElement('a'); a.href = '#' + id; a.innerHTML = `<b>${id === 'galeri' ? '+' : '0' + (i + 1)}</b>`; a.append(S.nav[L()][i]); nav.appendChild(a); });
+  const st = $('stats'); st.textContent = '';
+  for (const [v, u, k, col] of [[fmt(1.3, 1), 'g', 'st_g'], [fmt(1.2, 1), 'km', 'st_h'], [fmt(125, 0), 'm/s', 'st_v', COL.ac2], [fmt(17, 0), LANG === 'en' ? 'h' : 'jam', 'st_s', COL.red], [fmt(61362, 0), 'x', 'st_d']]) {
+    const d = document.createElement('div'); d.className = 'stat'; d.innerHTML = `<b${col ? ` style="color:${col}"` : ''}>${v}<small>${u}</small></b><span>${T(k)}</span>`; st.appendChild(d);
+  }
+  for (const [id, v, dgt, u] of [['pG', 1.3, 1, ' g'], ['pR', 8282, 0, ' km'], ['pD', 0.66, 2, ' m'], ['pE', 14.5, 1, ' km/s'], ['lS1', 2.9, 1, ' m/s'], ['lS2', 123.7, 1, ' m/s'], ['lS3', 125, 0, ' m/s'], ['lS4', 1225, 0, ' m'], ['fW', 0.2, 1, ''], ['fL1', 2.9, 1, ''], ['fL2', 123.7, 1, ''], ['fO1', V_ORB / 1e3, 2, ''], ['fO2', P_ORB / 60, 1, '']]) $(id).textContent = fmt(v, dgt) + u;
+  chips('tPre', S.c2_pre[L()], (i) => timeSet(TPRE[i], true));
+  const gl = $('gal'); gl.textContent = '';
+  GAL.forEach((g, i) => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<img src="detail/${g[0]}" alt="" loading="lazy" width="960" height="540"><span></span>`; b.querySelector('span').textContent = `${i + 1}. ${g[1][L()]}`; b.querySelector('img').alt = g[1][1]; b.addEventListener('click', () => lbShow(i)); gl.appendChild(b); });
+  $('lang').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
+  renderPass(); heroCap(); timeRead(); spRead(); gravRead(); hzRead(); waveRead(); obRead();
+  $('lAo').textContent = fmt(LB.amp, 2) + '°';
+  [TS, SPS, HZS, WVS, OBS].forEach((s) => s.btn());
+  if (!WVS.play && WVS.t === 0) $('wVerd').textContent = T('w_start');
+  if (!OBS.play && OBS.t === 0) $('oVerd').textContent = T('o_start');
+  navSpy();
+}
+for (const [c, n] of [['id', 'ID'], ['en', 'EN']]) {
+  const b = document.createElement('button'); b.type = 'button'; b.dataset.lang = c; b.textContent = n;
+  b.addEventListener('click', () => { LANG = c; try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ } history.replaceState(null, '', '?lang=' + c + location.hash); render(); });
+  $('lang').appendChild(b);
+}
+/* =====================================================================
+   Gulir: muncul, navigasi aktif, progres
+   ===================================================================== */
+const io = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }, { threshold: 0.12 });
+document.querySelectorAll('.rv').forEach((el) => io.observe(el));
+let CUR = '';
+const spy = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) { CUR = e.target.id; navSpy(); } }, { rootMargin: '-45% 0px -50% 0px' });
+CH_IDS.forEach((id) => spy.observe($(id)));
+function navSpy() {
+  $('nav').querySelectorAll('a').forEach((a) => { const on = a.getAttribute('href') === '#' + CUR; a.classList.toggle('on', on); if (on) { const n = $('nav'); n.scrollTo({ left: a.offsetLeft - n.clientWidth / 2 + a.clientWidth / 2, behavior: reduce ? 'auto' : 'smooth' }); } });
+}
+addEventListener('scroll', () => { const m = document.documentElement.scrollHeight - innerHeight; $('prog').style.width = (m > 0 ? (scrollY / m) * 100 : 0) + '%'; }, { passive: true });
+// mulai
+timeSet(3600, false); $('hE').value = hzF(EYE); $('lA').value = LB.amp;
+render();
+document.querySelectorAll('input[type=range]').forEach(setP);
+requestAnimationFrame(loop);
+window.__detail = { waveG, drawdown, current, horizon, kerrIsco, climbT, V_ORB, P_ORB, DIL, HERO, TS, SPS, HZS, WVS, WVX, OBS, OB, waveState, T: () => LANG };   // untuk uji
+window.__detailReady = true;
+</script>
+</body>
+</html>

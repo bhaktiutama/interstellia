@@ -1,0 +1,1179 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Copper Corn Station: Fisika</title>
+<style>
+  /* Halaman detail Copper Corn Station (konsep docs/cooper-station/detail/konsep-halaman-detail.md).
+     Satu file, tanpa library, jalan dari file://. Semua simulasi dihitung langsung dari R 1.000 m dan g 9,81 m/s^2
+     (sama dengan CONFIG di index.html). Label di kanvas English saja; teks halaman ID + EN (kamus S). */
+  :root { --ink: #e8ecf2; --muted: #9aa2ae; --line: rgba(255,255,255,0.10); --glass: rgba(14,18,27,0.72);
+    --cu: #d9bd62; --cu2: #f4dc8a; --te: #8fd3dc; --or: #f3a55a; --red: #ff8a7a; --bar: 58px; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--bar) + 12px); }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  html, body { margin: 0; color: var(--ink); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
+  body { background: radial-gradient(circle 90vmax at 80% 0%, #1b1710 0%, #090b10 42%, #050608 100%) fixed #050608; }
+  a { color: var(--cu2); }
+  b, strong { color: #fff; font-weight: 650; }
+  kbd { display: inline-block; min-width: 1.9em; padding: 1px 7px; border-radius: 6px; text-align: center; font: 600 12.5px/1.6 ui-monospace, Menlo, Consolas, monospace;
+    color: #fff; background: linear-gradient(#2b3240, #1a1f29); border: 1px solid rgba(255,255,255,0.18); border-bottom-width: 3px; }
+  code { font: 13.5px ui-monospace, Menlo, Consolas, monospace; color: var(--cu2); background: rgba(217,189,98,0.08); padding: 1px 6px; border-radius: 5px; }
+
+  /* ===== bilah atas ===== */
+  .bar { position: fixed; inset: 0 0 auto 0; height: var(--bar); z-index: 50; display: flex; align-items: center; gap: 10px; padding: 0 14px;
+    background: rgba(6,8,12,0.78); backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3); border-bottom: 1px solid var(--line); }
+  .bar .back { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); text-decoration: none; font-size: 13px; padding: 6px 10px; border-radius: 99px; border: 1px solid var(--line); white-space: nowrap; }
+  .bar .back:hover { border-color: var(--cu); }
+  .bar .brand { font-weight: 700; letter-spacing: 0.04em; font-size: 14px; white-space: nowrap; }
+  .bar .brand span { color: var(--cu); }
+  .bar nav { flex: 1; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent); padding: 0 8px; }
+  .bar nav::-webkit-scrollbar { display: none; }
+  .bar nav a { flex: none; color: var(--muted); text-decoration: none; font-size: 12.5px; padding: 6px 10px; border-radius: 99px; transition: all .25s; white-space: nowrap; }
+  .bar nav a b { color: inherit; opacity: 0.6; margin-right: 5px; font-weight: 600; }
+  .bar nav a:hover { color: #fff; }
+  .bar nav a.on { color: #0b0b0b; background: var(--cu); }
+  .bar .lang { display: flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .bar .lang button { font: 600 12px system-ui, sans-serif; color: var(--muted); background: none; border: 0; padding: 6px 10px; cursor: pointer; }
+  .bar .lang button.on { color: #0b0b0b; background: var(--cu); }
+  .play { display: inline-flex; align-items: center; gap: 8px; background: var(--cu); color: #0b0b0b; font-weight: 700; text-decoration: none; border-radius: 99px; padding: 8px 16px; font-size: 13.5px; white-space: nowrap;
+    box-shadow: 0 6px 26px rgba(217,189,98,0.25); transition: transform .2s, box-shadow .2s; }
+  .play:hover { transform: translateY(-1px); box-shadow: 0 8px 34px rgba(217,189,98,0.45); }
+  .play svg { width: 13px; height: 13px; }
+  .prog { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: linear-gradient(90deg, var(--or), var(--cu), var(--te)); box-shadow: 0 0 10px var(--cu); }
+  @media (max-width: 760px) { .bar .brand, .bar .back span { display: none; } .bar .play span { display: none; } .bar .play { padding: 8px 11px; } }
+
+  /* ===== umum ===== */
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px; }
+  @media (max-width: 600px) { .wrap { padding: 0 16px; } }
+  .kick { color: var(--cu); font-size: 12px; letter-spacing: 0.28em; text-transform: uppercase; font-weight: 600; }
+  .rv { opacity: 0; transform: translateY(24px); transition: opacity .9s ease, transform .9s cubic-bezier(.2,.7,.2,1); transition-delay: var(--d, 0s); }
+  .rv.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .rv { opacity: 1; transform: none; transition: none; } }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: 600 13px/1.4 system-ui, sans-serif; color: var(--ink); text-decoration: none; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); border-radius: 99px; padding: 7px 14px; cursor: pointer; transition: all .2s; }
+  a.btn, a.play, a.back, .chip, .stamp, .bar nav a { text-decoration: none; }
+  .btn:hover { border-color: var(--cu); color: #fff; }
+  .btn.on { background: var(--cu); border-color: var(--cu); color: #0b0b0b; }
+  .btn.main { background: var(--cu); border-color: var(--cu); color: #0b0b0b; }
+  .btn.main:hover { box-shadow: 0 0 22px rgba(217,189,98,0.4); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+
+  /* ===== hero ===== */
+  .hero { min-height: 100vh; padding: calc(var(--bar) + 40px) 0 50px; display: flex; align-items: center; position: relative; }
+  .hero .wrap { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; width: 100%; }
+  .hero h1 { margin: 10px 0 0; font-size: clamp(40px, 7vw, 86px); line-height: 0.98; letter-spacing: -0.02em; font-weight: 750;
+    background: linear-gradient(100deg, #fff 10%, #f7e3a6 45%, #f3a55a 80%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero .lead { color: #c3cad4; font-size: clamp(16px, 1.6vw, 19px); max-width: 56ch; margin: 18px 0 26px; }
+  .hero .cta { display: flex; gap: 10px; flex-wrap: wrap; }
+  .orb { position: relative; aspect-ratio: 1; width: 100%; max-width: 560px; justify-self: center; }
+  .orb canvas { width: 100%; height: 100%; display: block; }
+  .orb .tog { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); display: flex; gap: 6px; background: var(--glass); padding: 5px; border-radius: 99px; border: 1px solid var(--line); backdrop-filter: blur(8px); }
+  .orb .tog .btn { padding: 5px 12px; font-size: 12px; white-space: nowrap; }
+  .orb .hcap { position: absolute; left: 0; right: 0; bottom: -64px; margin: 0; text-align: center; font-size: 13.5px; color: #c3cad4; min-height: 42px; }
+  .orb .turn { position: absolute; top: 4px; right: 0; font-size: 12px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .orb .turn b { color: var(--cu); font-size: 15px; }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 34px; }
+  .stat { background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015)); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 24px; color: var(--cu); font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .stat b small { font-size: 12px; color: var(--ink); font-weight: 500; margin-left: 3px; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  .orb { margin-bottom: 64px; }
+  @media (max-width: 900px) { .hero .wrap { grid-template-columns: 1fr; } .orb { max-width: 440px; } .stats { grid-template-columns: repeat(2, 1fr); } }
+  .scrollhint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); color: var(--muted); font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; }
+
+  /* ===== bab ===== */
+  section.ch { padding: 90px 0 40px; position: relative; }
+  section.ch::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(217,189,98,0.25), transparent); }
+  .chh { display: grid; grid-template-columns: auto 1fr; gap: 0 24px; align-items: end; margin-bottom: 28px; }
+  .chh .n { font-size: 76px; line-height: 0.85; font-weight: 200; color: var(--cu); opacity: 0.55; font-variant-numeric: tabular-nums; }
+  .chh h2 { margin: 4px 0 0; font-size: clamp(28px, 4vw, 46px); line-height: 1.08; letter-spacing: -0.01em; }
+  .chh .hook { grid-column: 1 / -1; margin: 12px 0 0; font-size: clamp(17px, 1.8vw, 21px); font-weight: 300; color: #fff; max-width: 60ch; }
+  .cols { display: grid; grid-template-columns: 5fr 7fr; gap: 36px; align-items: start; }
+  .cols.flip { grid-template-columns: 7fr 5fr; }
+  .cols.flip > .txt { order: 2; }
+  .cols.even { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 960px) { .cols, .cols.flip, .cols.even { grid-template-columns: 1fr; } .cols.flip > .txt { order: 0; } }
+  #cvLift { aspect-ratio: 16 / 8; background: #0a0d14; }
+  @media (max-width: 600px) { #cvLift { aspect-ratio: 1 / 1; } }
+  .txt p { margin: 0 0 14px; color: #c3cad4; }
+  .txt p b { color: #fff; }
+  .formula { margin: 18px 0; padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(217,189,98,0.25); background: rgba(217,189,98,0.05); }
+  .formula .f { font: 600 16px ui-monospace, Menlo, Consolas, monospace; color: var(--cu2); }
+  .formula .w { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .tryit { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: rgba(143,211,220,0.06); border: 1px solid rgba(143,211,220,0.22); font-size: 14px; color: #cfe9ec; }
+  .tryit::before { content: ''; flex: none; width: 8px; height: 8px; margin-top: 8px; border-radius: 50%; background: var(--te); box-shadow: 0 0 0 4px rgba(143,211,220,0.18), 0 0 12px var(--te); }
+  .fact { display: flex; gap: 10px; margin: 10px 0; font-size: 14.5px; color: #c3cad4; }
+  .fact i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--cu); margin-top: 9px; box-shadow: 0 0 8px var(--cu); }
+
+  /* ===== lab (panel simulasi) ===== */
+  .lab { background: linear-gradient(180deg, rgba(20,26,38,0.9), rgba(10,13,20,0.92)); border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05); }
+  .lab .stage { position: relative; }
+  .lab canvas { display: block; width: 100%; }
+  .lab .split { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: rgba(255,255,255,0.07); }
+  .lab .split canvas { background: #0a0d14; aspect-ratio: 1 / 1; }
+  @media (max-width: 600px) { .lab .split { grid-template-columns: 1fr; } .lab .split canvas { aspect-ratio: 4 / 3; } }
+  .ctrl { padding: 14px 16px 6px; display: grid; gap: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row .lbl { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; margin-right: 4px; }
+  .chip { font: 600 12.5px system-ui, sans-serif; color: var(--ink); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14); border-radius: 99px; padding: 5px 12px; cursor: pointer; transition: all .2s; }
+  .chip:hover { border-color: var(--cu); }
+  .chip.on { background: rgba(217,189,98,0.18); border-color: var(--cu); color: #fff; }
+  .slide { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; font-size: 13.5px; }
+  .slide span { color: var(--muted); white-space: nowrap; }
+  .slide output { font-variant-numeric: tabular-nums; color: #fff; font-weight: 650; min-width: 86px; text-align: right; }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; background: transparent; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--cu) var(--p, 50%), rgba(255,255,255,0.14) var(--p, 50%)); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 4px; background: rgba(255,255,255,0.14); }
+  input[type=range]::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--cu); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%; background: #fff; border: 3px solid var(--cu); box-shadow: 0 0 12px rgba(217,189,98,0.6); }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid var(--cu); box-shadow: 0 0 12px rgba(217,189,98,0.6); }
+  input[type=number] { width: 70px; font: inherit; color: #fff; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 3px 8px; }
+  .ro { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1px; background: rgba(255,255,255,0.07); border-top: 1px solid rgba(255,255,255,0.07); }
+  .ro div { background: #0c1018; padding: 11px 14px; }
+  .ro b { display: block; font-size: 21px; font-variant-numeric: tabular-nums; line-height: 1.25; color: var(--cu); }
+  .ro b.t { color: var(--te); } .ro b.o { color: var(--or); } .ro b.w { color: #fff; } .ro b.r { color: var(--red); }
+  .ro span { font-size: 12px; color: var(--muted); }
+  .verdict { margin: 0 16px 14px; padding: 10px 14px; border-radius: 10px; font-size: 14px; background: rgba(255,255,255,0.04); border-left: 3px solid var(--cu); color: #d6dbe2; min-height: 22px; }
+  .verdict:empty { display: none; }
+
+  /* ===== paspor ===== */
+  .pass { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .stamp { position: relative; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 16px 16px 14px; border-radius: 16px; border: 1px dashed rgba(255,255,255,0.18);
+    background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.01)); transition: all .3s; }
+  .stamp:hover { border-color: var(--cu); transform: translateY(-2px); }
+  .stamp h4 { margin: 0 46px 6px 0; font-size: 16px; }
+  .stamp p { margin: 0 0 10px; font-size: 13.5px; color: #b9c1cb; }
+  .stamp .k { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--muted); }
+  .stamp .k a { color: var(--cu2); text-decoration: none; border-bottom: 1px dashed rgba(244,220,138,0.4); }
+  .stamp .seal { position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; border-radius: 50%; border: 2px dashed rgba(255,255,255,0.22); display: grid; place-items: center; transition: all .35s cubic-bezier(.3,1.6,.5,1); }
+  .stamp .seal svg { width: 20px; height: 20px; opacity: 0; transition: opacity .2s; }
+  .stamp.done { border-style: solid; border-color: rgba(217,189,98,0.55); background: linear-gradient(180deg, rgba(217,189,98,0.12), rgba(217,189,98,0.02)); }
+  .stamp.done .seal { border: 2px solid var(--cu); background: var(--cu); transform: rotate(-12deg) scale(1.08); box-shadow: 0 0 18px rgba(217,189,98,0.5); }
+  .stamp.done .seal svg { opacity: 1; }
+  .passhead { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .passhead .meter { flex: 1; min-width: 200px; max-width: 360px; }
+  .passhead .meter div { height: 6px; border-radius: 6px; background: rgba(255,255,255,0.1); overflow: hidden; margin-top: 6px; }
+  .passhead .meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--or), var(--cu)); transition: width .5s; }
+  .passhead .meter span { font-size: 13px; color: var(--muted); }
+
+  /* ===== di balik layar ===== */
+  details.trick { border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.025); margin-bottom: 10px; overflow: hidden; }
+  details.trick summary { cursor: pointer; list-style: none; padding: 14px 16px; display: flex; gap: 12px; align-items: center; font-weight: 650; }
+  details.trick summary::-webkit-details-marker { display: none; }
+  details.trick summary::after { content: '+'; margin-left: auto; color: var(--cu); font-size: 20px; font-weight: 300; transition: transform .25s; }
+  details.trick[open] summary::after { transform: rotate(45deg); }
+  details.trick summary em { font-style: normal; font-size: 12px; color: var(--muted); font-weight: 500; }
+  details.trick .body { padding: 0 16px 14px; color: #c3cad4; font-size: 14.5px; }
+  details.trick .body p { margin: 0 0 8px; }
+  .fig { margin: 22px 0 0; }
+  .fig img { width: 100%; height: auto; display: block; border-radius: 14px; border: 1px solid var(--line); }
+  .fig figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  /* ===== galeri ===== */
+  .gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .gal button { padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: none; cursor: zoom-in; transition: transform .25s, border-color .25s; text-align: left; color: inherit; font: inherit; }
+  .gal button:hover { transform: translateY(-3px); border-color: var(--cu); }
+  .gal img { width: 100%; height: auto; display: block; aspect-ratio: 16 / 9; object-fit: cover; }
+  .gal span { display: block; padding: 8px 12px; font-size: 13px; color: #c3cad4; background: rgba(255,255,255,0.03); }
+  .lb { position: fixed; inset: 0; z-index: 80; background: rgba(3,4,7,0.92); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; padding: 70px 16px 40px; }
+  .lb.on { display: flex; }
+  .lb img { max-width: min(1200px, 100%); max-height: 100%; border-radius: 14px; box-shadow: 0 30px 90px rgba(0,0,0,0.6); }
+  .lb .x, .lb .pv, .lb .nx { position: absolute; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #fff; border-radius: 99px; width: 44px; height: 44px; font-size: 20px; cursor: pointer; }
+  .lb .x { top: 16px; right: 16px; } .lb .pv { left: 12px; top: 50%; } .lb .nx { right: 12px; top: 50%; }
+  .lb .cap { position: absolute; top: 22px; left: 20px; right: 80px; color: var(--muted); font-size: 14px; }
+  .lb .cap a { margin-left: 10px; }
+
+  footer { padding: 70px 0 60px; color: var(--muted); font-size: 13px; text-align: center; }
+  footer .end { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 22px; }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <a class="back" id="backLink" href="../../index.html"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3L5 8l5 5"/></svg><span data-t="menu"></span></a>
+  <div class="brand">Copper Corn <span>Station</span></div>
+  <nav id="nav"></nav>
+  <div class="lang" id="lang"></div>
+  <a class="play" id="playTop" href="index.html"><svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg><span data-t="play"></span></a>
+  <div class="prog" id="prog"></div>
+</header>
+
+<!-- ================= HERO ================= -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div>
+      <div class="kick rv" data-t="h_kick"></div>
+      <h1 class="rv" style="--d:.08s" data-t="h_title"></h1>
+      <p class="lead rv" style="--d:.16s" data-t="h_lead"></p>
+      <div class="cta rv" style="--d:.24s"><a class="btn main" href="#stasiun" data-t="h_go"></a><a class="btn" id="playHero" href="index.html" data-t="play"></a></div>
+      <div class="stats rv" style="--d:.32s" id="stats"></div>
+    </div>
+    <div class="orb rv" style="--d:.2s">
+      <canvas id="cvHero" role="img" aria-label="Copper Corn Station cross-section"></canvas>
+      <div class="turn" id="heroTurn"></div>
+      <div class="tog"><button class="btn on" data-hv="out" type="button" data-t="h_out"></button><button class="btn" data-hv="in" type="button" data-t="h_in"></button></div>
+      <p class="hcap" id="heroCap"></p>
+    </div>
+  </div>
+  <div class="scrollhint" data-t="scroll"></div>
+</section>
+
+<!-- ================= 01 STASIUN ================= -->
+<section class="ch" id="stasiun">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">01</div><div><div class="kick" data-t="c1_k"></div><h2 data-t="c1_t"></h2></div><p class="hook" data-t="c1_h"></p></div>
+    <div class="cols">
+      <div class="txt rv"><p data-t="c1_p1"></p><p data-t="c1_p2"></p>
+        <div class="fact"><i></i><span data-t="c1_f1"></span></div><div class="fact"><i></i><span data-t="c1_f2"></span></div><div class="fact"><i></i><span data-t="c1_f3"></span></div>
+      </div>
+      <figure class="fig rv" style="--d:.1s;margin:0"><img src="detail/cc-01-station.svg" width="960" height="540" alt="Copper Corn Station cross-section and side view" loading="lazy"><figcaption data-t="c1_cap"></figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02 GRAVITASI ================= -->
+<section class="ch" id="gravitasi">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">02</div><div><div class="kick" data-t="c2_k"></div><h2 data-t="c2_t"></h2></div><p class="hook" data-t="c2_h"></p></div>
+    <div class="cols">
+      <div class="txt rv"><p data-t="c2_p1"></p><p data-t="c2_p2"></p>
+        <div class="formula"><div class="f">g(h) = ω² (R − h)</div><div class="w" data-t="c2_fw"></div></div>
+        <div class="tryit"><span data-t="c2_try"></span></div></div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvGrav" style="aspect-ratio: 16 / 10; background:#0a0d14" role="img" aria-label="Gravity versus height"></canvas>
+        <div class="ctrl">
+          <div class="slide"><span data-t="c2_sh"></span><input type="range" id="gH" min="0" max="1000" step="1" value="175"><output id="gHo"></output></div>
+          <div class="row"><span class="lbl" data-t="go_to"></span><button class="chip" data-gh="0" data-t="c2_p_floor"></button><button class="chip" data-gh="175" data-t="c2_p_deck"></button><button class="chip" data-gh="221" data-t="c2_p_top"></button><button class="chip" data-gh="500" data-t="c2_p_half"></button><button class="chip" data-gh="994" data-t="c2_p_hub"></button>
+            <span style="margin-left:auto;font-size:13px;color:var(--muted)"><span data-t="mass"></span> <input type="number" class="massIn" min="20" max="200" value="70"> kg</span></div>
+        </div>
+        <div class="ro"><div><b id="gG"></b><span data-t="ro_g"></span></div><div><b class="w" id="gKg"></b><span data-t="ro_scale"></span></div><div><b class="t" id="gJump"></b><span data-t="ro_jump"></span></div><div><b class="o" id="gCup"></b><span data-t="ro_cup"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 CORIOLIS ================= -->
+<section class="ch" id="coriolis">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">03</div><div><div class="kick" data-t="c3_k"></div><h2 data-t="c3_t"></h2></div><p class="hook" data-t="c3_h"></p></div>
+    <div class="lab rv">
+      <div class="stage">
+        <div class="split"><canvas id="cvIn" role="img" aria-label="Inertial view"></canvas><canvas id="cvRot" role="img" aria-label="Rotating view"></canvas></div>
+      </div>
+      <div class="ctrl">
+        <div class="row"><span class="lbl" data-t="preset"></span><span id="cPre"></span></div>
+        <div class="slide"><span data-t="c3_sh"></span><input type="range" id="cH" min="0" max="995" step="0.5" value="176.5"><output id="cHo"></output></div>
+        <div class="slide"><span data-t="c3_su"></span><input type="range" id="cU" min="0" max="60" step="0.5" value="0"><output id="cUo"></output></div>
+        <div class="slide"><span data-t="c3_st"></span><input type="range" id="cTs" min="0" max="1" step="0.001" value="0"><output id="cTso"></output></div>
+        <div class="row"><button class="btn main" id="cPlay" type="button"></button><button class="btn" id="cReplay" type="button" data-t="c3_replay"></button>
+          <span style="margin-left:auto;font-size:12.5px;color:var(--muted)" data-t="c3_ghost"></span></div>
+      </div>
+      <div class="verdict" id="cVerd"></div>
+      <div class="ro"><div><b class="w" id="cT"></b><span data-t="ro_ft"></span></div><div><b id="cLand"></b><span id="cLandL"></span></div><div><b class="t" id="cV0"></b><span data-t="ro_v0"></span></div><div><b class="o" id="cFloor"></b><span data-t="ro_floor"></span></div></div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c3_p1"></p><p data-t="c3_p2"></p></div>
+      <div class="txt rv" style="--d:.1s"><div class="formula" style="margin-top:0"><div class="f">v = ω r,&nbsp;&nbsp; a<sub>cor</sub> = −2 ω × v</div><div class="w" data-t="c3_fw"></div></div><div class="tryit"><span data-t="c3_try"></span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04 AIR MANCUR DAN HUJAN ================= -->
+<section class="ch" id="airmancur">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">04</div><div><div class="kick" data-t="c4_k"></div><h2 data-t="c4_t"></h2></div><p class="hook" data-t="c4_h"></p></div>
+    <div class="cols even">
+      <div class="lab rv">
+        <canvas id="cvFount" style="aspect-ratio: 1 / 1; background:#0a0d14" role="img" aria-label="Fountain jet"></canvas>
+        <div class="ctrl"><div class="slide"><span data-t="c4_sj"></span><input type="range" id="fV" min="2" max="25" step="0.5" value="10"><output id="fVo"></output></div></div>
+        <div class="ro"><div><b class="w" id="fPeak"></b><span data-t="ro_peak"></span></div><div><b class="t" id="fLand"></b><span data-t="ro_ahead"></span></div><div><b class="o" id="fEst"></b><span data-t="ro_est"></span></div></div>
+      </div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvRain" style="aspect-ratio: 1 / 1; background:#0a0d14" role="img" aria-label="Rain tilt"></canvas>
+        <div class="ctrl"><div class="slide"><span data-t="c4_sr"></span><input type="range" id="rV" min="2" max="9" step="0.1" value="7"><output id="rVo"></output></div></div>
+        <div class="ro"><div><b class="t" id="rTilt"></b><span data-t="ro_tilt"></span></div><div><b class="o" id="rDrift"></b><span data-t="ro_drift"></span></div><div><b class="w" id="rKind"></b><span data-t="ro_rain"></span></div></div>
+      </div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c4_p1"></p><p data-t="c4_p2"></p></div>
+      <div class="txt rv" style="--d:.1s"><div class="formula" style="margin-top:0"><div class="f">Δs ≈ (4/3) ω v³ / g²&nbsp;&nbsp; · &nbsp;&nbsp;tan θ = 2 ω v<sub>t</sub> / g</div><div class="w" data-t="c4_fw"></div></div><div class="tryit"><span data-t="c4_try"></span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 05 BERAT ================= -->
+<section class="ch" id="berat">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">05</div><div><div class="kick" data-t="c5_k"></div><h2 data-t="c5_t"></h2></div><p class="hook" data-t="c5_h"></p></div>
+    <div class="cols flip">
+      <div class="txt rv"><p data-t="c5_p1"></p><p data-t="c5_p2"></p>
+        <div class="formula"><div class="f">g′ = (ωR + v)² / R</div><div class="w" data-t="c5_fw"></div></div><div class="tryit"><span data-t="c5_try"></span></div></div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvRing" style="aspect-ratio: 16 / 10; background:#0a0d14" role="img" aria-label="Ring road seen from the axis"></canvas>
+        <div class="ctrl">
+          <div class="slide"><span data-t="c5_sv"></span><input type="range" id="wV" min="-400" max="400" step="1" value="150"><output id="wVo"></output></div>
+          <div class="row"><span class="lbl" data-t="preset"></span><button class="chip" data-wv="150" data-t="c5_p1b"></button><button class="chip" data-wv="-150" data-t="c5_p2b"></button><button class="chip" data-wv="5" data-t="c5_p3b"></button><button class="chip" data-wv="-357" data-t="c5_p4b"></button>
+            <span style="margin-left:auto;font-size:13px;color:var(--muted)"><span data-t="mass"></span> <input type="number" class="massIn" min="20" max="200" value="70"> kg</span></div>
+        </div>
+        <div class="verdict" id="wVerd"></div>
+        <div class="ro"><div><b id="wG"></b><span data-t="ro_g"></span></div><div><b class="w" id="wKg"></b><span data-t="ro_scale"></span></div><div><b class="t" id="wJump"></b><span data-t="ro_jump"></span></div><div><b class="o" id="wAbs"></b><span data-t="ro_abs"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 06 LIFT ================= -->
+<section class="ch" id="lift">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">06</div><div><div class="kick" data-t="c6_k"></div><h2 data-t="c6_t"></h2></div><p class="hook" data-t="c6_h"></p></div>
+    <div class="lab rv">
+      <canvas id="cvLift" role="img" aria-label="Lift ride with a plumb bob"></canvas>
+      <div class="ctrl"><div class="row"><button class="btn main" id="lUp" type="button" data-t="c6_up"></button><button class="btn" id="lDown" type="button" data-t="c6_down"></button><button class="btn" id="lShift" type="button" data-t="c6_shift"></button>
+        <span style="margin-left:auto;font-size:12.5px;color:var(--muted)" id="lClock"></span></div></div>
+      <div class="verdict" id="lVerd"></div>
+      <div class="ro"><div><b class="w" id="lH"></b><span data-t="ro_h"></span></div><div><b class="t" id="lV"></b><span data-t="ro_v"></span></div><div><b id="lG"></b><span data-t="ro_gdown"></span></div><div><b class="o" id="lCor"></b><span data-t="ro_side"></span></div><div><b class="r" id="lTilt"></b><span data-t="ro_bob"></span></div></div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c6_p1"></p><p data-t="c6_p2"></p></div>
+      <div class="txt rv" style="--d:.1s"><div class="formula" style="margin-top:0"><div class="f">down = ω² r + a,&nbsp;&nbsp; side = 2 ω v</div><div class="w" data-t="c6_fw"></div></div><div class="tryit"><span data-t="c6_try"></span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 07 GERHANA ================= -->
+<section class="ch" id="gerhana">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">07</div><div><div class="kick" data-t="c7_k"></div><h2 data-t="c7_t"></h2></div><p class="hook" data-t="c7_h"></p></div>
+    <div class="cols flip">
+      <div class="txt rv"><p data-t="c7_p1"></p><p data-t="c7_p2"></p><div class="tryit"><span data-t="c7_try"></span></div></div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvOrb" style="aspect-ratio: 16 / 10; background:#05070b" role="img" aria-label="Orbit around Saturn"></canvas>
+        <div class="ctrl">
+          <div class="slide"><span data-t="c7_st"></span><input type="range" id="oT" min="0" max="37.57" step="0.01" value="4"><output id="oTo"></output></div>
+          <div class="row"><button class="btn main" id="oPlay" type="button" data-t="c7_play"></button><button class="btn" id="oJump" type="button" data-t="c7_jump"></button></div>
+        </div>
+        <div class="ro"><div><b id="oState"></b><span data-t="ro_state"></span></div><div><b class="w" id="oSun"></b><span data-t="ro_sunline"></span></div><div><b class="o" id="oNext"></b><span id="oNextL"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 08 COBA ================= -->
+<section class="ch" id="coba">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">08</div><div><div class="kick" data-t="c8_k"></div><h2 data-t="c8_t"></h2></div><p class="hook" data-t="c8_h"></p></div>
+    <div class="passhead rv"><div class="meter"><span id="passCount"></span><div><i id="passBar"></i></div></div><button class="btn" id="passReset" type="button" data-t="c8_reset"></button></div>
+    <div class="pass" id="pass"></div>
+  </div>
+</section>
+
+<!-- ================= GALERI ================= -->
+<section class="ch" id="galeri">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">+</div><div><div class="kick" data-t="gl_k"></div><h2 data-t="gl_t"></h2></div><p class="hook" data-t="gl_h"></p></div>
+    <div class="gal rv" id="gal"></div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <div class="end"><a class="play" id="playEnd" href="index.html"><svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg><span data-t="play_long"></span></a><a class="btn" id="backEnd" href="../../index.html" data-t="menu"></a></div>
+  <div data-t="footer"></div>
+</div></footer>
+
+<div class="lb" id="lb" role="dialog" aria-modal="true"><div class="cap" id="lbCap"></div><button class="x" id="lbX" type="button" aria-label="close">×</button><button class="pv" id="lbP" type="button" aria-label="previous">‹</button><img id="lbImg" alt=""><button class="nx" id="lbN" type="button" aria-label="next">›</button></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   Konstanta fisika (sama dengan CONFIG Copper Corn Station)
+   ===================================================================== */
+const R = 1000, G = 9.81, W = Math.sqrt(G / R), TAU = Math.PI * 2;
+const CIRC = TAU * R, P_ORB = 37.57, SAT_R = 60.268, ORB_R = 260;   // jam, ribu km
+const COL = { cu: '#d9bd62', cu2: '#f4dc8a', te: '#8fd3dc', or: '#f3a55a', ink: '#e8ecf2', mu: '#9aa2ae', red: '#ff8a7a', bg: '#0a0d14' };
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;   // hanya untuk efek muncul saat digulir dan gulir halus; kanvas simulasi tetap beranimasi (permintaan pemilik)
+
+/* =====================================================================
+   Teks: [Indonesia, English]. Label di kanvas English saja.
+   ===================================================================== */
+const S = {
+  menu: ['Menu utama', 'Main menu'], play: ['Mulai', 'Play'], play_long: ['Masuk ke Copper Corn Station', 'Enter Copper Corn Station'], scroll: ['Gulir', 'Scroll'],
+  go_to: ['Ke', 'Go to'], preset: ['Coba', 'Try'], mass: ['Massamu', 'Your mass'],
+  h_kick: ['Copper Corn Station · panduan fisika', 'Copper Corn Station · physics guide'],
+  h_title: ['Kota yang berputar', 'The city that spins'],
+  h_lead: ['Silinder 8 km di orbit Saturnus. Di sini tidak ada gravitasi, hanya putaran. Halaman ini membedah apa yang kamu rasakan di dalamnya, kenapa benda melenceng, dan eksperimen yang bisa kamu coba. Semua simulasi dihitung langsung dari R = 1.000 m.',
+    'An 8 km cylinder orbiting Saturn. There is no gravity here, only spin. This page takes apart what you feel inside, why things drift, and the experiments you can try. Every simulation is computed live from R = 1,000 m.'],
+  h_go: ['Mulai menjelajah', 'Start exploring'], h_out: ['Dilihat dari luar', 'Seen from outside'], h_in: ['Dilihat dari dalam', 'Seen from inside'],
+  h_cap_out: ['Stasiun berputar, bintang diam. Kamu (emas) ikut terbawa berputar bersama lantai.', 'The station turns, the stars stand still. You (gold) are carried around with the floor.'],
+  h_cap_in: ['Kamu ikut berputar, jadi stasiun tampak diam dan kamu selalu di bawah. Yang berputar justru bintang di luar.', 'You turn with the station, so it looks still and you are always at the bottom. Now it is the stars outside that turn.'],
+  h_turn: ['satu putaran', 'one turn'], h_real: ['kecepatan asli', 'real speed'],
+  st_r: ['radius', 'radius'], st_l: ['panjang', 'length'], st_t: ['satu putaran', 'one turn'], st_v: ['kecepatan lantai', 'floor speed'], st_o: ['orbit Saturnus', 'Saturn orbit'],
+  nav: [['Stasiun', 'Gravitasi', 'Coriolis', 'Air dan hujan', 'Berat', 'Lift', 'Gerhana', 'Paspor', 'Galeri'], ['Station', 'Gravity', 'Coriolis', 'Water and rain', 'Weight', 'Lift', 'Eclipse', 'Passport', 'Gallery']],
+
+  c1_k: ['Bentuk dan ukuran', 'Shape and size'], c1_t: ['Stasiun sekilas', 'The station at a glance'],
+  c1_h: ['Kota, ladang, dan sungai melapisi dinding dalam sebuah tabung. Kepala semua orang menghadap sumbu.', 'City, fields and river line the inside of a tube. Everyone\'s head points at the axis.'],
+  c1_p1: ['Copper Corn Station adalah <b>silinder O\'Neill</b>: tabung berjari-jari 1.000 m dan panjang 8.000 m yang berputar sekali tiap <b>63,4 detik</b>. Lantainya bergerak 99,05 m/s (356,6 km/h), tetapi karena semuanya ikut berputar, kamu tidak merasakannya.',
+    'Copper Corn Station is an <b>O\'Neill cylinder</b>: a tube with a 1,000 m radius and 8,000 m length that turns once every <b>63.4 seconds</b>. The floor moves at 99.05 m/s (356.6 km/h), but since everything turns with it, you never notice.'],
+  c1_p2: ['Di sumbu ada <b>sunline</b>, garis cahaya yang menerangi seluruh silinder. Sinar Matahari asli masuk lewat end cap B yang berkaca dengan sudut 25 derajat dan mencapai sekitar 4,3 km ke dalam.',
+    'Along the axis runs the <b>sunline</b>, a line of light for the whole cylinder. Real sunlight enters through the glass of end cap B at 25 degrees and reaches about 4.3 km inside.'],
+  c1_f1: ['Keliling 6,28 km: jalan kaki memutar sekitar 75 menit.', 'Circumference 6.28 km: a walk around takes about 75 minutes.'],
+  c1_f2: ['Kota di seberang menggantung 2 km di atas kepalamu, terbalik.', 'The city across hangs 2 km above your head, upside down.'],
+  c1_f3: ['Mengorbit Saturnus di 260.000 km, sekali tiap 37,57 jam.', 'Orbits Saturn at 260,000 km, once every 37.57 hours.'],
+  c1_cap: ['Penampang dan tampak samping berskala. Panjang 8 km, diameter 2 km.', 'Cross-section and side view to scale. 8 km long, 2 km across.'],
+
+  c2_k: ['Gravitasi buatan', 'Artificial gravity'], c2_t: ['Bukan tarikan, tapi dorongan', 'Not a pull, a push'],
+  c2_h: ['Lantai yang berputar terus mendorongmu ke arah sumbu. Dorongan itu terasa seperti berat, dan melemah saat kamu naik.', 'The spinning floor keeps pushing you toward the axis. That push feels like weight, and it fades as you climb.'],
+  c2_p1: ['Tanpa lantai, kamu akan bergerak lurus. Lantai yang melengkung terus membelokkanmu ke dalam, dan dorongan itulah yang dibaca timbangan sebagai berat. Arah "bawah" selalu <b>menjauhi sumbu</b>.',
+    'Without the floor you would fly straight. The curved floor keeps turning you inward, and that push is what a scale reads as weight. "Down" always points <b>away from the axis</b>.'],
+  c2_p2: ['Makin tinggi, makin kecil lingkaranmu, makin lemah dorongannya. Di dek menara 175 m tinggal 0,825 g, dan di sumbu 0 g: kamu melayang.',
+    'The higher you go, the smaller your circle and the weaker the push. On the 175 m tower deck it is only 0.825 g, and at the axis it is 0 g: you float.'],
+  c2_fw: ['ω = 0,09905 rad/s, R = 1.000 m. Lurus dari 1 g di lantai ke 0 g di sumbu.', 'ω = 0.09905 rad/s, R = 1,000 m. A straight line from 1 g on the floor to 0 g at the axis.'],
+  c2_try: ['Di game: tombol <kbd>L</kbd> naik lift ke hub di sumbu, atau dek pandang menara lewat panel Lokasi.', 'In the game: press <kbd>L</kbd> to ride the lift to the axis hub, or open the tower deck from the Places panel.'],
+  c2_sh: ['Ketinggian', 'Height'], c2_p_floor: ['Lantai', 'Floor'], c2_p_deck: ['Dek 175 m', 'Deck 175 m'], c2_p_top: ['Puncak menara', 'Tower top'], c2_p_half: ['Setengah jalan', 'Halfway'], c2_p_hub: ['Hub', 'Hub'],
+  ro_g: ['gravitasi terasa', 'felt gravity'], ro_scale: ['angka di timbangan', 'scale reading'], ro_jump: ['lompatan 0,5 m di Bumi', 'a 0.5 m Earth jump'], ro_cup: ['cangkir jatuh 1 m', 'a cup falls 1 m'],
+
+  c3_k: ['Efek Coriolis', 'The Coriolis effect'], c3_t: ['Bola yang meleset dari menara', 'The ball that misses the tower'],
+  c3_h: ['Jatuhkan bola dari dek pandang. Ia tidak mendarat di kaki menara. Kenapa? Tekan Jalankan dan lihat dari dua sudut pandang sekaligus.', 'Drop a ball from the observation deck. It does not land at the foot of the tower. Why? Press Run and watch from two points of view at once.'],
+  c3_sh: ['Tinggi lepas', 'Release height'], c3_su: ['Lempar ke atas', 'Throw upward'], c3_play: ['Jalankan', 'Run'], c3_pause: ['Jeda', 'Pause'], c3_resume: ['Lanjut', 'Resume'], c3_replay: ['Ulang', 'Replay'], c3_st: ['Waktu', 'Time'],
+  c3_ghost: ['Titik jejak = posisi pada waktu yang sama di kedua panel', 'Ghost dots = same moments in both panels'],
+  c3_pre: [['Dek menara', 'Gedung 100 m', 'Lompat', 'Air mancur', 'Lempar keras', 'Dari puncak lift'], ['Tower deck', '100 m building', 'Jump', 'Fountain', 'Hard throw', 'From the lift top']],
+  ro_ft: ['waktu terbang', 'flight time'], ro_v0: ['kecepatan keliling bola', 'ball\'s circling speed'], ro_floor: ['lantai bergerak sejauh', 'floor moved'],
+  ro_behind: ['mendarat di belakang', 'lands behind'], ro_ahead2: ['mendarat di depan', 'lands ahead'],
+  c3_turns: ['Stasiun berputar {n} kali selama bola jatuh. Dari luar bola tetap lurus; dari dalam lintasannya menjadi spiral.', 'The station turns {n} times while it falls. From outside the ball still goes straight; from inside its path becomes a spiral.'],
+  c3_p1: ['<b>Panel kiri</b> melihat dari luar stasiun. Bola yang dilepas hanya membawa kecepatan keliling di ketinggian itu (81,6 m/s di dek), lalu terbang lurus. Lantai di bawahnya bergerak 99,05 m/s, jadi lantai menyalip bola.',
+    'The <b>left panel</b> looks from outside the station. A released ball keeps only the circling speed of its height (81.6 m/s on the deck) and flies straight. The floor below moves at 99.05 m/s, so it overtakes the ball.'],
+  c3_p2: ['<b>Panel kanan</b> adalah fisika yang sama dilihat dari lantai yang berputar. Dari sini bola seperti didorong ke belakang oleh gaya misterius: <b>gaya Coriolis</b>. Benda yang turun tertinggal, benda yang naik mendahului.',
+    'The <b>right panel</b> is the same physics seen from the spinning floor. From here the ball seems pushed backwards by a mysterious force: the <b>Coriolis force</b>. Things going down lag behind, things going up get ahead.'],
+  c3_fw: ['Lintasan dihitung tepat (garis lurus di kerangka inersia), bukan pendekatan.', 'Paths are exact (a straight line in the inertial frame), not an approximation.'],
+  c3_try: ['Di game: dek pandang menara, lalu <kbd>G</kbd> menjatuhkan bola dan <kbd>B</kbd> melempar. HUD menulis jarak dan arah melenceng.', 'In the game: go to the tower deck, then <kbd>G</kbd> drops a ball and <kbd>B</kbd> throws one. The HUD shows how far and which way it drifted.'],
+
+  c4_k: ['Coriolis dua arah', 'Coriolis both ways'], c4_t: ['Air mancur dan hujan miring', 'Fountains and slanted rain'],
+  c4_h: ['Air yang naik mendarat di depan. Hujan yang turun miring ke belakang, walau tanpa angin.', 'Rising water lands ahead. Falling rain slants backwards, even with no wind.'],
+  c4_sj: ['Kecepatan semburan', 'Jet speed'], c4_sr: ['Kecepatan jatuh tetes', 'Drop fall speed'],
+  ro_peak: ['tinggi semburan', 'jet height'], ro_ahead: ['mendarat di depan', 'lands ahead'], ro_est: ['rumus pendekatan', 'approximate formula'],
+  ro_tilt: ['kemiringan hujan', 'rain tilt'], ro_drift: ['hanyut melawan putaran', 'drift against spin'], ro_rain: ['jenis hujan', 'kind of rain'],
+  rain_k: [['gerimis', 'hujan ringan', 'hujan sedang', 'hujan deras'], ['drizzle', 'light rain', 'moderate rain', 'downpour']],
+  c4_p1: ['Air keluar dari nosel dengan kecepatan keliling lantai. Saat naik ke lingkaran yang lebih kecil, kecepatan itu jadi berlebih, jadi air <b>mendahului</b> lantai: semburan 10 m/s mendarat 1,36 m di depan (plakat di game memakai rumus pendekatan: 1,37 m).',
+    'Water leaves the nozzle with the floor\'s circling speed. Rising into a smaller circle, that speed becomes too much, so the water <b>gets ahead</b> of the floor: a 10 m/s jet lands 1.36 m ahead (the plaque in the game uses the approximate formula: 1.37 m).'],
+  c4_p2: ['Tetes hujan sebaliknya. Udara ikut berputar, jadi gaya Coriolis diimbangi hambatan udara dan tetes hanyut menyamping dengan kecepatan tetap. Tetes besar jatuh lebih cepat, jadi <b>lebih miring</b>.',
+    'Raindrops do the opposite. The air turns with the station, so drag balances the Coriolis force and drops drift sideways at a steady speed. Big drops fall faster, so they <b>slant more</b>.'],
+  c4_fw: ['Rumus kiri berlaku untuk semburan kecil; panel memakai hitungan tepat. Game memakai v<sub>t</sub> = 7 m/s: 8,0 derajat.', 'The left formula holds for small jets; the panel uses the exact result. The game uses v<sub>t</sub> = 7 m/s: 8.0 degrees.'],
+  c4_try: ['Di game: tombol <kbd>9</kbd> ke air mancur Coriolis (<kbd>E</kbd> di plakat), <kbd>N</kbd> sampai mendung tebal untuk hujan.', 'In the game: <kbd>9</kbd> takes you to the Coriolis fountain (<kbd>E</kbd> at the plaque), <kbd>N</kbd> until heavy overcast for rain.'],
+
+  c5_k: ['Berat yang berubah', 'Changing weight'], c5_t: ['Beratmu bergantung arah', 'Your weight depends on direction'],
+  c5_h: ['Ngebut searah putaran, kamu jadi berat. Melawan putaran, kamu jadi ringan.', 'Speed along with the spin and you get heavier. Go against it and you get lighter.'],
+  c5_sv: ['Kecepatan', 'Speed'], c5_p1b: ['Motor +150', 'Bike +150'], c5_p2b: ['Motor −150', 'Bike −150'], c5_p3b: ['Jalan kaki', 'Walking'], c5_p4b: ['Melayang?', 'Float?'],
+  ro_abs: ['kecepatan dilihat dari luar', 'speed seen from outside'],
+  c5_p1: ['Beratmu berasal dari kecepatan kelilingmu, bukan dari lantai. Naik motor <b>searah</b> putaran menambah kecepatan keliling, jadi lantai harus mendorong lebih keras: 2,02 g pada 150 km/h.',
+    'Your weight comes from your circling speed, not from the floor. Riding <b>with</b> the spin adds to it, so the floor must push harder: 2.02 g at 150 km/h.'],
+  c5_p2: ['<b>Melawan</b> putaran mengurangi kecepatan keliling: 0,34 g pada 150 km/h. Pada 356,6 km/h melawan putaran kamu diam dilihat dari luar, dan beratmu nol. Motor di game dibatasi 150 km/h.',
+    'Riding <b>against</b> the spin takes speed away: 0.34 g at 150 km/h. At 356.6 km/h against the spin you stand still as seen from outside, and weigh nothing. The game bike is limited to 150 km/h.'],
+  c5_fw: ['Arah sumbu (ke end cap) tidak mengubah berat.', 'Moving along the axis (toward an end cap) does not change your weight.'],
+  c5_try: ['Di game: <kbd>C</kbd> naik motor di jalan cincin, <kbd>Shift</kbd> mode sport sampai 150 km/h, lalu putar balik.', 'In the game: <kbd>C</kbd> to ride the bike on the ring road, <kbd>Shift</kbd> for sport mode up to 150 km/h, then turn around.'],
+  w_over: ['Di atas batas motor game (150 km/h): hanya hitungan.', 'Beyond the game bike limit (150 km/h): calculation only.'],
+  w_float: ['Diam dilihat dari luar: kamu melayang di atas lantai yang lewat di bawahmu.', 'Standing still as seen from outside: you float while the floor slides past below you.'],
+  w_neg: ['Lebih cepat dari lantai: "bawah" kembali ke lantai, tapi kamu kini berputar ke arah sebaliknya.', 'Faster than the floor: "down" points to the floor again, but you now circle the other way.'],
+
+  c6_k: ['Fisika yang belum ada di game', 'Physics not in the game yet'], c6_t: ['Naik lift ke nol-g', 'Riding the lift to zero g'],
+  c6_h: ['Lift naik 994 m ke sumbu. Gravitasi memudar, tapi ada kejutan: dinding kabin mendorongmu ke samping.', 'The lift climbs 994 m to the axis. Gravity fades, but there is a surprise: the cabin wall pushes you sideways.'],
+  c6_up: ['Naik ke hub', 'Ride up'], c6_down: ['Turun ke lantai', 'Ride down'], c6_shift: ['Shift 5x', 'Shift 5x'],
+  ro_h: ['ketinggian', 'height'], ro_v: ['kecepatan lift', 'lift speed'], ro_gdown: ['tekanan ke lantai kabin', 'push into the cabin floor'], ro_side: ['dorongan dinding', 'wall push'], ro_bob: ['unting-unting miring', 'plumb bob tilt'],
+  l_idle: ['Tekan Naik. Perhatikan unting-unting di kabin: ia menunjukkan arah "bawah" yang kamu rasakan.', 'Press Ride up. Watch the plumb bob in the cabin: it points to the "down" you feel.'],
+  l_acc: ['Lift mempercepat: kamu sedikit lebih berat.', 'The lift speeds up: you feel slightly heavier.'],
+  l_cruise: ['Lift melaju: dinding kabin mendorongmu {dir}. Unting-unting miring {a}.', 'The lift cruises: the cabin wall pushes you {dir}. The plumb bob tilts {a}.'],
+  l_ceil: ['Rem lift lebih kuat dari gravitasi di sini: kamu terangkat ke langit-langit!', 'The brakes beat gravity up here: you float up to the ceiling!'],
+  l_done_up: ['Tiba di hub: 0,6% g. Di game kamu kini melayang.', 'Arrived at the hub: 0.6% g. In the game you now float.'],
+  l_done_dn: ['Tiba di lantai: 1 g lagi.', 'Back on the floor: 1 g again.'],
+  l_dir_a: ['searah putaran', 'with the spin'], l_dir_b: ['melawan putaran', 'against the spin'],
+  c6_p1: ['Kabin bergerak lurus ke arah sumbu, padahal tiap meter ke atas butuh kecepatan keliling lebih kecil. Kabin harus terus mengerem kecepatan kelilingmu, dan rem itu adalah <b>dinding kabin</b>: pada 20 m/s dorongannya 0,40 g, cukup untuk membuat kopi tumpah.',
+    'The cabin moves straight toward the axis, yet every metre up needs less circling speed. The cabin has to keep braking your circling speed, and that brake is the <b>cabin wall</b>: at 20 m/s it pushes with 0.40 g, enough to spill your coffee.'],
+  c6_p2: ['Dekat sumbu gravitasi hampir habis, sementara lift masih mengerem 1 m/s². Di 96 m terakhir rem lebih kuat dari gravitasi: tanpa pegangan kamu terangkat ke langit-langit. Dengan <b>Shift</b> (5x, seperti di game) semuanya 25 kali lebih kuat.',
+    'Near the axis gravity is almost gone while the lift still brakes at 1 m/s². In the last 96 m the brakes beat gravity: without a handrail you float to the ceiling. With <b>Shift</b> (5x, like in the game) everything is 25 times stronger.'],
+  c6_fw: ['Profil kecepatan sama dengan stepLift() di game: percepatan 1 m/s², maksimal 20 m/s. Game belum memodelkan dorongan samping.', 'Same speed profile as stepLift() in the game: 1 m/s² acceleration, 20 m/s top speed. The game does not model the sideways push yet.'],
+  c6_try: ['Di game: tombol <kbd>L</kbd> atau <kbd>E</kbd> di kaki lift end cap A. Tahan <kbd>Shift</kbd> untuk 5x.', 'In the game: <kbd>L</kbd>, or <kbd>E</kbd> at the lift in end cap A. Hold <kbd>Shift</kbd> for 5x.'],
+  lclock: ['waktu simulasi {t} s · diputar {k}x lebih cepat', 'sim time {t} s · played {k}x faster'],
+
+  c7_k: ['Orbit', 'Orbit'], c7_t: ['Gerhana Saturnus', 'Saturn eclipse'],
+  c7_h: ['Sekali tiap orbit, stasiun masuk ke bayangan Saturnus dan sunline padam.', 'Once every orbit the station slips into Saturn\'s shadow and the sunline fades.'],
+  c7_p1: ['Stasiun mengorbit Saturnus di 260.000 km, sekali tiap <b>37,57 jam</b>. Matahari berada di bidang orbit, jadi tiap orbit stasiun lewat di belakang Saturnus.',
+    'The station orbits Saturn at 260,000 km, once every <b>37.57 hours</b>. The Sun lies in the orbit plane, so every orbit the station passes behind Saturn.'],
+  c7_p2: ['Di game gerhana berlangsung <b>2,78 jam</b> (terukur, termasuk penumbra). Model bayangan sederhana di panel ini memberi sekitar 2,8 jam. Sinar padam, dan tepi atmosfer Saturnus menyala seperti cincin.',
+    'In the game the eclipse lasts <b>2.78 hours</b> (measured, including the penumbra). The simple shadow model in this panel gives about 2.8 hours. The light fades, and Saturn\'s atmosphere glows around its edge like a ring.'],
+  c7_try: ['Di game: tombol <kbd>I</kbd> melompat ke 2 menit sebelum gerhana berikutnya.', 'In the game: <kbd>I</kbd> jumps to 2 minutes before the next eclipse.'],
+  c7_st: ['Waktu di orbit', 'Orbit time'], c7_play: ['Putar orbit', 'Play orbit'], c7_pause: ['Jeda', 'Pause'], c7_jump: ['Lompat ke gerhana (I)', 'Jump to eclipse (I)'],
+  ro_state: ['keadaan', 'state'], ro_sunline: ['sinar Matahari', 'sunlight'], o_sun: ['Terang', 'Sunlit'], o_ecl: ['Gerhana', 'Eclipse'], o_next: ['gerhana berikutnya dalam', 'next eclipse in'], o_left: ['gerhana selesai dalam', 'eclipse ends in'],
+
+  c8_k: ['Trik untuk dicoba', 'Tricks to try'], c8_t: ['Paspor fisika', 'Physics passport'],
+  c8_h: ['Sepuluh eksperimen yang bisa kamu lakukan di dalam stasiun. Tandai yang sudah dicoba.', 'Ten experiments you can do inside the station. Stamp the ones you have tried.'],
+  c8_count: ['{n} dari {m} cap', '{n} of {m} stamps'], c8_reset: ['Hapus cap', 'Clear stamps'], c8_all: ['Lengkap! Kamu sudah merasakan semua fisika stasiun.', 'Complete! You have felt all the physics of the station.'],
+
+  gl_k: ['Diagram', 'Diagrams'], gl_t: ['Galeri diagram', 'Diagram gallery'], gl_h: ['Tujuh diagram untuk dibagikan. Ketuk untuk memperbesar.', 'Seven diagrams to share. Tap to enlarge.'], gl_open: ['buka file', 'open file'],
+  footer: ['Proyek penggemar untuk belajar fisika dan grafis 3D. Tidak berafiliasi dengan studio film mana pun. Angka di halaman ini dihitung dari R = 1.000 m dan g = 9,81 m/s².',
+    'A fan project for learning physics and 3D graphics. Not affiliated with any film studio. Numbers on this page are computed from R = 1,000 m and g = 9.81 m/s².'],
+};
+// paspor: [judul, isi, tombol (HTML), bab]
+const PASS = [
+  [['Bola meleset 85,7 m', 'A ball that misses by 85.7 m'], ['Jatuhkan bola dari dek 175 m. Ia mendarat jauh di belakang kaki menara.', 'Drop a ball from the 175 m deck. It lands far behind the foot of the tower.'], ['<kbd>G</kbd> di dek pandang', '<kbd>G</kbd> on the tower deck'], 'coriolis'],
+  [['Bola menabrak menara', 'A ball that hits the tower'], ['Berdiri di sisi dek yang menghadap arah putaran, lalu jatuhkan. Bola melenceng ke belakang dan mengenai menara.', 'Stand on the deck side facing the spin, then drop. The ball drifts back and hits the tower.'], ['<kbd>G</kbd> di sisi depan dek', '<kbd>G</kbd> on the leading side'], 'coriolis'],
+  [['Lempar lebih jauh', 'Throw farther'], ['Lempar bola melawan arah putaran: bola lebih ringan (0,64 g pada 20 m/s) dan terbang lebih jauh.', 'Throw against the spin: the ball is lighter (0.64 g at 20 m/s) and flies farther.'], ['<kbd>B</kbd> melawan putaran', '<kbd>B</kbd> against the spin'], 'berat'],
+  [['Motor 2 g dan 0,3 g', 'A 2 g and 0.3 g bike ride'], ['Ngebut 150 km/h searah lalu melawan putaran di jalan cincin, rasakan beratnya.', 'Ride 150 km/h with and then against the spin on the ring road and feel the weight.'], ['<kbd>C</kbd> lalu <kbd>Shift</kbd>', '<kbd>C</kbd> then <kbd>Shift</kbd>'], 'berat'],
+  [['Air mancur yang meleset', 'The fountain that misses'], ['Semburan tegak 10 m/s mendarat 1,37 m searah putaran. Baca plakatnya.', 'A straight-up 10 m/s jet lands 1.37 m ahead. Read the plaque.'], ['<kbd>9</kbd> lalu <kbd>E</kbd>', '<kbd>9</kbd> then <kbd>E</kbd>'], 'airmancur'],
+  [['Hujan tanpa angin', 'Rain with no wind'], ['Tunggu mendung tebal dan lihat hujan miring 8 derajat.', 'Wait for heavy overcast and watch rain slant 8 degrees.'], ['<kbd>N</kbd> sampai mendung', '<kbd>N</kbd> until overcast'], 'airmancur'],
+  [['Melayang di sumbu', 'Float at the axis'], ['Naik lift 994 m ke hub dan lepaskan pijakan.', 'Ride the lift 994 m to the hub and let go.'], ['<kbd>L</kbd>', '<kbd>L</kbd>'], 'lift'],
+  [['Gerhana Saturnus', 'Saturn eclipse'], ['Lompat ke gerhana dan lihat sunline padam serta tepi Saturnus menyala.', 'Jump to the eclipse and watch the sunline fade and Saturn\'s edge glow.'], ['<kbd>I</kbd>', '<kbd>I</kbd>'], 'gerhana'],
+  [['Stasiun dari luar', 'The station from outside'], ['Kamera luar memperlihatkan silinder berputar dalam kerangka inersia.', 'The outside camera shows the cylinder spinning in the inertial frame.'], ['<kbd>V</kbd>', '<kbd>V</kbd>'], 'stasiun'],
+  [['Foto dengan rangefinder', 'A rangefinder photo'], ['Bidik kota di seberang yang menggantung di atas kepala, lensa 21-90 mm.', 'Frame the city hanging overhead with a 21-90 mm lens.'], ['<kbd>F</kbd> lalu <kbd>Enter</kbd>', '<kbd>F</kbd> then <kbd>Enter</kbd>'], 'stasiun'],
+];
+const GAL = [
+  ['cc-01-station.svg', ['Stasiun sekilas', 'The station at a glance']], ['cc-02-spin-gravity.svg', ['Gravitasi dari putaran', 'Gravity from spin']],
+  ['cc-03-coriolis-drop.svg', ['Bola meleset dari menara', 'The ball that misses the tower']], ['cc-04-fountain-rain.svg', ['Air mancur dan hujan', 'Fountain and rain']],
+  ['cc-05-moving-weight.svg', ['Berat saat bergerak', 'Weight on the move']], ['cc-06-lift.svg', ['Lift ke nol-g', 'Lift to zero g']],
+  ['cc-07-orbit-eclipse.svg', ['Orbit dan gerhana', 'Orbit and eclipse']],
+];
+const CH_IDS = ['stasiun', 'gravitasi', 'coriolis', 'airmancur', 'berat', 'lift', 'gerhana', 'coba', 'galeri'];
+
+/* =====================================================================
+   Bahasa (dibagi dengan semua halaman: localStorage lazarus.lang, ?lang=)
+   ===================================================================== */
+let LANG = 'id';
+{
+  const ok = (c) => c === 'id' || c === 'en'; let c = null;
+  try { c = new URLSearchParams(location.search).get('lang'); } catch (e) { /* abaikan */ }
+  if (!ok(c)) try { c = localStorage.getItem('lazarus.lang'); } catch (e) { c = null; }
+  if (!ok(c)) c = (navigator.language || 'id').slice(0, 2).toLowerCase();
+  LANG = ok(c) ? c : 'id';
+}
+const L = () => (LANG === 'en' ? 1 : 0);
+const T = (k, v) => { let s = S[k] ? S[k][L()] : k; if (v) for (const n in v) s = s.split('{' + n + '}').join(v[n]); return s; };
+const fmt = (n, d = 0) => n.toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtE = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });   // label kanvas
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const dist = (m) => (Math.abs(m) >= 1000 ? fmt(m / 1000, 2) + ' km' : Math.abs(m) >= 10 ? fmt(m, 1) + ' m' : Math.abs(m) >= 1 ? fmt(m, 2) + ' m' : fmt(m * 100, 1) + ' cm');
+const distE = (m) => (Math.abs(m) >= 1000 ? fmtE(m / 1000, 2) + ' km' : Math.abs(m) >= 10 ? fmtE(m, 1) + ' m' : Math.abs(m) >= 1 ? fmtE(m, 2) + ' m' : fmtE(m * 100, 1) + ' cm');
+const dur = (s) => (s >= 120 ? fmt(s / 60, 1) + (LANG === 'en' ? ' min' : ' menit') : fmt(s, 2) + ' s');
+let MASS = 70;
+
+/* =====================================================================
+   Kanvas: ukuran ikut CSS + DPR, satu loop animasi untuk semua panel yang terlihat
+   ===================================================================== */
+const PANELS = [];
+function panel(id, draw, step) {
+  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, vis: false, step };
+  o.draw = (p) => { if (p.w > 20 && p.h > 20) draw(p); };   // belum berukuran: jangan gambar (radius negatif)
+  const fit = () => {
+    const r = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+    if (r.width < 2) return;
+    o.w = r.width; o.h = r.height; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
+    ctx.setTransform(d, 0, 0, d, 0, 0); o.draw(o);
+  };
+  new ResizeObserver(fit).observe(el);
+  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; }, { rootMargin: '80px' }).observe(el);
+  PANELS.push(o); return o;
+}
+let lastT = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  if (CS.play) cStep(dt, now / 1000);   // simulasi Coriolis tetap jalan walau panelnya tergulir keluar layar (ponsel: tombol di bawah panel)
+  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) p.draw(p);
+  requestAnimationFrame(loop);
+}
+// alat gambar
+function txt(c, x, y, s, col = COL.ink, size = 12, align = 'left', weight = 500) {
+  c.font = `${weight} ${size}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`; c.fillStyle = col; c.textAlign = align; c.textBaseline = 'alphabetic'; c.fillText(s, x, y);
+}
+function pillC(c, x, y, s, col = COL.ink, size = 11.5, align = 'left') {
+  c.font = `600 ${size}px system-ui, sans-serif`; const w = c.measureText(s).width + 16, h = size + 10;
+  const x0 = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+  c.fillStyle = 'rgba(8,11,17,0.85)'; c.strokeStyle = 'rgba(255,255,255,0.16)'; c.lineWidth = 1;
+  c.beginPath(); c.roundRect ? c.roundRect(x0, y - h / 2, w, h, h / 2) : c.rect(x0, y - h / 2, w, h); c.fill(); c.stroke();
+  c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s, x0 + w / 2, y + 0.5); c.textBaseline = 'alphabetic';
+}
+function glow(c, col, blur) { c.shadowColor = col; c.shadowBlur = blur; }
+function noGlow(c) { c.shadowBlur = 0; }
+function corner(c, s) { txt(c, 14, 22, s, COL.mu, 10.5, 'left', 650); }
+function arrow(c, x0, y0, x1, y1, col, w = 2) {
+  c.strokeStyle = col; c.fillStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+  const a = Math.atan2(y1 - y0, x1 - x0), L_ = 7 + w * 1.5;
+  c.beginPath(); c.moveTo(x1 + Math.cos(a) * 2, y1 + Math.sin(a) * 2); c.lineTo(x1 - Math.cos(a - 0.45) * L_, y1 - Math.sin(a - 0.45) * L_); c.lineTo(x1 - Math.cos(a + 0.45) * L_, y1 - Math.sin(a + 0.45) * L_); c.closePath(); c.fill();
+}
+function bgStars(c, w, h, seed, n = 60, rot = 0, cx = 0, cy = 0) {
+  let s = seed; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  c.save(); if (rot) { c.translate(cx, cy); c.rotate(rot); c.translate(-cx, -cy); }
+  const D = Math.hypot(w, h);
+  for (let i = 0; i < n; i++) { const x = cx - D / 2 + rnd() * D, y = cy - D / 2 + rnd() * D, r = 0.3 + rnd() ** 3 * 1.3; c.globalAlpha = 0.15 + rnd() * 0.6; c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
+  c.restore(); c.globalAlpha = 1;
+}
+function person(c, x, y, ang, s = 1, col = '#fff') {   // berdiri di (x, y), kepala ke arah ang
+  const ux = Math.cos(ang), uy = Math.sin(ang), px = -uy, py = ux;
+  c.strokeStyle = col; c.fillStyle = col; c.lineWidth = 1.6 * s; c.lineCap = 'round';
+  const hip = [x + ux * 7 * s, y + uy * 7 * s], sh = [x + ux * 13 * s, y + uy * 13 * s];
+  c.beginPath(); c.moveTo(x + px * 3 * s, y + py * 3 * s); c.lineTo(hip[0], hip[1]); c.lineTo(x - px * 3 * s, y - py * 3 * s); c.moveTo(hip[0], hip[1]); c.lineTo(sh[0], sh[1]);
+  c.moveTo(sh[0] + px * 3.5 * s - ux * 4 * s, sh[1] + py * 3.5 * s - uy * 4 * s); c.lineTo(sh[0], sh[1]); c.lineTo(sh[0] - px * 3.5 * s - ux * 4 * s, sh[1] - py * 3.5 * s - uy * 4 * s); c.stroke();
+  c.beginPath(); c.arc(x + ux * 17 * s, y + uy * 17 * s, 3.3 * s, 0, TAU); c.fill();
+}
+// dinding dalam silinder: blok kota, ladang, sungai, taman (sekali, benih tetap)
+const LAND = (() => {
+  let s = 11; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647); const out = [];
+  for (let a = 0; a < 360; a += 2.2) {
+    const z = (a + 20) % 120;
+    if (z < 55) out.push({ a, h: 3 + rnd() ** 2 * 15, w: 2.4 + rnd() * 2.2, c: ['#aab4c4', '#8794a8', '#c3cad6', '#76839a', '#9fa9b8'][Math.floor(rnd() * 5)] });
+    else if (z < 62) out.push({ a, h: 1.6, w: 3.5, c: '#3f86b8' });
+    else if (z < 75) out.push({ a, tree: 2.6 + rnd() * 1.6, c: ['#4f7a35', '#5e8c3c', '#3f6a2c'][Math.floor(rnd() * 3)] });
+    else out.push({ a, h: 1.8, w: 4.4, c: ['#c9a24a', '#8fa83e', '#6f8f3a', '#d4b35a', '#a7b54a'][Math.floor(rnd() * 5)] });
+  }
+  return out;
+})();
+function drawLand(c, cx, cy, r, rot, k = 1) {   // rot = sudut putar (rad), titik a berada di arah (sin, cos) dari "bawah"
+  c.lineWidth = 14 * k; c.strokeStyle = '#1b2016'; c.beginPath(); c.arc(cx, cy, r + 7 * k, 0, TAU); c.stroke();
+  for (const q of LAND) {
+    const A = q.a * Math.PI / 180 + rot, ux = Math.sin(A), uy = Math.cos(A);
+    if (q.tree) { c.fillStyle = q.c; c.beginPath(); c.arc(cx + ux * (r - 3.5 * k), cy + uy * (r - 3.5 * k), q.tree * k, 0, TAU); c.fill(); continue; }
+    c.save(); c.translate(cx + ux * r, cy + uy * r); c.rotate(-A); c.fillStyle = q.c; c.fillRect(-q.w * k / 2, -q.h * k, q.w * k, q.h * k); c.restore();
+  }
+}
+
+/* =====================================================================
+   HERO: penampang berputar dengan kecepatan asli (63,4 s per putaran)
+   ===================================================================== */
+const HERO = { view: 'out', t0: performance.now() / 1000, k: 0, kt: 0 };   // k: 0 = dari luar, 1 = dari dalam (dicampur halus)
+const hero = panel('cvHero', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, cx = w / 2, cy = h / 2, r = Math.min(w, h) * 0.36;
+  const t = performance.now() / 1000 - HERO.t0, k = HERO.k, kk = r / 150;
+  const ph = Math.atan2(Math.sin(W * t), Math.cos(W * t));   // sudut putar dibungkus (-pi, pi]: peralihan mode paling banyak setengah putaran
+  const rotLand = ph * (1 - k), rotSky = ph * k;
+  c.clearRect(0, 0, w, h);
+  bgStars(c, w, h, 7, 120, rotSky, cx, cy);
+  if (k > 0.5) {   // dari dalam: jejak bintang (busur 10 s ke belakang) + panah putar di langit
+    let s0 = 7; const rnd = () => ((s0 = (s0 * 16807) % 2147483647) / 2147483647), D = Math.hypot(w, h);
+    c.save(); c.globalAlpha = (k - 0.5) * 2; c.strokeStyle = 'rgba(255,255,255,0.35)'; c.lineWidth = 1;
+    for (let i = 0; i < 120; i++) { const x = cx - D / 2 + rnd() * D, y = cy - D / 2 + rnd() * D; rnd(); rnd(); const rr = Math.hypot(x - cx, y - cy), a = Math.atan2(y - cy, x - cx) + rotSky;
+      if (rr < r + 30) continue; c.beginPath(); c.arc(cx, cy, rr, a - W * 10, a); c.stroke(); }
+    c.strokeStyle = COL.te; c.lineWidth = 2.2; glow(c, COL.te, 8);
+    for (const a0 of [-0.6, 2.54]) { const rr = r + 52 * (r / 150); c.beginPath(); c.arc(cx, cy, rr, a0, a0 + 0.8); c.stroke(); const e = a0 + 0.8; arrow(c, cx + Math.cos(e - 0.1) * rr, cy + Math.sin(e - 0.1) * rr, cx + Math.cos(e) * rr, cy + Math.sin(e) * rr, COL.te, 2.2); }
+    noGlow(c); c.restore();
+  }
+  const ga = c.createRadialGradient(cx, cy, 0, cx, cy, r);
+  ga.addColorStop(0, 'rgba(255,242,194,0.55)'); ga.addColorStop(0.25, 'rgba(109,143,179,0.32)'); ga.addColorStop(1, 'rgba(22,38,58,0.92)');
+  c.fillStyle = ga; c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.fill();
+  drawLand(c, cx, cy, r, rotLand, r / 150);
+  glow(c, COL.cu, 10); c.strokeStyle = COL.cu; c.lineWidth = 2.5; c.beginPath(); c.arc(cx, cy, r + 16 * kk, 0, TAU); c.stroke(); noGlow(c);
+  for (let i = 0; i < 12; i++) { const A = i * TAU / 12 + rotLand; c.strokeStyle = 'rgba(217,189,98,0.55)'; c.lineWidth = 2; c.beginPath(); c.moveTo(cx + Math.sin(A) * (r + 16 * kk), cy + Math.cos(A) * (r + 16 * kk)); c.lineTo(cx + Math.sin(A) * (r + 23 * kk), cy + Math.cos(A) * (r + 23 * kk)); c.stroke(); }
+  glow(c, '#fff6d6', 28); c.fillStyle = '#fff6d6'; c.beginPath(); c.arc(cx, cy, 6, 0, TAU); c.fill(); noGlow(c);
+  for (const b of [100, 220, 330]) { const A = b * Math.PI / 180 + rotLand; person(c, cx + Math.sin(A) * (r - 18 * kk), cy + Math.cos(A) * (r - 18 * kk), Math.atan2(-Math.cos(A), -Math.sin(A)), kk * 0.95); }
+  // "kamu" (+ jejak emas 12 s ke belakang di mode luar)
+  const A = rotLand, px = cx + Math.sin(A) * (r - 18 * kk), py = cy + Math.cos(A) * (r - 18 * kk);
+  if (k < 0.5) { c.strokeStyle = 'rgba(217,189,98,0.55)'; c.lineWidth = 2; c.setLineDash([3, 4]); c.beginPath(); for (let i = 0; i <= 30; i++) { const a = A - (W * 12 * i) / 30; const x = cx + Math.sin(a) * (r - 18 * kk), y = cy + Math.cos(a) * (r - 18 * kk); i ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); c.setLineDash([]); }
+  glow(c, COL.cu, 14); person(c, px, py, Math.atan2(-Math.cos(A), -Math.sin(A)), kk * 1.15, COL.cu); noGlow(c);
+  pillC(c, px + Math.cos(A) * 34, py - Math.sin(A) * 34 + 26, 'you', COL.cu, 11.5, 'center');
+  // panah putar
+  if (k < 0.5) {
+    c.strokeStyle = COL.cu; c.lineWidth = 2.4; glow(c, COL.cu, 8);
+    for (const a0 of [200, 20]) { c.beginPath(); const s0 = (a0 * Math.PI) / 180; c.arc(cx, cy, r + 40 * kk, -s0, -s0 - 0.9, true); c.stroke(); const e = -s0 - 0.9; arrow(c, cx + Math.cos(e + 0.12) * (r + 40 * kk), cy + Math.sin(e + 0.12) * (r + 40 * kk), cx + Math.cos(e) * (r + 40 * kk), cy + Math.sin(e) * (r + 40 * kk), COL.cu, 2.4); }
+    noGlow(c);
+  }
+}, (dt) => { HERO.k += clamp(HERO.kt - HERO.k, -dt / 0.6, dt / 0.6); const t = performance.now() / 1000 - HERO.t0, f = ((W * t) / TAU) % 1; $('heroTurn').innerHTML = `${T('h_turn')} · ${T('h_real')}<br><b>${fmt(f * 63.44, 1)} / ${fmt(63.4, 1)} s</b>`; return true; });
+function heroCap() { $('heroCap').textContent = T(HERO.view === 'out' ? 'h_cap_out' : 'h_cap_in'); }
+document.querySelectorAll('[data-hv]').forEach((b) => b.addEventListener('click', () => { HERO.view = b.dataset.hv; HERO.kt = HERO.view === 'in' ? 1 : 0; document.querySelectorAll('[data-hv]').forEach((x) => x.classList.toggle('on', x === b)); heroCap(); hero.draw(hero); }));
+
+/* =====================================================================
+   02 Gravitasi vs ketinggian
+   ===================================================================== */
+const GR = { h: 175 };
+const grav = panel('cvGrav', (o) => {
+  const c = o.ctx, w = o.w, h = o.h; c.clearRect(0, 0, w, h);
+  corner(c, 'HEIGHT ABOVE THE FLOOR VS FELT GRAVITY');
+  const fy = h - 34, ty = 44, x0 = w * 0.36, wm = w * 0.5, Y = (m) => fy - (m / R) * (fy - ty);
+  const gw = c.createLinearGradient(0, fy, 0, ty); gw.addColorStop(0, 'rgba(217,189,98,0.5)'); gw.addColorStop(1, 'rgba(143,211,220,0.12)');
+  c.fillStyle = gw; c.beginPath(); c.moveTo(x0, fy); c.lineTo(x0 + wm, fy); c.lineTo(x0, ty); c.closePath(); c.fill();
+  const ge = c.createLinearGradient(0, fy, 0, ty); ge.addColorStop(0, COL.cu); ge.addColorStop(1, COL.te);
+  glow(c, COL.cu, 8); c.strokeStyle = ge; c.lineWidth = 3; c.beginPath(); c.moveTo(x0 + wm, fy); c.lineTo(x0, ty); c.stroke(); noGlow(c);
+  for (let m = 0; m <= 1000; m += 250) { txt(c, x0 - w * 0.2, Y(m) + 4, `${fmtE(m)} m`, COL.mu, 11, 'right'); c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1; c.beginPath(); c.moveTo(x0 - w * 0.18, Y(m)); c.lineTo(x0 + wm, Y(m)); c.stroke(); }
+  // lantai, sumbu
+  const gg = c.createLinearGradient(0, fy, 0, h); gg.addColorStop(0, '#3d5a2c'); gg.addColorStop(1, '#0d110b'); c.fillStyle = gg; c.fillRect(0, fy, w, h - fy);
+  glow(c, COL.cu, 8); c.strokeStyle = COL.cu; c.lineWidth = 2; c.beginPath(); c.moveTo(0, fy); c.lineTo(w, fy); c.stroke();
+  c.strokeStyle = '#fff6d6'; c.setLineDash([2, 5]); c.beginPath(); c.moveTo(0, ty); c.lineTo(w, ty); c.stroke(); c.setLineDash([]); noGlow(c);
+  txt(c, w - 10, ty - 8, 'axis · sunline', '#fff6d6', 11, 'right');
+  // menara 221 m dan dek
+  const tx = x0 - w * 0.11, H = fy - Y(221);
+  for (const [fw, a, b] of [[1, 0, 0.42], [0.78, 0.42, 0.7], [0.56, 0.7, 0.9], [0.3, 0.9, 1]]) { const tw = 20 * fw; const gb = c.createLinearGradient(tx - tw / 2, 0, tx + tw / 2, 0); gb.addColorStop(0, '#9aa6b8'); gb.addColorStop(1, '#3c4452'); c.fillStyle = gb; c.fillRect(tx - tw / 2, fy - H * b, tw, H * (b - a) + 0.5); }
+  c.strokeStyle = COL.cu2; c.lineWidth = 2; c.beginPath(); c.moveTo(tx - 18, Y(175)); c.lineTo(tx + 18, Y(175)); c.stroke();
+  // lift
+  c.strokeStyle = COL.te; c.setLineDash([4, 4]); c.lineWidth = 1.5; c.beginPath(); c.moveTo(x0 - 16, fy); c.lineTo(x0 - 16, ty + 4); c.stroke(); c.setLineDash([]);
+  // penanda
+  const g = (R - GR.h) / R, my = Y(GR.h), mx = x0 + wm * g;
+  c.strokeStyle = '#fff'; c.lineWidth = 1.2; c.setLineDash([3, 4]); c.beginPath(); c.moveTo(x0 - 30, my); c.lineTo(mx, my); c.stroke(); c.setLineDash([]);
+  glow(c, COL.cu, 12); c.fillStyle = COL.cu; c.beginPath(); c.arc(mx, my, 6, 0, TAU); c.fill(); noGlow(c);
+  glow(c, COL.cu, 10); person(c, x0 - 30, my, -Math.PI / 2, 1, COL.cu); noGlow(c);
+  pillC(c, mx + 14, my - 2, `${fmtE(GR.h)} m · ${fmtE(g, 3)} g`, COL.cu2, 12, 'left');
+}, null);
+function updGrav() {
+  const g = (R - GR.h) / R;
+  $('gH').value = GR.h; setP($('gH')); $('gHo').textContent = fmt(GR.h) + ' m';
+  $('gG').textContent = fmt(g, 3) + ' g'; $('gKg').textContent = fmt(MASS * g, 1) + ' kg';
+  $('gJump').textContent = g < 0.01 ? '∞' : dist(0.5 / g); $('gCup').textContent = g < 0.001 ? '∞' : dur(Math.sqrt(2 / (g * G)));
+  document.querySelectorAll('[data-gh]').forEach((b) => b.classList.toggle('on', +b.dataset.gh === GR.h));
+  grav.draw(grav);
+}
+$('gH').addEventListener('input', (e) => { GR.h = +e.target.value; updGrav(); });
+document.querySelectorAll('[data-gh]').forEach((b) => b.addEventListener('click', () => { GR.h = +b.dataset.gh; updGrav(); }));
+grav.el.addEventListener('click', (e) => { const r = grav.el.getBoundingClientRect(), fy = r.height - 34, ty = 44; GR.h = Math.round(clamp((fy - (e.clientY - r.top)) / (fy - ty), 0, 1) * R); updGrav(); });
+
+/* =====================================================================
+   03 Coriolis: lintasan tepat (garis lurus di kerangka inersia)
+   Mulai di ketinggian h (r0 = R - h), kecepatan keliling omega r0, dilempar ke arah sumbu dengan u.
+   Koordinat dunia: x = arah putaran di lantai bawah, y = dari sumbu ke lantai bawah.
+   ===================================================================== */
+function traj(h, u) {
+  const r0 = R - h, vx = W * r0, a = vx * vx + u * u;
+  const T_ = (2 * r0 * u + Math.sqrt(Math.max(0, 4 * r0 * r0 * u * u - 4 * a * (r0 * r0 - R * R)))) / (2 * a);
+  const pos = (t) => ({ x: vx * t, y: r0 - u * t });
+  const rot = (t) => { const p = pos(t), r = Math.hypot(p.x, p.y), an = Math.atan2(p.x, p.y) - W * t; return { x: r * Math.sin(an), y: r * Math.cos(an), s: an * R, h: R - r }; };
+  let hmax = h; for (let i = 0; i <= 300; i++) hmax = Math.max(hmax, rot((T_ * i) / 300).h);
+  return { h, u, r0, vx, T: T_, pos, rot, land: rot(T_).s, hmax, floorMove: W * R * T_ };
+}
+const CPRE = [[176.5, 0], [100, 0], [0, 3], [0, 10], [0, 30], [990, 0]];
+const CS = { h: 176.5, u: 0, tr: null, t: 0, play: false, done: false };
+function cRecalc() { CS.tr = traj(CS.h, CS.u); CS.t = 0; CS.play = false; CS.done = false; }
+function viewFit(o, pts) {   // skala dan pusat agar titik dunia muat
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+  for (const p of pts) { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y); }
+  let bw = x1 - x0, bh = y1 - y0; const m = Math.max(bw, bh, 0.05); bw = Math.max(bw, m * 0.35); bh = Math.max(bh, m * 0.35);
+  const pad = 46, s = Math.min((o.w - pad * 2) / bw, (o.h - pad * 2 - 20) / bh);
+  return { s, ox: o.w / 2 - ((x0 + x1) / 2) * s, oy: o.h / 2 + 10 - ((y0 + y1) / 2) * s };
+}
+function drawSim(o, mode) {
+  const c = o.ctx, w = o.w, h = o.h, tr = CS.tr; c.clearRect(0, 0, w, h);
+  const inr = mode === 'in', N = Math.round(clamp(160 * (W * tr.T) / TAU * 4, 160, 4000)), t = CS.t;
+  const P = (tt) => (inr ? tr.pos(tt) : tr.rot(tt));
+  const site = (tt) => { const a = inr ? W * tt : 0; return { x: R * Math.sin(a), y: R * Math.cos(a), a }; };
+  // titik untuk menyesuaikan pandangan: lintasan penuh + titik luncur + puncak struktur
+  const pts = []; for (let i = 0; i <= N; i++) { const tt = (tr.T * i) / N; pts.push(P(tt)); }
+  const topH = tr.h > 0.5 ? (tr.h <= 300 ? Math.max(tr.h, Math.min(221, tr.h + 40)) : tr.h) : 0;
+  const ns = inr ? 24 : 1; for (let i = 0; i <= ns; i++) { const st = site((tr.T * i) / ns); pts.push(st, { x: (R - topH) * Math.sin(st.a), y: (R - topH) * Math.cos(st.a) }); }
+  const V = viewFit(o, pts), X = (p) => V.ox + p.x * V.s, Y = (p) => V.oy + p.y * V.s, Rs = R * V.s;
+  const cx = V.ox, cy = V.oy;
+  // tanah
+  c.lineWidth = 60; c.strokeStyle = '#18221a'; c.beginPath(); c.arc(cx, cy, Rs + 30, 0, TAU); c.stroke();
+  c.lineWidth = 10; c.strokeStyle = '#2e4224'; c.beginPath(); c.arc(cx, cy, Rs + 5, 0, TAU); c.stroke();
+  glow(c, COL.cu, 8); c.lineWidth = 2.2; c.strokeStyle = COL.cu; c.beginPath(); c.arc(cx, cy, Rs, 0, TAU); c.stroke(); noGlow(c);
+  // garis-garis lantai (memperlihatkan lantai bergerak di panel kiri)
+  const rotF = inr ? W * t : 0, step = 26 / Rs, vc = Math.atan2(w / 2 - cx, h / 2 - cy), span = Math.hypot(w, h) / Rs;
+  const k0 = Math.floor((vc - span - rotF) / step), k1 = Math.ceil((vc + span - rotF) / step);
+  if (k1 - k0 < 2000) { c.strokeStyle = 'rgba(217,189,98,0.35)'; c.lineWidth = 1.2; for (let k = k0; k <= k1; k++) { const a = k * step + rotF, sx = Math.sin(a), sy = Math.cos(a); c.beginPath(); c.moveTo(cx + sx * Rs, cy + sy * Rs); c.lineTo(cx + sx * (Rs + 7), cy + sy * (Rs + 7)); c.stroke(); } }
+  // struktur pelepas: menara (h <= 300) atau poros lift, nosel bila h = 0
+  const st = site(t), ux = Math.sin(st.a), uy = Math.cos(st.a);
+  if (tr.h > 0.5) {
+    const top = R - Math.max(tr.h, tr.h <= 300 ? Math.min(221, tr.h + 40) : tr.h);
+    c.lineCap = 'butt'; c.strokeStyle = tr.h <= 300 ? '#7d8899' : 'rgba(143,211,220,0.55)'; c.lineWidth = tr.h <= 300 ? Math.max(4, Math.min(16, 18 * V.s)) : 2;
+    if (tr.h > 300) c.setLineDash([5, 5]);
+    c.beginPath(); c.moveTo(cx + ux * Rs, cy + uy * Rs); c.lineTo(cx + ux * top * V.s, cy + uy * top * V.s); c.stroke(); c.setLineDash([]);
+    const tx_ = uy * 12, ty_ = -ux * 12, rr = (R - tr.h) * V.s, bx = cx + ux * rr, by = cy + uy * rr;   // palang dek, tegak lurus jari-jari
+    c.strokeStyle = COL.cu2; c.lineWidth = 2; c.beginPath(); c.moveTo(bx - tx_, by - ty_); c.lineTo(bx + tx_, by + ty_); c.stroke();
+  } else { glow(c, COL.te, 10); c.fillStyle = COL.te; c.beginPath(); c.arc(cx + ux * Rs, cy + uy * Rs, 4.5, 0, TAU); c.fill(); noGlow(c); }
+  // jejak lintasan sampai t
+  c.strokeStyle = COL.te; c.lineWidth = 2.2; glow(c, COL.te, 6); c.beginPath();
+  for (let i = 0; i <= N; i++) { const tt = Math.min(t, (tr.T * i) / N), p = P(tt); i ? c.lineTo(X(p), Y(p)) : c.moveTo(X(p), Y(p)); if (tt >= t) break; }
+  c.stroke(); noGlow(c);
+  // titik hantu
+  for (let k = 0; k <= 8; k++) { const tt = (tr.T * k) / 8; if (tt > t + 1e-9) break; const p = P(tt); c.fillStyle = 'rgba(232,236,242,0.45)'; c.beginPath(); c.arc(X(p), Y(p), 3, 0, TAU); c.fill(); }
+  // bola
+  const pb = P(t); glow(c, '#ffffff', 14); const gb = c.createRadialGradient(X(pb) - 2, Y(pb) - 2, 0, X(pb), Y(pb), 7); gb.addColorStop(0, '#fff'); gb.addColorStop(1, COL.te); c.fillStyle = gb; c.beginPath(); c.arc(X(pb), Y(pb), 6, 0, TAU); c.fill(); noGlow(c);
+  // hasil: busur antara titik mendarat dan titik luncur
+  if (CS.done) {
+    const lb = P(tr.T), sb = site(tr.T), a0 = Math.atan2(lb.x, lb.y), a1 = sb.a;
+    const da = Math.atan2(Math.sin(a1 - a0), Math.cos(a1 - a0)), rr = Rs + 16;
+    c.strokeStyle = '#fff'; c.lineWidth = 1.5; c.beginPath();
+    for (let i = 0; i <= 30; i++) { const a = a0 + (da * i) / 30, px = cx + Math.sin(a) * rr, py = cy + Math.cos(a) * rr; i ? c.lineTo(px, py) : c.moveTo(px, py); } c.stroke();
+    const am = a0 + da / 2, off = ((tr.land % CIRC) + CIRC * 1.5) % CIRC - CIRC / 2;
+    const lab = Math.abs(off) < 0.0005 ? 'lands straight below' : `${distE(Math.abs(off))} ${off < 0 ? 'behind' : 'ahead'}`;
+    pillC(c, clamp(cx + Math.sin(am) * (rr + 22), 70, w - 70), clamp(cy + Math.cos(am) * (rr + 22), 40, h - 16), lab, off < 0 ? COL.or : COL.te, 12, 'center');
+  }
+  corner(c, inr ? 'SEEN FROM OUTSIDE · INERTIAL' : 'ON THE STATION · ROTATING');
+  txt(c, w - 14, 22, `t = ${fmtE(t, t < 100 ? 2 : 0)} s`, COL.mu, 11, 'right', 600);
+  const rate = tr.T / cDur(); txt(c, w - 14, 38, Math.abs(rate - 1) < 0.02 ? 'real time' : rate < 1 ? `${fmtE(1 / rate, 1)}x slow motion` : `${fmtE(rate, rate < 10 ? 1 : 0)}x faster`, CS.play ? COL.cu : COL.mu, 10.5, 'right', 600);
+  // arah putar
+  const sx = 14, sy = h - 16; arrow(c, sx, sy, sx + 46, sy, COL.or, 1.8); txt(c, sx + 54, sy + 4, 'spin', COL.or, 11, 'left', 650);
+}
+const cvIn = panel('cvIn', (o) => drawSim(o, 'in'), cStep);
+const cvRot = panel('cvRot', (o) => drawSim(o, 'rot'), cStep);
+function cStep(dt, now) {
+  if (CS.lastNow === now) return CS.play || CS.done; CS.lastNow = now;
+  if (!CS.play) return false;
+  const tr = CS.tr;
+  CS.t = Math.min(tr.T, CS.t + (dt * tr.T) / cDur());
+  if (CS.t >= tr.T) { CS.play = false; CS.done = true; cResult(); cDrawAll(); cBtn(); }
+  cClock(); return true;
+}
+// lama putar: jatuh pendek diputar waktu nyata (minimal 3 s, mis. dek 6,96 s), jatuh panjang dipadatkan ke 9 s
+const cDur = () => clamp(CS.tr.T, 3, 9);
+function cClock() { const ts = $('cTs'); ts.value = CS.tr.T ? CS.t / CS.tr.T : 0; setP(ts); $('cTso').textContent = dur(CS.t); }
+function cBtn() { $('cPlay').textContent = T(CS.play ? 'c3_pause' : CS.done || CS.t === 0 ? 'c3_play' : 'c3_resume'); }
+function cDrawAll() { cvIn.draw(cvIn); cvRot.draw(cvRot); }
+function cGo() { CS.t = 0; CS.done = false; CS.play = true; $('cVerd').textContent = ''; cBtn(); }
+function cToggle() { if (CS.play) { CS.play = false; cBtn(); return; } if (CS.done || CS.t >= CS.tr.T) { cGo(); return; } CS.play = true; cBtn(); }
+function cResult() {
+  const parts = [];
+  const turns = (W * CS.tr.T) / TAU; if (turns > 0.9) parts.push(T('c3_turns', { n: fmt(turns, 1) }));
+  $('cVerd').textContent = parts.join(' ');
+}
+function cRead() {
+  const tr = CS.tr, off = ((tr.land % CIRC) + CIRC * 1.5) % CIRC - CIRC / 2;
+  $('cHo').textContent = fmt(CS.h, CS.h % 1 ? 1 : 0) + ' m'; $('cUo').textContent = fmt(CS.u, CS.u % 1 ? 1 : 0) + ' m/s';
+  setP($('cH')); setP($('cU'));
+  $('cT').textContent = dur(tr.T); $('cLand').textContent = dist(Math.abs(off)); $('cLand').className = off < 0 ? 'o' : 't';
+  $('cLandL').textContent = T(off < 0 ? 'ro_behind' : 'ro_ahead2');
+  $('cV0').textContent = fmt(tr.vx, 2) + ' m/s'; $('cFloor').textContent = dist(tr.floorMove);
+  $('cPre').querySelectorAll('.chip').forEach((b, i) => b.classList.toggle('on', CPRE[i][0] === CS.h && CPRE[i][1] === CS.u));
+}
+function cSet(h, u) { CS.h = h; CS.u = u; $('cH').value = h; $('cU').value = u; cRecalc(); cRead(); $('cVerd').textContent = ''; cClock(); cBtn(); cDrawAll(); }
+$('cH').addEventListener('input', (e) => cSet(+e.target.value, CS.u));
+$('cU').addEventListener('input', (e) => cSet(CS.h, +e.target.value));
+$('cPlay').addEventListener('click', cToggle);
+$('cTs').addEventListener('input', (e) => { CS.play = false; CS.t = +e.target.value * CS.tr.T; CS.done = +e.target.value >= 1; $('cVerd').textContent = ''; if (CS.done) cResult(); cClock(); cBtn(); cDrawAll(); });
+$('cReplay').addEventListener('click', () => { cSet(CS.h, CS.u); cGo(); });
+
+/* =====================================================================
+   04 Air mancur (lintasan tepat, tampak samping lantai dibuka) dan hujan miring
+   ===================================================================== */
+const FT = { v: 10, tr: null, drops: [], acc: 0 };
+const fount = panel('cvFount', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, tr = FT.tr; c.clearRect(0, 0, w, h); corner(c, 'FOUNTAIN · ON THE STATION');
+  const fy = h - 60, sc = Math.min((fy - 70) / Math.max(tr.hmax * 1.12, 0.05), (w * 0.5) / Math.max(tr.land, 0.001) * 3);
+  const nx = w * 0.38, X = (s) => nx + s * sc, Y = (hh) => fy - hh * sc;
+  const pg = c.createLinearGradient(0, fy - 6, 0, fy + 26); pg.addColorStop(0, '#3a8fb4'); pg.addColorStop(1, '#103347');
+  c.fillStyle = pg; c.strokeStyle = '#9aa6b8'; c.lineWidth = 3; c.beginPath(); c.ellipse(nx + tr.land * sc / 2, fy + 8, Math.max(120, tr.land * sc + 60), 20, 0, 0, TAU); c.fill(); c.stroke();
+  c.strokeStyle = 'rgba(255,255,255,0.4)'; c.setLineDash([3, 5]); c.lineWidth = 1.2; c.beginPath(); c.moveTo(nx, fy); c.lineTo(nx, Y(tr.hmax * 1.08)); c.stroke(); c.setLineDash([]);
+  txt(c, nx - 8, Y(tr.hmax * 0.7), 'straight up?', COL.mu, 11.5, 'right');
+  // aliran tetes
+  for (const d of FT.drops) { const p = tr.rot(d.a); c.fillStyle = 'rgba(217,246,251,0.9)'; c.beginPath(); c.arc(X(p.s), Y(p.h), 2.1, 0, TAU); c.fill(); }
+  c.strokeStyle = 'rgba(191,238,244,0.55)'; c.lineWidth = 3; glow(c, COL.te, 8); c.beginPath();
+  for (let i = 0; i <= 80; i++) { const p = tr.rot((tr.T * i) / 80); i ? c.lineTo(X(p.s), Y(p.h)) : c.moveTo(X(p.s), Y(p.h)); } c.stroke(); noGlow(c);
+  const lx = X(tr.land);
+  for (let i = 0; i < 3; i++) { c.strokeStyle = `rgba(217,246,251,${0.7 - i * 0.2})`; c.lineWidth = 1; c.beginPath(); c.ellipse(lx, fy + 2, 8 + i * 9, 2.5 + i * 2.5, 0, 0, TAU); c.stroke(); }
+  c.strokeStyle = '#fff'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(nx, fy + 40); c.lineTo(lx, fy + 40); c.moveTo(nx, fy + 34); c.lineTo(nx, fy + 46); c.moveTo(lx, fy + 34); c.lineTo(lx, fy + 46); c.stroke();
+  pillC(c, (nx + lx) / 2, fy + 40, `${distE(tr.land)} ahead`, COL.te, 12, 'center');
+  txt(c, w - 14, 22, `peak ${distE(tr.hmax)}`, COL.mu, 11, 'right', 600);
+  arrow(c, w - 74, h - 16, w - 26, h - 16, COL.or, 1.8); txt(c, w - 80, h - 12, 'spin', COL.or, 11, 'right', 650);
+}, (dt) => {
+  const tr = FT.tr, rate = 1 / Math.max(0.6, tr.T); FT.acc += dt;
+  while (FT.acc > 0.045) { FT.acc -= 0.045; FT.drops.push({ a: 0 }); }
+  for (const d of FT.drops) d.a += dt * tr.T * rate * 1.2;
+  FT.drops = FT.drops.filter((d) => d.a < tr.T); return true;
+});
+function updFount() {
+  FT.tr = traj(0, FT.v); FT.drops = []; setP($('fV'));
+  $('fVo').textContent = fmt(FT.v, 1) + ' m/s'; $('fPeak').textContent = dist(FT.tr.hmax); $('fLand').textContent = dist(FT.tr.land);
+  $('fEst').textContent = dist((4 / 3) * W * FT.v ** 3 / G ** 2); fount.draw(fount);
+}
+$('fV').addEventListener('input', (e) => { FT.v = +e.target.value; updFount(); });
+
+const RN = { v: 7, drops: [] };
+for (let i = 0; i < 140; i++) RN.drops.push({ x: Math.random(), y: Math.random(), l: 0.7 + Math.random() * 0.6 });
+const rain = panel('cvRain', (o) => {
+  const c = o.ctx, w = o.w, h = o.h; c.clearRect(0, 0, w, h);
+  const sk = c.createLinearGradient(0, 0, 0, h * 0.4); sk.addColorStop(0, 'rgba(42,52,66,0.95)'); sk.addColorStop(1, 'rgba(11,15,22,0)'); c.fillStyle = sk; c.fillRect(0, 0, w, h * 0.4);
+  const gy = h - 46, lpx = w * 0.72, lpy = h * 0.34;
+  const lamp = c.createRadialGradient(lpx - 20, lpy + 4, 0, lpx - 20, lpy + 4, w * 0.22); lamp.addColorStop(0, 'rgba(255,226,160,0.5)'); lamp.addColorStop(1, 'rgba(255,226,160,0)');
+  c.fillStyle = lamp; c.fillRect(0, 0, w, h);
+  const vl = (2 * W * RN.v * RN.v) / G, sl = vl / RN.v;
+  for (const d of RN.drops) {
+    const x = d.x * w * 1.2 - w * 0.1, y = d.y * (gy - 20), L_ = (10 + RN.v * 3.2) * d.l;
+    const near = Math.hypot(x - (lpx - 20), y - lpy) < w * 0.18;
+    c.strokeStyle = near ? 'rgba(255,233,184,0.95)' : 'rgba(143,211,220,0.55)'; c.lineWidth = 1.2 + RN.v * 0.06; c.lineCap = 'round';
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x + L_ * sl, y - L_); c.stroke();
+  }
+  c.fillStyle = '#0f1720'; c.fillRect(0, gy, w, h - gy); glow(c, COL.cu, 8); c.strokeStyle = COL.cu; c.lineWidth = 2; c.beginPath(); c.moveTo(0, gy); c.lineTo(w, gy); c.stroke(); noGlow(c);
+  for (const px of [0.18, 0.45, 0.85]) { c.fillStyle = 'rgba(93,127,155,0.45)'; c.beginPath(); c.ellipse(px * w, gy + 12, 34, 4, 0, 0, TAU); c.fill(); }
+  c.fillStyle = '#2a3240'; c.fillRect(lpx - 2, lpy, 4, gy - lpy); c.strokeStyle = '#2a3240'; c.lineWidth = 4; c.beginPath(); c.moveTo(lpx, lpy + 2); c.quadraticCurveTo(lpx, lpy - 8, lpx - 18, lpy - 4); c.stroke();
+  glow(c, '#ffe9b8', 18); c.fillStyle = '#ffe9b8'; c.beginPath(); c.ellipse(lpx - 20, lpy, 7, 3, 0, 0, TAU); c.fill(); noGlow(c);
+  // sudut
+  const ax = w * 0.3, ay = h * 0.38, Lr = h * 0.3, deg = Math.atan(sl) * 180 / Math.PI;
+  c.strokeStyle = 'rgba(255,255,255,0.6)'; c.setLineDash([3, 5]); c.lineWidth = 1.2; c.beginPath(); c.moveTo(ax, ay); c.lineTo(ax, ay + Lr); c.stroke(); c.setLineDash([]);
+  glow(c, COL.te, 8); arrow(c, ax, ay, ax - Lr * sl, ay + Lr, COL.te, 3); noGlow(c);
+  c.strokeStyle = '#fff'; c.lineWidth = 1.3; c.beginPath(); c.arc(ax, ay, Lr * 0.55, Math.PI / 2, Math.PI / 2 + Math.atan(sl)); c.stroke();
+  c.fillStyle = 'rgba(10,14,22,0.72)'; c.beginPath(); c.roundRect ? c.roundRect(ax + 10, ay + Lr * 0.35, 122, 46, 10) : c.rect(ax + 10, ay + Lr * 0.35, 122, 46); c.fill();
+  txt(c, ax + 20, ay + Lr * 0.35 + 30, `${fmtE(deg, 1)}°`, COL.te, 26, 'left', 700); txt(c, ax + 20, ay + Lr * 0.35 + 42, 'tilt, no wind', COL.mu, 10.5);
+  corner(c, 'RAIN · ON THE STATION');
+  arrow(c, w - 74, h - 16, w - 26, h - 16, COL.or, 1.8); txt(c, w - 80, h - 12, 'spin', COL.or, 11, 'right', 650);
+}, (dt) => {
+  const vl = (2 * W * RN.v * RN.v) / G, k = 0.11;
+  for (const d of RN.drops) { d.y += dt * RN.v * k; d.x -= dt * vl * k * 0.8; if (d.y > 1) { d.y -= 1; d.x = Math.random(); } if (d.x < -0.05) d.x += 1.1; }
+  return true;
+});
+function updRain() {
+  const vl = (2 * W * RN.v * RN.v) / G, deg = Math.atan(vl / RN.v) * 180 / Math.PI; setP($('rV'));
+  $('rVo').textContent = fmt(RN.v, 1) + ' m/s'; $('rTilt').textContent = fmt(deg, 1) + '°'; $('rDrift').textContent = fmt(vl, 2) + ' m/s';
+  $('rKind').textContent = S.rain_k[L()][RN.v < 3.5 ? 0 : RN.v < 5.5 ? 1 : RN.v < 7.5 ? 2 : 3]; rain.draw(rain);
+}
+$('rV').addEventListener('input', (e) => { RN.v = +e.target.value; updRain(); });
+
+/* =====================================================================
+   05 Berat: jalan cincin dilihat dari sumbu, waktu nyata
+   ===================================================================== */
+const WT = { v: 150, th: 0, t: 0, trail: [] };
+const ring = panel('cvRing', (o) => {
+  const c = o.ctx, w = o.w, h = o.h; c.clearRect(0, 0, w, h); corner(c, 'RING ROAD · SEEN FROM THE AXIS · STATION SPIN AT REAL SPEED');
+  const cx = w * 0.5, cy = h * 0.54, r = Math.min(w, h) * 0.36, spin = W * WT.t;
+  c.lineWidth = 26; c.strokeStyle = '#1d232d'; c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.stroke();
+  c.lineWidth = 1.5; c.strokeStyle = 'rgba(255,255,255,0.35)'; c.setLineDash([8, 10]); c.lineDashOffset = -spin * r; c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.stroke(); c.setLineDash([]); c.lineDashOffset = 0;
+  for (let i = 0; i < 24; i++) { const a = (i / 24) * TAU + spin, bh = 6 + ((i * 37) % 11); c.save(); c.translate(cx + Math.sin(a) * (r + 18), cy + Math.cos(a) * (r + 18)); c.rotate(-a); c.fillStyle = i % 5 === 0 ? '#c9a24a' : '#76839a'; c.fillRect(-4, 0, 8, bh); c.restore(); }
+  glow(c, '#fff6d6', 20); c.fillStyle = '#fff6d6'; c.beginPath(); c.arc(cx, cy, 5, 0, TAU); c.fill(); noGlow(c);
+  // arah putaran stasiun
+  c.strokeStyle = COL.or; c.lineWidth = 2; c.beginPath(); c.arc(cx, cy, r * 0.42, -1.2, -2.5, true); c.stroke();
+  arrow(c, cx + Math.cos(-2.4) * r * 0.42, cy + Math.sin(-2.4) * r * 0.42, cx + Math.cos(-2.5) * r * 0.42, cy + Math.sin(-2.5) * r * 0.42, COL.or, 2);
+  txt(c, cx, cy + 4 - r * 0.2, 'station spin', COL.or, 10.5, 'center', 600);
+  // jejak dan motor
+  const col = WT.v >= 0 ? COL.cu : COL.te;
+  c.strokeStyle = col; c.lineWidth = 3; c.globalAlpha = 0.6; c.beginPath();
+  WT.trail.forEach((a, i) => { const x = cx + Math.sin(a + spin) * r, y = cy + Math.cos(a + spin) * r; i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); c.globalAlpha = 1;
+  const a = WT.th + spin, bx = cx + Math.sin(a) * r, by = cy + Math.cos(a) * r;
+  glow(c, col, 16); c.fillStyle = col; c.beginPath(); c.arc(bx, by, 7, 0, TAU); c.fill(); noGlow(c);
+  // pengukur
+  const g = Math.pow(W * R + WT.v / 3.6, 2) / R / G, gx = w - 70, gy = h - 40, gr = 46;
+  c.lineWidth = 7; c.strokeStyle = 'rgba(255,255,255,0.1)'; c.beginPath(); c.arc(gx, gy, gr, Math.PI, 0); c.stroke();
+  const f = clamp(g / 4, 0, 1); c.strokeStyle = col; glow(c, col, 8); c.beginPath(); c.arc(gx, gy, gr, Math.PI, Math.PI + f * Math.PI); c.stroke(); noGlow(c);
+  const na = Math.PI + clamp(1 / 4, 0, 1) * Math.PI; c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.moveTo(gx + Math.cos(na) * (gr - 8), gy + Math.sin(na) * (gr - 8)); c.lineTo(gx + Math.cos(na) * (gr + 8), gy + Math.sin(na) * (gr + 8)); c.stroke();
+  txt(c, gx, gy - 6, `${fmtE(g, 2)} g`, col, 17, 'center', 700); txt(c, gx, gy + 12, '1 g mark', COL.mu, 9.5, 'center');
+}, (dt) => {
+  WT.t += dt; WT.th += ((WT.v / 3.6) / R) * dt * 8;   // motor dipercepat 8x agar terlihat; putaran stasiun asli
+  WT.trail.push(WT.th); if (WT.trail.length > 40) WT.trail.shift(); return true;
+});
+function updW() {
+  const v = WT.v, g = Math.pow(W * R + v / 3.6, 2) / R / G; setP($('wV'));
+  $('wVo').textContent = (v > 0 ? '+' : '') + fmt(v) + ' km/h';
+  $('wG').textContent = fmt(g, 2) + ' g'; $('wG').className = v >= 0 ? '' : 't'; $('wKg').textContent = fmt(MASS * g, 1) + ' kg';
+  $('wJump').textContent = g < 0.005 ? '∞' : dist(0.5 / g); $('wAbs').textContent = fmt(Math.abs(W * R * 3.6 + v), 1) + ' km/h';
+  const ver = Math.abs(v + W * R * 3.6) < 3 ? T('w_float') : v < -W * R * 3.6 ? T('w_neg') : Math.abs(v) > 150 ? T('w_over') : '';
+  $('wVerd').textContent = ver; document.querySelectorAll('[data-wv]').forEach((b) => b.classList.toggle('on', +b.dataset.wv === v));
+  WT.trail = []; ring.draw(ring);
+}
+$('wV').addEventListener('input', (e) => { WT.v = +e.target.value; updW(); });
+document.querySelectorAll('[data-wv]').forEach((b) => b.addEventListener('click', () => { WT.v = +b.dataset.wv; $('wV').value = WT.v; updW(); }));
+
+/* =====================================================================
+   06 Lift: profil stepLift() game, unting-unting dalam kabin (fisika nyata)
+   Kerangka berputar: bawah radial = omega^2 r + a (a = percepatan ke arah sumbu),
+   Coriolis = 2 omega v (naik = mendahului / searah putaran).
+   ===================================================================== */
+const LD = 994, LF = { d: 0, dir: 1, f: 1, run: false, done: false, t: 0, v: 0, a: 0 };
+function liftV(d, f) {   // sama dengan stepLift(): min(20, sqrt(2a(d+0,5)), sqrt(2a sisa)) x f
+  const v1 = Math.sqrt(2 * (d + 0.5)), v2 = Math.sqrt(2 * Math.max(LD - d, 0)), m = Math.min(20, v1, v2);
+  return { v: m * f, a: (m === v1 ? 1 : m === v2 ? -1 : 0) * f * f };
+}
+function liftState() {
+  const hgt = LF.dir > 0 ? LF.d : LD - LF.d, r = R - hgt, vin = LF.dir * LF.v, ain = LF.dir * LF.a;
+  const down = W * W * r + (LF.run ? ain : 0), side = 2 * W * vin;
+  return { hgt, r, down, side, tilt: Math.atan2(side, down) * 180 / Math.PI, tot: Math.hypot(down, side) / G };
+}
+const lift = panel('cvLift', (o) => {
+  const c = o.ctx, w = o.w, h = o.h; c.clearRect(0, 0, w, h); corner(c, 'END CAP A LIFT · ROTATING FRAME');
+  const S_ = liftState(), nar = w < 520, ww = nar ? 64 : 120, sx = nar ? 44 : w * 0.17, fy = h - 30, ty = 52, Y = (m) => fy - (m / LD) * (fy - ty);
+  // dinding dan poros
+  const gw = c.createLinearGradient(sx - ww / 2, 0, sx + ww / 2, 0); gw.addColorStop(0, '#1a212c'); gw.addColorStop(0.5, '#2a3442'); gw.addColorStop(1, '#171d27');
+  c.fillStyle = gw; c.fillRect(sx - ww / 2, ty, ww, fy - ty);
+  const gs = c.createLinearGradient(0, fy, 0, ty); gs.addColorStop(0, COL.cu); gs.addColorStop(1, COL.te);
+  glow(c, COL.te, 8); c.strokeStyle = gs; c.lineWidth = 3; c.beginPath(); c.moveTo(sx, fy); c.lineTo(sx, ty); c.stroke(); noGlow(c);
+  const gx1 = nar ? sx + 40 : w * 0.36;
+  c.fillStyle = '#2a3a22'; c.fillRect(0, fy, gx1, h - fy); glow(c, COL.cu, 6); c.strokeStyle = COL.cu; c.lineWidth = 2; c.beginPath(); c.moveTo(0, fy); c.lineTo(gx1, fy); c.stroke(); noGlow(c);
+  c.strokeStyle = COL.te; c.lineWidth = 2.5; glow(c, COL.te, 10); c.beginPath(); c.ellipse(sx, ty - 6, ww * 0.6, 12, 0, 0, TAU); c.stroke(); noGlow(c);
+  if (!nar) { txt(c, sx + ww * 0.6 + 8, ty - 2, 'hub 0 g', COL.te, 11, 'left', 600); for (let m = 250; m <= 1000; m += 250) txt(c, sx - ww / 2 - 8, Y(Math.min(m, LD)) + 4, `${fmtE(m)} m`, COL.mu, 10, 'right'); }
+  // kabin
+  const cy_ = Y(S_.hgt); c.fillStyle = COL.ink; glow(c, '#fff', 10); c.beginPath(); c.roundRect ? c.roundRect(sx - 10, cy_ - 14, 20, 14, 3) : c.rect(sx - 10, cy_ - 14, 20, 14); c.fill(); noGlow(c);
+  if (Math.abs(S_.side) > 0.05) { const sd = Math.sign(S_.side); glow(c, COL.or, 8); arrow(c, sx + sd * 14, cy_ - 7, sx + sd * (14 + Math.min(60, Math.abs(S_.side) * 14)), cy_ - 7, COL.or, 2.5); noGlow(c); }
+  // interior kabin besar
+  const bx = nar ? sx + 52 : w * 0.44, by = 46, bw = w - bx - (nar ? 10 : w * 0.04), bh = h - 80;
+  c.fillStyle = 'rgba(255,255,255,0.03)'; c.strokeStyle = 'rgba(255,255,255,0.22)'; c.lineWidth = 2; c.beginPath(); c.roundRect ? c.roundRect(bx, by, bw, bh, 14) : c.rect(bx, by, bw, bh); c.fill(); c.stroke();
+  txt(c, bx + 12, by + 20, 'INSIDE THE CABIN', COL.mu, 10.5, 'left', 650);
+  const fx = bx + bw / 2, flo = by + bh - 14;
+  c.strokeStyle = 'rgba(217,189,98,0.6)'; c.lineWidth = 3; c.beginPath(); c.moveTo(bx + 10, flo); c.lineTo(bx + bw - 10, flo); c.stroke();
+  // unting-unting dari langit-langit
+  const px = bx + bw * 0.68, py = by + bh * 0.48, Lb = Math.min(bh * 0.36, bw * 0.26, 120), ta = S_.tilt * Math.PI / 180;   // digantung di tiang tengah kabin
+  const ex = px + Math.sin(ta) * Lb, ey = py + Math.cos(ta) * Lb;
+  c.strokeStyle = 'rgba(255,255,255,0.35)'; c.setLineDash([3, 5]); c.lineWidth = 1; c.beginPath(); c.moveTo(px, py); c.lineTo(px, py + Lb); c.stroke(); c.setLineDash([]);
+  c.strokeStyle = '#d8dde5'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(px, py); c.lineTo(ex, ey); c.stroke();
+  glow(c, COL.red, 12); c.fillStyle = COL.red; c.beginPath(); c.moveTo(ex - 7, ey - 6); c.lineTo(ex + 7, ey - 6); c.lineTo(ex, ey + 9); c.closePath(); c.fill(); noGlow(c);
+  c.fillStyle = '#5d6778'; c.beginPath(); c.arc(px, py, 4, 0, TAU); c.fill();
+  if (Math.abs(S_.tilt) > 0.5) { c.strokeStyle = COL.red; c.lineWidth = 1.2; c.beginPath(); c.arc(px, py, Lb * 0.45, Math.PI / 2, Math.PI / 2 - ta, ta > 0); c.stroke(); }
+  pillC(c, bx + bw - 14, by + 20, `plumb bob ${fmtE(Math.abs(S_.tilt), 1)}°`, COL.red, 11.5, 'right');
+  // orang + panah "bawah" terasa
+  const ppx = bx + bw * 0.25, gdir = Math.atan2(S_.down, S_.side);
+  if (S_.down < 0) { c.strokeStyle = 'rgba(217,189,98,0.6)'; c.lineWidth = 3; c.beginPath(); c.moveTo(bx + 10, by + 30); c.lineTo(bx + bw * 0.45, by + 30); c.stroke(); person(c, ppx, by + 30, Math.PI / 2, 1.4, COL.red); }
+  else person(c, ppx, flo, -Math.PI / 2, 1.4, '#fff');
+  const ar = Math.min(70, S_.tot * 70 + 6), ax = ppx + 40, ay = by + 60;
+  glow(c, COL.cu, 8); arrow(c, ax, ay, ax + Math.cos(gdir) * ar, ay + Math.sin(gdir) * ar, COL.cu, 2.5); noGlow(c);
+  txt(c, ax, ay - 10, `felt down: ${fmtE(S_.tot, 2)} g`, COL.cu, 11, 'left', 600);
+  arrow(c, bx + bw - 64, by + bh + 18, bx + bw - 16, by + bh + 18, COL.or, 1.8); txt(c, bx + bw - 70, by + bh + 22, 'spin', COL.or, 11, 'right', 650);
+}, (dt) => {
+  if (!LF.run) return false;
+  const rate = LF.f === 1 ? 6 : 1; let left = dt * rate;
+  while (left > 0 && LF.run) {
+    const sub = Math.min(0.02, left); left -= sub;
+    const q = liftV(LF.d, LF.f); LF.v = q.v; LF.a = q.a;
+    LF.d = Math.min(LD, LF.d + q.v * sub); LF.t += sub;
+    if (LD - LF.d < 1e-3) { LF.d = LD; LF.run = false; LF.done = true; LF.v = 0; LF.a = 0; }
+  }
+  updLift(); return true;
+});
+function updLift() {
+  const S_ = liftState();
+  $('lH').textContent = fmt(S_.hgt, 0) + ' m'; $('lV').textContent = fmt(LF.v, 1) + ' m/s';
+  $('lG').textContent = fmt(S_.down / G, 3) + ' g'; $('lG').className = S_.down < 0 ? 'r' : '';
+  $('lCor').textContent = fmt(Math.abs(S_.side) / G, 2) + ' g'; $('lTilt').textContent = fmt(Math.abs(S_.tilt), 1) + '°';
+  $('lClock').textContent = LF.t > 0 ? T('lclock', { t: fmt(LF.t, 1), k: LF.f === 1 ? 6 : 1 }) : '';
+  let v = T('l_idle');
+  if (LF.done) v = T(LF.dir > 0 ? 'l_done_up' : 'l_done_dn');
+  else if (LF.run && S_.down < 0) v = T('l_ceil');
+  else if (LF.run && LF.a > 0) v = T('l_acc');
+  else if (LF.run) v = T('l_cruise', { dir: T(S_.side > 0 ? 'l_dir_a' : 'l_dir_b'), a: fmt(Math.abs(S_.tilt), 0) + '°' });
+  $('lVerd').textContent = v;
+  if (!lift.vis) return; lift.draw(lift);
+}
+function liftGo(dir) { LF.dir = dir; LF.d = 0; LF.t = 0; LF.done = false; LF.run = true; const q = liftV(0, LF.f); LF.v = q.v; LF.a = q.a; updLift(); }
+$('lUp').addEventListener('click', () => liftGo(1));
+$('lDown').addEventListener('click', () => liftGo(-1));
+$('lShift').addEventListener('click', () => { LF.f = LF.f === 1 ? 5 : 1; $('lShift').classList.toggle('on', LF.f === 5); });
+
+/* =====================================================================
+   07 Orbit dan gerhana (model bayangan silinder sederhana)
+   ===================================================================== */
+const OB = { t: 4, play: false };
+const HALF = Math.asin(SAT_R / ORB_R);
+const phiOf = (t) => -2.3 + (TAU * t) / P_ORB;   // stasiun mulai di sisi terang
+const inEcl = (t) => { const p = phiOf(t); return Math.cos(p) > 0 && Math.abs(Math.sin(p)) * ORB_R < SAT_R; };
+const orb = panel('cvOrb', (o) => {
+  const c = o.ctx, w = o.w, h = o.h; c.clearRect(0, 0, w, h); bgStars(c, w, h, 21, 110);
+  const cx = w * 0.52, cy = h * 0.52, ro = Math.min(w * 0.36, h * 0.4), k = ro / ORB_R, rs = SAT_R * k, ecl = inEcl(OB.t);
+  const sun = c.createRadialGradient(-w * 0.06, cy, 0, -w * 0.06, cy, h * 0.5); sun.addColorStop(0, 'rgba(255,248,224,1)'); sun.addColorStop(0.25, 'rgba(255,210,122,0.85)'); sun.addColorStop(1, 'rgba(243,165,90,0)');
+  c.fillStyle = sun; c.fillRect(0, 0, w, h);
+  for (let i = 0; i < 5; i++) { const y = cy - h * 0.3 + i * h * 0.15; arrow(c, w * 0.05, y, w * 0.13, y, 'rgba(243,165,90,0.7)', 1.5); }
+  const um = c.createLinearGradient(cx, 0, w, 0); um.addColorStop(0, 'rgba(0,0,0,0.85)'); um.addColorStop(1, 'rgba(0,0,0,0.12)'); c.fillStyle = um; c.fillRect(cx, cy - rs, w - cx, rs * 2);
+  c.strokeStyle = 'rgba(255,255,255,0.4)'; c.setLineDash([3, 6]); c.lineWidth = 1; c.beginPath(); c.arc(cx, cy, ro, 0, TAU); c.stroke(); c.setLineDash([]);
+  glow(c, COL.or, 10); c.strokeStyle = COL.or; c.lineWidth = 5; c.lineCap = 'round'; c.beginPath(); c.arc(cx, cy, ro, -HALF, HALF); c.stroke(); noGlow(c);
+  // Saturnus
+  const ringP = (half) => { c.save(); c.translate(cx, cy); c.rotate(-0.24); c.strokeStyle = 'rgba(230,211,168,0.85)'; c.lineWidth = Math.max(2, rs * 0.16); c.beginPath(); c.ellipse(0, 0, rs * 2.2, rs * 0.42, 0, half ? Math.PI : 0, half ? TAU : Math.PI); c.stroke(); c.restore(); };
+  ringP(true);
+  const sb = c.createLinearGradient(cx, cy - rs, cx, cy + rs); ['#d9c08e', '#c8a873', '#e6d3a8', '#b8925e', '#e2c895', '#c49f69', '#b08a58'].forEach((col, i, a) => sb.addColorStop(i / (a.length - 1), col));
+  c.fillStyle = sb; c.beginPath(); c.arc(cx, cy, rs, 0, TAU); c.fill();
+  const nt = c.createLinearGradient(cx - rs, 0, cx + rs, 0); nt.addColorStop(0.35, 'rgba(0,0,0,0)'); nt.addColorStop(1, 'rgba(0,0,0,0.85)'); c.fillStyle = nt; c.beginPath(); c.arc(cx, cy, rs, 0, TAU); c.fill();
+  if (ecl) { c.strokeStyle = 'rgba(255,190,120,0.9)'; glow(c, COL.or, 18); c.lineWidth = 1.5; c.beginPath(); c.arc(cx, cy, rs + 1.5, 0, TAU); c.stroke(); noGlow(c); }
+  ringP(false);
+  // stasiun
+  const p = phiOf(OB.t), sx = cx + Math.cos(p) * ro, sy = cy + Math.sin(p) * ro;
+  c.save(); c.translate(sx, sy); c.rotate(p + Math.PI / 2 - 0.44); glow(c, ecl ? '#555' : COL.cu, ecl ? 0 : 14); c.fillStyle = ecl ? '#6b6250' : COL.cu; c.fillRect(-12, -4, 24, 8); noGlow(c); c.restore();
+  pillC(c, sx + (Math.cos(p) > 0 ? -16 : 16), sy - 22, ecl ? 'ECLIPSE · sunline off' : 'Copper Corn Station', ecl ? COL.or : COL.cu, 11.5, Math.cos(p) > 0 ? 'right' : 'left');
+  txt(c, cx, cy + rs + 26, 'Saturn', COL.ink, 12, 'center', 600);
+  corner(c, 'TOP VIEW OF THE ORBIT PLANE · TO SCALE');
+  // garis waktu
+  const tx0 = 16, tx1 = w - 16, ty = h - 14; c.fillStyle = 'rgba(217,189,98,0.25)'; c.fillRect(tx0, ty - 3, tx1 - tx0, 6);
+  for (let i = 0; i <= 200; i++) { const tt = (P_ORB * i) / 200; if (inEcl(tt)) { c.fillStyle = COL.or; c.fillRect(tx0 + ((tx1 - tx0) * i) / 200, ty - 5, (tx1 - tx0) / 200 + 1, 10); } }
+  c.fillStyle = '#fff'; c.fillRect(tx0 + ((tx1 - tx0) * OB.t) / P_ORB - 1, ty - 8, 2, 16);
+}, (dt) => { if (!OB.play) return false; OB.t = (OB.t + dt * P_ORB / 22) % P_ORB; updOrb(false); return true; });
+function eclWindow() {   // waktu masuk dan keluar bayangan
+  const p0 = -HALF, p1 = HALF, base = -2.3;
+  const t0 = ((((p0 - base) % TAU) + TAU) % TAU) / TAU * P_ORB, t1 = ((((p1 - base) % TAU) + TAU) % TAU) / TAU * P_ORB;
+  return [t0, t1];
+}
+function updOrb(draw = true) {
+  const [t0, t1] = eclWindow(), e = inEcl(OB.t); $('oT').value = OB.t; setP($('oT'));
+  const hh = (x) => { const H = Math.floor(x), M = Math.round((x - H) * 60); return `${H} ${LANG === 'en' ? 'h' : 'jam'} ${String(M).padStart(2, '0')} m`; };
+  $('oTo').textContent = hh(OB.t);
+  $('oState').textContent = T(e ? 'o_ecl' : 'o_sun'); $('oState').className = e ? 'o' : '';
+  $('oSun').textContent = e ? '0 %' : '100 %';
+  const nxt = e ? (t1 - OB.t + P_ORB) % P_ORB : (t0 - OB.t + P_ORB) % P_ORB;
+  $('oNext').textContent = hh(nxt); $('oNextL').textContent = T(e ? 'o_left' : 'o_next');
+  if (draw) orb.draw(orb);
+}
+$('oT').addEventListener('input', (e) => { OB.t = +e.target.value; updOrb(); });
+$('oPlay').addEventListener('click', () => { OB.play = !OB.play; $('oPlay').textContent = T(OB.play ? 'c7_pause' : 'c7_play'); });
+$('oJump').addEventListener('click', () => { OB.t = (eclWindow()[0] - 2 / 60 + P_ORB) % P_ORB; updOrb(); });
+
+/* =====================================================================
+   Paspor fisika (localStorage per penonton; aman bila diblokir)
+   ===================================================================== */
+let STAMP = [];
+try { STAMP = JSON.parse(localStorage.getItem('cooperStation.passport') || '[]'); if (!Array.isArray(STAMP)) STAMP = []; } catch (e) { STAMP = []; }
+const saveStamp = () => { try { localStorage.setItem('cooperStation.passport', JSON.stringify(STAMP)); } catch (e) { /* abaikan */ } };
+function renderPass() {
+  const box = $('pass'); box.textContent = '';
+  PASS.forEach((p, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'stamp' + (STAMP.includes(i) ? ' done' : '');
+    b.innerHTML = `<div class="seal"><svg viewBox="0 0 24 24" fill="none" stroke="#0b0b0b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></div><h4></h4><p></p><div class="k">${p[2][L()]} · <a href="#${p[3]}"></a></div>`;
+    b.querySelector('h4').textContent = p[0][L()]; b.querySelector('p').textContent = p[1][L()];
+    const a = b.querySelector('a'); a.textContent = S.nav[L()][CH_IDS.indexOf(p[3])]; a.addEventListener('click', (e) => e.stopPropagation());
+    b.addEventListener('click', () => { const j = STAMP.indexOf(i); j < 0 ? STAMP.push(i) : STAMP.splice(j, 1); saveStamp(); renderPass(); });
+    box.appendChild(b);
+  });
+  const n = STAMP.length; $('passCount').textContent = n === PASS.length ? T('c8_all') : T('c8_count', { n, m: PASS.length }); $('passBar').style.width = (n / PASS.length) * 100 + '%';
+}
+$('passReset').addEventListener('click', () => { STAMP = []; saveStamp(); renderPass(); });
+
+/* =====================================================================
+   Galeri + lightbox
+   ===================================================================== */
+let LB = 0;
+function lbShow(i) { LB = (i + GAL.length) % GAL.length; const g = GAL[LB]; $('lbImg').src = 'detail/' + g[0]; $('lbImg').alt = g[1][1]; $('lbCap').innerHTML = `${LB + 1} / ${GAL.length} · ${g[1][L()]} <a href="detail/${g[0]}" target="_blank" rel="noopener">${T('gl_open')}</a>`; $('lb').classList.add('on'); }
+const lbHide = () => $('lb').classList.remove('on');
+$('lbX').addEventListener('click', lbHide); $('lbP').addEventListener('click', () => lbShow(LB - 1)); $('lbN').addEventListener('click', () => lbShow(LB + 1));
+$('lb').addEventListener('click', (e) => { if (e.target === $('lb')) lbHide(); });
+addEventListener('keydown', (e) => { if (!$('lb').classList.contains('on')) return; if (e.key === 'Escape') lbHide(); if (e.key === 'ArrowRight') lbShow(LB + 1); if (e.key === 'ArrowLeft') lbShow(LB - 1); });
+
+/* =====================================================================
+   Render teks (ulang saat ganti bahasa)
+   ===================================================================== */
+function setP(inp) { const p = ((+inp.value - +inp.min) / (+inp.max - +inp.min)) * 100; inp.style.setProperty('--p', p + '%'); }
+function render() {
+  document.documentElement.lang = LANG; document.title = LANG === 'en' ? 'Copper Corn Station: Physics' : 'Copper Corn Station: Fisika';
+  document.querySelectorAll('[data-t]').forEach((el) => { el.innerHTML = T(el.dataset.t); });
+  const q = '?lang=' + LANG;
+  ['backLink', 'backEnd'].forEach((id) => { $(id).href = '../../index.html' + q; });
+  ['playTop', 'playHero', 'playEnd'].forEach((id) => { $(id).href = 'index.html' + q; });
+  // nav
+  const nav = $('nav'); nav.textContent = '';
+  CH_IDS.forEach((id, i) => { const a = document.createElement('a'); a.href = '#' + id; a.innerHTML = `<b>${id === 'galeri' ? '+' : '0' + (i + 1)}</b>`; a.append(S.nav[L()][i]); nav.appendChild(a); });
+  // statistik
+  const st = $('stats'); st.textContent = '';
+  for (const [v, u, k, col] of [[fmt(1000), 'm', 'st_r'], [fmt(8000), 'm', 'st_l'], [fmt(63.4, 1), 's', 'st_t'], [fmt(99.05, 2), 'm/s', 'st_v', COL.te], [fmt(37.57, 2), 'h', 'st_o', COL.or]]) {
+    const d = document.createElement('div'); d.className = 'stat'; d.innerHTML = `<b${col ? ` style="color:${col}"` : ''}>${v}<small>${u}</small></b><span>${T(k)}</span>`; st.appendChild(d);
+  }
+  // preset Coriolis
+  const cp = $('cPre'); cp.textContent = '';
+  CPRE.forEach((p, i) => { const b = document.createElement('button'); b.className = 'chip'; b.type = 'button'; b.textContent = S.c3_pre[L()][i]; b.addEventListener('click', () => { cSet(p[0], p[1]); cGo(); }); cp.appendChild(b); cp.append(' '); });
+  // galeri
+  const gl = $('gal'); gl.textContent = '';
+  GAL.forEach((g, i) => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<img src="detail/${g[0]}" alt="" loading="lazy" width="960" height="540"><span></span>`; b.querySelector('span').textContent = `${i + 1}. ${g[1][L()]}`; b.querySelector('img').alt = g[1][1]; b.addEventListener('click', () => lbShow(i)); gl.appendChild(b); });
+  $('lang').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
+  $('oPlay').textContent = T(OB.play ? 'c7_pause' : 'c7_play');
+  document.querySelectorAll('.massIn').forEach((m) => { m.value = MASS; });
+  renderPass(); updGrav(); cRead(); updFount(); updRain(); updW(); updLift(); updOrb(); heroCap(); cBtn(); cClock(); navSpy();
+}
+for (const [c, n] of [['id', 'ID'], ['en', 'EN']]) {
+  const b = document.createElement('button'); b.type = 'button'; b.dataset.lang = c; b.textContent = n;
+  b.addEventListener('click', () => { LANG = c; try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ } history.replaceState(null, '', '?lang=' + c + location.hash); render(); });
+  $('lang').appendChild(b);
+}
+document.querySelectorAll('.massIn').forEach((m) => m.addEventListener('input', () => { const v = +m.value; if (v >= 20 && v <= 200) { MASS = v; document.querySelectorAll('.massIn').forEach((x) => { if (x !== m) x.value = v; }); updGrav(); updW(); } }));
+
+/* =====================================================================
+   Gulir: muncul, navigasi aktif, progres
+   ===================================================================== */
+const io = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }, { threshold: 0.12 });
+document.querySelectorAll('.rv').forEach((el) => io.observe(el));
+let CUR = '';
+const spy = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) { CUR = e.target.id; navSpy(); } }, { rootMargin: '-45% 0px -50% 0px' });
+CH_IDS.forEach((id) => spy.observe($(id)));
+function navSpy() {
+  $('nav').querySelectorAll('a').forEach((a) => { const on = a.getAttribute('href') === '#' + CUR; a.classList.toggle('on', on); if (on && a.scrollIntoView) { const n = $('nav'); n.scrollTo({ left: a.offsetLeft - n.clientWidth / 2 + a.clientWidth / 2, behavior: reduce ? 'auto' : 'smooth' }); } });
+}
+addEventListener('scroll', () => { const m = document.documentElement.scrollHeight - innerHeight; $('prog').style.width = (m > 0 ? (scrollY / m) * 100 : 0) + '%'; }, { passive: true });
+
+// mulai
+cSet(176.5, 0);
+render();
+requestAnimationFrame(loop);
+window.__detail = { traj, liftV, liftState, LF, CS, inEcl, T: () => LANG };   // untuk uji
+window.__detailReady = true;
+</script>
+</body>
+</html>
