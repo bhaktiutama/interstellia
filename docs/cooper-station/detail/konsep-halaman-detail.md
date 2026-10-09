@@ -199,7 +199,7 @@ Coba sendiri: I lompat ke gerhana berikutnya.
 
 | Trik | Masalah | Cara di kode | Angka |
 | --- | --- | --- | --- |
-| Dua scene, dua skala | Saturnus 2,6 x 10^8 m dari stasiun: float 32 bit melangkah 16 m, satu depth buffer tidak cukup untuk 0,1 m sampai 3 x 10^8 m | `farScene` 1 unit = 1.000 km digambar dulu, lalu scene utama dalam meter | Langkah float32 di 2,6 x 10^8 = 16 (numpy `spacing`) |
+| Dua scene, dua skala | Satu depth buffer tidak cukup untuk kerikil 0,25 m dan Saturnus 3,2 x 10^8 m (rasio jauh / dekat 1,3 miliar, permukaan berkedip) | `farScene` + `farCam` (1 unit = 1.000 km, dekat 1 sampai jauh 20.000 unit) digambar dulu, depth dikosongkan, lalu scene utama `camera` dalam meter (0,25 m sampai 12 km) | Rasio kamera utama 48.000 : 1 |
 | Kerangka berputar | Di dalam stasiun dunia diam; dari luar dunia berputar | Kamera luar dan pesawat di kerangka inersia: `scene.rotation.z = omega t` | 1 putaran / 63,4 s |
 | Bayangan di silinder | Kotak bayangan datar memotong lantai lengkung | `shUnroll()`: kedalaman dan penerima dihitung di koordinat silinder terbuka (s = theta R, h = R - r) | Tahap 18b-3 |
 | Pantulan tanpa langit biru | Kaca dan air di dalam silinder memantulkan daratan seberang, bukan langit | `farEnv()` di `LIGHT_GLSL` | Tahap 17b, 17d |
@@ -211,7 +211,7 @@ Coba sendiri: I lompat ke gerhana berikutnya.
 
 ## 3. Daftar diagram
 
-Dibangkitkan oleh `tools/diagram_detail_copper.py` (Python, tanpa library luar); bentuk lintasan dan grafik dihitung dari rumus, bukan digambar tangan.
+Dibangkitkan oleh `tools/diagram_detail_copper.py` (Python, tanpa library luar); bentuk lintasan dan grafik dihitung dari rumus, bukan digambar tangan. Gaya (revisi 2): 960 x 540 (16:9), latar bintang, gradien dan glow beraksen emas Copper, ilustrasi kota di dinding dalam, lintasan stroboskop (bola, menara, kabin lift), kartu angka besar, label pil. Tanpa font atau gambar luar, jadi tampil sama di GitHub dan di halaman.
 
 | File | Bab | Menunjukkan |
 | --- | --- | --- |
