@@ -16,6 +16,17 @@ Per 9 Oktober 2026 · Status: P0-P4 dikerjakan (lihat Status implementasi), menu
 
 Koreksi akar masalah setelah ditelusuri: 76 dari 96 program frame pertama Copper bukan objek yang terlewat, melainkan varian lain dari material yang sama. Kunci program three.js memuat ruang warna keluaran dan tone mapping, yang bergantung pada target render aktif: prakompilasi lama berjalan tanpa target (kanvas, sRGB), sedangkan dunia digambar ke target HDR (linear). Sisanya: bayangan 9, efek layar 10, `farScene` 3, bake impostor 1. Millar tidak terkena karena `outputColorSpace` sudah linear.
 
+Verifikasi (sandbox, cabang dibanding `origin/main` yang dijalankan di lingkungan sama):
+
+| Cek | Cabang | main | Keterangan |
+| --- | --- | --- | --- |
+| `tools/ukur_muat.py --cek` (ketiga experience) | Lulus | - | 0 program baru di frame pertama dan saat tombol |
+| Rata-rata RGB layar 12 s setelah Mulai (Copper Tinggi, Millar Tinggi tanpa sinematik, Gargantua) | Copper 85,9 / 88,6 / 82,3; Millar 72,5 / 75,6 / 78,4; Gargantua 39,1 / 35,7 / 32,4 | Copper 85,9 / 88,6 / 82,3; Millar 72,6 / 75,8 / 78,6; Gargantua 39,3 / 35,8 / 32,6 | Bukan uji identik piksel (Copper berbeda antar muat walau waktu dibekukan, lihat `tools/uji_jendela_gedung.py`); Millar dan Gargantua beranimasi |
+| `tools/uji_millar.py` | 129 OK, 1 gagal (tombol F) | 129 OK, 1 gagal (tombol F) | Gagal yang sama di main |
+| `tools/uji_misi_gargantua.py` | 101 OK; gagal: commit G1 tidak ada (klon dangkal) | Sama | Satu kali jalan paralel: 9 nilai tidak valid dekat piringan (kokpit); tidak muncul lagi saat diulang sendiri (0, sama dengan main) |
+| `tools/uji_cahaya_lanjut.py` (adaptasi mata, bayangan) | 14 OK, 1 gagal (18b-2) | 14 OK, 1 gagal (18b-2, angka sama) | Gagal yang sama di main |
+| `tools/uji_bahasa.py` | 26 teks statis kamera tanpa entri kamus | Sama | Entri baru "Pemanasan GPU..." ada |
+
 Catatan sandbox: tanpa `KHR_parallel_shader_compile` kompilasi latar belakang P4 tidak dijalankan otomatis (dipaksa di `tools/ukur_muat.py` lewat `pre`), dan waktu menunggu program pindah ke saat tombol ditekan. Di GPU dengan ekstensi itu (Chrome di GTX 1060 dan M1 kemungkinan punya; terlihat di panel `?prof=1`) kompilasi selesai di latar belakang.
 
 Aturan: tanpa mengurangi yang sudah ada. Tiap perbaikan hanya memindahkan atau mempercepat kerja, tidak menurunkan preset, efek, objek, atau detail. Tampilan harus identik (diuji piksel per piksel dengan waktu dibekukan, pola `tools/uji_jendela_gedung.py`).
