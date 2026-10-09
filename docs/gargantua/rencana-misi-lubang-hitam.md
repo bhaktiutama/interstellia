@@ -48,6 +48,8 @@ Langkah mekanis di dalam tahap High (entri kamus, teks HUD, pembaruan dokumen) b
 | G5 | Selesai 4 Oktober 2026 (lihat bagian G5): skenario "Bidik tesseract (fiksi)", membidik sudut d dan bidang orbit dengan waktu beku, peta orbit, lintasan acuan yang dipakai saat terbang (prakiraan = hasil), gerbang fiksi di dalam horizon, adegan hiperkubus 4D, kartu akhir. Belum diuji di GTX 1060 dan M1 |
 | G6 | Berjalan per kelompok: uji G1 sampai G5 di `tools/uji_misi_gargantua.py`, kamus ID, CLAUDE.md, `tombol.md` |
 | G7 suara | Selesai 4 Oktober 2026 (lihat bagian G7): suara disintesis Web Audio, U nyala / mati, pilihan di panel. Belum didengar pemilik |
+| G8 peta corong | Selesai 8 Oktober 2026 (rumus: `docs/gargantua/rumus-peta-corong.md`): panel kanan bawah untuk semua misi, corong z = 2 sqrt(r) (irisan Eddington-Finkelstein, menembus horizon sampai singularitas) dengan riwayat, prakiraan, dan posisi live; tesseract tetap memakai peta orbit saat membidik, corong setelah Enter. Susur searah arus: partikel datang dari arah tampak lubang hitam (dulu 9-14 derajat di sampingnya); melawan arus tidak berubah. Uji kelompok 8. Belum diuji di GTX 1060 dan M1. Revisi 8 Oktober: panel corong seukuran jendela relai (340 x sampai 380 px), elevasi pandang 28-45 derajat agar panel terisi; informasi delta-v lolos di bagian "Bisakah lolos dari lubang hitam?" |
+| G9 pandangan relai | Selesai 8 Oktober 2026 (rumus: `docs/gargantua/rumus-pandangan-relai.md`): V saat misi = kamera luar, kokpit, relai 22 rs. Dari relai: lubang hitam dan piringan dengan aberasi orbit relai, wahana sebagai titik cahaya pulsa di citra lensa (tertunda, memerah, membeku di horizon, ditandai bila di balik piringan), jejak citra, suar E tampil sebagai kilat saat cahayanya tiba (dari dalam horizon tidak pernah). Uji kelompok 9. Belum diuji di GTX 1060 dan M1. Revisi 8 Oktober (foto Bhakti): pemilih cabang citra lensa diperbaiki (jejak garis tegak dan zigzag hilang), relai selalu di atas piringan, kamera otomatis ke garis bagi pusat dan wahana (FOV 70), jejak dari awal misi, penanda posisi sekarang, toast horizon versi relai, kartu akhir bisa ditutup dan diseret. Revisi 2 (9 Oktober): jejak ungu bergaris gelap (dulu jingga, samar di atas piringan), relai bisa dipindah bebas di bola 22 rs (seret), arah pandang seret kanan, zoom roda, klik ganda kembali. Revisi 3 (9 Oktober): jejak di sudut pandang rendah tidak lagi bergerigi (log relai rapat menurut sudut 0,5 derajat, titik tengah disisipkan bila citra melompat > 0,8 derajat; lompatan maks 6,1 -> 0,81 derajat di relai 4,6 derajat), kartu akhir bawaan di kanan |
 
 Catatan hak cipta: kedua foto rujukan tampaknya cuplikan film. Dipakai hanya sebagai rujukan suasana (warna, komposisi, gerak); bingkai, bentuk kapal, dan susunan gambarnya tidak ditiru, sesuai aturan proyek.
 
@@ -344,7 +346,7 @@ Mengikuti `docs/app/tombol.md`: tidak ada huruf baru.
 | Tombol | Fungsi |
 | --- | --- |
 | Panel ` | Mulai misi, pilih skenario (G2: 7 skenario; G3: + 2 susur piringan) dan sikap; tombol autopilot susur |
-| V | Kokpit / kamera luar |
+| V | Kamera luar / kokpit / relai 22 rs (G9) |
 | Z | Kecepatan waktu (Otomatis, x4, x16, Lambat x0,25) |
 | W/S, A/D, R/F, Shift | Dorong maju-mundur, kiri-kanan, naik-turun; Shift = mesin utama (G2, mengikuti tombol pesawat Copper) |
 | Seret mouse, roda | Kamera luar: seret = kamera mengitari wahana (klik ganda kembali), seret kanan = arah hidung; kokpit: seret = arah hidung; roda = jarak kamera luar |
@@ -358,6 +360,41 @@ Mengikuti `docs/app/tombol.md`: tidak ada huruf baru.
 | Esc | Akhiri misi |
 
 Selama misi F dan R dipakai untuk dorongan (seperti pesawat Copper), jadi mode foto dan atur ulang kamera tidak tersedia sampai misi diakhiri.
+
+## Bisakah lolos dari lubang hitam? (informasi, 8 Oktober 2026)
+
+Ringkasan:
+- Dorongan berfungsi. Delta-v dihitung dari besar dorongan, jadi semua arah (W/S/A/D/R/F) mengurangi anggaran yang sama.
+- Anggaran tiap skenario sengaja kecil (0,02 sampai 0,04 c; susur 0,3 c), tapi sudah jauh di atas wahana nyata. Dari jatuh lurus, lolos butuh minimal 0,091 c di 22 rs dan makin mahal ke dalam; di dalam horizon mustahil.
+- Hanya "Nyaris lolos" yang bisa lolos dengan anggaran sekarang (momentum sudut awal sudah di atas kritis). Tertangkap di skenario lain adalah hasil yang realistis.
+
+Delta-v minimum untuk lolos dari jatuh lurus (E = 1, dihitung dengan rumus boost `misThrust()` dan integrator `misAdvance()`, arah dicari tiap 5 derajat di bidang radial-tangensial, besar dengan bisection):
+
+| r (rs) | Laju jatuh vs pengamat diam | Delta-v min lolos | Arah terbaik dari radial keluar |
+| --- | --- | --- | --- |
+| 22 | 0,213 c | 0,091 c | 90 derajat (menyamping) |
+| 10 | 0,316 c | 0,203 c | 85 derajat |
+| 6 | 0,408 c | 0,340 c | 75 derajat |
+| 3 | 0,577 c | 0,658 c | 55 derajat |
+| 2 | 0,707 c | 0,866 c | 35 derajat |
+| 1,5 | 0,816 c | 0,965 c | 20 derajat |
+| 1,2 | 0,913 c | di atas 0,99 c (batas satu dorongan) | - |
+| di dalam horizon | - | mustahil: semua arah menuju r = 0 | - |
+
+Jauh dari lubang hitam, cara termurah adalah dorongan menyamping: momentum sudut cukup besar membuat wahana berayun lewat (kritis L = 2 rs c untuk E = 1). Dekat horizon dorongan harus makin lurus keluar dan mendekati c.
+
+Pembanding realisme:
+
+| Item | Delta-v |
+| --- | --- |
+| Roket kimia (satu tahap, terbaik) | sekitar 10 km/s = 3,3e-5 c |
+| Anggaran skenario jatuh 0,03 c | 8.994 km/s (sekitar 900 kali roket kimia) |
+| Anggaran susur 0,3 c | 89.938 km/s |
+| Lolos dari jatuh lurus di 22 rs | 0,091 c = 27.282 km/s |
+
+Catatan susur: autopilot memakai anggaran 0,3 c untuk menahan tinggi dan orbit (sekitar 0,19 c sampai ISCO bila setelan tidak diubah). W/S (laju turun) dan R/F (tinggi) saat autopilot mengubah sasaran, jadi autopilot ikut membakar delta-v. Bila habis, autopilot lepas dan tombol tidak lagi berefek (contoh foto Bhakti: 0,0000 / 0,300 di r 9,7).
+
+Usulan lanjutan (belum dikerjakan, menunggu keputusan pemilik): baris "delta-v untuk lolos" di HUD dan MFD (dihitung ulang tiap sekitar 1 s), skenario tantangan lolos (jatuh lurus dengan anggaran 0,4 c: lolos bila mendorong sebelum sekitar 6 rs), opsi delta-v tak terbatas (fiksi).
 
 ## Batasan dan catatan
 
