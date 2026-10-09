@@ -1,0 +1,1377 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Gargantua: Fisika</title>
+<style>
+  /* Halaman detail Gargantua (konsep docs/gargantua/detail/konsep-halaman-detail.md). Satu file, tanpa library, jalan dari file://.
+     Satuan seperti experience: rs = 1, M = 0,5, c = 1; massa 1e8 Matahari hanya untuk jam dan km. Sinar dan orbit diintegrasikan
+     dari persamaan yang sama dengan index.html (sinar a = -1,5 h^2 p / r^5, geodesik seperti misAcc()). Label kanvas English saja;
+     teks halaman ID + EN (kamus S). Kanvas simulasi tetap beranimasi walau prefers-reduced-motion (permintaan pemilik). */
+  :root { --ink: #e8ecf2; --muted: #9aa2ae; --line: rgba(255,255,255,0.10); --glass: rgba(14,12,16,0.72);
+    --ac: #f3a55a; --ac2: #ffd08a; --te: #8fd3dc; --vi: #b79cff; --red: #ff6b5a; --bar: 58px; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--bar) + 12px); }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  html, body { margin: 0; color: var(--ink); font: 16px/1.65 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow-x: hidden; }
+  body { background: radial-gradient(circle 90vmax at 75% 0%, #1d130c 0%, #08070a 42%, #040405 100%) fixed #040405; }
+  a { color: var(--ac2); }
+  b, strong { color: #fff; font-weight: 650; }
+  kbd { display: inline-block; min-width: 1.9em; padding: 1px 7px; border-radius: 6px; text-align: center; font: 600 12.5px/1.6 ui-monospace, Menlo, Consolas, monospace;
+    color: #fff; background: linear-gradient(#2b2a33, #19181f); border: 1px solid rgba(255,255,255,0.18); border-bottom-width: 3px; }
+  .fic { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #0b0b0b; background: var(--vi); border-radius: 99px; padding: 1px 8px; margin-left: 4px; vertical-align: 2px; }
+
+  /* ===== bilah atas ===== */
+  .bar { position: fixed; inset: 0 0 auto 0; height: var(--bar); z-index: 50; display: flex; align-items: center; gap: 10px; padding: 0 14px;
+    background: rgba(6,5,8,0.8); backdrop-filter: blur(14px) saturate(1.3); -webkit-backdrop-filter: blur(14px) saturate(1.3); border-bottom: 1px solid var(--line); }
+  .bar .back { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; padding: 6px 10px; border-radius: 99px; border: 1px solid var(--line); white-space: nowrap; }
+  .bar .back:hover { border-color: var(--ac); }
+  .bar .brand { font-weight: 700; letter-spacing: 0.04em; font-size: 14px; white-space: nowrap; color: var(--ac); }
+  .bar nav { flex: 1; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 12px), transparent); padding: 0 8px; }
+  .bar nav::-webkit-scrollbar { display: none; }
+  .bar nav a { flex: none; color: var(--muted); font-size: 12.5px; padding: 6px 10px; border-radius: 99px; transition: all .25s; white-space: nowrap; }
+  .bar nav a b { color: inherit; opacity: 0.6; margin-right: 5px; font-weight: 600; }
+  .bar nav a:hover { color: #fff; }
+  .bar nav a.on { color: #0b0b0b; background: var(--ac); }
+  .bar .lang { display: flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .bar .lang button { font: 600 12px system-ui, sans-serif; color: var(--muted); background: none; border: 0; padding: 6px 10px; cursor: pointer; }
+  .bar .lang button.on { color: #0b0b0b; background: var(--ac); }
+  .play { display: inline-flex; align-items: center; gap: 8px; background: var(--ac); color: #0b0b0b; font-weight: 700; border-radius: 99px; padding: 8px 16px; font-size: 13.5px; white-space: nowrap;
+    box-shadow: 0 6px 26px rgba(243,165,90,0.25); transition: transform .2s, box-shadow .2s; }
+  .play:hover { transform: translateY(-1px); box-shadow: 0 8px 34px rgba(243,165,90,0.45); }
+  .play svg { width: 13px; height: 13px; }
+  .prog { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: linear-gradient(90deg, var(--red), var(--ac), var(--ac2)); box-shadow: 0 0 10px var(--ac); }
+  @media (max-width: 760px) { .bar .brand, .bar .back span { display: none; } .bar .play span { display: none; } .bar .play { padding: 8px 11px; } }
+
+  /* ===== umum ===== */
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 0 28px; }
+  @media (max-width: 600px) { .wrap { padding: 0 16px; } }
+  .kick { color: var(--ac); font-size: 12px; letter-spacing: 0.28em; text-transform: uppercase; font-weight: 600; }
+  .rv { opacity: 0; transform: translateY(24px); transition: opacity .9s ease, transform .9s cubic-bezier(.2,.7,.2,1); transition-delay: var(--d, 0s); }
+  .rv.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .rv { opacity: 1; transform: none; transition: none; } }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: 600 13px/1.4 system-ui, sans-serif; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.16); border-radius: 99px; padding: 7px 14px; cursor: pointer; transition: all .2s; white-space: nowrap; }
+  a.btn, a.play, a.back, .chip, .stamp, .bar nav a { text-decoration: none; }
+  .btn:hover { border-color: var(--ac); color: #fff; }
+  .btn.on, .btn.main { background: var(--ac); border-color: var(--ac); color: #0b0b0b; }
+  .btn.main:hover { box-shadow: 0 0 22px rgba(243,165,90,0.4); }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+
+  /* ===== hero ===== */
+  .hero { min-height: 100vh; padding: calc(var(--bar) + 40px) 0 50px; display: flex; align-items: center; position: relative; }
+  .hero .wrap { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; width: 100%; }
+  .hero h1 { margin: 10px 0 0; font-size: clamp(40px, 7vw, 84px); line-height: 0.98; letter-spacing: -0.02em; font-weight: 750;
+    background: linear-gradient(100deg, #fff 10%, #ffd08a 45%, #f3a55a 75%, #ff6b5a 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero .lead { color: #c9c4c2; font-size: clamp(16px, 1.6vw, 19px); max-width: 56ch; margin: 18px 0 26px; }
+  .hero .cta { display: flex; gap: 10px; flex-wrap: wrap; }
+  .orb { position: relative; aspect-ratio: 1; width: 100%; max-width: 560px; justify-self: center; margin-bottom: 64px; }
+  .orb canvas { width: 100%; height: 100%; display: block; border-radius: 50%; cursor: grab; touch-action: none;
+    -webkit-mask-image: radial-gradient(circle, #000 64%, transparent 71%); mask-image: radial-gradient(circle, #000 64%, transparent 71%); }
+  .orb canvas:active { cursor: grabbing; }
+  .orb .tog { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); display: flex; gap: 6px; background: var(--glass); padding: 5px; border-radius: 99px; border: 1px solid var(--line); backdrop-filter: blur(8px); }
+  .orb .tog .btn { padding: 5px 12px; font-size: 12px; }
+  .orb .hcap { position: absolute; left: 0; right: 0; bottom: -64px; margin: 0; text-align: center; font-size: 13.5px; color: #c9c4c2; min-height: 42px; }
+  .orb .turn { position: absolute; top: 4px; right: 0; font-size: 12px; color: var(--muted); text-align: right; }
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 34px; }
+  .stat { background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015)); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .stat b { display: block; font-size: 23px; color: var(--ac); font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .stat b small { font-size: 12px; color: var(--ink); font-weight: 500; margin-left: 3px; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  @media (max-width: 900px) { .hero .wrap { grid-template-columns: 1fr; } .orb { max-width: 440px; } .stats { grid-template-columns: repeat(2, 1fr); } }
+  .scrollhint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); color: var(--muted); font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; }
+
+  /* ===== bab ===== */
+  section.ch { padding: 90px 0 40px; position: relative; }
+  section.ch::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(243,165,90,0.25), transparent); }
+  .chh { display: grid; grid-template-columns: auto 1fr; gap: 0 24px; align-items: end; margin-bottom: 28px; }
+  .chh .n { font-size: 76px; line-height: 0.85; font-weight: 200; color: var(--ac); opacity: 0.55; font-variant-numeric: tabular-nums; }
+  .chh h2 { margin: 4px 0 0; font-size: clamp(28px, 4vw, 46px); line-height: 1.08; letter-spacing: -0.01em; }
+  .chh .hook { grid-column: 1 / -1; margin: 12px 0 0; font-size: clamp(17px, 1.8vw, 21px); font-weight: 300; color: #fff; max-width: 62ch; }
+  .cols { display: grid; grid-template-columns: 5fr 7fr; gap: 36px; align-items: start; }
+  .cols.flip { grid-template-columns: 7fr 5fr; }
+  .cols.flip > .txt { order: 2; }
+  .cols.even { grid-template-columns: 1fr 1fr; }
+  @media (max-width: 960px) { .cols, .cols.flip, .cols.even { grid-template-columns: 1fr; } .cols.flip > .txt { order: 0; } }
+  .txt p { margin: 0 0 14px; color: #c9c4c2; }
+  .formula { margin: 18px 0; padding: 14px 16px; border-radius: 12px; border: 1px solid rgba(243,165,90,0.25); background: rgba(243,165,90,0.05); }
+  .formula .f { font: 600 16px ui-monospace, Menlo, Consolas, monospace; color: var(--ac2); }
+  .formula .w { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  .tryit { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; background: rgba(143,211,220,0.06); border: 1px solid rgba(143,211,220,0.22); font-size: 14px; color: #cfe9ec; }
+  .tryit::before { content: ''; flex: none; width: 8px; height: 8px; margin-top: 8px; border-radius: 50%; background: var(--te); box-shadow: 0 0 0 4px rgba(143,211,220,0.18), 0 0 12px var(--te); }
+  .fact { display: flex; gap: 10px; margin: 10px 0; font-size: 14.5px; color: #c9c4c2; }
+  .fact i { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--ac); margin-top: 9px; box-shadow: 0 0 8px var(--ac); }
+  .note { font-size: 13px; color: var(--muted); border-left: 2px solid rgba(183,156,255,0.5); padding-left: 10px; margin: 14px 0; }
+
+  /* ===== lab (panel simulasi) ===== */
+  .lab { background: linear-gradient(180deg, rgba(24,20,26,0.92), rgba(10,9,12,0.94)); border: 1px solid rgba(255,255,255,0.09); border-radius: 18px; overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.05); }
+  .lab canvas { display: block; width: 100%; background: #070609; }
+  @media (max-width: 600px) { #cvRay { aspect-ratio: 4 / 3 !important; } #cvFall { aspect-ratio: 3 / 4 !important; } #cvOrb { aspect-ratio: 1 / 1 !important; } #cvAna { aspect-ratio: 1 / 1 !important; } }
+  .ctrl { padding: 14px 16px 6px; display: grid; gap: 12px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .row .lbl { font-size: 12px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; margin-right: 4px; }
+  .row .aside { margin-left: auto; font-size: 12.5px; color: var(--muted); }
+  .chip { font: 600 12.5px system-ui, sans-serif; color: var(--ink); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.14); border-radius: 99px; padding: 5px 12px; cursor: pointer; transition: all .2s; }
+  .chip:hover { border-color: var(--ac); }
+  .chip.on { background: rgba(243,165,90,0.18); border-color: var(--ac); color: #fff; }
+  .slide { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; font-size: 13.5px; }
+  .slide span { color: var(--muted); white-space: nowrap; }
+  .slide output { font-variant-numeric: tabular-nums; color: #fff; font-weight: 650; min-width: 92px; text-align: right; }
+  @media (max-width: 600px) { .slide { grid-template-columns: 1fr auto; gap: 2px 12px; } .slide > span { grid-column: 1 / -1; } }
+  input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 26px; background: transparent; cursor: pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height: 4px; border-radius: 4px; background: linear-gradient(90deg, var(--ac) var(--p, 50%), rgba(255,255,255,0.14) var(--p, 50%)); }
+  input[type=range]::-moz-range-track { height: 4px; border-radius: 4px; background: rgba(255,255,255,0.14); }
+  input[type=range]::-moz-range-progress { height: 4px; border-radius: 4px; background: var(--ac); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px; border-radius: 50%; background: #fff; border: 3px solid var(--ac); box-shadow: 0 0 12px rgba(243,165,90,0.6); }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid var(--ac); box-shadow: 0 0 12px rgba(243,165,90,0.6); }
+  .ro { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1px; background: rgba(255,255,255,0.07); border-top: 1px solid rgba(255,255,255,0.07); }
+  .ro div { background: #0c0b0f; padding: 11px 14px; }
+  .ro b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; line-height: 1.25; color: var(--ac); }
+  .ro b.t { color: var(--te); } .ro b.v { color: var(--vi); } .ro b.w { color: #fff; } .ro b.r { color: var(--red); } .ro b.y { color: var(--ac2); }
+  .ro span { font-size: 12px; color: var(--muted); }
+  .verdict { margin: 0 16px 14px; padding: 10px 14px; border-radius: 10px; font-size: 14px; background: rgba(255,255,255,0.04); border-left: 3px solid var(--ac); color: #ddd8d4; min-height: 22px; }
+  .verdict:empty { display: none; }
+
+  /* ===== paspor ===== */
+  .pass { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+  .stamp { position: relative; text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 16px 16px 14px; border-radius: 16px; border: 1px dashed rgba(255,255,255,0.18);
+    background: linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.01)); transition: all .3s; }
+  .stamp:hover { border-color: var(--ac); transform: translateY(-2px); }
+  .stamp h4 { margin: 0 46px 6px 0; font-size: 16px; }
+  .stamp p { margin: 0 0 10px; font-size: 13.5px; color: #c0bab6; }
+  .stamp .k { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 12.5px; color: var(--muted); }
+  .stamp .k a { color: var(--ac2); text-decoration: none; border-bottom: 1px dashed rgba(255,208,138,0.4); }
+  .stamp .seal { position: absolute; top: 12px; right: 12px; width: 40px; height: 40px; border-radius: 50%; border: 2px dashed rgba(255,255,255,0.22); display: grid; place-items: center; transition: all .35s cubic-bezier(.3,1.6,.5,1); }
+  .stamp .seal svg { width: 20px; height: 20px; opacity: 0; transition: opacity .2s; }
+  .stamp.done { border-style: solid; border-color: rgba(243,165,90,0.55); background: linear-gradient(180deg, rgba(243,165,90,0.12), rgba(243,165,90,0.02)); }
+  .stamp.done .seal { border: 2px solid var(--ac); background: var(--ac); transform: rotate(-12deg) scale(1.08); box-shadow: 0 0 18px rgba(243,165,90,0.5); }
+  .stamp.done .seal svg { opacity: 1; }
+  .passhead { display: flex; justify-content: space-between; align-items: end; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
+  .passhead .meter { flex: 1; min-width: 200px; max-width: 360px; }
+  .passhead .meter div { height: 6px; border-radius: 6px; background: rgba(255,255,255,0.1); overflow: hidden; margin-top: 6px; }
+  .passhead .meter i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--red), var(--ac)); transition: width .5s; }
+  .passhead .meter span { font-size: 13px; color: var(--muted); }
+  .fig { margin: 0; }
+  .fig img { width: 100%; height: auto; display: block; border-radius: 14px; border: 1px solid var(--line); }
+  .fig figcaption { font-size: 13px; color: var(--muted); margin-top: 8px; }
+
+  /* ===== galeri ===== */
+  .gal { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .gal button { padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: none; cursor: zoom-in; transition: transform .25s, border-color .25s; text-align: left; color: inherit; font: inherit; }
+  .gal button:hover { transform: translateY(-3px); border-color: var(--ac); }
+  .gal img { width: 100%; height: auto; display: block; aspect-ratio: 16 / 9; object-fit: cover; }
+  .gal span { display: block; padding: 8px 12px; font-size: 13px; color: #c9c4c2; background: rgba(255,255,255,0.03); }
+  .lb { position: fixed; inset: 0; z-index: 80; background: rgba(3,3,5,0.92); backdrop-filter: blur(8px); display: none; align-items: center; justify-content: center; padding: 70px 16px 40px; }
+  .lb.on { display: flex; }
+  .lb img { max-width: min(1200px, 100%); max-height: 100%; border-radius: 14px; box-shadow: 0 30px 90px rgba(0,0,0,0.6); }
+  .lb .x, .lb .pv, .lb .nx { position: absolute; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2); color: #fff; border-radius: 99px; width: 44px; height: 44px; font-size: 20px; cursor: pointer; }
+  .lb .x { top: 16px; right: 16px; } .lb .pv { left: 12px; top: 50%; } .lb .nx { right: 12px; top: 50%; }
+  .lb .cap { position: absolute; top: 22px; left: 20px; right: 80px; color: var(--muted); font-size: 14px; }
+  .lb .cap a { margin-left: 10px; }
+
+  footer { padding: 70px 0 60px; color: var(--muted); font-size: 13px; text-align: center; }
+  footer .end { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 22px; }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <a class="back" id="backLink" href="../../index.html"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 3L5 8l5 5"/></svg><span data-t="menu"></span></a>
+  <div class="brand">Gargantua</div>
+  <nav id="nav"></nav>
+  <div class="lang" id="lang"></div>
+  <a class="play" id="playTop" href="index.html"><svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg><span data-t="play"></span></a>
+  <div class="prog" id="prog"></div>
+</header>
+
+<!-- ================= HERO ================= -->
+<section class="hero" id="top">
+  <div class="wrap">
+    <div>
+      <div class="kick rv" data-t="h_kick"></div>
+      <h1 class="rv" style="--d:.08s" data-t="h_title"></h1>
+      <p class="lead rv" style="--d:.16s" data-t="h_lead"></p>
+      <div class="cta rv" style="--d:.24s"><a class="btn main" href="#anatomi" data-t="h_go"></a><a class="btn" id="playHero" href="index.html" data-t="play"></a></div>
+      <div class="stats rv" style="--d:.32s" id="stats"></div>
+    </div>
+    <div class="orb rv" style="--d:.2s">
+      <canvas id="cvHero" role="img" aria-label="Ray-traced black hole with accretion disk"></canvas>
+      <div class="turn" id="heroTurn"></div>
+      <div class="tog"><button class="btn on" data-hv="film" type="button" data-t="h_film"></button><button class="btn" data-hv="phys" type="button" data-t="h_phys"></button></div>
+      <p class="hcap" id="heroCap"></p>
+    </div>
+  </div>
+  <div class="scrollhint" data-t="scroll"></div>
+</section>
+
+<!-- ================= 01 ANATOMI ================= -->
+<section class="ch" id="anatomi">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">01</div><div><div class="kick" data-t="c1_k"></div><h2 data-t="c1_t"></h2></div><p class="hook" data-t="c1_h"></p></div>
+    <div class="cols">
+      <div class="txt rv"><p data-t="c1_p1"></p><p data-t="c1_p2"></p>
+        <div class="fact"><i></i><span data-t="c1_f1"></span></div><div class="fact"><i></i><span data-t="c1_f2"></span></div><div class="fact"><i></i><span data-t="c1_f3"></span></div>
+        <div class="tryit"><span data-t="c1_try"></span></div></div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvAna" style="aspect-ratio: 16 / 11" role="img" aria-label="Radii around the black hole"></canvas>
+        <div class="ctrl">
+          <div class="slide"><span data-t="c1_sr"></span><input type="range" id="aR" min="0" max="1" step="0.001" value="0.5"><output id="aRo"></output></div>
+          <div class="row"><span class="lbl" data-t="go_to"></span><span id="aPre"></span></div>
+        </div>
+        <div class="verdict" id="aVerd"></div>
+        <div class="ro"><div><b class="w" id="aDist"></b><span data-t="ro_dist"></span></div><div><b class="t" id="aClock"></b><span data-t="ro_clock"></span></div><div><b id="aOrb"></b><span data-t="ro_orbv"></span></div><div><b class="y" id="aPer"></b><span data-t="ro_per"></span></div><div><b class="r" id="aEsc"></b><span data-t="ro_esc"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02 LENSA ================= -->
+<section class="ch" id="lensa">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">02</div><div><div class="kick" data-t="c2_k"></div><h2 data-t="c2_t"></h2></div><p class="hook" data-t="c2_h"></p></div>
+    <div class="lab rv">
+      <canvas id="cvRay" style="aspect-ratio: 16 / 8" role="img" aria-label="Light ray bending around the black hole"></canvas>
+      <div class="ctrl">
+        <div class="slide"><span data-t="c2_sb"></span><input type="range" id="rB" min="0" max="8" step="0.0001" value="3.2"><output id="rBo"></output></div>
+        <div class="row"><span class="lbl" data-t="preset"></span><span id="rPre"></span></div>
+        <div class="row"><button class="btn main" id="rPlay" type="button"></button><span class="aside" data-t="c2_hint"></span></div>
+      </div>
+      <div class="verdict" id="rVerd"></div>
+      <div class="ro"><div><b class="w" id="rOut"></b><span data-t="ro_out"></span></div><div><b id="rBend"></b><span data-t="ro_bend"></span></div><div><b class="t" id="rMin"></b><span data-t="ro_rmin"></span></div><div><b class="v" id="rTurn"></b><span data-t="ro_turns"></span></div></div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c2_p1"></p><p data-t="c2_p2"></p>
+        <div class="formula" style="margin-top:0"><div class="f">u″ = −u + 1,5 u² &nbsp;·&nbsp; b<sub>crit</sub> = 3√3 / 2 rs</div><div class="w" data-t="c2_fw"></div></div>
+        <div class="tryit"><span data-t="c2_try"></span></div></div>
+      <figure class="fig rv" style="--d:.1s"><img src="detail/gg-03-disk-image.svg" width="960" height="540" alt="Why the top and bottom of the disk are visible" loading="lazy"><figcaption data-t="c2_cap"></figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 03 PIRINGAN ================= -->
+<section class="ch" id="piringan">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">03</div><div><div class="kick" data-t="c3_k"></div><h2 data-t="c3_t"></h2></div><p class="hook" data-t="c3_h"></p></div>
+    <div class="cols flip">
+      <div class="txt rv"><p data-t="c3_p1"></p><p data-t="c3_p2"></p>
+        <div class="formula"><div class="f">D = 1 / (γ (1 − β·n)) &nbsp;·&nbsp; I ∝ (g D)⁴</div><div class="w" data-t="c3_fw"></div></div>
+        <div class="tryit"><span data-t="c3_try"></span></div></div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvDisk" style="aspect-ratio: 16 / 10" role="img" aria-label="Accretion disk with Doppler beaming"></canvas>
+        <div class="ctrl">
+          <div class="row"><span class="lbl" data-t="c3_mode"></span><span id="dMode"></span></div>
+          <div class="slide"><span data-t="c3_se"></span><input type="range" id="dE" min="2" max="80" step="1" value="20"><output id="dEo"></output></div>
+        </div>
+        <div class="ro"><div><b id="dRatio"></b><span data-t="ro_ratio"></span></div><div><b class="t" id="dHot"></b><span data-t="ro_hot"></span></div><div><b class="r" id="dCold"></b><span data-t="ro_cold"></span></div><div><b class="w" id="dV"></b><span data-t="ro_gas"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04 JATUH ================= -->
+<section class="ch" id="jatuh">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">04</div><div><div class="kick" data-t="c4_k"></div><h2 data-t="c4_t"></h2></div><p class="hook" data-t="c4_h"></p></div>
+    <div class="lab rv">
+      <canvas id="cvFall" style="aspect-ratio: 16 / 7.6" role="img" aria-label="Falling into the black hole"></canvas>
+      <div class="ctrl">
+        <div class="slide"><span data-t="time"></span><input type="range" id="fTs" min="0" max="1" step="0.0005" value="0"><output id="fTso"></output></div>
+        <div class="row"><button class="btn main" id="fPlay" type="button"></button><button class="btn" id="fReplay" type="button" data-t="replay"></button><span class="aside" data-t="c4_hint"></span></div>
+      </div>
+      <div class="verdict" id="fVerd"></div>
+      <div class="ro"><div><b id="fOwn"></b><span data-t="ro_own"></span></div><div><b class="t" id="fRel"></b><span data-t="ro_relclk"></span></div><div><b class="w" id="fR"></b><span data-t="ro_r"></span></div><div><b class="t" id="fSeen"></b><span data-t="ro_seen"></span></div><div><b class="v" id="fTide"></b><span data-t="ro_tide"></span></div><div><b class="y" id="fSpd"></b><span data-t="ro_spd"></span></div></div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c4_p1"></p><p data-t="c4_p2"></p></div>
+      <div class="txt rv" style="--d:.1s"><div class="formula" style="margin-top:0"><div class="f">τ = (2/3)(r₀^1,5 − r^1,5) rs/c &nbsp;·&nbsp; a<sub>tide</sub> = 2GM ℓ / r³</div><div class="w" data-t="c4_fw"></div></div><div class="tryit"><span data-t="c4_try"></span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 05 RELAI ================= -->
+<section class="ch" id="relai">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">05</div><div><div class="kick" data-t="c5_k"></div><h2 data-t="c5_t"></h2></div><p class="hook" data-t="c5_h"></p></div>
+    <div class="cols flip">
+      <div class="txt rv"><p data-t="c5_p1"></p><p data-t="c5_p2"></p>
+        <div class="formula"><div class="f">dr/dT = 1 − 1/√r &nbsp;·&nbsp; f<sub>relay</sub> / f<sub>craft</sub> = (1 − 1/√r) / √(1 − 1/22)</div><div class="w" data-t="c5_fw"></div></div>
+        <div class="tryit"><span data-t="c5_try"></span></div></div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvST" style="aspect-ratio: 16 / 12" role="img" aria-label="Spacetime diagram with light pulses"></canvas>
+        <div class="ctrl">
+          <div class="slide"><span data-t="time"></span><input type="range" id="sTs" min="0" max="1" step="0.0005" value="0"><output id="sTso"></output></div>
+          <div class="row"><button class="btn main" id="sPlay" type="button"></button><button class="btn" id="sPulse" type="button" data-t="c5_pulse"></button><button class="chip on" id="sAuto" type="button" data-t="c5_auto"></button></div>
+        </div>
+        <div class="verdict" id="sVerd"></div>
+        <div class="ro"><div><b class="w" id="sSent"></b><span data-t="ro_sent"></span></div><div><b class="t" id="sGot"></b><span data-t="ro_got"></span></div><div><b id="sGap"></b><span data-t="ro_gap"></span></div><div><b class="r" id="sFreq"></b><span data-t="ro_freq"></span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 06 ORBIT ================= -->
+<section class="ch" id="orbit">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">06</div><div><div class="kick" data-t="c6_k"></div><h2 data-t="c6_t"></h2></div><p class="hook" data-t="c6_h"></p></div>
+    <div class="lab rv">
+      <canvas id="cvOrb" style="aspect-ratio: 16 / 8" role="img" aria-label="Orbits aimed from 22 rs"></canvas>
+      <div class="ctrl">
+        <div class="slide"><span data-t="c6_sd"></span><input type="range" id="oD" min="0" max="60" step="0.0001" value="24.6"><output id="oDo"></output></div>
+        <div class="row"><span class="lbl" data-t="preset"></span><span id="oPre"></span></div>
+        <div class="row"><button class="btn main" id="oPlay" type="button"></button><button class="btn" id="oFine" type="button" data-t="c6_fine"></button><span class="aside" id="oSpeed"></span></div>
+      </div>
+      <div class="verdict" id="oVerd"></div>
+      <div class="ro"><div><b class="v" id="oL"></b><span data-t="ro_l"></span></div><div><b class="w" id="oOut"></b><span data-t="ro_out"></span></div><div><b id="oTurns"></b><span data-t="ro_turns2"></span></div><div><b class="t" id="oMin"></b><span data-t="ro_rmin"></span></div><div><b class="y" id="oTau"></b><span data-t="ro_tau"></span></div></div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c6_p1"></p><p data-t="c6_p2"></p></div>
+      <div class="txt rv" style="--d:.1s"><div class="formula" style="margin-top:0"><div class="f">L = r₀ sin d / √(r₀ − 1) &nbsp;·&nbsp; L<sub>crit</sub> = 2 rs c</div><div class="w" data-t="c6_fw"></div></div><div class="tryit"><span data-t="c6_try"></span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 07 SUSUR ================= -->
+<section class="ch" id="susur">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">07</div><div><div class="kick" data-t="c7_k"></div><h2 data-t="c7_t"></h2></div><p class="hook" data-t="c7_h"></p></div>
+    <div class="cols even">
+      <div class="lab rv">
+        <canvas id="cvSkim" style="aspect-ratio: 1 / 1" role="img" aria-label="Skimming over the disk"></canvas>
+        <div class="ctrl">
+          <div class="row"><span class="lbl" data-t="c7_dir"></span><button class="chip on" data-sk="-1" type="button" data-t="c7_against"></button><button class="chip" data-sk="1" type="button" data-t="c7_with"></button></div>
+          <div class="slide"><span data-t="c7_sr"></span><input type="range" id="kR" min="3" max="12" step="0.1" value="3"><output id="kRo"></output></div>
+        </div>
+        <div class="ro"><div><b class="r" id="kRel"></b><span data-t="ro_rel"></span></div><div><b class="w" id="kG"></b><span data-t="ro_gamma"></span></div><div><b id="kE"></b><span data-t="ro_dust"></span></div></div>
+      </div>
+      <div class="lab rv" style="--d:.1s">
+        <canvas id="cvSky" style="aspect-ratio: 1 / 1" role="img" aria-label="Sky aberration ahead"></canvas>
+        <div class="ctrl">
+          <div class="slide"><span data-t="c7_sb"></span><input type="range" id="bB" min="0" max="0.95" step="0.01" value="0.66"><output id="bBo"></output></div>
+          <div class="row"><span class="lbl" data-t="preset"></span><button class="chip" data-bb="0" type="button" data-t="c7_rest"></button><button class="chip" data-bb="0.66" type="button" data-t="c7_fast"></button><button class="chip" data-bb="0.9" type="button">0,9 c</button></div>
+        </div>
+        <div class="ro"><div><b class="t" id="bSide"></b><span data-t="ro_side"></span></div><div><b id="bD"></b><span data-t="ro_dahead"></span></div><div><b class="w" id="bHalf"></b><span data-t="ro_half"></span></div></div>
+      </div>
+    </div>
+    <div class="cols" style="margin-top:34px">
+      <div class="txt rv"><p data-t="c7_p1"></p><p data-t="c7_p2"></p></div>
+      <div class="txt rv" style="--d:.1s"><div class="formula" style="margin-top:0"><div class="f">v<sub>rel</sub> = 2v / (1 + v²) &nbsp;·&nbsp; cos θ′ = (cos θ + β) / (1 + β cos θ)</div><div class="w" data-t="c7_fw"></div></div><div class="tryit"><span data-t="c7_try"></span></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 08 COBA ================= -->
+<section class="ch" id="coba">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">08</div><div><div class="kick" data-t="c8_k"></div><h2 data-t="c8_t"></h2></div><p class="hook" data-t="c8_h"></p></div>
+    <div class="passhead rv"><div class="meter"><span id="passCount"></span><div><i id="passBar"></i></div></div><button class="btn" id="passReset" type="button" data-t="c8_reset"></button></div>
+    <div class="pass" id="pass"></div>
+    <p class="note rv" data-t="c8_note"></p>
+  </div>
+</section>
+
+<!-- ================= GALERI ================= -->
+<section class="ch" id="galeri">
+  <div class="wrap">
+    <div class="chh rv"><div class="n">+</div><div><div class="kick" data-t="gl_k"></div><h2 data-t="gl_t"></h2></div><p class="hook" data-t="gl_h"></p></div>
+    <div class="gal rv" id="gal"></div>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <div class="end"><a class="play" id="playEnd" href="index.html"><svg viewBox="0 0 16 16"><path d="M4 2l10 6-10 6z" fill="currentColor"/></svg><span data-t="play_long"></span></a><a class="btn" id="backEnd" href="../../index.html" data-t="menu"></a></div>
+  <div data-t="footer"></div>
+</div></footer>
+
+<div class="lb" id="lb" role="dialog" aria-modal="true"><div class="cap" id="lbCap"></div><button class="x" id="lbX" type="button" aria-label="close">×</button><button class="pv" id="lbP" type="button" aria-label="previous">‹</button><img id="lbImg" alt=""><button class="nx" id="lbN" type="button" aria-label="next">›</button></div>
+
+<script>
+'use strict';
+/* =====================================================================
+   Konstanta (sama dengan experience Gargantua: rs = 1, M = 0,5, c = 1)
+   ===================================================================== */
+const M = 0.5, TS = 985.27, RS_KM = 2.954e8, AU_KM = 1.496e8, B_C = 1.5 * Math.sqrt(3), R_REL = 22, REL_CLK = Math.sqrt(1 - 1.5 / 22);
+const TAU = Math.PI * 2, DEG = Math.PI / 180;
+const COL = { ac: '#f3a55a', ac2: '#ffd08a', te: '#8fd3dc', vi: '#b79cff', red: '#ff6b5a', ink: '#e8ecf2', mu: '#9aa2ae', bg: '#070609' };
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;   // hanya untuk efek muncul saat digulir dan gulir halus; kanvas tetap beranimasi
+const vGas = (r) => Math.sqrt(M / (r - 2 * M));                          // orbit lingkaran, diukur pengamat diam
+const Tn = (r) => Math.pow(r / 3, -0.75) * Math.pow(Math.max(0, 1 - 0.85 / Math.sqrt(r / 3)), 0.25) / 0.62233;   // = shadeDisk()
+const tauFall = (r0, r) => (2 / 3) * (Math.pow(r0, 1.5) - Math.pow(Math.max(r, 0), 1.5));   // jatuh E = 1: waktu wajar = waktu PG
+const rOfTau = (r0, t) => Math.pow(Math.max(0, Math.pow(r0, 1.5) - 1.5 * t), 2 / 3);
+const Gout = (r) => r + 2 * Math.sqrt(r) + 2 * Math.log(Math.abs(Math.sqrt(r) - 1));      // sinar keluar (waktu PG), = relStep()
+const tidalG = (r) => 2 * 299792458 ** 2 / (r ** 3 * (RS_KM * 1e3) ** 2) / 9.81;           // tubuh 2 m, sama dengan kode
+const critD = (r0) => Math.asin(2 * Math.sqrt(r0 - 1) / r0) / DEG;
+function blackbody(T) {   // = blackbody() di shader
+  const lam = [610e-9, 550e-9, 465e-9], b = lam.map((l) => { const x = 1.4388e-2 / (l * T), l5 = Math.pow(l / 550e-9, 5); return 1 / (l5 * (Math.exp(Math.min(x, 80)) - 1)); });
+  const m = Math.max(...b); return b.map((v) => v / m);
+}
+const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+function filmRamp(t) {    // = filmRamp() di shader
+  let c = mix3([0.42, 0.11, 0.02], [1.0, 0.46, 0.12], sstep(0.30, 0.55, t));
+  c = mix3(c, [1.0, 0.78, 0.52], sstep(0.55, 0.80, t)); return mix3(c, [1.0, 0.95, 0.88], sstep(0.80, 1.0, t));
+}
+const BB = []; for (let i = 0; i < 256; i++) BB.push(blackbody(800 + i * 60));                 // LUT 800-16.100 K
+const bbAt = (T) => BB[Math.max(0, Math.min(255, Math.round((T - 800) / 60)))];
+const FR = []; for (let i = 0; i < 256; i++) FR.push(filmRamp(i / 255));
+const cssRGB = (c, k = 1) => `rgb(${Math.round(255 * Math.min(1, c[0] * k))},${Math.round(255 * Math.min(1, c[1] * k))},${Math.round(255 * Math.min(1, c[2] * k))})`;
+
+/* =====================================================================
+   Teks: [Indonesia, English]. Label di kanvas English saja.
+   ===================================================================== */
+const S = {
+  menu: ['Menu utama', 'Main menu'], play: ['Mulai', 'Play'], play_long: ['Masuk ke Gargantua', 'Enter Gargantua'], scroll: ['Gulir', 'Scroll'],
+  go_to: ['Ke', 'Go to'], preset: ['Coba', 'Try'], time: ['Waktu', 'Time'], replay: ['Ulang', 'Replay'],
+  run: ['Jalankan', 'Run'], pause: ['Jeda', 'Pause'], resume: ['Lanjut', 'Resume'],
+  h_kick: ['Gargantua · panduan fisika', 'Gargantua · physics guide'],
+  h_title: ['Jatuh ke lubang hitam', 'Falling into a black hole'],
+  h_lead: ['Lubang hitam 100 juta kali massa Matahari, piringan gas yang menyala, dan wahana yang jatuh ke dalamnya. Halaman ini membedah apa yang kamu lihat dan rasakan di game: cahaya yang dibelokkan, jam yang membeku, dan sudut bidik yang memutuskan nasib. Semua simulasi dihitung langsung dengan persamaan yang sama dengan game.',
+    'A black hole of 100 million Suns, a glowing disk of gas, and a craft falling in. This page takes apart what you see and feel in the game: bent light, frozen clocks, and the aiming angle that decides your fate. Every simulation is computed live with the same equations as the game.'],
+  h_go: ['Mulai menjelajah', 'Start exploring'], h_film: ['Mode film', 'Film mode'], h_phys: ['Fisika penuh', 'Full physics'],
+  h_cap_film: ['Dijejak sinar langsung dari 22 rs. Mode film (bawaan game): warna hangat merata, tanpa Doppler. Seret untuk mengitari.', 'Ray-traced live from 22 rs. Film mode (game default): even warm colours, no Doppler. Drag to orbit.'],
+  h_cap_phys: ['Fisika penuh: sisi piringan yang datang ke arahmu jadi biru dan menyilaukan, sisi yang menjauh merah dan redup. Seret untuk mengitari.', 'Full physics: the side of the disk coming toward you turns blue and blinding, the side moving away red and dim. Drag to orbit.'],
+  h_turn: ['piringan dipercepat {k}x', 'disk sped up {k}x'],
+  st_h: ['1 rs, horizon', '1 rs, horizon'], st_s: ['lebar bayangan', 'shadow width'], st_g: ['gas di tepi dalam', 'gas at the inner edge'], st_f: ['jatuh dari relai', 'fall from the relay'], st_c: ['sudut kritis', 'critical angle'],
+  nav: [['Anatomi', 'Lensa', 'Piringan', 'Jatuh', 'Jam beku', 'Orbit', 'Susur', 'Paspor', 'Galeri'], ['Anatomy', 'Lensing', 'Disk', 'Falling', 'Frozen clock', 'Orbits', 'Skimming', 'Passport', 'Gallery']],
+
+  c1_k: ['Bentuk dan ukuran', 'Shape and size'], c1_t: ['Anatomi lubang hitam', 'Anatomy of a black hole'],
+  c1_h: ['Semua jarak di game diukur dalam rs, jari-jari Schwarzschild. Geser penggaris dan lihat apa yang berubah di tiap jarak.', 'Every distance in the game is measured in rs, the Schwarzschild radius. Slide the ruler and see what changes at each distance.'],
+  c1_p1: ['Untuk lubang hitam 100 juta kali massa Matahari (asumsi game), <b>1 rs = 295 juta km</b>, hampir dua kali jarak Bumi-Matahari. Cahaya butuh 16,4 menit untuk menempuh 1 rs, jadi game memakai rs/c sebagai satuan waktu.',
+    'For a black hole of 100 million Suns (the game\'s assumption), <b>1 rs = 295 million km</b>, almost twice the Earth-Sun distance. Light needs 16.4 minutes to cross 1 rs, so the game uses rs/c as its unit of time.'],
+  c1_p2: ['Di <b>1 rs</b> ada horizon: dari dalam, cahaya pun tidak bisa keluar. Di <b>1,5 rs</b> cahaya bisa mengorbit. Di bawah <b>3 rs</b> (ISCO) tidak ada orbit yang stabil, jadi piringan gas berhenti di sana. Relai menunggu di <b>22 rs</b>, tempat misi dimulai.',
+    'At <b>1 rs</b> is the horizon: from inside, not even light gets out. At <b>1.5 rs</b> light can orbit. Below <b>3 rs</b> (the ISCO) no orbit is stable, so the gas disk ends there. The relay waits at <b>22 rs</b>, where missions begin.'],
+  c1_f1: ['Bayangan yang terlihat 2,6 kali lebih lebar dari horizon: 13,3 derajat dilihat dari relai.', 'The visible shadow is 2.6 times wider than the horizon: 13.3 degrees seen from the relay.'],
+  c1_f2: ['Relai mengorbit sekali tiap 917 rs/c, sekitar 10,4 hari.', 'The relay orbits once every 917 rs/c, about 10.4 days.'],
+  c1_f3: ['Fisika yang dihitung: Schwarzschild (tanpa putaran). Slider spin di panel game hanya pendekatan berlabel.', 'The physics computed: Schwarzschild (no spin). The spin slider in the game panel is a labelled approximation only.'],
+  c1_try: ['Di game: tombol <kbd>`</kbd> membuka panel; tab Kamera mengatur jarak, tab Piringan mengatur tepi dalam dan luar.', 'In the game: <kbd>`</kbd> opens the panel; the Camera tab sets the distance, the Disk tab sets the inner and outer edge.'],
+  c1_sr: ['Jarak dari pusat', 'Distance from centre'],
+  c1_pre: [['Horizon', 'Bola foton', '2 rs', 'ISCO', 'Tepi piringan', 'Relai'], ['Horizon', 'Photon sphere', '2 rs', 'ISCO', 'Disk edge', 'Relay']],
+  ro_dist: ['jarak dari pusat', 'distance from centre'], ro_clock: ['jam yang diam di sini', 'a clock hovering here'], ro_orbv: ['laju orbit lingkaran', 'circular orbit speed'], ro_per: ['satu putaran orbit', 'one orbit'], ro_esc: ['laju lolos', 'escape speed'],
+  a_in: ['Di dalam horizon tidak ada yang bisa diam: ruang sendiri mengalir ke dalam lebih cepat dari cahaya.', 'Inside the horizon nothing can stay put: space itself flows inward faster than light.'],
+  a_ph: ['Antara horizon dan 1,5 rs bahkan cahaya tidak bisa mengorbit.', 'Between the horizon and 1.5 rs not even light can orbit.'],
+  a_un: ['Orbit lingkaran ada, tapi tidak stabil: dorongan sekecil apa pun membuatnya jatuh atau lepas.', 'A circular orbit exists, but it is unstable: the slightest nudge makes it fall or fly off.'],
+  a_st: ['Orbit stabil. Gas piringan bisa mengitari lubang hitam di sini.', 'A stable orbit. Disk gas can circle the hole here.'],
+  a_rel: ['Relai di 22 rs: jamnya berjalan 0,9653 kali jam di tempat jauh.', 'The relay at 22 rs: its clock runs 0.9653 times a clock far away.'],
+  none: ['tidak ada', 'none'], light: ['cahaya', 'light'],
+
+  c2_k: ['Lensa gravitasi', 'Gravitational lensing'], c2_t: ['Cahaya yang dibelokkan', 'Bent light'],
+  c2_h: ['Tembakkan seberkas cahaya ke arah lubang hitam. Atur seberapa jauh ia meleset dari pusat, lalu lihat apa yang terjadi.', 'Fire a ray of light toward the black hole. Set how far it misses the centre, then watch what happens.'],
+  c2_sb: ['Jarak bidik b', 'Impact parameter b'], c2_hint: ['Garis tipis: sinar lain dengan b berbeda', 'Faint lines: other rays with different b'],
+  c2_pre: [['b = 1,5', 'b = 2,5', 'Tepat di atas batas', 'b = 2,7', 'b = 4', 'b = 7'], ['b = 1.5', 'b = 2.5', 'Just above the edge', 'b = 2.7', 'b = 4', 'b = 7']],
+  ro_out: ['hasil', 'outcome'], ro_bend: ['sudut belok', 'bend angle'], ro_rmin: ['jarak terdekat', 'closest approach'], ro_turns: ['putaran mengitari lubang', 'turns around the hole'],
+  r_cap: ['Tertangkap', 'Captured'], r_esc: ['Lolos', 'Escapes'],
+  r_v_cap: ['Sinar ini diarahkan di dalam 2,598 rs, jadi jatuh ke horizon. Semua sinar seperti ini membentuk bayangan hitam.', 'This ray was aimed inside 2.598 rs, so it falls through the horizon. All rays like it make up the black shadow.'],
+  r_v_ring: ['Begitu dekat dengan batas, sinar mengitari bola foton {n} kali sebelum keluar lagi. Sinar-sinar inilah cincin tipis yang terang di tepi bayangan.', 'So close to the edge that the ray circles the photon sphere {n} times before leaving. Rays like this make the thin bright ring at the shadow\'s edge.'],
+  r_v_esc: ['Sinar lolos, tapi dibelokkan {a}. Makin dekat ke 2,598 rs, makin tajam beloknya.', 'The ray escapes, bent by {a}. The closer to 2.598 rs, the sharper the bend.'],
+  c2_p1: ['Ruang di sekitar lubang hitam melengkung, jadi cahaya ikut melengkung. Sinar yang diarahkan kurang dari <b>2,598 rs</b> dari pusat tidak pernah keluar lagi. Karena itu bayangan yang terlihat <b>2,6 kali</b> lebih lebar dari horizon.',
+    'Space around the hole is curved, so light curves with it. Any ray aimed within <b>2.598 rs</b> of the centre never comes back. That is why the visible shadow is <b>2.6 times</b> wider than the horizon.'],
+  c2_p2: ['Cahaya dari belakang lubang hitam melengkung ke atas dan ke bawahnya. Karena itu sisi jauh piringan terlihat sebagai <b>busur di atas dan di bawah</b> bayangan, seperti di hero halaman ini.',
+    'Light from behind the hole bends over and under it. That is why the far side of the disk shows up as <b>arcs above and below</b> the shadow, as in the hero at the top of this page.'],
+  c2_fw: ['u = rs / r. Lintasan dihitung RK4 dari persamaan yang sama dengan shader game (a = −1,5 h² p / r⁵).', 'u = rs / r. Paths are integrated with RK4 from the same equation as the game shader (a = −1.5 h² p / r⁵).'],
+  c2_try: ['Di game: panel Kamera, turunkan kamera mendekati bidang piringan untuk melihat busur atas dan bawah dengan jelas.', 'In the game: in the Camera tab, lower the camera toward the disk plane to see the upper and lower arcs clearly.'],
+  c2_cap: ['Sinar dijejak mundur dari matamu: muka atas sisi jauh terlihat di atas, muka bawah di bawah.', 'Rays traced back from your eye: the top face of the far side shows above, the underside below.'],
+
+  c3_k: ['Doppler dan pergeseran merah', 'Doppler and redshift'], c3_t: ['Warna dan terang piringan', 'Colour and brightness of the disk'],
+  c3_h: ['Gas di tepi dalam mengorbit dengan setengah kecepatan cahaya. Nyalakan Doppler dan lihat satu sisi menyala, sisi lain meredup.', 'Gas at the inner edge orbits at half the speed of light. Switch on Doppler and watch one side blaze and the other fade.'],
+  c3_mode: ['Mode', 'Mode'], c3_m: [['Film (bawaan game)', 'Doppler', 'Doppler + pergeseran merah'], ['Film (game default)', 'Doppler', 'Doppler + redshift']],
+  c3_se: ['Tinggi pandang', 'View height'],
+  ro_ratio: ['sisi terang : sisi redup', 'bright : dim side'], ro_hot: ['warna sisi terang', 'bright side colour'], ro_cold: ['warna sisi redup', 'dim side colour'], ro_gas: ['laju gas di ISCO', 'gas speed at the ISCO'],
+  c3_p1: ['Gas yang datang ke arahmu memadatkan gelombang cahayanya: lebih biru, dan energinya tertumpuk ke depan. Terangnya naik dengan <b>pangkat empat</b> faktor Doppler. Di tepi dalam, dilihat dari samping, sisi itu <b>81 kali</b> lebih terang daripada sisi yang menjauh.',
+    'Gas coming toward you squeezes its light waves: bluer, with its energy beamed forward. Brightness rises with the <b>fourth power</b> of the Doppler factor. At the inner edge, seen edge-on, that side is <b>81 times</b> brighter than the side moving away.'],
+  c3_p2: ['Cahaya yang memanjat keluar dari dekat lubang hitam juga kehilangan energi: <b>pergeseran merah gravitasi</b>. Mode film bawaan game sengaja mematikan Doppler supaya piringan tampak hangat dan rata seperti di bioskop.',
+    'Light climbing out from near the hole also loses energy: <b>gravitational redshift</b>. The game\'s default film mode switches Doppler off so the disk looks warm and even, as on the big screen.'],
+  c3_fw: ['Rumus warna dan terang sama dengan shadeDisk() di game. Panel ini tanpa pembelokan cahaya (lihat hero untuk versi lengkap).', 'Colour and brightness formulas match shadeDisk() in the game. This panel skips light bending (see the hero for the full version).'],
+  c3_try: ['Di game: panel tab Fisika, matikan Mode film, nyalakan Doppler beaming dan pergeseran merah.', 'In the game: in the Physics tab, switch off Film mode and switch on Doppler beaming and gravitational redshift.'],
+
+  c4_k: ['Jatuh bebas', 'Free fall'], c4_t: ['Jatuh ke horizon', 'Falling to the horizon'],
+  c4_h: ['Wahana jatuh lurus dari relai. Jam wahana dan jam relai berdetak berdampingan, dan keduanya tidak sepakat.', 'The craft falls straight in from the relay. Its clock and the relay\'s clock tick side by side, and they do not agree.'],
+  c4_hint: ['Kiri: peta corong · kanan: dua jam', 'Left: funnel map · right: two clocks'],
+  ro_own: ['jam wahana', 'craft clock'], ro_relclk: ['jam relai', 'relay clock'], ro_r: ['jarak dari pusat', 'distance from centre'], ro_seen: ['relai melihat wahana di', 'relay sees the craft at'], ro_tide: ['peregangan tubuh 2 m', 'stretch on a 2 m body'], ro_spd: ['laju thd pengamat diam', 'speed vs hovering'],
+  f_start: ['Tekan Jalankan. Wahana mulai jatuh dari 22 rs dengan laju jatuh bebas setempat.', 'Press Run. The craft starts falling from 22 rs at the local free-fall speed.'],
+  f_out: ['Jatuh. Makin dekat, makin cepat; relai melihatmu makin lambat.', 'Falling. The closer you get, the faster you go; the relay sees you slow down.'],
+  f_hor: ['Kamu melewati horizon pada {t} jam. Tidak terasa apa-apa: peregangannya hanya 2 per 10 juta g. Tapi relai tidak akan pernah melihat saat ini.', 'You crossed the horizon at {t} hours. You felt nothing: the stretch was 2 ten-millionths of a g. But the relay will never see this moment.'],
+  f_tide: ['Peregangan melewati 1 g. Sisa waktu: kurang dari 0,3 detik.', 'The stretch passes 1 g. Time left: under 0.3 seconds.'],
+  f_end: ['Akhir di pusat, {s} detik setelah horizon. Relai masih melihatmu membeku di horizon, makin merah dan redup.', 'The end at the centre, {s} seconds after the horizon. The relay still sees you frozen at the horizon, ever redder and dimmer.'],
+  c4_p1: ['Jatuh lurus dari relai butuh <b>18,65 jam</b> menurut jammu sendiri. Melewati horizon tidak terasa: tidak ada dinding, tidak ada guncangan, dan peregangan pasang surut di tubuhmu masih 2 per 10 juta g.',
+    'Falling straight in from the relay takes <b>18.65 hours</b> on your own clock. Crossing the horizon feels like nothing: no wall, no jolt, and the tidal stretch on your body is still 2 ten-millionths of a g.'],
+  c4_p2: ['Dari horizon ke pusat hanya <b>657 detik</b> (11 menit). Peregangan baru terasa di akhir: 1 g dicapai pada 0,006 rs, <b>0,3 detik</b> sebelum pusat. Sementara itu relai melihatmu melambat dan membeku di horizon.',
+    'From the horizon to the centre takes only <b>657 seconds</b> (11 minutes). The stretch arrives at the very end: 1 g at 0.006 rs, <b>0.3 seconds</b> before the centre. Meanwhile the relay watches you slow down and freeze at the horizon.'],
+  c4_fw: ['ℓ = 2 m, massa 1e8 Matahari. Corong: z = 2√r (irisan Eddington-Finkelstein, sama dengan peta corong di game).', 'ℓ = 2 m, mass 1e8 Suns. Funnel: z = 2√r (Eddington-Finkelstein slice, the same as the game\'s funnel map).'],
+  c4_try: ['Di game: panel tab Misi, skenario "Lurus di atas kutub". <kbd>Z</kbd> mengatur kecepatan waktu.', 'In the game: Mission tab, scenario "Straight in over the pole". <kbd>Z</kbd> sets the time speed.'],
+
+  c5_k: ['Informasi dan horizon', 'Information and the horizon'], c5_t: ['Jam yang membeku', 'The frozen clock'],
+  c5_h: ['Wahana mengirim pulsa cahaya ke relai saat jatuh. Lihat kapan pulsa itu tiba, dan mana yang tidak pernah tiba.', 'The craft sends light pulses to the relay as it falls. Watch when they arrive, and which ones never do.'],
+  c5_pulse: ['Kirim pulsa', 'Send a pulse'], c5_auto: ['Otomatis tiap 10 rs/c', 'Auto every 10 rs/c'],
+  ro_sent: ['pulsa terkirim', 'pulses sent'], ro_got: ['tiba di relai', 'reached the relay'], ro_gap: ['jarak tiba terakhir', 'last arrival gap'], ro_freq: ['frekuensi pulsa terakhir', 'last pulse frequency'],
+  s_start: ['Tekan Jalankan. Waktu naik ke atas, jarak ke kanan. Garis jingga adalah wahana, garis biru di kanan adalah relai.', 'Press Run. Time goes up, distance goes right. The orange line is the craft, the blue line on the right is the relay.'],
+  s_in: ['Pulsa ini dikirim dari dalam horizon. Bahkan cahaya yang diarahkan keluar bergerak ke dalam: ia tidak akan pernah tiba.', 'This pulse was sent from inside the horizon. Even light aimed outward moves inward: it will never arrive.'],
+  s_gap: ['Pulsa yang dikirim berdekatan tiba makin berjauhan: {g}.', 'Pulses sent close together arrive further and further apart: {g}.'],
+  c5_p1: ['Dekat horizon, cahaya yang diarahkan keluar hampir tidak bergerak. Pulsa yang dikirim tiap 10 rs/c tiba di relai makin berjauhan, <b>makin merah, makin redup</b>: memerah dengan faktor e tiap 32,8 menit waktu relai.',
+    'Near the horizon, light aimed outward barely moves. Pulses sent every 10 rs/c reach the relay further and further apart, <b>redder and dimmer</b>: reddening by a factor e every 32.8 minutes of relay time.'],
+  c5_p2: ['Di horizon kerucut cahaya menegak: cahaya keluar diam di tempat. Di dalamnya, semua arah menuju pusat. Dari relai, wahana tampak membeku di horizon selamanya, padahal wahana sudah lewat.',
+    'At the horizon the light cones stand upright: outgoing light stays put. Inside, every direction leads to the centre. From the relay, the craft seems frozen at the horizon forever, although it has long gone through.'],
+  c5_fw: ['T = waktu kerangka rain (Painlevé-Gullstrand), sama dengan jam wahana yang jatuh dari jauh. Relai dianggap diam untuk frekuensi.', 'T = rain-frame time (Painlevé-Gullstrand), equal to the clock of a craft falling from far away. The relay is treated as hovering for the frequency.'],
+  c5_try: ['Di game: saat misi, <kbd>E</kbd> menembakkan suar, <kbd>M</kbd> membuka pandangan relai dan diagram ruang-waktu, <kbd>V</kbd> sampai pandangan dari relai.', 'In the game: during a mission, <kbd>E</kbd> fires a flare, <kbd>M</kbd> opens the relay view and spacetime diagram, <kbd>V</kbd> cycles to the view from the relay.'],
+
+  c6_k: ['Geodesik', 'Geodesics'], c6_t: ['Orbit dan sudut kritis', 'Orbits and the critical angle'],
+  c6_h: ['Dari 22 rs, wahana meluncur dengan laju jatuh bebas. Arah bidiknya memutuskan: jatuh, berputar-putar, atau terlempar keluar.', 'From 22 rs the craft coasts at free-fall speed. Its aim decides: fall in, whirl around, or get flung out.'],
+  c6_sd: ['Sudut bidik dari arah pusat', 'Aim angle from the centre'], c6_fine: ['Sangat dekat kritis', 'A hair from critical'],
+  c6_pre: [['12°', '23°', 'Kritis 24,62°', '26°', '40°'], ['12°', '23°', 'Critical 24.62°', '26°', '40°']],
+  ro_l: ['momentum sudut L / L_kritis', 'angular momentum L / L_crit'], ro_turns2: ['putaran di sekitar lubang', 'turns around the hole'], ro_tau: ['jam wahana', 'craft clock'],
+  o_cap: ['Tertangkap', 'Captured'], o_esc: ['Lolos', 'Escapes'], o_spd: ['diputar {k} rs/c per detik', 'played at {k} rs/c per second'],
+  o_v_cap: ['L di bawah 2: tidak ada penghalang, wahana jatuh setelah {n} putaran.', 'L below 2: no barrier, the craft falls in after {n} turns.'],
+  o_v_whirl: ['Hampir tepat kritis: wahana berputar-putar di orbit tak stabil 2 rs ({n} putaran) lalu jatuh. Tiap 10 kali lebih dekat ke kritis menambah 186,6 derajat.', 'Almost exactly critical: the craft whirls around the unstable orbit at 2 rs ({n} turns) and then falls. Every 10 times closer to critical adds 186.6 degrees.'],
+  o_v_esc: ['L di atas 2: penghalang potensial memantulkan wahana keluar lagi.', 'L above 2: the potential barrier bounces the craft back out.'],
+  c6_p1: ['Tanpa mesin, nasib wahana hanya ditentukan <b>momentum sudut</b> L. Dari 22 rs dengan laju jatuh bebas, L = 2 dicapai pada sudut bidik <b>24,62 derajat</b>. Di bawahnya tidak ada yang menahan, di atasnya ada penghalang yang memantulkan.',
+    'With engines off, the craft\'s fate depends only on its <b>angular momentum</b> L. From 22 rs at free-fall speed, L = 2 is reached at an aim of <b>24.62 degrees</b>. Below it nothing holds you back, above it a barrier bounces you out.'],
+  c6_p2: ['Tepat di batas, wahana terjebak sebentar di orbit tak stabil <b>2 rs</b> dan berputar-putar: <b>zoom-whirl</b>. Tiap kali bidikan 10 kali lebih dekat ke kritis, wahana berputar 186,6 derajat lebih banyak. Sudut kritis makin besar bila kamu mulai lebih dekat: 36,87 derajat di 10 rs, 48,19 di 6 rs.',
+    'Right at the edge the craft is trapped for a while on the unstable orbit at <b>2 rs</b> and whirls: <b>zoom-whirl</b>. Every 10 times closer to critical adds 186.6 degrees of whirling. The critical angle grows if you start closer: 36.87 degrees at 10 rs, 48.19 at 6 rs.'],
+  c6_fw: ['r″ = −M/r² + L²/r³ − 3ML²/r⁴, φ′ = L/r², diintegrasikan RK4 (sama dengan misAcc() di game).', 'r″ = −M/r² + L²/r³ − 3ML²/r⁴, φ′ = L/r², integrated with RK4 (the same as misAcc() in the game).'],
+  c6_try: ['Di game: skenario "Berputar di 2 rs", "Nyaris lolos" (rem <kbd>S</kbd> sebelum 4 rs), dan "Bidik tesseract" (fiksi: <kbd>W</kbd>/<kbd>S</kbd> sudut, <kbd>Enter</kbd> kunci).', 'In the game: scenarios "Whirl at 2 rs", "Near miss" (brake with <kbd>S</kbd> before 4 rs), and "Aim for the tesseract" (fiction: <kbd>W</kbd>/<kbd>S</kbd> angle, <kbd>Enter</kbd> locks).'],
+
+  c7_k: ['Kecepatan relatif', 'Relative speed'], c7_t: ['Menyusur piringan', 'Skimming the disk'],
+  c7_h: ['Terbang rendah di atas piringan: melawan arus, gas menghantam kaca pada 0,8 c. Searah arus, nyaris tenang. Dan saat melaju, seluruh langit menyempit ke depan.', 'Fly low over the disk: against the flow, gas hits the glass at 0.8 c. With the flow, almost calm. And at speed, the whole sky crowds forward.'],
+  c7_dir: ['Arah', 'Direction'], c7_against: ['Melawan arus', 'Against the flow'], c7_with: ['Searah arus', 'With the flow'], c7_sr: ['Jarak dari pusat', 'Distance from centre'],
+  c7_sb: ['Laju wahana', 'Craft speed'], c7_rest: ['Diam', 'At rest'], c7_fast: ['Datang cepat 0,66 c', 'Fast arrival 0.66 c'],
+  ro_rel: ['gas terhadap wahana', 'gas vs craft'], ro_gamma: ['faktor Lorentz γ', 'Lorentz factor γ'], ro_dust: ['energi debu 1 µg', 'energy of 1 µg of dust'],
+  ro_side: ['bintang di samping (90°) tampak di', 'a star at your side (90°) shows at'], ro_dahead: ['frekuensi di depan', 'frequency ahead'], ro_half: ['setengah langit masuk kerucut', 'half the sky fits in a cone of'],
+  c7_p1: ['Gas di tepi dalam mengorbit 0,5 c. Wahana yang mengorbit berlawanan arah pada laju yang sama menabraknya pada <b>2v / (1 + v²) = 0,8 c</b>, bukan 1 c: kecepatan tidak dijumlah biasa. Satu butir debu 1 mikrogram membawa <b>6,0e7 J</b>, setara 14 kg TNT.',
+    'Gas at the inner edge orbits at 0.5 c. A craft orbiting the other way at the same speed meets it at <b>2v / (1 + v²) = 0.8 c</b>, not 1 c: speeds do not simply add. A single 1 microgram dust grain carries <b>6.0e7 J</b>, like 14 kg of TNT.'],
+  c7_p2: ['Saat melaju cepat, cahaya bintang dari samping tampak datang dari depan: <b>aberasi</b>. Pada 0,66 c (skenario Datang cepat), bintang di 90 derajat tampak di 48,7 derajat dari depan, dan yang di depan jadi lebih biru.',
+    'At high speed, starlight from the side seems to come from ahead: <b>aberration</b>. At 0.66 c (the Fast arrival scenario), a star at 90 degrees appears 48.7 degrees from ahead, and stars ahead turn bluer.'],
+  c7_fw: ['Teks game "0,86 c di 22 rs" adalah dr/dτ. Laju terhadap pengamat diam di sana 0,66 c (E = 1,3).', 'The game text "0.86 c at 22 rs" is dr/dτ. The speed past a hovering observer there is 0.66 c (E = 1.3).'],
+  c7_try: ['Di game: skenario "Susur piringan, melawan arus" dengan <kbd>O</kbd> autopilot, lalu "searah arus". Bandingkan retakan kaca.', 'In the game: scenario "Skim the disk, against the flow" with <kbd>O</kbd> autopilot, then "with the flow". Compare the cracks in the glass.'],
+
+  c8_k: ['Trik untuk dicoba', 'Tricks to try'], c8_t: ['Paspor fisika', 'Physics passport'],
+  c8_h: ['Dua belas eksperimen yang bisa kamu lakukan di game. Tandai yang sudah dicoba.', 'Twelve experiments you can do in the game. Stamp the ones you have tried.'],
+  c8_count: ['{n} dari {m} cap', '{n} of {m} stamps'], c8_reset: ['Hapus cap', 'Clear stamps'], c8_all: ['Lengkap! Kamu sudah jatuh ke lubang hitam dengan segala cara.', 'Complete! You have fallen into the black hole every possible way.'],
+  c8_note: ['Misi dimulai dari panel (<kbd>`</kbd>), tab Misi. Tesseract adalah fiksi: fisika nyata tidak mengenal tesseract di dalam lubang hitam.', 'Missions start from the panel (<kbd>`</kbd>), Mission tab. The tesseract is fiction: real physics knows no tesseract inside a black hole.'],
+
+  gl_k: ['Diagram', 'Diagrams'], gl_t: ['Galeri diagram', 'Diagram gallery'], gl_h: ['Delapan diagram untuk dibagikan. Ketuk untuk memperbesar.', 'Eight diagrams to share. Tap to enlarge.'], gl_open: ['buka file', 'open file'],
+  footer: ['Proyek penggemar untuk belajar fisika dan grafis 3D. Tidak berafiliasi dengan studio film mana pun. Angka di halaman ini dihitung untuk lubang hitam Schwarzschild 1e8 massa Matahari.',
+    'A fan project for learning physics and 3D graphics. Not affiliated with any film studio. Numbers on this page are computed for a Schwarzschild black hole of 1e8 solar masses.'],
+};
+// paspor: [judul, isi, cara (HTML), bab]
+const PASS = [
+  [['Bayangan 13,3 derajat', 'A 13.3 degree shadow'], ['Dari 22 rs, bayangan selebar 26 kali bulan purnama.', 'From 22 rs the shadow is as wide as 26 full Moons.'], ['tab Kamera, jarak 22', 'Camera tab, distance 22'], 'lensa'],
+  [['Piringan jujur', 'The honest disk'], ['Matikan Mode film, nyalakan Doppler: satu sisi biru menyilaukan, sisi lain merah.', 'Switch Film mode off, Doppler on: one side blinding blue, the other red.'], ['tab Fisika', 'Physics tab'], 'piringan'],
+  [['Lurus ke pusat', 'Straight to the centre'], ['Jatuh lurus di atas kutub: 18,65 jam menurut jam wahana.', 'Fall straight in over the pole: 18.65 hours on the craft clock.'], ['Misi: Lurus di atas kutub', 'Mission: Straight in over the pole'], 'jatuh'],
+  [['Dilepas diam', 'Released at rest'], ['Mulai diam di 22 rs, lalu jatuh.', 'Start motionless at 22 rs, then fall.'], ['Misi: Dilepas diam di 22 rs', 'Mission: Released at rest at 22 rs'], 'jatuh'],
+  [['Langit menyempit', 'The sky squeezes'], ['Datang cepat: bintang berkumpul di depan.', 'Fast arrival: stars crowd ahead.'], ['Misi: Datang cepat (E = 1,3)', 'Mission: Fast arrival (E = 1.3)'], 'susur'],
+  [['Lewat celah dalam', 'Through the inner gap'], ['Menembus bidang piringan di sekitar 2 rs, di dalam tepi dalamnya.', 'Cross the disk plane at about 2 rs, inside its inner edge.'], ['Misi: Miring, lewat celah dalam', 'Mission: Slanted, through the inner gap'], 'orbit'],
+  [['Zoom-whirl', 'Zoom-whirl'], ['Berputar-putar di 2 rs lalu jatuh.', 'Whirl around 2 rs, then fall in.'], ['Misi: Berputar di 2 rs', 'Mission: Whirl at 2 rs'], 'orbit'],
+  [['Nyaris lolos', 'Near miss'], ['Ketapel keluar, atau rem <kbd>S</kbd> sebelum 4 rs untuk jatuh.', 'Slingshot out, or brake with <kbd>S</kbd> before 4 rs to fall in.'], ['Misi: Nyaris lolos', 'Mission: Near miss'], 'orbit'],
+  [['Orbit tak stabil', 'Unstable orbit'], ['Di 2,4 rs, dorongan kecil memulai jatuh.', 'At 2.4 rs a tiny nudge starts the plunge.'], ['Misi: Orbit tak stabil 2,4 rs', 'Mission: Unstable orbit at 2.4 rs'], 'orbit'],
+  [['Kaca retak', 'Cracked glass'], ['Susur melawan arus, lalu searah arus. Bandingkan kacanya.', 'Skim against the flow, then with it. Compare the glass.'], ['Misi susur + <kbd>O</kbd>', 'Skim mission + <kbd>O</kbd>'], 'susur'],
+  [['Suar yang hilang', 'The lost flare'], ['Tembakkan suar dari dalam horizon: relai tidak pernah menerimanya.', 'Fire a flare from inside the horizon: the relay never receives it.'], ['<kbd>E</kbd> lalu <kbd>M</kbd>', '<kbd>E</kbd> then <kbd>M</kbd>'], 'relai'],
+  [['Tesseract (fiksi)', 'Tesseract (fiction)'], ['Bidik sudut tepat lalu masuk gerbang fiksi di dalam horizon.', 'Aim precisely and enter the fictional gate inside the horizon.'], ['Misi tesseract: <kbd>W</kbd>/<kbd>S</kbd>, <kbd>Enter</kbd>', 'Tesseract mission: <kbd>W</kbd>/<kbd>S</kbd>, <kbd>Enter</kbd>'], 'orbit'],
+];
+const GAL = [
+  ['gg-01-anatomy.svg', ['Anatomi lubang hitam', 'Anatomy of a black hole']], ['gg-02-light-bending.svg', ['Cahaya dibelokkan', 'Bent light']],
+  ['gg-03-disk-image.svg', ['Atas dan bawah piringan', 'Top and bottom of the disk']], ['gg-04-disk-doppler.svg', ['Warna dan terang piringan', 'Colour and brightness of the disk']],
+  ['gg-05-fall.svg', ['Jatuh ke horizon', 'Falling in']], ['gg-06-spacetime.svg', ['Jam yang membeku', 'The frozen clock']],
+  ['gg-07-orbits.svg', ['Orbit dan sudut kritis', 'Orbits and the critical angle']], ['gg-08-skim-aberration.svg', ['Susur dan aberasi', 'Skimming and aberration']],
+];
+const CH_IDS = ['anatomi', 'lensa', 'piringan', 'jatuh', 'relai', 'orbit', 'susur', 'coba', 'galeri'];
+
+/* =====================================================================
+   Bahasa (dibagi dengan semua halaman: localStorage lazarus.lang, ?lang=)
+   ===================================================================== */
+let LANG = 'id';
+{
+  const ok = (c) => c === 'id' || c === 'en'; let c = null;
+  try { c = new URLSearchParams(location.search).get('lang'); } catch (e) { /* abaikan */ }
+  if (!ok(c)) try { c = localStorage.getItem('lazarus.lang'); } catch (e) { c = null; }
+  if (!ok(c)) c = (navigator.language || 'id').slice(0, 2).toLowerCase();
+  LANG = ok(c) ? c : 'id';
+}
+const L = () => (LANG === 'en' ? 1 : 0);
+const T = (k, v) => { let s = S[k] ? S[k][L()] : k; if (v) for (const n in v) s = s.split('{' + n + '}').join(v[n]); return s; };
+const fmt = (n, d = 0) => n.toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
+const fmtE = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });   // label kanvas
+const sci = (x, d = 1) => { const e = Math.floor(Math.log10(Math.abs(x))), m = x / 10 ** e; return (LANG === 'en' ? m.toFixed(d) : m.toFixed(d).replace('.', ',')) + 'e' + e; };
+const $ = (id) => document.getElementById(id);
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+const hms = (s) => { s = Math.max(0, s); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = Math.floor(s % 60); return `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}`; };
+const dur = (s) => (s >= 3 * 86400 ? fmt(s / 86400, 1) + (LANG === 'en' ? ' days' : ' hari') : s >= 7200 ? fmt(s / 3600, 2) + (LANG === 'en' ? ' h' : ' jam') : s >= 120 ? fmt(s / 60, 1) + (LANG === 'en' ? ' min' : ' menit') : fmt(s, 1) + ' s');
+function setP(inp) { const p = ((+inp.value - +inp.min) / (+inp.max - +inp.min)) * 100; inp.style.setProperty('--p', p + '%'); }
+
+/* =====================================================================
+   Kanvas: ukuran ikut CSS + DPR, satu loop animasi; simulasi berjalan walau panelnya tergulir keluar
+   ===================================================================== */
+const PANELS = [], SIMS = [];
+function panel(id, draw, step) {
+  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, vis: false, step };
+  o.draw = (p) => { if (p.w > 20 && p.h > 20) draw(p); };
+  const fit = () => {
+    const r = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+    if (r.width < 2) return;
+    o.w = r.width; o.h = r.height; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
+    ctx.setTransform(d, 0, 0, d, 0, 0); o.draw(o);
+  };
+  new ResizeObserver(fit).observe(el);
+  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; }, { rootMargin: '80px' }).observe(el);
+  PANELS.push(o); return o;
+}
+let lastT = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  for (const s of SIMS) s.tick(dt);
+  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) p.draw(p);
+  requestAnimationFrame(loop);
+}
+// pemutar umum: Jalankan / Jeda / Lanjut + slider waktu + label kecepatan (pola bab Coriolis Copper)
+function player(key, opt) {
+  const s = { t: 0, T: opt.T, play: false, done: false, opt };
+  s.btn = () => { if (opt.btn) $(opt.btn).textContent = T(s.play ? 'pause' : s.done || s.t === 0 ? 'run' : 'resume'); };
+  s.sync = () => { if (opt.slider) { const el = $(opt.slider); el.value = s.T ? s.t / s.T : 0; setP(el); } if (opt.update) opt.update(); };
+  s.go = () => { s.t = 0; s.done = false; s.play = true; if (opt.reset) opt.reset(); s.btn(); s.sync(); };
+  s.toggle = () => { if (s.play) { s.play = false; s.btn(); return; } if (s.done || s.t >= s.T || s.t === 0) { s.go(); return; } s.play = true; s.btn(); };
+  s.seek = (f) => { s.play = false; s.t = clamp(f, 0, 1) * s.T; s.done = s.t >= s.T; if (opt.seek) opt.seek(); s.btn(); s.sync(); };
+  s.tick = (dt) => {
+    if (!s.play) return;
+    s.t = Math.min(s.T, s.t + dt * opt.rate(s.t));
+    if (opt.during) opt.during();
+    if (s.t >= s.T) { s.play = false; s.done = true; if (opt.end) opt.end(); s.btn(); }
+    s.sync();
+  };
+  if (opt.btn) $(opt.btn).addEventListener('click', s.toggle);
+  if (opt.slider) $(opt.slider).addEventListener('input', (e) => s.seek(+e.target.value));
+  SIMS.push(s); return s;
+}
+// alat gambar
+function txt(c, x, y, s, col = COL.ink, size = 12, align = 'left', weight = 500) {
+  c.font = `${weight} ${size}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`; c.fillStyle = col; c.textAlign = align; c.textBaseline = 'alphabetic'; c.fillText(s, x, y);
+}
+function pillC(c, x, y, s, col = COL.ink, size = 11.5, align = 'left') {
+  c.font = `600 ${size}px system-ui, sans-serif`; const w = c.measureText(s).width + 16, h = size + 10;
+  const x0 = align === 'left' ? x : align === 'right' ? x - w : x - w / 2;
+  c.fillStyle = 'rgba(8,7,10,0.85)'; c.strokeStyle = 'rgba(255,255,255,0.16)'; c.lineWidth = 1;
+  c.beginPath(); c.roundRect ? c.roundRect(x0, y - h / 2, w, h, h / 2) : c.rect(x0, y - h / 2, w, h); c.fill(); c.stroke();
+  c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s, x0 + w / 2, y + 0.5); c.textBaseline = 'alphabetic';
+}
+function glow(c, col, blur) { c.shadowColor = col; c.shadowBlur = blur; }
+function noGlow(c) { c.shadowBlur = 0; }
+function corner(c, s, x = 14) { txt(c, x, 22, s, COL.mu, 10.5, 'left', 650); }
+function cornerR(c, w, s, col = COL.mu) { txt(c, w - 14, 22, s, col, 10.5, 'right', 650); }
+function arrow(c, x0, y0, x1, y1, col, w = 2) {
+  c.strokeStyle = col; c.fillStyle = col; c.lineWidth = w; c.beginPath(); c.moveTo(x0, y0); c.lineTo(x1, y1); c.stroke();
+  const a = Math.atan2(y1 - y0, x1 - x0), L_ = 7 + w * 1.5;
+  c.beginPath(); c.moveTo(x1 + Math.cos(a) * 2, y1 + Math.sin(a) * 2); c.lineTo(x1 - Math.cos(a - 0.45) * L_, y1 - Math.sin(a - 0.45) * L_); c.lineTo(x1 - Math.cos(a + 0.45) * L_, y1 - Math.sin(a + 0.45) * L_); c.closePath(); c.fill();
+}
+function bgStars(c, w, h, seed, n = 70) {
+  let s = seed; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < n; i++) { const x = rnd() * w, y = rnd() * h, r = 0.3 + rnd() ** 3 * 1.2; c.globalAlpha = 0.12 + rnd() * 0.5; c.fillStyle = '#fff'; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
+  c.globalAlpha = 1;
+}
+function holeC(c, x, y, r) {   // lubang hitam kecil: halo jingga + bayangan hitam
+  const g = c.createRadialGradient(x, y, r * 0.9, x, y, r * 2.2); g.addColorStop(0, 'rgba(243,165,90,0.35)'); g.addColorStop(1, 'rgba(243,165,90,0)');
+  c.fillStyle = g; c.beginPath(); c.arc(x, y, r * 2.2, 0, TAU); c.fill();
+  c.fillStyle = '#000'; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill();
+}
+
+/* =====================================================================
+   Fisika bersama: sinar foton (a = -1,5 h^2 p / r^5) dan geodesik bermassa (= misAcc())
+   ===================================================================== */
+function rayTrace(px, py, vx, vy, stop, hk = 0.02, nmax = 9000) {
+  const hh = (px * vy - py * vx) ** 2, P = [px, py]; let cap = false, rmin = 1e9, turn = 0, ang = Math.atan2(vy, vx), da = 0;
+  const acc = (x, y) => { const r2 = x * x + y * y, r = Math.sqrt(r2), k = -1.5 * hh / (r2 * r2 * r); return [k * x, k * y]; };
+  for (let i = 0; i < nmax; i++) {
+    const r = Math.hypot(px, py); rmin = Math.min(rmin, r);
+    if (r < 1) { cap = true; break; }
+    if (stop(px, py, vx, vy)) break;
+    const h = hk * Math.max(0.25, Math.min(4, r)) * Math.min(1, (r - 0.6) / 2);
+    const a1 = acc(px, py), a2 = acc(px + vx * h / 2, py + vy * h / 2);
+    const v2x = vx + a1[0] * h / 2, v2y = vy + a1[1] * h / 2, a3 = acc(px + v2x * h / 2, py + v2y * h / 2);
+    const v3x = vx + a2[0] * h / 2, v3y = vy + a2[1] * h / 2, a4 = acc(px + v3x * h, py + v3y * h);
+    const v4x = vx + a3[0] * h, v4y = vy + a3[1] * h;
+    const nx = px + h / 6 * (vx + 2 * v2x + 2 * v3x + v4x), ny = py + h / 6 * (vy + 2 * v2y + 2 * v3y + v4y);
+    vx += h / 6 * (a1[0] + 2 * a2[0] + 2 * a3[0] + a4[0]); vy += h / 6 * (a1[1] + 2 * a2[1] + 2 * a3[1] + a4[1]);
+    turn += Math.atan2(px * ny - py * nx, px * nx + py * ny);
+    px = nx; py = ny; P.push(px, py);
+    const a = Math.atan2(vy, vx); let d = a - ang; d -= TAU * Math.round(d / TAU); da += d; ang = a;
+  }
+  return { P, cap, vx, vy, rmin, turn, bend: da };
+}
+function geodesic(r0, L, E = 1, tmax = 6000, rcap = 1, rout = 60) {
+  let r = r0, vr = -Math.sqrt(Math.max(0, E * E - (1 - 1 / r0) * (1 + L * L / (r0 * r0)))), ph = 0, tau = 0;
+  const f = (r, vr) => [vr, -M / (r * r) + L * L / (r * r * r) - 3 * M * L * L / (r ** 4), L / (r * r)];
+  const out = { r: [r], ph: [ph], tau: [tau], end: 'bound' };
+  while (tau < tmax) {
+    if (r < rcap) { out.end = 'cap'; break; }
+    if (r > rout && vr > 0) { out.end = 'esc'; break; }
+    const h = 0.004 * r ** 1.5;
+    const k1 = f(r, vr), k2 = f(r + k1[0] * h / 2, vr + k1[1] * h / 2), k3 = f(r + k2[0] * h / 2, vr + k2[1] * h / 2), k4 = f(r + k3[0] * h, vr + k3[1] * h);
+    r += h / 6 * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]); vr += h / 6 * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]);
+    ph += h / 6 * (k1[2] + 2 * k2[2] + 2 * k3[2] + k4[2]); tau += h;
+    out.r.push(r); out.ph.push(ph); out.tau.push(tau);
+  }
+  return out;
+}
+
+/* =====================================================================
+   HERO: lubang hitam dijejak sinar di kanvas 2D (tabel lintasan per sudut, dihitung sekali)
+   Pengamat diam di 22 rs. Tiap piksel: sudut a dari pusat + azimut chi; lintasan di bidangnya hanya bergantung a.
+   Peta piksel (kena piringan / tertangkap / langit) dihitung ulang hanya saat kemiringan pandang berubah;
+   tiap frame cukup memutar tekstur piringan (Kepler) dan langit (kamera mengitari).
+   ===================================================================== */
+const HB = { mode: 'film', inc: 82 * DEG, psi: 0.6, t: 0, NA: 1300, AMAX: 40 * DEG, TANF: Math.tan(26 * DEG), tr: null, map: null, res: 0, drag: null, dirty: true, lowUntil: 0, auto: 0.05, k: 6 };
+function heroTrace() {
+  HB.tr = [];
+  for (let i = 0; i < HB.NA; i++) {
+    const a = (i / (HB.NA - 1)) * HB.AMAX, U = [], W = [];
+    let x = R_REL, y = 0, vx = -Math.cos(a), vy = Math.sin(a);
+    const hh = (x * vy - y * vx) ** 2; let cap = false;
+    for (let n = 0; n < 4000; n++) {
+      const r2 = x * x + y * y, r = Math.sqrt(r2);
+      U.push(x); W.push(y);
+      if (r < 1) { cap = true; break; }
+      if (r > 32 && x * vx + y * vy > 0) break;
+      const h = Math.min(0.6, Math.max(0.006, 0.03 * r)) * Math.min(1, (r - 0.6) / 1.2);
+      const acc = (px, py) => { const q = px * px + py * py, k = -1.5 * hh / (q * q * Math.sqrt(q)); return [k * px, k * py]; };
+      const a1 = acc(x, y), a2 = acc(x + vx * h / 2, y + vy * h / 2), v2x = vx + a1[0] * h / 2, v2y = vy + a1[1] * h / 2;
+      const a3 = acc(x + v2x * h / 2, y + v2y * h / 2), v3x = vx + a2[0] * h / 2, v3y = vy + a2[1] * h / 2, a4 = acc(x + v3x * h, y + v3y * h);
+      const v4x = vx + a3[0] * h, v4y = vy + a3[1] * h;
+      x += h / 6 * (vx + 2 * v2x + 2 * v3x + v4x); y += h / 6 * (vy + 2 * v2y + 2 * v3y + v4y);
+      vx += h / 6 * (a1[0] + 2 * a2[0] + 2 * a3[0] + a4[0]); vy += h / 6 * (a1[1] + 2 * a2[1] + 2 * a3[1] + a4[1]);
+    }
+    const n = Math.hypot(vx, vy);
+    HB.tr.push({ u: Float32Array.from(U), w: Float32Array.from(W), cap, du: vx / n, dw: vy / n });
+  }
+}
+function heroMap(N) {
+  const si = Math.sin(HB.inc), ci = Math.cos(HB.inc);
+  const o = [si, 0, ci], f = [-si, 0, -ci];                            // arah ke pengamat, arah pandang
+  const nf = -ci; let up = [0 - nf * f[0], 0 - nf * f[1], 1 - nf * f[2]]; const ul = Math.hypot(...up); up = up.map((v) => v / ul);
+  const rt = [f[1] * up[2] - f[2] * up[1], f[2] * up[0] - f[0] * up[2], f[0] * up[1] - f[1] * up[0]];
+  const kind = new Uint8Array(N * N), rr = new Float32Array(N * N), ph = new Float32Array(N * N), sh = new Float32Array(N * N), gg = new Float32Array(N * N), dir = new Float32Array(N * N * 3);
+  const gc = 1 / Math.sqrt(1 - 1 / R_REL);
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const k = j * N + i, x = ((2 * (i + 0.5)) / N - 1) * HB.TANF, y = (1 - (2 * (j + 0.5)) / N) * HB.TANF;
+    const rho = Math.hypot(x, y), a = Math.atan(rho), cx = rho > 0 ? x / rho : 1, cy = rho > 0 ? y / rho : 0;
+    const e = [cx * rt[0] + cy * up[0], cx * rt[1] + cy * up[1], cx * rt[2] + cy * up[2]];
+    if (a >= HB.AMAX) { const d = [f[0] + x * rt[0] + y * up[0], f[1] + x * rt[1] + y * up[1], f[2] + x * rt[2] + y * up[2]], l = Math.hypot(...d); dir[k * 3] = d[0] / l; dir[k * 3 + 1] = d[1] / l; dir[k * 3 + 2] = d[2] / l; continue; }
+    const t = HB.tr[Math.round((a / HB.AMAX) * (HB.NA - 1))], U = t.u, Wv = t.w, A = o[2], B = e[2];
+    let hit = false, sp = U[0] * A + Wv[0] * B;
+    for (let n = 1; n < U.length; n++) {
+      const s = U[n] * A + Wv[n] * B;
+      if ((s > 0) !== (sp > 0)) {
+        const q = sp / (sp - s), u = U[n - 1] + (U[n] - U[n - 1]) * q, w = Wv[n - 1] + (Wv[n] - Wv[n - 1]) * q, r = Math.hypot(u, w);
+        if (r >= 3 && r <= 12) {
+          const P = [u * o[0] + w * e[0], u * o[1] + w * e[1], u * o[2] + w * e[2]];
+          let Tx = (U[n] - U[n - 1]) * o[0] + (Wv[n] - Wv[n - 1]) * e[0], Ty = (U[n] - U[n - 1]) * o[1] + (Wv[n] - Wv[n - 1]) * e[1], Tz = (U[n] - U[n - 1]) * o[2] + (Wv[n] - Wv[n - 1]) * e[2];
+          const tl = Math.hypot(Tx, Ty, Tz); Tx /= tl; Ty /= tl; Tz /= tl;           // arah jejak mundur; foton = kebalikannya
+          const pl = Math.hypot(P[0], P[1]), td = [-P[1] / pl, P[0] / pl], v = Math.min(vGas(r), 0.99), gam = 1 / Math.sqrt(1 - v * v);
+          const D = 1 / (gam * (1 - v * (td[0] * -Tx + td[1] * -Ty)));
+          const g = Math.sqrt(1 - 1 / r) * gc;
+          kind[k] = 1; rr[k] = r; ph[k] = Math.atan2(P[1], P[0]); sh[k] = g * D; gg[k] = g; hit = true; break;
+        }
+      }
+      sp = s;
+    }
+    if (hit) continue;
+    if (t.cap) { kind[k] = 2; continue; }
+    const d = [t.du * o[0] + t.dw * e[0], t.du * o[1] + t.dw * e[1], t.du * o[2] + t.dw * e[2]];
+    dir[k * 3] = d[0]; dir[k * 3 + 1] = d[1]; dir[k * 3 + 2] = d[2];
+  }
+  const om = new Float32Array(N * N), tn = new Float32Array(N * N);
+  for (let k = 0; k < N * N; k++) if (kind[k] === 1) { om[k] = Math.sqrt(M / rr[k] ** 3); tn[k] = Tn(rr[k]); }
+  HB.map = { N, kind, rr, ph, sh, gg, dir, om, tn }; HB.res = N; HB.dirty = false;
+  HB.img = new ImageData(N, N); HB.off = document.createElement('canvas'); HB.off.width = N; HB.off.height = N;
+}
+function hHash(x, y, z) { let h = (x * 374761393 + y * 668265263 + z * 1274126177) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+function heroPaint() {
+  const m = HB.map, N = m.N, D = HB.img.data, cp = Math.cos(HB.psi), sp = Math.sin(HB.psi), phys = HB.mode === 'phys', t = HB.t, P = 80;
+  const c1 = (t / P) % 1, c2 = (t / P + 0.5) % 1, w1 = 1 - Math.abs(2 * c1 - 1), SC = 64;
+  for (let k = 0; k < N * N; k++) {
+    let R = 0, G = 0, Bc = 0; const kd = m.kind[k];
+    if (kd === 1) {
+      const r = m.rr[k], lr = Math.log(r), base = m.ph[k] + HB.psi;
+      const pat = (ph) => 0.55 + 0.25 * Math.sin(9 * ph + 7 * lr) + 0.2 * Math.sin(23 * ph - 11 * lr + 1.7);
+      const pt = pat(base - m.om[k] * c2 * P) * (1 - w1) + pat(base - m.om[k] * c1 * P) * w1;
+      const tn = m.tn[k], edge = sstep(0, 0.3, r - 3) * (1 - sstep(12 - 0.35 * 9, 12, r));
+      let col, I = (0.05 + 2.2 * tn * tn * tn) * (0.35 + pt * 0.9);
+      if (phys) { const s = m.sh[k]; col = bbAt(Math.max(800, 7500 * tn * s)); I *= 0.7 * s ** 4; }
+      else { col = FR[Math.min(255, Math.round(tn * 255))]; I *= m.gg[k] * m.gg[k]; }
+      const v = (1 - Math.exp(-(phys ? 0.35 : 0.9) * I)) * edge;
+      R = col[0] * v; G = col[1] * v; Bc = col[2] * v;
+    } else if (kd === 0) {
+      const dx = m.dir[k * 3], dy = m.dir[k * 3 + 1], dz = m.dir[k * 3 + 2];
+      const x = dx * cp - dy * sp, y = dx * sp + dy * cp, z = dz;                // kamera mengitari = langit berputar
+      const qx = x * SC, qy = y * SC, qz = z * SC, ix = Math.floor(qx), iy = Math.floor(qy), iz = Math.floor(qz);
+      const h = hHash(ix, iy, iz); let b = 0;
+      if (h < 0.08) { const ox = hHash(iy, iz, ix), oy = hHash(iz, ix, iy), oz = hHash(ix + 7, iy, iz), d2 = (qx - ix - ox) ** 2 + (qy - iy - oy) ** 2 + (qz - iz - oz) ** 2; b = Math.exp(-d2 / 0.006) * (0.3 + 1.6 * hHash(ix, iz, iy) ** 3); }
+      const band = Math.exp(-((0.5 * x + 0.3 * y + 0.81 * z) ** 2) / 0.04) * 0.05;
+      R = b + band * 0.9; G = b + band * 0.8; Bc = b * 1.05 + band;
+    }
+    const q = k * 4; D[q] = Math.min(255, 255 * Math.pow(R, 0.8)); D[q + 1] = Math.min(255, 255 * Math.pow(G, 0.8)); D[q + 2] = Math.min(255, 255 * Math.pow(Bc, 0.8)); D[q + 3] = 255;
+  }
+  HB.off.getContext('2d').putImageData(HB.img, 0, 0);
+}
+const hero = panel('cvHero', (o) => {
+  const c = o.ctx, w = o.w, h = o.h;
+  if (!HB.tr) heroTrace();
+  const want = performance.now() < HB.lowUntil ? 130 : Math.min(300, Math.round(Math.min(w, h) * 0.62));
+  if (HB.dirty || !HB.map || HB.res !== want) heroMap(want);
+  heroPaint();
+  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+  c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(HB.off, 0, 0, w, h);
+  c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.35; c.filter = 'blur(6px)'; c.drawImage(HB.off, 0, 0, w, h); c.restore();
+  txt(c, w / 2, h * 0.9, `VIEW FROM 22 rs · ${Math.round(90 - HB.inc / DEG)}° ABOVE THE DISK`, COL.mu, 10.5, 'center', 650);
+}, (dt) => {
+  HB.t += dt * HB.k; if (!HB.drag) HB.psi += dt * HB.auto;
+  if (HB.lowUntil && performance.now() > HB.lowUntil && !HB.drag) { HB.lowUntil = 0; HB.dirty = true; }
+  return true;
+});
+{
+  const el = $('cvHero');
+  el.addEventListener('pointerdown', (e) => { HB.drag = { x: e.clientX, y: e.clientY }; el.setPointerCapture(e.pointerId); });
+  el.addEventListener('pointermove', (e) => {
+    if (!HB.drag) return; const dx = e.clientX - HB.drag.x, dy = e.clientY - HB.drag.y; HB.drag = { x: e.clientX, y: e.clientY };
+    HB.psi -= dx * 0.008; const ni = clamp(HB.inc - dy * 0.004, 45 * DEG, 98 * DEG);
+    if (ni !== HB.inc) { HB.inc = ni; HB.dirty = true; HB.lowUntil = performance.now() + 250; }
+  });
+  const up = () => { HB.drag = null; };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+}
+document.querySelectorAll('[data-hv]').forEach((b) => b.addEventListener('click', () => { HB.mode = b.dataset.hv; heroCap(); }));
+function heroCap() {
+  document.querySelectorAll('[data-hv]').forEach((b) => b.classList.toggle('on', b.dataset.hv === HB.mode));
+  $('heroCap').textContent = T(HB.mode === 'film' ? 'h_cap_film' : 'h_cap_phys');
+  $('heroTurn').textContent = T('h_turn', { k: fmt(HB.k * TS, 0) });
+}
+
+/* =====================================================================
+   01 ANATOMI: penggaris jari-jari, zoom halus ke jarak terpilih
+   ===================================================================== */
+const AN = { r: 3, zoom: 8, t: 0 };
+const aR = (f) => Math.exp(Math.log(0.3) + f * (Math.log(24) - Math.log(0.3)));
+const aF = (r) => (Math.log(r) - Math.log(0.3)) / (Math.log(24) - Math.log(0.3));
+const ana = panel('cvAna', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, cx = w * 0.5, cy = h * 0.53, s = (Math.min(w, h) * 0.42) / AN.zoom;
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 3, 80);
+  const ring = (r, col, dash, lw = 1.3) => { c.strokeStyle = col; c.lineWidth = lw; c.setLineDash(dash); c.beginPath(); c.arc(cx, cy, r * s, 0, TAU); c.stroke(); c.setLineDash([]); };
+  // piringan 3-12 rs
+  const g = c.createRadialGradient(cx, cy, 3 * s, cx, cy, 12 * s); g.addColorStop(0, 'rgba(255,241,207,0.55)'); g.addColorStop(0.25, 'rgba(255,208,138,0.4)'); g.addColorStop(0.7, 'rgba(243,165,90,0.22)'); g.addColorStop(1, 'rgba(160,64,28,0.05)');
+  c.fillStyle = g; c.beginPath(); c.arc(cx, cy, 12 * s, 0, TAU); c.arc(cx, cy, 3 * s, 0, TAU, true); c.fill();
+  c.strokeStyle = 'rgba(255,246,220,0.25)'; c.lineWidth = 1;
+  for (let i = 0; i < 22; i++) { const r0 = 3.3 + ((i * 0.37) % 1) * 8.4, a0 = i * 2.39 - Math.sqrt(M / r0 ** 3) * AN.t; c.beginPath(); c.arc(cx, cy, r0 * s, a0, a0 + 0.7); c.stroke(); }
+  c.fillStyle = '#000'; c.beginPath(); c.arc(cx, cy, Math.max(1.5, s), 0, TAU); c.fill();
+  ring(1, '#ffffff', [], 1.4); ring(1.5, COL.te, [4, 4]); ring(2, COL.vi, [2, 4]); ring(3, COL.ink, []); ring(22, COL.te, [3, 6]);
+  // relai mengorbit 22 rs
+  const ar = -0.6 + Math.sqrt(M / 22 ** 3) * AN.t, rx = cx + 22 * s * Math.cos(ar), ry = cy - 22 * s * Math.sin(ar);
+  if (Math.abs(rx - cx) < w && Math.abs(ry - cy) < h) { glow(c, COL.te, 10); c.fillStyle = COL.te; c.fillRect(rx - 6, ry - 3, 12, 6); c.fillRect(rx - 13, ry - 0.8, 26, 1.6); noGlow(c); }
+  // jarak terpilih: cincin + benda mengorbit dengan laju sudut di sana (dipercepat)
+  const r = AN.r; c.strokeStyle = COL.ac; c.lineWidth = 2.2; glow(c, COL.ac, 12); c.beginPath(); c.arc(cx, cy, r * s, 0, TAU); c.stroke(); noGlow(c);
+  if (r > 1.5) { const a = 0.8 + Math.sqrt(M / r ** 3) * AN.t; const x = cx + r * s * Math.cos(a), y = cy - r * s * Math.sin(a); glow(c, '#fff', 12); c.fillStyle = r < 3 ? COL.vi : '#fff'; c.beginPath(); c.arc(x, y, 4, 0, TAU); c.fill(); noGlow(c); }
+  else if (r > 1) { c.fillStyle = COL.red; for (let i = 0; i < 6; i++) { const a = i * 1.05 + AN.t * 0.05, q = r - ((AN.t * 0.02 + i * 0.17) % 1) * (r - 1); c.beginPath(); c.arc(cx + q * s * Math.cos(a), cy - q * s * Math.sin(a), 2.5, 0, TAU); c.fill(); } }
+  // label
+  const lab = [[1, 'horizon', '#fff', -100], [1.5, 'photon sphere', COL.te, -40], [2, '2 rs', COL.vi, 200], [3, 'ISCO', COL.ink, 140], [12, 'disk edge', COL.ac, 35], [22, 'relay', COL.te, 100]];
+  for (const [rl, n, col, an] of lab) { const px = rl * s, a = an * DEG; if (px < 8 || px > Math.min(w, h) * 0.7) continue; const x = cx + px * Math.cos(a), y = cy - px * Math.sin(a); c.fillStyle = col; c.beginPath(); c.arc(x, y, 2.5, 0, TAU); c.fill(); pillC(c, x + (Math.cos(a) >= 0 ? 8 : -8), y - 12 * Math.sign(Math.sin(a) || 1), n, col, 10.5, Math.cos(a) >= 0 ? 'left' : 'right'); }
+  corner(c, 'TOP VIEW · TO SCALE');
+  const km = r * RS_KM; cornerR(c, w, `${fmtE(r, r < 10 ? 2 : 1)} rs = ${fmtE(km / 1e6, 0)} million km`, COL.ac);
+  // skala
+  const bar = Math.pow(10, Math.floor(Math.log10(AN.zoom * 0.5))); const bp = bar * s;
+  c.strokeStyle = COL.mu; c.lineWidth = 1.4; c.beginPath(); c.moveTo(16, h - 16); c.lineTo(16 + bp, h - 16); c.stroke(); txt(c, 16 + bp / 2, h - 22, `${fmtE(bar, bar < 1 ? 1 : 0)} rs`, COL.mu, 10.5, 'center');
+}, (dt) => { AN.t += dt * 14; const zt = Math.max(1.6, AN.r * 1.25); AN.zoom += (zt - AN.zoom) * Math.min(1, dt * 4); return true; });
+const APRE = [1, 1.5, 2, 3, 12, 22];
+function updAna() {
+  const r = AN.r; $('aR').value = aF(r); setP($('aR'));
+  $('aRo').textContent = fmt(r, r < 10 ? 2 : 1) + ' rs';
+  const km = r * RS_KM; $('aDist').textContent = fmt(km / AU_KM, 2) + ' AU';
+  $('aClock').textContent = r > 1 ? fmt(Math.sqrt(1 - 1 / r), 3) + 'x' : T('none');
+  $('aOrb').textContent = r > 1.5 ? fmt(vGas(r), 3) + ' c' : r === 1.5 ? T('light') : T('none');
+  $('aPer').textContent = r > 1.5 ? dur(TAU * Math.sqrt(r ** 3 / M) * TS) : T('none');
+  $('aEsc').textContent = r > 1 ? fmt(Math.sqrt(1 / r), 3) + ' c' : '> c';
+  $('aVerd').textContent = Math.abs(r - 22) < 0.3 ? T('a_rel') : r <= 1 ? T('a_in') : r < 1.5 ? T('a_ph') : r < 3 ? T('a_un') : T('a_st');
+}
+$('aR').addEventListener('input', (e) => { AN.r = aR(+e.target.value); updAna(); });
+
+/* =====================================================================
+   02 LENSA: penembak sinar
+   ===================================================================== */
+const RY = { b: 3.2, res: null, fam: null, famKey: '' };
+function rayView(o) { const s = o.h / 15, cx = o.w * 0.5, cy = o.h * 0.5; return { s, cx, cy, x0: -cx / s - 0.3, x1: (o.w - cx) / s + 0.3, ym: (o.h / 2) / s + 0.3 }; }
+function rayShoot(b, V) {
+  const stop = (x, y, vx, vy) => (x > V.x1 && vx > 0) || (x < V.x0 - 0.5 && vx < 0) || (Math.abs(y) > V.ym && vy * y > 0);
+  return rayTrace(V.x0, b, 1, 0, stop, 0.012);
+}
+const RYS = player('ray', { T: 1, btn: 'rPlay', rate: (t) => { const n = RY.res ? RY.res.P.length / 2 : 1; return clamp(220 / Math.max(1, RY.len), 0.05, 2); },
+  reset: () => { RY.res = rayShoot(RY.b, rayView(ray)); RY.len = rayLen(RY.res, rayView(ray)); $('rVerd').textContent = ''; },
+  update: () => { rayRead(); ray.draw(ray); }, end: () => rayVerdict() });
+function rayLen(res, V) { let L_ = 0; const P = res.P; for (let i = 2; i < P.length; i += 2) L_ += Math.hypot(P[i] - P[i - 2], P[i + 1] - P[i - 1]) * V.s; return L_; }
+const ray = panel('cvRay', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, V = rayView(o), X = (x) => V.cx + x * V.s, Y = (y) => V.cy - y * V.s;
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 21, 90);
+  const key = `${w}x${h}`;
+  if (RY.famKey !== key) { RY.fam = []; for (const sg of [1, -1]) for (const b of [0.6, 1.4, 2.2, 2.75, 3.4, 4.3, 5.4, 6.6]) RY.fam.push(rayShoot(sg * b, V)); RY.famKey = key; if (RY.res) { RY.res = rayShoot(RY.b, V); RY.len = rayLen(RY.res, V); } }
+  // bayangan di belakang lubang
+  c.fillStyle = 'rgba(0,0,0,0.45)'; c.fillRect(V.cx, Y(B_C), w - V.cx, 2 * B_C * V.s);
+  c.lineWidth = 1;
+  for (const f of RY.fam) { c.strokeStyle = f.cap ? 'rgba(255,107,90,0.28)' : 'rgba(255,208,138,0.22)'; c.beginPath(); for (let i = 0; i < f.P.length; i += 4) i ? c.lineTo(X(f.P[i]), Y(f.P[i + 1])) : c.moveTo(X(f.P[i]), Y(f.P[i + 1])); c.stroke(); }
+  c.strokeStyle = 'rgba(143,211,220,0.6)'; c.setLineDash([4, 4]); c.beginPath(); c.arc(V.cx, V.cy, 1.5 * V.s, 0, TAU); c.stroke(); c.setLineDash([]);
+  holeC(c, V.cx, V.cy, V.s);
+  // berkas terpilih: garis bidik + foton berjalan
+  c.strokeStyle = 'rgba(255,255,255,0.18)'; c.setLineDash([2, 5]); c.beginPath(); c.moveTo(0, Y(RY.b)); c.lineTo(w, Y(RY.b)); c.stroke(); c.setLineDash([]);
+  if (RY.res) {
+    const P = RY.res.P, n = P.length / 2, upto = Math.max(1, Math.floor(RYS.t * (n - 1)));
+    const near = Math.abs(Math.abs(RY.b) - B_C) < 0.05, col = RY.res.cap && RYS.t >= 1 ? COL.red : near ? COL.te : COL.ac2;
+    c.strokeStyle = col; c.lineWidth = 2.4; glow(c, col, 12); c.beginPath();
+    for (let i = 0; i <= upto; i++) i ? c.lineTo(X(P[2 * i]), Y(P[2 * i + 1])) : c.moveTo(X(P[0]), Y(P[1]));
+    c.stroke();
+    const hx = X(P[2 * upto]), hy = Y(P[2 * upto + 1]); c.fillStyle = '#fff'; glow(c, '#fff', 18); c.beginPath(); c.arc(hx, hy, 4.5, 0, TAU); c.fill(); noGlow(c);
+  }
+  // penanda b
+  c.strokeStyle = COL.ink; c.lineWidth = 1.2; c.beginPath(); c.moveTo(20, V.cy); c.lineTo(20, Y(RY.b)); c.stroke();
+  pillC(c, 28, (V.cy + Y(RY.b)) / 2, `b = ${fmtE(RY.b, Math.abs(Math.abs(RY.b) - B_C) < 0.01 ? 4 : 2)} rs`, COL.ac2, 11);
+  pillC(c, w - 14, Y(B_C) - 14, 'shadow edge b = 2.598 rs', COL.ink, 10.5, 'right');
+  corner(c, 'LIGHT FROM THE LEFT · TO SCALE · PHOTON SPHERE DASHED', 64);
+  return 0;
+}, () => false);
+function rayRead() {
+  const R_ = RY.res; if (!R_) { ['rOut', 'rBend', 'rMin', 'rTurn'].forEach((id) => { $(id).textContent = '–'; }); return; }
+  const fin = RYS.t >= 1;
+  $('rOut').textContent = fin ? T(R_.cap ? 'r_cap' : 'r_esc') : '…';
+  $('rBend').textContent = fin && !R_.cap ? fmt(Math.abs(R_.bend) / DEG, 1) + '°' : '–';
+  $('rMin').textContent = fmt(Math.max(1, R_.rmin), 3) + ' rs';
+  $('rTurn').textContent = fmt(Math.abs(R_.turn) / TAU, 2);
+}
+function rayVerdict() {
+  const R_ = RY.res; if (!R_) return;
+  const turns = Math.abs(R_.turn) / TAU;
+  $('rVerd').textContent = R_.cap ? T('r_v_cap') : turns > 0.75 ? T('r_v_ring', { n: fmt(turns, 1) }) : T('r_v_esc', { a: fmt(Math.abs(R_.bend) / DEG, 1) + '°' });
+}
+function raySet(b) { RY.b = b; $('rB').value = b; setP($('rB')); $('rBo').textContent = fmt(b, Math.abs(b - B_C) < 0.01 ? 4 : 2) + ' rs'; }
+$('rB').addEventListener('input', (e) => { raySet(+e.target.value); RYS.go(); });
+const RPRE = [1.5, 2.5, B_C + 0.0003, 2.7, 4, 7];
+
+/* =====================================================================
+   03 PIRINGAN: Doppler + pergeseran merah, tanpa pembelokan cahaya
+   ===================================================================== */
+const DK = { mode: 0, elev: 20, t: 0 };
+function diskShift(r, am, ce) {   // am = sudut di piringan (0 = kanan), ce = cos tinggi pandang
+  const v = vGas(r), bl = -v * Math.cos(am) * ce, D = 1 / (Math.sqrt(1 - v * v) * (1 - bl)), g = Math.sqrt(1 - 1 / r) / Math.sqrt(1 - 1 / R_REL);
+  return DK.mode === 0 ? 1 : DK.mode === 1 ? D : g * D;
+}
+const disk = panel('cvDisk', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, cx = w / 2, cy = h * 0.54, s = Math.min(w * 0.4, h * 0.9) / 12, e = DK.elev * DEG, se = Math.sin(e), ce = Math.cos(e);
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 31, 70);
+  const NR = 22, NP = 96, cells = [];
+  for (let j = 0; j < NR; j++) for (let k = 0; k < NP; k++) {
+    const r0 = 3 * 4 ** (j / NR), r1 = 3 * 4 ** ((j + 1) / NR), a0 = (k * TAU) / NP, a1 = ((k + 1) * TAU) / NP, rm = (r0 + r1) / 2, am = (a0 + a1) / 2;
+    const tn = Tn(rm), sft = diskShift(rm, am, ce), om = Math.sqrt(M / rm ** 3);
+    const pat = 0.7 + 0.3 * Math.sin(9 * (am - om * DK.t) + 7 * Math.log(rm)) * Math.sin(4 * (am - om * DK.t) - 3 * Math.log(rm) + 1);
+    let col, I = (0.05 + 2.2 * tn ** 3) * pat;
+    if (DK.mode === 0) { col = FR[Math.min(255, Math.round(tn * 255))]; const g = Math.sqrt(1 - 1 / rm) / Math.sqrt(1 - 1 / R_REL); I *= g * g; }
+    else { col = bbAt(Math.max(800, 7500 * tn * sft)); I *= 0.7 * sft ** 4; }
+    const v = Math.pow(1 - Math.exp(-1.1 * I), 0.7);
+    const pt = [[r0, a0], [r1, a0], [r1, a1], [r0, a1]].map(([rr, aa]) => [cx + rr * s * Math.cos(aa), cy - rr * s * Math.sin(aa) * se]);
+    cells.push([Math.sin(am), pt, cssRGB(col, v)]);
+  }
+  const drawCells = (far) => { for (const [sn, pt, col] of cells) { if ((sn >= 0) !== far) continue; c.fillStyle = col; c.strokeStyle = col; c.lineWidth = 0.7; c.beginPath(); c.moveTo(pt[0][0], pt[0][1]); for (let i = 1; i < 4; i++) c.lineTo(pt[i][0], pt[i][1]); c.closePath(); c.fill(); c.stroke(); } };
+  glow(c, 'rgba(255,190,120,0.4)', 18); drawCells(true); noGlow(c);
+  c.fillStyle = '#000'; c.beginPath(); c.arc(cx, cy, s * 1.0, 0, TAU); c.fill();
+  drawCells(false);
+  // panah arah gas
+  if (DK.mode) { pillC(c, 14, h - 18, 'coming toward you', COL.te, 10.5); pillC(c, w - 14, h - 18, 'moving away', COL.red, 10.5, 'right'); }
+  corner(c, `DISK SEEN ${DK.elev}° ABOVE ITS PLANE · NO LENSING`);
+  cornerR(c, w, ['FILM MODE', 'DOPPLER', 'DOPPLER + REDSHIFT'][DK.mode], DK.mode ? COL.te : COL.ac);
+}, (dt) => { DK.t += dt * 6; return true; });
+function updDisk() {
+  const ce = Math.cos(DK.elev * DEG), v = vGas(3) * ce;
+  const ratio = DK.mode ? ((1 + v) / (1 - v)) ** 4 : 1;
+  $('dEo').textContent = fmt(DK.elev, 0) + '°'; setP($('dE'));
+  $('dRatio').textContent = fmt(ratio, ratio < 10 ? 1 : 0) + ' : 1';
+  const hot = 7500 * diskShift(3, Math.PI, ce), cold = 7500 * diskShift(3, 0, ce);
+  $('dHot').textContent = DK.mode ? fmt(Math.round(hot / 10) * 10, 0) + ' K' : (LANG === 'en' ? 'warm' : 'hangat');
+  $('dCold').textContent = DK.mode ? fmt(Math.round(cold / 10) * 10, 0) + ' K' : (LANG === 'en' ? 'warm' : 'hangat');
+  $('dV').textContent = fmt(vGas(3), 2) + ' c';
+  $('dMode').querySelectorAll('.chip').forEach((b, i) => b.classList.toggle('on', i === DK.mode));
+}
+$('dE').addEventListener('input', (e) => { DK.elev = +e.target.value; updDisk(); });
+
+/* =====================================================================
+   04 JATUH: peta corong + dua jam (wahana dan relai), E = 1 dari 22 rs
+   ===================================================================== */
+const T_END = tauFall(22, 0), T_HOR = tauFall(22, 1), F_TMAX = 100;
+const fRate = (t) => (t > 66 && t < T_END + 0.3 ? 0.45 : 10);                       // lambat di dekat horizon dan pusat
+function seenR(T) {   // jarak wahana yang terlihat relai pada waktu PG T (T_arr(r) = T, cari dengan bisection)
+  const ta = (r) => tauFall(22, r) + Gout(22) - Gout(r);
+  if (T <= 0) return 22; let a = 1 + 1e-12, b = 22;
+  if (ta(a) < T) return 1;
+  for (let i = 0; i < 60; i++) { const m = (a + b) / 2; if (ta(m) > T) a = m; else b = m; }
+  return (a + b) / 2;
+}
+const FL = { flags: {} };
+const FS = player('fall', { T: F_TMAX, btn: 'fPlay', slider: 'fTs', rate: fRate, reset: () => { FL.flags = {}; $('fVerd').textContent = T('f_out'); },
+  update: () => { fallRead(); fall.draw(fall); }, during: () => fallEvents(), end: () => fallEvents(),
+  seek: () => { FL.flags = {}; $('fVerd').textContent = T(FS.t > 0 ? 'f_out' : 'f_start'); fallEvents(); } });
+$('fReplay').addEventListener('click', () => FS.go());
+function fallEvents() {
+  const t = FS.t;
+  if (t >= T_HOR && !FL.flags.h) { FL.flags.h = 1; $('fVerd').textContent = T('f_hor', { t: fmt(T_HOR * TS / 3600, 2) }); }
+  if (t >= tauFall(22, 0.00594) && !FL.flags.g) { FL.flags.g = 1; $('fVerd').textContent = T('f_tide'); }
+  if (t >= T_END && !FL.flags.e) { FL.flags.e = 1; $('fVerd').textContent = T('f_end', { s: fmt((T_END - T_HOR) * TS, 0) }); }
+}
+function fallRead() {
+  const t = FS.t, alive = t < T_END, r = alive ? rOfTau(22, t) : 0;
+  $('fOwn').textContent = hms(Math.min(t, T_END) * TS); $('fRel').textContent = hms(t * REL_CLK * TS);
+  $('fR').textContent = alive ? fmt(r, r < 0.1 ? 4 : 2) + ' rs' : '0';
+  $('fSeen').textContent = fmt(seenR(t), seenR(t) < 1.01 ? 5 : 2) + ' rs';
+  $('fTide').textContent = alive ? (tidalG(Math.max(r, 1e-3)) < 0.01 ? sci(tidalG(Math.max(r, 1e-3))) : fmt(Math.min(tidalG(Math.max(r, 1e-3)), 9999), 2)) + ' g' : '∞';
+  $('fSpd').textContent = !alive ? '–' : r > 1 ? fmt(Math.sqrt(1 / r), 3) + ' c' : (LANG === 'en' ? 'no one hovers' : 'tidak ada yang diam');
+  $('fTso').textContent = fmt(t, 1) + ' rs/c';
+}
+const fall = panel('cvFall', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, t = FS.t, alive = t < T_END, r = alive ? rOfTau(22, t) : 0;
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 41, 60);
+  const narrow = w < 560;
+  // --- corong (kiri) ---
+  const fw = narrow ? w : w * 0.38, fh = narrow ? h * 0.48 : h, fcx = fw / 2, top = 40, sR = (fw * 0.42) / 22, zs = (fh - top - 26) / (2 * Math.sqrt(22));
+  const FY = (rr) => top + (2 * Math.sqrt(22) - 2 * Math.sqrt(rr)) * zs;
+  c.strokeStyle = 'rgba(243,165,90,0.18)'; c.lineWidth = 1;
+  for (let k = 1; k <= 11; k++) { const rr = (22 * k) / 11, y = FY(rr), rx = rr * sR; c.beginPath(); c.ellipse(fcx, y, rx, rx * 0.16, 0, 0, TAU); c.stroke(); }
+  for (const sg of [1, -1]) { c.strokeStyle = 'rgba(243,165,90,0.55)'; c.lineWidth = 1.6; c.beginPath(); for (let i = 0; i <= 120; i++) { const rr = 22 * (i / 120) ** 2, x = fcx + sg * rr * sR, y = FY(rr); i ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); }
+  c.strokeStyle = COL.red; c.lineWidth = 2; glow(c, COL.red, 8); c.beginPath(); c.ellipse(fcx, FY(1), sR, sR * 0.16, 0, 0, TAU); c.stroke(); noGlow(c);
+  txt(c, fcx + sR + 8, FY(1) + 4, 'horizon', COL.red, 10.5);
+  const showR = alive ? r : 0, crx = fcx + showR * sR * 0.98, cry = FY(Math.max(showR, 0)) - 3;
+  glow(c, COL.ac, 14); c.fillStyle = alive ? COL.ac : '#555'; c.beginPath(); c.arc(crx, cry, 5, 0, TAU); c.fill(); noGlow(c);
+  // tubuh 2 m meregang (skala log, dibesar-besarkan)
+  const td = alive ? tidalG(Math.max(r, 1e-3)) : 1e3, st = clamp((Math.log10(td) + 9) / 12, 0, 1), bl = 18 + st * 40, bw = 6 * (1 - st * 0.75);
+  c.fillStyle = st > 0.75 ? COL.red : COL.vi; c.globalAlpha = 0.9; c.beginPath(); c.roundRect ? c.roundRect(crx + 14, cry - bl / 2, bw, bl, bw / 2) : c.rect(crx + 14, cry - bl / 2, bw, bl); c.fill(); c.globalAlpha = 1;
+  corner(c, 'FUNNEL MAP z = 2√r');
+  // --- grafik jam (kanan) ---
+  const gx0 = narrow ? 48 : fw + 56, gy0 = narrow ? fh + 26 : 40, gw = w - gx0 - 18, gh = (narrow ? h - fh - 26 : h - 40) - 44;
+  const X = (T_) => gx0 + (T_ / F_TMAX) * gw, Y = (rr) => gy0 + gh - (rr / 22) * gh;
+  c.strokeStyle = 'rgba(255,255,255,0.07)'; c.lineWidth = 1;
+  for (let k = 0; k <= 5; k++) { c.beginPath(); c.moveTo(X(k * 20), gy0); c.lineTo(X(k * 20), gy0 + gh); c.stroke(); txt(c, X(k * 20), gy0 + gh + 14, String(k * 20), COL.mu, 10, 'center'); }
+  for (const rr of [1, 5, 10, 15, 20]) { c.beginPath(); c.moveTo(gx0, Y(rr)); c.lineTo(gx0 + gw, Y(rr)); c.stroke(); txt(c, gx0 - 6, Y(rr) + 3, String(rr), COL.mu, 10, 'right'); }
+  txt(c, gx0 + gw / 2, gy0 + gh + 30, 'each clock\'s own time (rs/c) · 100 rs/c = 27.4 h', COL.mu, 10, 'center');
+  c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(gx0, Y(1), gw, Y(0) - Y(1)); c.strokeStyle = COL.red; c.setLineDash([5, 4]); c.beginPath(); c.moveTo(gx0, Y(1)); c.lineTo(gx0 + gw, Y(1)); c.stroke(); c.setLineDash([]);
+  // kurva penuh (pudar) + bagian yang sudah lewat (terang)
+  const own = (upto, a) => { c.strokeStyle = COL.ac; c.globalAlpha = a; c.lineWidth = 2.4; c.beginPath(); for (let i = 0; i <= 200; i++) { const T_ = (Math.min(upto, T_END) * i) / 200; const p = [X(T_), Y(rOfTau(22, T_))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); c.globalAlpha = 1; };
+  const seen = (upto, a) => { c.strokeStyle = COL.te; c.globalAlpha = a; c.lineWidth = 2; c.setLineDash([6, 4]); c.beginPath(); for (let i = 0; i <= 200; i++) { const T_ = (upto * i) / 200; const p = [X(T_ * REL_CLK), Y(seenR(T_))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); c.setLineDash([]); c.globalAlpha = 1; };
+  own(F_TMAX, 0.2); seen(F_TMAX, 0.2); own(t, 1); seen(t, 1);
+  if (alive) { glow(c, COL.ac, 12); c.fillStyle = COL.ac; c.beginPath(); c.arc(X(t), Y(r), 4.5, 0, TAU); c.fill(); }
+  glow(c, COL.te, 12); c.fillStyle = COL.te; c.beginPath(); c.arc(X(t * REL_CLK), Y(seenR(t)), 4, 0, TAU); c.fill(); noGlow(c);
+  pillC(c, gx0 + 8, gy0 + 10, 'your clock', COL.ac, 10.5); pillC(c, gx0 + 92, gy0 + 10, 'what the relay sees', COL.te, 10.5);
+  txt(c, gx0 + gw, gy0 - 8, 'distance (rs)', COL.mu, 10, 'right');
+  if (!narrow) cornerR(c, w, `1 s = ${fmtE(fRate(t) * TS / 60, 0)} min`, COL.mu);
+}, () => false);
+
+/* =====================================================================
+   05 RELAI: diagram ruang-waktu (r, T), pulsa cahaya ke relai
+   ===================================================================== */
+const ST = { pulses: [], auto: true, idx: 0, gotN: 0, lastArr: null, lastGap: null, lastF: null };
+const AUTO_T = [0, 10, 20, 30, 40, 50, 60, 65, 67, 67.8, 68.0, 68.4];   // pulsa terakhir dari dalam horizon (r = 0,70)
+const ST_T = 110;
+function pulseMake(te) {
+  const re = rOfTau(22, te), p = { te, re, inside: re <= 1, arr: Infinity, got: false };
+  if (re > 1) { p.arr = te + Gout(22) - Gout(re); p.f = (1 - 1 / Math.sqrt(re)) / Math.sqrt(1 - 1 / 22); }
+  else { const pts = []; let r = re, Tq = te; pts.push([r, Tq]); while (r > 0.02 && Tq < ST_T) { const dT = 0.01; r += (1 - 1 / Math.sqrt(r)) * dT; Tq += dT; pts.push([r, Tq]); } p.pts = pts; }
+  ST.pulses.push(p);
+  if (p.inside) $('sVerd').textContent = T('s_in');
+  stRead();
+}
+const SS = player('st', { T: ST_T, btn: 'sPlay', slider: 'sTs', rate: (t) => (t > 60 && t < 70 ? 2.2 : 7),
+  reset: () => { ST.pulses = []; ST.idx = 0; ST.gotN = 0; ST.lastArr = null; ST.lastGap = null; ST.lastF = null; $('sVerd').textContent = T('s_start'); },
+  during: () => stEvents(), seek: () => stRebuild(), update: () => { stRead(); stp.draw(stp); } });
+function stEvents() {
+  const t = SS.t;
+  while (ST.idx < AUTO_T.length && AUTO_T[ST.idx] <= t) { if (ST.auto) pulseMake(AUTO_T[ST.idx]); ST.idx++; }
+  for (const p of ST.pulses) if (!p.got && p.arr <= t) {
+    p.got = true; ST.gotN++; if (ST.lastArr !== null) ST.lastGap = p.arr - ST.lastArr; ST.lastArr = p.arr; ST.lastF = p.f;
+    if (ST.lastGap && ST.gotN > 3) $('sVerd').textContent = T('s_gap', { g: dur(ST.lastGap * REL_CLK * TS) });
+  }
+}
+function stRebuild() {   // geser waktu: bangun ulang pulsa otomatis sampai waktu itu
+  const keep = ST.pulses.filter((p) => p.manual && p.te <= SS.t); ST.pulses = []; ST.idx = 0; ST.gotN = 0; ST.lastArr = null; ST.lastGap = null; ST.lastF = null;
+  for (const p of keep) { pulseMake(p.te); ST.pulses[ST.pulses.length - 1].manual = true; }
+  ST.pulses.sort((a, b) => a.te - b.te); stEvents();
+}
+$('sPulse').addEventListener('click', () => { if (SS.t >= T_END) return; if (!SS.play && SS.t === 0) SS.go(); pulseMake(SS.t); ST.pulses[ST.pulses.length - 1].manual = true; });
+$('sAuto').addEventListener('click', () => { ST.auto = !ST.auto; $('sAuto').classList.toggle('on', ST.auto); });
+function stRead() {
+  $('sSent').textContent = String(ST.pulses.length); $('sGot').textContent = String(ST.gotN);
+  $('sGap').textContent = ST.lastGap ? dur(ST.lastGap * REL_CLK * TS) : '–';
+  $('sFreq').textContent = ST.lastF ? fmt(ST.lastF, 3) + 'x' : '–';
+  $('sTso').textContent = fmt(SS.t, 1) + ' rs/c';
+}
+const freqCol = (f) => { const q = clamp(f / 0.8, 0, 1); return `rgb(${255},${Math.round(80 + 170 * q)},${Math.round(60 + 190 * q)})`; };
+const stp = panel('cvST', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, t = SS.t, x0 = 44, y0 = 34, gw = w - x0 - 22, gh = h - y0 - 44;
+  const X = (r) => x0 + (r / 23) * gw, Y = (T_) => y0 + gh - (T_ / ST_T) * gh;
+  c.clearRect(0, 0, w, h);
+  c.strokeStyle = 'rgba(255,255,255,0.07)'; c.lineWidth = 1;
+  for (const r of [1, 5, 10, 15, 20]) { c.beginPath(); c.moveTo(X(r), y0); c.lineTo(X(r), y0 + gh); c.stroke(); txt(c, X(r), y0 + gh + 14, String(r), COL.mu, 10, 'center'); }
+  for (let k = 0; k <= 5; k++) { const T_ = k * 20; c.beginPath(); c.moveTo(x0, Y(T_)); c.lineTo(x0 + gw, Y(T_)); c.stroke(); txt(c, x0 - 6, Y(T_) + 3, String(T_), COL.mu, 10, 'right'); }
+  txt(c, x0 + gw / 2, y0 + gh + 30, 'distance from centre (rs)', COL.mu, 10, 'center');
+  c.save(); c.translate(12, y0 + gh / 2); c.rotate(-Math.PI / 2); txt(c, 0, 0, 'time (rs/c)', COL.mu, 10, 'center'); c.restore();
+  c.fillStyle = 'rgba(0,0,0,0.55)'; c.fillRect(x0, y0, X(1) - x0, gh);
+  c.strokeStyle = COL.red; c.setLineDash([5, 4]); c.beginPath(); c.moveTo(X(1), y0); c.lineTo(X(1), y0 + gh); c.stroke(); c.setLineDash([]);
+  // garis "sekarang"
+  c.strokeStyle = 'rgba(255,255,255,0.25)'; c.beginPath(); c.moveTo(x0, Y(t)); c.lineTo(x0 + gw, Y(t)); c.stroke();
+  // relai
+  glow(c, COL.te, 10); c.strokeStyle = COL.te; c.lineWidth = 3; c.beginPath(); c.moveTo(X(22), Y(0)); c.lineTo(X(22), Y(t)); c.stroke(); noGlow(c);
+  c.strokeStyle = 'rgba(143,211,220,0.25)'; c.lineWidth = 3; c.beginPath(); c.moveTo(X(22), Y(t)); c.lineTo(X(22), y0); c.stroke();
+  // wahana (pudar penuh, terang sampai sekarang)
+  const craft = (upto, a, lw) => { c.strokeStyle = COL.ac; c.globalAlpha = a; c.lineWidth = lw; c.beginPath(); for (let i = 0; i <= 160; i++) { const T_ = (Math.min(upto, T_END) * i) / 160; const p = [X(rOfTau(22, T_)), Y(T_)]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); c.globalAlpha = 1; };
+  craft(T_END, 0.2, 2); glow(c, COL.ac, 10); craft(t, 1, 2.6); noGlow(c);
+  // kerucut cahaya
+  for (const r of [16, 8, 3, 1, 0.45]) {
+    const Tq = tauFall(22, r); if (Tq > t + 0.01) continue;
+    const so = 1 - 1 / Math.sqrt(r), si_ = -1 - 1 / Math.sqrt(r), Ls = 22;
+    const e = (sl) => { const dx = (sl * gw) / 23, dy = gh / ST_T, n = Math.hypot(dx, dy); return [(dx / n) * Ls, (dy / n) * Ls]; };
+    const a = e(so), b = e(si_); c.fillStyle = 'rgba(255,255,255,0.12)'; c.beginPath(); c.moveTo(X(r), Y(Tq)); c.lineTo(X(r) + a[0], Y(Tq) - a[1]); c.lineTo(X(r) + b[0], Y(Tq) - b[1]); c.closePath(); c.fill();
+    c.strokeStyle = '#fff'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(X(r) + a[0], Y(Tq) - a[1]); c.lineTo(X(r), Y(Tq)); c.lineTo(X(r) + b[0], Y(Tq) - b[1]); c.stroke();
+  }
+  // pulsa
+  for (const p of ST.pulses) {
+    if (p.te > t) continue;
+    if (!p.inside) {
+      const col = freqCol(p.f); c.strokeStyle = col; c.lineWidth = 1.5; c.beginPath(); let head = null;
+      for (let i = 0; i <= 260; i++) { const rr = p.re + (22 - p.re) * (i / 260) ** 1.7, Tq = p.te + Gout(rr) - Gout(p.re); if (Tq > t) break; const pt = [X(rr), Y(Tq)]; i ? c.lineTo(...pt) : c.moveTo(...pt); head = pt; }
+      c.stroke();
+      if (head && !p.got) { glow(c, col, 12); c.fillStyle = col; c.beginPath(); c.arc(head[0], head[1], 3.5, 0, TAU); c.fill(); noGlow(c); }
+      if (p.got) { c.strokeStyle = col; c.lineWidth = 3; glow(c, col, 10); c.beginPath(); c.moveTo(X(22) - 8, Y(p.arr)); c.lineTo(X(22) + 8, Y(p.arr)); c.stroke(); noGlow(c); }
+    } else {
+      c.strokeStyle = COL.red; c.lineWidth = 1.6; c.beginPath(); let head = null;
+      for (let i = 0; i < p.pts.length; i += 3) { const [rr, Tq] = p.pts[i]; if (Tq > t) break; const pt = [X(rr), Y(Tq)]; i ? c.lineTo(...pt) : c.moveTo(...pt); head = pt; }
+      c.stroke(); if (head) { c.fillStyle = COL.red; c.beginPath(); c.arc(head[0], head[1], 3, 0, TAU); c.fill(); }
+    }
+    c.fillStyle = COL.ac2; c.beginPath(); c.arc(X(p.re), Y(p.te), 2.5, 0, TAU); c.fill();
+  }
+  pillC(c, X(22), y0 - 14, 'relay', COL.te, 10.5, 'center'); pillC(c, X(1) + 4, y0 - 14, 'horizon', COL.red, 10.5);
+}, () => false);
+
+/* =====================================================================
+   06 ORBIT: sudut bidik dari 22 rs, geodesik RK4, potensial efektif
+   ===================================================================== */
+const OR = { d: 24.6, path: null, L: 0 };
+function orbPlan() {
+  const L = (22 * Math.sin(OR.d * DEG)) / Math.sqrt(21); OR.L = L;
+  const g = geodesic(22, L, 1, 9000, 1, 60); OR.path = g;
+  // panjang lintasan (dalam rs) untuk laju layar tetap
+  const n = g.r.length, cum = new Float32Array(n); let s = 0;
+  for (let i = 1; i < n; i++) { const x0 = g.r[i - 1] * Math.cos(g.ph[i - 1]), y0 = g.r[i - 1] * Math.sin(g.ph[i - 1]), x1 = g.r[i] * Math.cos(g.ph[i]), y1 = g.r[i] * Math.sin(g.ph[i]); s += Math.hypot(x1 - x0, y1 - y0); cum[i] = s; }
+  OR.cum = cum; OR.len = s;
+}
+const OS = player('orb', { T: 1, btn: 'oPlay', rate: () => clamp(13 / Math.max(1, OR.len), 0.01, 1),
+  reset: () => { orbPlan(); $('oVerd').textContent = ''; }, update: () => { orbRead(); orbp.draw(orbp); }, end: () => orbVerdict() });
+function orbIdx() { if (!OR.path) return 0; const target = OS.t * OR.len, cum = OR.cum; let a = 0, b = cum.length - 1; while (b - a > 1) { const m = (a + b) >> 1; if (cum[m] < target) a = m; else b = m; } return b; }
+function orbRead() {
+  $('oL').textContent = fmt(OR.L / 2, 6);
+  if (!OR.path) { ['oOut', 'oTurns', 'oMin', 'oTau'].forEach((id) => { $(id).textContent = '–'; }); return; }
+  const i = orbIdx(), g = OR.path; let rmin = 99; for (let k = 0; k <= i; k++) rmin = Math.min(rmin, g.r[k]);
+  $('oOut').textContent = OS.t >= 1 ? T(g.end === 'cap' ? 'o_cap' : 'o_esc') : '…';
+  $('oTurns').textContent = fmt(Math.abs(g.ph[i]) / TAU, 2); $('oMin').textContent = fmt(Math.max(1, rmin), 3) + ' rs'; $('oTau').textContent = dur(g.tau[i] * TS);
+}
+function orbVerdict() {
+  const g = OR.path, n = Math.abs(g.ph[g.ph.length - 1]) / TAU;
+  $('oVerd').textContent = g.end !== 'cap' ? T('o_v_esc') : Math.abs(OR.L - 2) < 0.002 ? T('o_v_whirl', { n: fmt(n, 1) }) : T('o_v_cap', { n: fmt(n, 1) });
+}
+function orbSet(d) { OR.d = d; OR.L = (22 * Math.sin(d * DEG)) / Math.sqrt(21); $('oD').value = d; setP($('oD')); $('oDo').textContent = fmt(d, Math.abs(d - 24.62) < 0.05 ? 4 : 1) + '°'; OR.path = null; OS.t = 0; OS.play = false; OS.done = false; OS.btn(); orbRead(); orbp.draw(orbp); }
+$('oD').addEventListener('input', (e) => orbSet(+e.target.value));
+$('oFine').addEventListener('click', () => { orbSet(critD(22) - 1e-4); OS.go(); });
+const OPRE = [12, 23, critD(22) - 0.003, 26, 40];
+const orbp = panel('cvOrb', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, narrow = w < 600;
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 61, 80);
+  // potensial efektif (kiri)
+  const pw = narrow ? 0 : w * 0.34;
+  if (!narrow) {
+    const x0 = 48, y0 = 40, gw = pw - 64, gh = h - 90, X = (r) => x0 + ((r - 1) / 15) * gw, Y = (V) => y0 + gh - ((V - 0.85) / 0.3) * gh, L = OR.L;
+    c.strokeStyle = 'rgba(255,255,255,0.07)'; c.lineWidth = 1;
+    for (const r of [1, 2, 3, 6, 10, 16]) { c.beginPath(); c.moveTo(X(r), y0); c.lineTo(X(r), y0 + gh); c.stroke(); txt(c, X(r), y0 + gh + 14, String(r), COL.mu, 10, 'center'); }
+    for (const V of [0.9, 1.0, 1.1]) { c.beginPath(); c.moveTo(x0, Y(V)); c.lineTo(x0 + gw, Y(V)); c.stroke(); txt(c, x0 - 6, Y(V) + 3, fmtE(V, 1), COL.mu, 10, 'right'); }
+    c.save(); c.beginPath(); c.rect(x0, y0, gw, gh); c.clip();
+    c.strokeStyle = COL.vi; c.globalAlpha = 0.35; c.lineWidth = 1.4; c.beginPath(); for (let i = 0; i <= 300; i++) { const r = 1 + i * 0.05, p = [X(r), Y((1 - 1 / r) * (1 + 4 / (r * r)))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); c.globalAlpha = 1;
+    c.strokeStyle = COL.ac2; c.lineWidth = 2.2; glow(c, COL.ac2, 8); c.beginPath(); for (let i = 0; i <= 300; i++) { const r = 1 + i * 0.05, p = [X(r), Y((1 - 1 / r) * (1 + (L * L) / (r * r)))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); noGlow(c);
+    c.strokeStyle = COL.ac; c.setLineDash([6, 4]); c.beginPath(); c.moveTo(x0, Y(1)); c.lineTo(x0 + gw, Y(1)); c.stroke(); c.setLineDash([]);
+    if (OR.path) { const i = orbIdx(), r = OR.path.r[i]; if (r <= 16) { glow(c, '#fff', 12); c.fillStyle = '#fff'; c.beginPath(); c.arc(X(r), Y(1), 5, 0, TAU); c.fill(); noGlow(c); } }
+    c.restore();
+    txt(c, x0, y0 - 10, 'EFFECTIVE POTENTIAL · E² = 1 DASHED', COL.mu, 10, 'left', 650);
+    txt(c, x0 + gw / 2, y0 + gh + 30, 'r (rs) · violet: L = 2, gold: your L', COL.mu, 10, 'center');
+  }
+  // lintasan (kanan)
+  const ox0 = pw, ow = w - pw, s = Math.min((ow * 0.56) / 22, h / 22), cx = ox0 + ow * 0.36, cy = h * 0.52;
+  c.strokeStyle = 'rgba(183,156,255,0.5)'; c.setLineDash([3, 4]); c.beginPath(); c.arc(cx, cy, 2 * s, 0, TAU); c.stroke(); c.setLineDash([]);
+  c.strokeStyle = 'rgba(255,255,255,0.18)'; c.beginPath(); c.arc(cx, cy, 3 * s, 0, TAU); c.stroke();
+  holeC(c, cx, cy, s);
+  const sx = cx + 22 * s, sy = cy;
+  // panah bidik
+  const ad = OR.d * DEG; arrow(c, sx, sy, sx - Math.cos(ad) * 46, sy - Math.sin(ad) * 46, COL.ac, 1.8);
+  c.strokeStyle = 'rgba(255,255,255,0.2)'; c.setLineDash([2, 4]); c.beginPath(); c.moveTo(sx, sy); c.lineTo(cx, cy); c.stroke(); c.setLineDash([]);
+  if (OR.path) {
+    const g = OR.path, i = orbIdx(), P = (k) => [cx + g.r[k] * s * Math.cos(g.ph[k]), cy - g.r[k] * s * Math.sin(g.ph[k])];
+    c.strokeStyle = COL.ac2; c.lineWidth = 2.2; glow(c, COL.ac2, 10); c.beginPath();
+    const stepK = Math.max(1, Math.floor(i / 1500));
+    for (let k = 0; k <= i; k += stepK) { const p = P(k); k ? c.lineTo(...p) : c.moveTo(...p); }
+    const ph = P(i); c.lineTo(...ph); c.stroke();
+    c.fillStyle = '#fff'; glow(c, '#fff', 16); c.beginPath(); c.arc(ph[0], ph[1], 4.5, 0, TAU); c.fill(); noGlow(c);
+  }
+  glow(c, COL.ac, 10); c.fillStyle = COL.ac; c.beginPath(); c.arc(sx, sy, 5, 0, TAU); c.fill(); noGlow(c);
+  pillC(c, sx, sy + 20, '22 rs', COL.ac, 10.5, 'center');
+  txt(c, ox0 + 14, 22, 'AIMED FROM 22 rs · 2 rs ORBIT DASHED', COL.mu, 10.5, 'left', 650);
+  if (!narrow) cornerR(c, w, `1 s = ${fmtE(13 * TS / 3600 / Math.max(1, OR.len) * (OR.path ? OR.path.tau[OR.path.tau.length - 1] : 0), 1)} h of craft time (avg)`);
+}, () => false);
+
+/* =====================================================================
+   07 SUSUR: gas relatif + debu, dan aberasi langit
+   ===================================================================== */
+const SK = { dir: -1, r: 3, t: 0, parts: [] };
+for (let i = 0; i < 90; i++) SK.parts.push({ x: Math.random(), y: Math.random(), z: Math.random() });
+const relSkim = () => (SK.dir < 0 ? (2 * vGas(SK.r)) / (1 + vGas(SK.r) ** 2) : 0.02);
+const skim = panel('cvSkim', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, v = relSkim();
+  c.clearRect(0, 0, w, h); bgStars(c, w, h, 71, 60);
+  // permukaan piringan di bawah, bergerak
+  const hz = h * 0.62, tn = Tn(SK.r), col = FR[Math.min(255, Math.round(tn * 255))];
+  const g = c.createLinearGradient(0, hz, 0, h); g.addColorStop(0, cssRGB(col, 0.9)); g.addColorStop(1, cssRGB(col, 0.15)); c.fillStyle = g; c.fillRect(0, hz, w, h - hz);
+  c.strokeStyle = 'rgba(255,240,210,0.35)'; c.lineWidth = 1;
+  for (let k = 0; k < 14; k++) { const yy = hz + (h - hz) * ((k / 14) ** 1.6), off = ((SK.t * (0.05 + 2 * v) * (1 + k * 0.2)) % 1) * 80; for (let x = -80 + off; x < w + 80; x += 80) { c.beginPath(); c.moveTo(x, yy); c.lineTo(x + 30, yy); c.stroke(); } }
+  // wahana (siluet kecil, hidung ke kiri)
+  const sx = w * 0.5, sy = hz - h * 0.12;
+  c.fillStyle = '#1b1a20'; c.strokeStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.moveTo(sx - 46, sy); c.lineTo(sx + 30, sy - 12); c.lineTo(sx + 40, sy); c.lineTo(sx + 30, sy + 10); c.closePath(); c.fill(); c.stroke();
+  c.fillStyle = 'rgba(143,211,220,0.6)'; c.beginPath(); c.moveTo(sx - 40, sy - 1); c.lineTo(sx - 20, sy - 7); c.lineTo(sx - 18, sy); c.closePath(); c.fill();
+  // debu: melesat dari kiri ke kanan (melawan arus) atau nyaris diam
+  for (const p of SK.parts) {
+    const yy = hz - (p.y ** 1.3) * h * 0.55, len = 4 + v * 90 * (0.5 + p.z), x = ((p.x + SK.t * (0.02 + v * 1.4) * (0.6 + p.z)) % 1) * (w + 120) - 60;
+    c.strokeStyle = `rgba(255,${Math.round(190 + 60 * p.z)},${Math.round(140 + 80 * p.z)},${0.25 + 0.6 * p.z})`; c.lineWidth = 0.8 + p.z * 1.6;
+    c.beginPath(); c.moveTo(x - len, yy); c.lineTo(x, yy); c.stroke();
+  }
+  pillC(c, 14, h - 18, SK.dir < 0 ? 'against the flow' : 'with the flow', SK.dir < 0 ? COL.red : COL.te, 10.5);
+  corner(c, `SKIMMING AT ${fmtE(SK.r, 1)} rs`); cornerR(c, w, `gas ${fmtE(v, 2)} c`, v > 0.5 ? COL.red : COL.te);
+}, (dt) => { SK.t += dt; return true; });
+function updSkim() {
+  const v = relSkim(), gm = 1 / Math.sqrt(1 - v * v), E = (gm - 1) * 1e-9 * 299792458 ** 2;
+  $('kRo').textContent = fmt(SK.r, 1) + ' rs'; setP($('kR'));
+  $('kRel').textContent = fmt(v, 3) + ' c'; $('kG').textContent = fmt(gm, 3);
+  $('kE').textContent = E > 1e5 ? `${sci(E)} J · ${fmt(E / 4.184e6, 1)} kg TNT` : (LANG === 'en' ? 'tiny' : 'kecil');
+  document.querySelectorAll('[data-sk]').forEach((b) => b.classList.toggle('on', +b.dataset.sk === SK.dir));
+}
+document.querySelectorAll('[data-sk]').forEach((b) => b.addEventListener('click', () => { SK.dir = +b.dataset.sk; updSkim(); }));
+$('kR').addEventListener('input', (e) => { SK.r = +e.target.value; updSkim(); });
+// aberasi: bintang acak di bola langit, sudut tampak cos t' = (cos t + b) / (1 + b cos t), warna dari faktor Doppler
+const SKY = { b: 0.66, bt: 0.66, stars: [], t: 0 };
+{ let s = 5; const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647); for (let i = 0; i < 700; i++) SKY.stars.push({ ct: 2 * rnd() - 1, az: rnd() * TAU, m: 0.3 + rnd() ** 3 * 1.6, tw: rnd() * TAU }); }
+const sky = panel('cvSky', (o) => {
+  const c = o.ctx, w = o.w, h = o.h, cx = w / 2, cy = h / 2, R0 = Math.min(w, h) * 0.42, b = SKY.b;
+  c.fillStyle = '#030305'; c.fillRect(0, 0, w, h);
+  c.strokeStyle = 'rgba(255,255,255,0.12)'; c.lineWidth = 1;
+  for (const deg of [30, 60, 90]) { c.beginPath(); c.arc(cx, cy, (R0 * deg) / 90, 0, TAU); c.stroke(); txt(c, cx + (R0 * deg) / 90 * 0.707 + 4, cy - (R0 * deg) / 90 * 0.707 - 4, deg + '°', COL.mu, 10); }
+  for (const st of SKY.stars) {
+    const ctp = (st.ct + b) / (1 + b * st.ct); if (ctp <= 0) continue;                // hanya belahan depan (90° = tepi)
+    const th = Math.acos(ctp), rr = (R0 * th) / (Math.PI / 2), x = cx + rr * Math.cos(st.az), y = cy + rr * Math.sin(st.az);
+    const D = 1 / (Math.sqrt(1 - b * b) * (1 - b * ctp)), col = bbAt(clamp(5800 * D, 1500, 16000)), lum = clamp(st.m * Math.pow(D, 1.5) * (0.85 + 0.15 * Math.sin(SKY.t * 3 + st.tw)), 0, 3);
+    c.fillStyle = cssRGB(col, 1); c.globalAlpha = clamp(0.25 + lum * 0.5, 0, 1); c.beginPath(); c.arc(x, y, 0.5 + Math.min(1.6, lum * 0.8), 0, TAU); c.fill();
+  }
+  c.globalAlpha = 1;
+  const a90 = Math.acos(b), r90 = (R0 * a90) / (Math.PI / 2);
+  c.strokeStyle = COL.te; c.lineWidth = 1.6; c.setLineDash([5, 4]); glow(c, COL.te, 8); c.beginPath(); c.arc(cx, cy, r90, 0, TAU); c.stroke(); c.setLineDash([]); noGlow(c);
+  pillC(c, cx, cy + r90 + 14, `former side stars (90°) now at ${fmtE(a90 / DEG, 1)}°`, COL.te, 10.5, 'center');
+  c.strokeStyle = COL.ac; c.lineWidth = 1.5; c.beginPath(); c.moveTo(cx - 8, cy); c.lineTo(cx + 8, cy); c.moveTo(cx, cy - 8); c.lineTo(cx, cy + 8); c.stroke();
+  corner(c, 'LOOKING AHEAD · FORWARD HALF OF THE SKY'); cornerR(c, w, `β = ${fmtE(b, 2)}`, COL.ac);
+}, (dt) => { SKY.t += dt; const d = SKY.bt - SKY.b; if (Math.abs(d) > 1e-4) SKY.b += d * Math.min(1, dt * 2.5); return true; });
+function updSky() {
+  const b = SKY.bt; $('bBo').textContent = fmt(b, 2) + ' c'; $('bB').value = b; setP($('bB'));
+  $('bSide').textContent = fmt(Math.acos(b) / DEG, 1) + '°';
+  $('bD').textContent = fmt(Math.sqrt((1 + b) / (1 - b)), 2) + 'x';
+  $('bHalf').textContent = fmt(Math.acos(b) / DEG, 1) + '°';
+  document.querySelectorAll('[data-bb]').forEach((x) => x.classList.toggle('on', Math.abs(+x.dataset.bb - b) < 0.005));
+}
+$('bB').addEventListener('input', (e) => { SKY.bt = +e.target.value; updSky(); });
+document.querySelectorAll('[data-bb]').forEach((x) => x.addEventListener('click', () => { SKY.bt = +x.dataset.bb; updSky(); }));
+
+/* =====================================================================
+   Paspor (localStorage per penonton; aman bila diblokir)
+   ===================================================================== */
+let STAMP = [];
+try { STAMP = JSON.parse(localStorage.getItem('gargantua.passport') || '[]'); if (!Array.isArray(STAMP)) STAMP = []; } catch (e) { STAMP = []; }
+const saveStamp = () => { try { localStorage.setItem('gargantua.passport', JSON.stringify(STAMP)); } catch (e) { /* abaikan */ } };
+function renderPass() {
+  const box = $('pass'); box.textContent = '';
+  PASS.forEach((p, i) => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'stamp' + (STAMP.includes(i) ? ' done' : '');
+    b.innerHTML = `<div class="seal"><svg viewBox="0 0 24 24" fill="none" stroke="#0b0b0b" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5 9-10"/></svg></div><h4></h4><p></p><div class="k">${p[2][L()]} · <a href="#${p[3]}"></a></div>`;
+    b.querySelector('h4').textContent = p[0][L()]; b.querySelector('p').innerHTML = p[1][L()];
+    if (i === PASS.length - 1) b.querySelector('h4').insertAdjacentHTML('beforeend', `<span class="fic">${LANG === 'en' ? 'fiction' : 'fiksi'}</span>`);
+    const a = b.querySelector('a'); a.textContent = S.nav[L()][CH_IDS.indexOf(p[3])]; a.addEventListener('click', (e) => e.stopPropagation());
+    b.addEventListener('click', () => { const j = STAMP.indexOf(i); j < 0 ? STAMP.push(i) : STAMP.splice(j, 1); saveStamp(); renderPass(); });
+    box.appendChild(b);
+  });
+  const n = STAMP.length; $('passCount').textContent = n === PASS.length ? T('c8_all') : T('c8_count', { n, m: PASS.length }); $('passBar').style.width = (n / PASS.length) * 100 + '%';
+}
+$('passReset').addEventListener('click', () => { STAMP = []; saveStamp(); renderPass(); });
+
+/* =====================================================================
+   Galeri + lightbox
+   ===================================================================== */
+let LB = 0;
+function lbShow(i) { LB = (i + GAL.length) % GAL.length; const g = GAL[LB]; $('lbImg').src = 'detail/' + g[0]; $('lbImg').alt = g[1][1]; $('lbCap').innerHTML = `${LB + 1} / ${GAL.length} · ${g[1][L()]} <a href="detail/${g[0]}" target="_blank" rel="noopener">${T('gl_open')}</a>`; $('lb').classList.add('on'); }
+const lbHide = () => $('lb').classList.remove('on');
+$('lbX').addEventListener('click', lbHide); $('lbP').addEventListener('click', () => lbShow(LB - 1)); $('lbN').addEventListener('click', () => lbShow(LB + 1));
+$('lb').addEventListener('click', (e) => { if (e.target === $('lb')) lbHide(); });
+addEventListener('keydown', (e) => { if (!$('lb').classList.contains('on')) return; if (e.key === 'Escape') lbHide(); if (e.key === 'ArrowRight') lbShow(LB + 1); if (e.key === 'ArrowLeft') lbShow(LB - 1); });
+
+/* =====================================================================
+   Render teks (ulang saat ganti bahasa)
+   ===================================================================== */
+function chips(box, labels, fn, onIdx) {
+  const el = $(box); el.textContent = '';
+  labels.forEach((lab, i) => { const b = document.createElement('button'); b.className = 'chip' + (onIdx === i ? ' on' : ''); b.type = 'button'; b.textContent = lab; b.addEventListener('click', () => fn(i)); el.appendChild(b); el.append(' '); });
+}
+function render() {
+  document.documentElement.lang = LANG; document.title = LANG === 'en' ? 'Gargantua: Physics' : 'Gargantua: Fisika';
+  document.querySelectorAll('[data-t]').forEach((el) => { el.innerHTML = T(el.dataset.t); });
+  const q = '?lang=' + LANG;
+  ['backLink', 'backEnd'].forEach((id) => { $(id).href = '../../index.html' + q; });
+  ['playTop', 'playHero', 'playEnd'].forEach((id) => { $(id).href = 'index.html' + q; });
+  const nav = $('nav'); nav.textContent = '';
+  CH_IDS.forEach((id, i) => { const a = document.createElement('a'); a.href = '#' + id; a.innerHTML = `<b>${id === 'galeri' ? '+' : '0' + (i + 1)}</b>`; a.append(S.nav[L()][i]); nav.appendChild(a); });
+  const st = $('stats'); st.textContent = '';
+  for (const [v, u, k, col] of [[fmt(1.97, 2), 'AU', 'st_h'], [fmt(13.3, 1), '°', 'st_s'], [fmt(0.5, 1), 'c', 'st_g', COL.te], [fmt(18.65, 2), LANG === 'en' ? 'h' : 'jam', 'st_f'], [fmt(24.62, 2), '°', 'st_c', COL.vi]]) {
+    const d = document.createElement('div'); d.className = 'stat'; d.innerHTML = `<b${col ? ` style="color:${col}"` : ''}>${v}<small>${u}</small></b><span>${T(k)}</span>`; st.appendChild(d);
+  }
+  chips('aPre', S.c1_pre[L()], (i) => { AN.r = APRE[i]; updAna(); });
+  chips('rPre', S.c2_pre[L()], (i) => { raySet(RPRE[i]); RYS.go(); });
+  chips('dMode', S.c3_m[L()], (i) => { DK.mode = i; updDisk(); }, DK.mode);
+  chips('oPre', S.c6_pre[L()], (i) => { orbSet(OPRE[i]); OS.go(); });
+  const gl = $('gal'); gl.textContent = '';
+  GAL.forEach((g, i) => { const b = document.createElement('button'); b.type = 'button'; b.innerHTML = `<img src="detail/${g[0]}" alt="" loading="lazy" width="960" height="540"><span></span>`; b.querySelector('span').textContent = `${i + 1}. ${g[1][L()]}`; b.querySelector('img').alt = g[1][1]; b.addEventListener('click', () => lbShow(i)); gl.appendChild(b); });
+  $('lang').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
+  renderPass(); heroCap(); updAna(); rayRead(); updDisk(); fallRead(); stRead(); orbRead(); updSkim(); updSky();
+  [RYS, FS, SS, OS].forEach((s) => s.btn());
+  $('rBo').textContent = fmt(RY.b, Math.abs(RY.b - B_C) < 0.01 ? 4 : 2) + ' rs'; $('oDo').textContent = fmt(OR.d, Math.abs(OR.d - 24.62) < 0.05 ? 4 : 1) + '°';
+  if (!FS.play && FS.t === 0) $('fVerd').textContent = T('f_start');
+  if (!SS.play && SS.t === 0) $('sVerd').textContent = T('s_start');
+  navSpy();
+}
+for (const [c, n] of [['id', 'ID'], ['en', 'EN']]) {
+  const b = document.createElement('button'); b.type = 'button'; b.dataset.lang = c; b.textContent = n;
+  b.addEventListener('click', () => { LANG = c; try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ } history.replaceState(null, '', '?lang=' + c + location.hash); render(); });
+  $('lang').appendChild(b);
+}
+
+/* =====================================================================
+   Gulir: muncul, navigasi aktif, progres
+   ===================================================================== */
+const io = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }, { threshold: 0.12 });
+document.querySelectorAll('.rv').forEach((el) => io.observe(el));
+let CUR = '';
+const spy = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) { CUR = e.target.id; navSpy(); } }, { rootMargin: '-45% 0px -50% 0px' });
+CH_IDS.forEach((id) => spy.observe($(id)));
+function navSpy() {
+  $('nav').querySelectorAll('a').forEach((a) => { const on = a.getAttribute('href') === '#' + CUR; a.classList.toggle('on', on); if (on) { const n = $('nav'); n.scrollTo({ left: a.offsetLeft - n.clientWidth / 2 + a.clientWidth / 2, behavior: reduce ? 'auto' : 'smooth' }); } });
+}
+addEventListener('scroll', () => { const m = document.documentElement.scrollHeight - innerHeight; $('prog').style.width = (m > 0 ? (scrollY / m) * 100 : 0) + '%'; }, { passive: true });
+
+// mulai
+raySet(3.2); orbSet(24.6); $('dE').value = DK.elev; $('kR').value = SK.r; setP($('kR'));
+render();
+requestAnimationFrame(loop);
+window.__detail = { rayTrace, geodesic, critD, tauFall, seenR, Gout, tidalG, vGas, HB, RY, RYS, FS, SS, ST, OR, OS, T: () => LANG };   // untuk uji
+window.__detailReady = true;
+</script>
+</body>
+</html>

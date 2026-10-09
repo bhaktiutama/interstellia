@@ -1,5 +1,5 @@
 # Bangkitkan diagram SVG untuk konsep halaman detail Gargantua (docs/gargantua/detail/konsep-halaman-detail.md).
-# Pakai: python tools/diagram_detail_gargantua.py  (menulis docs/gargantua/detail/gambar/gg-*.svg)
+# Pakai: python tools/diagram_detail_gargantua.py  (menulis docs/gargantua/detail/gambar/gg-*.svg + salinan experiences/gargantua/detail/)
 # Label English saja (satu gambar untuk kedua bahasa). Satuan seperti di experience: rs = 1, M = 0,5, c = 1;
 # massa 1e8 Matahari hanya untuk angka km dan detik. Lintasan sinar dan orbit diintegrasikan dari persamaan
 # yang sama dengan kode (sinar a = -1,5 h^2 p / r^5, geodesik r'' = -M/r^2 + L^2/r^3 - 3 M L^2/r^4), bukan digambar tangan.
@@ -615,9 +615,12 @@ files['gg-08-skim-aberration.svg'] = doc(8, 'Skimming the disk, squeezing the sk
 
 
 # ------------------------------------------------------------------ tulis
-os.makedirs(OUT, exist_ok=True)
-for n, s_ in files.items():
-    open(os.path.join(OUT, n), 'w').write(s_)
+# salinan untuk halaman detail experiences/gargantua/detail.html (galeri)
+PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'experiences', 'gargantua', 'detail')
+for d_ in (OUT, PAGE):
+    os.makedirs(d_, exist_ok=True)
+    for n, s_ in files.items():
+        open(os.path.join(d_, n), 'w').write(s_)
 print(f"shadow {N['shadow_deg']:.3f} deg; fall {N['fall_h']:.3f} rs/c = {N['fall_hours']:.3f} h; inside {N['inside_s']:.1f} s")
 print(f"crit {N['crit22']:.3f} / {N['crit10']:.3f} / {N['crit6']:.3f} deg; zoom {N['zoom_deg']:.2f} deg; whirl 24.6199 deg = {N['whirl_turns']:.2f} turns")
 print(f"ISCO gas {N['v_isco']:.3f} c, head-on {N['rel_isco']:.3f} c, beaming edge-on {N['beam_edge']:.1f}x, {90 - INC:.0f} deg above {N['beam_70']:.1f}x; T peak {N['T_peak_r']:.2f} rs")

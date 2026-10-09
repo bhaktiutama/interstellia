@@ -1,6 +1,6 @@
 # Konsep halaman detail: Gargantua
 
-Per 9 Oktober 2026 · konsep, belum ada kode halaman yang diubah. Mengikuti pola halaman detail Copper (`docs/cooper-station/detail/konsep-halaman-detail.md`, sudah jadi di `experiences/cooper-station/detail.html`).
+Per 9 Oktober 2026 · konsep; halaman sudah dibangun (lihat Status). Mengikuti pola halaman detail Copper (`docs/cooper-station/detail/konsep-halaman-detail.md`, sudah jadi di `experiences/cooper-station/detail.html`).
 
 ## Ringkasan
 
@@ -249,6 +249,21 @@ Coba di game: misi "Menyusur melawan arus" (O autopilot) lalu "Menyusur searah a
 | Suar ke relai | E saat jatuh, lalu M | Suar dari dalam horizon tidak pernah tiba |
 | Tesseract (fiksi) | Skenario tesseract: W/S sudut, Enter | Masuk gerbang fiksi, diberi label fiksi |
 
+## 2b. Animasi per bab
+
+Keputusan (sama dengan Copper): semua kanvas simulasi bergerak saat dijalankan, tidak langsung menampilkan hasil akhir, dan tetap beranimasi walau "Animation effects" Windows mati (prefers-reduced-motion). Pengaturan itu hanya mematikan efek muncul saat digulir dan gulir halus. Kontrol pemutar seperti bab Coriolis Copper: Jalankan / Jeda / Lanjut, slider waktu untuk maju-mundur, label kecepatan putar.
+
+| Bab | Animasi | Kontrol |
+| --- | --- | --- |
+| Hero | Piringan berputar dengan laju Kepler (dipercepat 5.912x), kamera perlahan mengitari, seret untuk mengitari dan mengubah kemiringan (peta sinar dihitung ulang) | Mode film / Fisika penuh |
+| 1 Anatomi | Relai mengitari orbit 22 rs, benda kecil mengorbit di jarak terpilih dengan laju sudutnya, gas piringan berputar, pandangan zoom halus ke jarak terpilih; di bawah 1,5 rs titik merah jatuh ke dalam | Slider jarak, 6 tombol jarak |
+| 2 Cahaya dibelokkan | Foton berjalan di sepanjang lintasan dengan jejak bercahaya lalu tertangkap atau lolos; sinar dekat batas mengitari bola foton | Slider b, 6 preset, Jalankan |
+| 3 Piringan | Gas berputar dengan laju Kepler; warna biru dan merah langsung berganti saat mode diganti | 3 mode, slider tinggi pandang |
+| 4 Jatuh | Wahana turun di peta corong, tubuh 2 m meregang (skala log), dua jam berdetak di grafik; diperlambat di 3 rs/c terakhir | Jalankan / Jeda / Lanjut, Ulang, slider waktu |
+| 5 Jam membeku | Pulsa merambat sebagai garis cahaya ke relai, warnanya memerah dekat horizon; pulsa dari dalam horizon bergerak ke pusat | Jalankan, Kirim pulsa, pulsa otomatis, slider waktu |
+| 6 Orbit | Wahana terbang dari 22 rs dengan jejak, titik bergerak di grafik potensial efektif | Slider sudut, 5 preset, Sangat dekat kritis |
+| 7 Susur | Debu melesat melewati wahana (laju ikut kecepatan relatif), permukaan piringan mengalir, bintang bergeser ke depan saat laju diubah | Arah arus, slider jarak, slider laju, preset |
+
 ## 3. Daftar diagram
 
 Dibangkitkan oleh `tools/diagram_detail_gargantua.py` (Python, tanpa library luar).
@@ -276,6 +291,20 @@ Dibangkitkan oleh `tools/diagram_detail_gargantua.py` (Python, tanpa library lua
 | G-D2b | Hero lensa (tabel alfa(b)), penembak sinar, orbit bidik, diagram ruang-waktu langsung | `detail.html` | High | Opus 5.5 | xhigh (relativitas) |
 | G-D3 | Tombol Pelajari + `g_learn` (+ `FACTS.g` bila strip dibuat) | `index.html` | Low | Haiku 4.5 | low |
 | G-D4 | Uji `tools/uji_detail_gargantua.cjs` (angka fisika, simulasi berjalan, tanpa error, tanpa gulir mendatar, tanpa tombol bergaris bawah, ganti bahasa) | `tools/` | Low | Sonnet 5.5 | low |
+
+## Status
+
+| Tahap | Status | Catatan |
+| --- | --- | --- |
+| G-D1 | Selesai | `experiences/gargantua/detail.html`, teks ID + EN, galeri 8 diagram (`experiences/gargantua/detail/`) |
+| G-D2a | Selesai | Anatomi, piringan, jatuh, pulsa relai, susur dan aberasi |
+| G-D2b | Selesai | Hero dijejak sinar di kanvas 2D (1.300 lintasan per sudut, dihitung sekali; peta piksel dihitung ulang hanya saat kemiringan berubah), penembak sinar, orbit bidik |
+| G-D3 | Sebagian | Tombol "Pelajari fisikanya" di bagian Gargantua menu (`g_learn`); strip `FACTS` belum (sama dengan Copper) |
+| G-D4 | Selesai | `tools/uji_detail_gargantua.cjs` (34 cek lulus, reduce-motion diemulasikan) |
+
+Temuan saat membangun:
+- Sudut belok sinar b = 7 rs dari integrasi halaman: 20,7 derajat; diagram 02 menulis 20 derajat (pembulatan, sinar dimulai dari 9,6 rs).
+- Hero mode fisika: rata-rata (gD)^4 sisi mendekat 1,53 vs sisi menjauh 0,43 (uji).
 
 ## Catatan dan batasan
 
