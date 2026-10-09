@@ -9,7 +9,7 @@ Per 9 Oktober 2026 · konsep, belum ada kode halaman yang diubah. Mengikuti pola
 - Temuan baru untuk halaman ini:
   - Dilatasi 61.362x hanya mungkin di dekat lubang hitam yang berputar hampir maksimum: 1 - a = 1,3e-14. Hitungan Kerr ini cocok dengan angka Kip Thorne.
   - Kecepatan 125 m/s adalah parameter desain.
-  - Laju orbit di sinematik (7,6 km/s) tidak cocok dengan planet ini (seharusnya 10,07 km/s).
+  - Laju orbit di sinematik dulu 7,6 km/s, tidak cocok dengan planet ini (seharusnya 10,07 km/s). Sudah diperbaiki: `ORB.v` di game.
 
 ## 1. Arsitektur halaman
 
@@ -300,15 +300,29 @@ Dibangkitkan oleh `tools/diagram_detail_millar.py` (Python, tanpa library luar).
 | --- | --- | --- | --- | --- | --- |
 | M-D1 | `detail.html`: kerangka dari detail Gargantua (`player()`, `panel()`, kamus), diagram statis, galeri, paspor | `experiences/millar/detail.html` | Medium | Sonnet 5.5 | medium |
 | M-D2a | Simulasi: planet, waktu, gravitasi, cakrawala, goyangan | `detail.html` | Medium | Sonnet 5.5 | medium |
-| M-D2b | Hero laut dan gelombang, penampang gelombang bergerak (kembaran `waveG` / `currentAt`), dilatasi Kerr (perlu presisi tinggi: BigInt atau deret untuk 1 - a kecil), orbit | `detail.html` | High | Opus 5.5 | high |
+| M-D2b | Hero laut dan gelombang, penampang gelombang bergerak (kembaran `waveG` / `currentAt`), dilatasi Kerr (ditulis dalam e = 1 - a, cukup presisi double), orbit | `detail.html` | High | Opus 5.5 | high |
 | M-D3 | Tombol Pelajari + `m_learn` (+ `FACTS.m` bila strip dibuat) | `index.html` | Low | Haiku 4.5 | low |
 | M-D4 | Uji `tools/uji_detail_millar.cjs` (angka, animasi walau reduce-motion, tanpa error, tanpa gulir mendatar, tanpa tombol bergaris bawah, ganti bahasa, tautan menu) | `tools/` | Low | Sonnet 5.5 | low |
+
+## Status
+
+| Tahap | Status | Catatan |
+| --- | --- | --- |
+| M-D1 | Selesai | `experiences/millar/detail.html`, teks ID + EN, galeri 8 diagram (`experiences/millar/detail/`), paspor 10 cap (localStorage `millar.passport`) |
+| M-D2a | Selesai | Planet, dua jam, gravitasi, cakrawala, goyangan |
+| M-D2b | Selesai | Hero laut dan gelombang, penampang 1:1 (`waveG` / `drawdown` / `currentAt` kembaran game), dilatasi Kerr, orbit 10,07 km/s |
+| M-D3 | Sebagian | Tombol Pelajari di bagian Millar menu (`m_learn`); strip `FACTS` belum (sama dengan Copper dan Gargantua) |
+| M-D4 | Selesai | `tools/uji_detail_millar.cjs` (35 cek lulus, reduce-motion diemulasikan) |
+
+Temuan saat membangun:
+- Dilatasi Kerr tidak butuh BigInt: rumus Bardeen ditulis ulang dalam e = 1 - a (akar pangkat tiga dari e (2 - e), bukan dari 1 - a²), jadi presisi double cukup. Hasil JS cocok dengan Python 60 digit: 1e-14 -> 67.526,43x, 1,333e-14 -> 61.356,9x.
+- Bab cakrawala memakai satu skala tegak untuk lengkung, tinggi mata, dan gelombang (dibesarkan sekitar 19x di desktop), jadi garis pandang menyinggung permukaan tepat di 5,3 km dan puncak menyentuh garis itu di 146 km.
 
 ## Catatan dan batasan
 
 - **125 m/s** adalah parameter desain (`CONFIG.wave.v`). Laju gelombang air dangkal setinggi lutut hanya 2,9 m/s. Rumus gelombang soliter memberi 123,7 m/s, tetapi rumus itu tidak berlaku untuk gelombang setinggi ini; kedekatannya kebetulan dan halaman menulisnya begitu.
 - **Asumsi**: jari-jari planet (kepadatan sama dengan Bumi) dan kedalaman laut tidak berasal dari sumber; keduanya pilihan desain (`docs/millar/konsep-millar.md`).
-- **Sinematik orbit**: kapal digerakkan 7,6 km/s (laju orbit Bumi). Untuk planet ini, laju orbit lingkaran di 350 km adalah 10,07 km/s. Belum diubah di game; usul perbaikan kecil terpisah.
+- **Sinematik orbit**: kapal dulu digerakkan 7,6 km/s (laju orbit Bumi). Untuk planet ini, laju orbit lingkaran di 350 km adalah 10,07 km/s. Sudah diperbaiki: `ORB.v` = akar(g R² / (R + 350 km)) dihitung dari `CONFIG.g` dan dipakai di `cineStep()`. Tanah di bawah kapal kini bergeser 32% lebih cepat.
 - **Dilatasi**:
   - Angka 61.362x berlaku untuk planet di orbit. Halaman memakai faktor yang sama untuk orbit KS-07 di 350 km (perbedaan ketinggian terhadap Gargantua bisa diabaikan).
   - Dilatasi Kerr di ISCO adalah u^t untuk pengamat jauh (Bardeen, Press, Teukolsky 1972). Thorne menempatkan Millar dekat orbit itu; angka 1,33e-14 adalah hitungan halaman ini, dan Thorne menulis sekitar 1e-14.
