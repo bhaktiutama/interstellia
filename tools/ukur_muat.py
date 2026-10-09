@@ -18,7 +18,8 @@ EXP = {
     # sandbox tidak punya ekstensi itu, jadi dipaksa agar hasilnya mewakili GPU asli.
     'cooper-station': {'keys': ['KeyP', 'KeyP', 'Digit8', 'Digit1', 'KeyC', 'KeyC', 'Digit7', 'KeyN', 'KeyP', 'KeyQ'], 'go': True,
                        'pre': 'PROFKIT.parallel || window.__station.warmLater(true)'},
-    'millar': {'keys': ['Space', 'KeyN', 'KeyP', 'KeyQ', 'KeyQ', 'KeyF', 'Escape', 'KeyM'], 'go': True},
+    'millar': {'keys': ['Space', 'KeyN', 'KeyP', 'KeyQ', 'KeyQ', 'KeyQ', 'KeyQ', 'KeyQ', 'KeyF', 'Escape', 'KeyM'], 'go': True,
+               'pre': 'PROFKIT.parallel || window.__millar.warmPresets(true)'},
     'gargantua': {'keys': ['KeyQ', 'KeyP', 'KeyF', 'Escape', 'KeyV'], 'go': False},
 }
 

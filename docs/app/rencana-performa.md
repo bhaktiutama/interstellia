@@ -1,6 +1,22 @@
 # Rencana P: Performa muat dan tersendat (sebelum VR)
 
-Per 9 Oktober 2026 · Status: rencana, belum dikerjakan. Berlaku untuk Copper Corn Station, Millar's World, dan Gargantua (menu utama dan halaman detail fisika menyusul). Dikerjakan sebelum rencana VR (`docs/app/rencana-vr.md`).
+Per 9 Oktober 2026 · Status: P0-P4 dikerjakan (lihat Status implementasi), menunggu ukur `?prof=1` dan uji visual pemilik di GTX 1060 dan M1; P5-P6 menunggu data itu. Berlaku untuk Copper Corn Station, Millar's World, dan Gargantua (menu utama dan halaman detail fisika menyusul). Dikerjakan sebelum rencana VR (`docs/app/rencana-vr.md`).
+
+## Status implementasi
+
+| Tahap | Status | Isi | Hasil sandbox (SwiftShader) |
+| --- | --- | --- | --- |
+| P0 | Selesai | `shared/prof.js` (`PROFKIT`, hanya `?prof=1`, panel kiri bawah + tombol Salin hasil), `tools/ukur_muat.py` (`--cek`, `--json`) | Fase frame pertama dihitung per tick rAF (Copper punya beberapa loop rAF dalam satu tick) |
+| P1 | Selesai | Copper `warmShaders()` (scene dan `farScene` dengan target HDR yang sama dengan `postBegin()`, semua material layar penuh `FS_MATS`), `warmFrame()` (bayangan, impostor oktahedral, scene, efek layar; keadaan `ADAPT` / `TAA` / `SSR` dikembalikan), bar 96-98,5% per program + "Pemanasan GPU" | Frame pertama: 96 program, sekitar 11,4 s -> 0 program, 77-98 ms. Halaman bisa dipakai: sekitar 24 s -> 16,2-17,2 s |
+| P2 | Selesai | Millar: bar progres di kartu awal (pilihan dan Mulai aktif setelah siap), `millarWarm()` lewat `shared/warm.js` (`WARMKIT.compile`), sisi lensa `GCUBE` satu per langkah + `SKYCUBE` penuh saat muat, render pemanasan (bayangan, dunia, efek layar, adegan orbit bila sinematik akan diputar) | Frame pertama: 9 program, 8,9 s -> 0 program, 30-31 ms. F pertama: 1 program -> 0 |
+| P3 | Selesai | Gargantua: 13 program dikirim semua dulu, status dicek sekali (`checkPrograms()`), `KHR_parallel_shader_compile` diaktifkan; pesan galat sama. Layar muat tidak dibuat (siap 0,28 s di sandbox; dibuat bila ukur GTX 1060 menunjukkan perlu) | Siap 0,86 s -> 0,28 s, tunggu program 166 ms -> 14 ms |
+| P4 | Selesai | Copper `warmLater()`: varian target lain (P mode Mati = kanvas sRGB) dikompilasi di latar belakang 1,5 s setelah siap. Millar `warmPresets()`: material pemegang per preset (define dari `presetDefs()`, uniform dibagi) menahan program di cache. Keduanya hanya bila ada kompilasi paralel | Copper P, 8, 1, C, 7, N, P, Q: 0 program baru. Millar Q x5 (satu putaran preset) dan F: 0 program baru (sebelumnya Q 5-10 per tekan) |
+| P5 | Belum | Sisa CPU muat Copper | Menunggu angka P0 GPU asli |
+| P6 | Belum | FPS saat bermain | Menunggu angka P0 GPU asli |
+
+Koreksi akar masalah setelah ditelusuri: 76 dari 96 program frame pertama Copper bukan objek yang terlewat, melainkan varian lain dari material yang sama. Kunci program three.js memuat ruang warna keluaran dan tone mapping, yang bergantung pada target render aktif: prakompilasi lama berjalan tanpa target (kanvas, sRGB), sedangkan dunia digambar ke target HDR (linear). Sisanya: bayangan 9, efek layar 10, `farScene` 3, bake impostor 1. Millar tidak terkena karena `outputColorSpace` sudah linear.
+
+Catatan sandbox: tanpa `KHR_parallel_shader_compile` kompilasi latar belakang P4 tidak dijalankan otomatis (dipaksa di `tools/ukur_muat.py` lewat `pre`), dan waktu menunggu program pindah ke saat tombol ditekan. Di GPU dengan ekstensi itu (Chrome di GTX 1060 dan M1 kemungkinan punya; terlihat di panel `?prof=1`) kompilasi selesai di latar belakang.
 
 Aturan: tanpa mengurangi yang sudah ada. Tiap perbaikan hanya memindahkan atau mempercepat kerja, tidak menurunkan preset, efek, objek, atau detail. Tampilan harus identik (diuji piksel per piksel dengan waktu dibekukan, pola `tools/uji_jendela_gedung.py`).
 

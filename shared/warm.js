@@ -6,7 +6,8 @@
    keluaran dan tone mapping). Karena itu tiap job menyebut target yang sama dengan saat objek itu digambar.
 
    WARMKIT.compile(renderer, jobs, onStep, opt) -> Promise<{ programs, ready, parallel }>
-     jobs: [{ scene, camera, target, before, after }]   target null = kanvas; before/after dipanggil di sekitar
+     jobs: [{ scene, camera, target, targetScene, before, after }]   target null = kanvas; targetScene = scene asal
+           bila scene hanya satu objek (kabut dan cahaya dibaca dari scene asal); before/after dipanggil di sekitar
            renderer.compile (mis. memasang material ke quad layar penuh lalu mengembalikannya)
      onStep(frac): dipanggil berulang sampai semua program siap; WAJIB memberi jeda (mis. menunggu satu frame)
      opt.maxMs (bawaan 20000): batas tunggu; program yang belum siap dikompilasi saat dipakai seperti biasa
@@ -28,7 +29,7 @@
         if (j.before) j.before();
         try {
           renderer.setRenderTarget(j.target == null ? null : j.target);
-          renderer.compile(j.scene, j.camera).forEach((m) => mats.add(m));
+          renderer.compile(j.scene, j.camera, j.targetScene || null).forEach((m) => mats.add(m));
         } finally { if (j.after) j.after(); }
       }
     } finally { renderer.setRenderTarget(rt0); }
@@ -57,7 +58,7 @@
         for (const j of jobs) {
           if (j.before) j.before();
           const rt0 = renderer.getRenderTarget();
-          try { renderer.setRenderTarget(j.target == null ? null : j.target); n += renderer.compile(j.scene, j.camera).size; }
+          try { renderer.setRenderTarget(j.target == null ? null : j.target); n += renderer.compile(j.scene, j.camera, j.targetScene || null).size; }
           finally { renderer.setRenderTarget(rt0); if (j.after) j.after(); }
         }
       } catch (e) { /* abaikan: varian dikompilasi saat dipakai seperti dulu */ }

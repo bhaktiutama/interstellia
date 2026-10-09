@@ -4062,6 +4062,38 @@ async function millarWarm() {
   document.getElementById('go').disabled = false;
 }
 await millarWarm();
+/* P4: varian shader preset lain dikompilasi di latar belakang (dulu Q mengompilasi 5-6 program saat ditekan).
+   Tiap preset mendapat material pemegang (salinan dengan define preset itu, uniform dibagi, bukan disalin) yang menahan
+   programnya di cache three.js, jadi berganti preset bolak-balik tidak mengompilasi ulang. Hanya bila GPU bisa mengompilasi
+   paralel (tanpa itu kompilasi memblokir frame); force untuk uji di sandbox.
+   presetDefs() harus sama dengan define yang dipasang applyPreset(), makeOcean(), makeGCube() dan renderOrbit() (ubah bersama;
+   bila berbeda hanya pemanasannya yang meleset, tampilan tidak berubah, dan tools/ukur_muat.py --cek gagal saat Q). */
+function presetDefs(i) {
+  const Pr = PRESETS[i], fft = !!(Pr.fftN && OCEAN.ok);
+  const sea = { NW: Pr.nw, NM: Pr.nm, FFT: fft ? 1 : 0, NC: fft ? Pr.fftL.length : 1, CAUST: fft && Pr.caust ? 1 : 0 };
+  return [[seaNear, scene, POST.hdr, sea], [seaFar, scene, POST.hdr, sea], [wave, scene, POST.hdr, { NW: Pr.nw, NM: Pr.nm }],
+    [skyScene.children[0], skyScene, SKYCUBE.rt, { STEPS: Pr.steps, LAYERS: Pr.layers, OCT: Pr.oct }],
+    [gScene.children[0], gScene, GCUBE.rt, { GSTEPS: Pr.gSteps, GOCT: Pr.gOct }], [orbPlanet, orbScene, POST.hdr, { POCT: [5, 5, 4, 3, 3][i] || 4 }]];
+}
+const PRESET_WARM = [];
+function warmPresets(force) {
+  if (PRESET_WARM.length || (!force && !renderer.extensions.has('KHR_parallel_shader_compile'))) return 0;
+  let n = 0;
+  PRESETS.forEach((_, i) => {
+    for (const [obj, sc, tgt, defs] of presetDefs(i)) {
+      const m = obj.material, u = m.uniforms;
+      let c = null;
+      try { m.uniforms = {}; c = m.clone(); } catch (e) { /* lewati material ini */ } finally { m.uniforms = u; }   // tanpa menyalin tekstur / target render di uniform
+      if (!c) continue;
+      c.uniforms = u; c.onBeforeCompile = m.onBeforeCompile; c.customProgramCacheKey = m.customProgramCacheKey; Object.assign(c.defines, defs);
+      PRESET_WARM.push(c);
+      n += WARMKIT.background(renderer, [{ scene: obj, camera, target: tgt, targetScene: sc,
+        before: () => { obj.material = c; }, after: () => { obj.material = m; } }], true);
+    }
+  });
+  return n;
+}
+setTimeout(() => warmPresets(), 1500);
 requestAnimationFrame(frame);
 window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
   frontX, waveTop, waterAt, drawdown, seabed, chopAt, CHOP, stepPlayer, simStep, start: () => start(true), startWithCine: start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_, OCEAN, makeOcean, updateOcean,
@@ -4073,7 +4105,7 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   MIS, missionSites, startMission, stopMission, restartMission, finishMission, updateMission, missionAction, toggleRadar, radarFix, setMode, setLevel, fmtMS,
   SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip, CK, COCKPIT, cockpitUpdate,
   CINE, startCine, cineStep, cineStop, cineSkip, ORB, orbScene, orbCam, orbShip, orbPlanet, renderOrbit, beginPlay, orbPlaceShip, orbShipCam, ORB_U, SEA_ROT,
-  SHD, SHD_SIZE, makeShadow, updateShadow, playerAtDoor };
+  SHD, SHD_SIZE, makeShadow, updateShadow, playerAtDoor, warmPresets, presetDefs };
 PROFKIT.mark('Siap'); PROFKIT.ready();
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>

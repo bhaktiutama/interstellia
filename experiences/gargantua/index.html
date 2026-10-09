@@ -1011,10 +1011,19 @@ function main() {
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); showError(txt('WebGL context lost. Reload the page to restart.')); });
 
   // ---------- shader compile with readable errors ----------
+  // P3 (docs/app/rencana-performa.md): all shaders and programs are submitted first and their status is checked once in
+  // checkPrograms(), after the last program. With KHR_parallel_shader_compile the GPU compiles them concurrently (the wait is
+  // about the slowest program instead of the sum). Error messages are unchanged.
+  gl.getExtension('KHR_parallel_shader_compile');
+  const GLPEND = { sh: [], pr: [] };
   function compile(type, src, name) {
     const s = gl.createShader(type);
     gl.shaderSource(s, src);
     gl.compileShader(s);
+    GLPEND.sh.push([s, src, name]);
+    return s;
+  }
+  function checkShader(s, src, name) {
     if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
       const log = gl.getShaderInfoLog(s) || '';
       const lines = src.split('\n');
@@ -1027,7 +1036,11 @@ function main() {
       }
       throw new Error(`[${name}] shader compile error\n\n${log}\n${ctx.join('\n')}`);
     }
-    return s;
+  }
+  function checkPrograms() {
+    for (const [s, src, name] of GLPEND.sh) checkShader(s, src, name);
+    for (const [p, name] of GLPEND.pr) if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(`[${name}] link error\n\n${gl.getProgramInfoLog(p)}`);
+    GLPEND.sh.length = 0; GLPEND.pr.length = 0;
   }
   const vsObj = compile(gl.VERTEX_SHADER, VS, 'vertex');
   function program(fsSrc, name, vsSrc) {
@@ -1035,7 +1048,7 @@ function main() {
     gl.attachShader(p, vsSrc ? compile(gl.VERTEX_SHADER, vsSrc, name + ' vertex') : vsObj);
     gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fsSrc, name));
     gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(`[${name}] link error\n\n${gl.getProgramInfoLog(p)}`);
+    GLPEND.pr.push([p, name]);
     const cache = new Map();
     return { p, u(n) { if (!cache.has(n)) cache.set(n, gl.getUniformLocation(p, n)); return cache.get(n); } };
   }
@@ -1162,6 +1175,7 @@ function main() {
   // G3: program partikel, tumbukan kaca, awan debu; derau 3D 64^3 berulang (3 oktaf derau nilai halus berperiode, unit tekstur 6)
   const PART_P = program(PART_FS, 'particles', PART_VS), IMP_P = program(IMP_FS, 'impacts', IMP_VS);
   P.dust = program(DUST_FS, 'dust'); P.lum = program(LUM_FS, 'lum');
+  checkPrograms();                                                   // P3: all 13 programs submitted, now wait once
   // G3a: target 16 x 9 RGBA8 + PBO untuk eksposur otomatis misi
   const AE = { k: 1, kt: 1, fence: null, t: 0, L: null, skip: false, tgt: null, pbo: gl.createBuffer() };
   {
