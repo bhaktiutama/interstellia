@@ -20,7 +20,8 @@ const ok = (name, cond, info = '') => { console.log(`${cond ? 'OK   ' : 'GAGAL'}
   const opt = process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {};
   const b = await chromium.launch(opt);
   for (const [vw, vh, tag, lang] of [[1440, 900, 'desktop', 'id'], [390, 844, 'ponsel', 'en']]) {
-    const pg = await b.newPage({ viewport: { width: vw, height: vh } }); const errs = [];
+    // reduce-motion aktif (Windows: Animation effects mati): kanvas simulasi tetap harus beranimasi
+    const pg = await b.newPage({ viewport: { width: vw, height: vh }, reducedMotion: 'reduce' }); const errs = [];
     pg.on('pageerror', (e) => errs.push(e.message));
     pg.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errs.push(m.text()); });
     await pg.goto(url('experiences/cooper-station/detail.html') + '?lang=' + lang);
@@ -37,9 +38,15 @@ const ok = (name, cond, info = '') => { console.log(`${cond ? 'OK   ' : 'GAGAL'}
       ok('lift mengerem di 950 m: terangkat ke langit-langit', n.ceil.down < 0, n.ceil.down.toFixed(3) + ' m/s2');
     }
     await pg.evaluate(() => document.getElementById('coriolis').scrollIntoView({ behavior: 'instant' }));
-    await pg.click('#cPlay'); await pg.waitForTimeout(4500);
+    await pg.click('#cPlay'); await pg.waitForTimeout(1000);
+    const mid = await pg.evaluate(() => ({ t: window.__detail.CS.t, T: window.__detail.CS.tr.T, done: window.__detail.CS.done }));
+    ok(`${tag}: Run beranimasi walau reduce-motion (tidak langsung ke akhir)`, mid.t > 0 && !mid.done && mid.t < mid.T, `t ${mid.t.toFixed(2)} / ${mid.T.toFixed(2)} s`);
+    await pg.waitForTimeout(6800);
     const done = await pg.evaluate(() => window.__detail.CS.done);
     ok(`${tag}: simulasi Coriolis selesai`, done === true);
+    await pg.evaluate(() => { const r = document.getElementById('cTs'); r.value = 0.5; r.dispatchEvent(new Event('input')); });
+    const sc = await pg.evaluate(() => window.__detail.CS.t / window.__detail.CS.tr.T);
+    ok(`${tag}: slider waktu ke tengah`, Math.abs(sc - 0.5) < 0.01, sc.toFixed(3));
     for (const v of ['in', 'out']) await pg.evaluate((v) => document.querySelector(`[data-hv="${v}"]`).click(), v);
     const cap = await pg.evaluate(() => document.getElementById('heroCap').textContent);
     ok(`${tag}: keterangan mode hero`, cap.length > 20, cap.slice(0, 50));
