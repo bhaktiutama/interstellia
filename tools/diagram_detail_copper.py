@@ -643,7 +643,11 @@ b.append(t(752, 300, 'One depth buffer cannot', 12.5, INK)); b.append(t(752, 318
 b.append(t(752, 336, 'surfaces would flicker', 12.5, INK)); b.append(t(752, 354, '(z-fighting).', 12.5, INK))
 files['cc-09-two-scenes.svg'] = doc(9, 'Behind the scenes: two scenes, two scales', 'How a pebble at your feet and Saturn 260,000 km away share one frame', '\n'.join(b), ex, h=H_)
 
+# salinan untuk halaman detail experiences/cooper-station/detail.html (galeri dan gambar statis)
+PAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'experiences', 'cooper-station', 'detail')
+os.makedirs(PAGE, exist_ok=True)
 for n, s_ in files.items():
-    open(os.path.join(OUT, n), 'w').write(s_)
+    for d_ in (OUT, PAGE):
+        open(os.path.join(d_, n), 'w').write(s_)
 print(f'drop t {tf:.3f} s, miss {miss:.2f} m, v0 {v0:.2f} m/s; fountain {land:.3f} m; rain {deg:.2f} deg; lift {T:.1f} s; orbit {P_orb:.2f} h')
 print(sorted(files))

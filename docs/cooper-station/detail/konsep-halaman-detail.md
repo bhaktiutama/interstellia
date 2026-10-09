@@ -247,6 +247,32 @@ Rumus Gargantua sudah ada di `docs/gargantua/rumus-peta-corong.md` dan `rumus-pa
 | D3 | Tombol Pelajari + strip `FACTS` di menu | `index.html` | Low | Haiku 4.5 | low |
 | D4 | Cek termuat tanpa error dan kamus EN lengkap | `tools/qc_load.py` | Low | Haiku 4.5 | low |
 
+## Status
+
+| Tahap | Status | Catatan |
+| --- | --- | --- |
+| D1 | Selesai | `experiences/cooper-station/detail.html`, teks ID + EN |
+| D2 | Selesai | Simulasi interaktif di semua bab fisika (lihat di bawah) |
+| D3 | Sebagian | Tombol "Pelajari fisikanya" di bagian Copper menu; strip `FACTS` belum |
+| D4 | Selesai | `tools/uji_detail_copper.cjs` (17 cek lulus) |
+
+Isi interaktif yang dibangun (lebih dari rencana awal):
+
+| Bab | Interaksi |
+| --- | --- |
+| Hero | Penampang berputar dengan kecepatan asli 63,4 s; "Dari lantai" = kerangka ikut berputar, bintang yang berputar |
+| 2 Gravitasi | Slider / klik ketinggian; massa pengguna -> angka timbangan, tinggi lompatan, waktu jatuh cangkir |
+| 3 Coriolis | Tebak dulu (depan / bawah / belakang), lalu dua panel bersamaan (inersia dan berputar) dari lintasan tepat; 6 preset termasuk "dari puncak lift" (16,8 menit, stasiun berputar 15,9 kali, lintasan spiral) |
+| 4 Air mancur dan hujan | Slider kecepatan semburan (hitungan tepat vs rumus pendekatan) dan kecepatan tetes (gerimis sampai deras) |
+| 5 Berat | Jalan cincin dilihat dari sumbu, putaran stasiun kecepatan asli, slider -400 sampai +400 km/h, pengukur g |
+| 6 Lift | Naik / turun, Shift 5x, unting-unting dan arah "bawah" terasa di kabin, orang terangkat ke langit-langit saat rem lebih kuat dari gravitasi |
+| 7 Gerhana | Slider waktu orbit, putar, lompat ke gerhana (seperti tombol I), garis waktu satu orbit |
+| 8 Paspor | 10 eksperimen dengan cap (tersimpan di browser) |
+| 9 Di balik layar | Slider morf silinder dibuka dengan persen texel terpakai, 8 trik, diagram dua scene |
+| Galeri | 9 diagram dengan lightbox |
+
+Temuan saat membangun: hitungan tepat semburan 10 m/s = 1,36 m; plakat di game memakai rumus pendekatan (4/3) omega v^3 / g^2 = 1,37 m. Halaman menyebut keduanya.
+
 ## Catatan dan batasan
 
 - Angka di dokumen ini dihitung ulang dengan Python dari R 1.000 m dan g 9,81 m/s^2; semua cocok dengan `fisika-coriolis.md` dan teks di kode (85,7 m, 1,37 m, 8 derajat, 0,825 g).
