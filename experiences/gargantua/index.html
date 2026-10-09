@@ -84,7 +84,7 @@
   #dash[hidden] { display: none; }
   body.photo #dash { display: none; }
   /* G9: kartu akhir tidak menutup layar: latar tembus (pandangan relai tetap berjalan), kepala diseret, x menutup */
-  #mend { position: fixed; inset: 0; display: grid; place-items: center; background: transparent; z-index: 12; pointer-events: none; }
+  #mend { position: fixed; inset: 0; display: grid; place-items: center end; padding-right: 12px; background: transparent; z-index: 12; pointer-events: none; }   /* G9: bawaan di kanan */
   #mend[hidden] { display: none; }
   #mend .card { pointer-events: auto; position: relative; }
   #mend .hh { display: flex; align-items: center; gap: 8px; cursor: move; user-select: none; touch-action: none; }
@@ -94,7 +94,7 @@
   #mendShow { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 12; font: inherit; font-size: 12px; color: var(--text);
     background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
   #mendShow[hidden] { display: none; }
-  #mend .card { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; background: var(--panel-bg); border: 1px solid var(--panel-border);
+  #mend .card { width: min(500px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; background: var(--panel-bg); border: 1px solid var(--panel-border);
     border-radius: 10px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
   #mend .hh { color: var(--accent); letter-spacing: .12em; text-transform: uppercase; font-size: 11px; margin-bottom: 8px; }
   #mend p { margin: 6px 0; color: var(--text); font-size: 11.5px; line-height: 1.5; }
@@ -1588,7 +1588,8 @@ function main() {
   function relLog(st) {                                          // ekor log selalu keadaan terkini
     const L = REL.log, r = Math.hypot(...st.x), cur = [st.tau, st.T, r, relArrive(st.T, r), ...st.x], q = L[L.length - 2];   // G9: + posisi
     if (q && st.tau - q[0] < 0.05 && Math.abs(r - q[2]) < 0.02 * Math.max(r, 0.02) && (r > 1) === (q[2] > 1)
-        && Math.abs(Math.log(Math.abs(r - 1) / Math.abs(q[2] - 1))) < 0.02) L[L.length - 1] = cur;
+        && Math.abs(Math.log(Math.abs(r - 1) / Math.abs(q[2] - 1))) < 0.02
+        && v3.dot(st.x, [q[4], q[5], q[6]]) > 0.99996 * r * q[2]) L[L.length - 1] = cur;   // G9: juga rapat menurut sudut (0,5 derajat)
     else L.push(cur);
   }
   function relReset() {
@@ -1668,7 +1669,7 @@ function main() {
     let t = v3.cross([0, -1, 0], dir); if (Math.hypot(...t) < 1e-6) t = [0, 0, 1];
     const L = Math.sqrt(MM * REL.r * REL.r / (REL.r - 3 * MM)), R = rainOf(pos, v3.mul(v3.norm(t), L / REL.r));   // orbit searah piringan (x -> z)
     Object.assign(V, { pos, obs: { v: R.v, g: R.g, beta: R.beta }, cur: null, curT: 0, nowT: 0 });
-    if (rebuild) Object.assign(V, { imgs: [], li: 0 });
+    if (rebuild) Object.assign(V, { imgs: [], li: 0, stack: [], lastIdx: -1 });
   }
   // sudut sapu sinar dari relai (r0, sudut psi dari arah pusat) sampai r = re; mode 'in' = pertama kali masuk, 'out' = setelah periapsis
   function rayPhi(r0, psi, re, mode, onStep) {
@@ -1726,14 +1727,24 @@ function main() {
     return { vel0: v3.add(v3.mul(er, -Math.cos(psi)), v3.mul(et, Math.sin(psi))), psi, dphi, occ };
   }
   // tiap frame saat pandangan relai: citra keadaan yang terlihat (paling cepat tiap 0,15 s), jejak dari REL.log yang sudah tiba
-  // (dicicil 3 titik per frame, sekitar 200 titik), citra posisi sekarang (cahayanya belum tiba), arah kamera otomatis
+  // (sekitar 200 titik + sisipan adaptif, dicicil 4 citra per frame), citra posisi sekarang (cahayanya belum tiba), arah kamera otomatis
   function relUpdate(dt, now = performance.now()) {
     const V = REL.view; if (!V || !MIS.on || SHIP.view !== 'relay') return;
     const TR = MIS.T + REL.Tx, S = relSeen(TR), L = REL.log;
     if (S && S.x && (!V.cur || (Math.abs(S.tau - V.cur.tau) > 1e-12 && now - V.curT > 150))) { V.cur = { tau: S.tau, I: relImage(S.x) }; V.curT = now; }
-    for (let k = 0; k < 3 && !V.moving && V.li < L.length && L[V.li][3] <= TR; k++) {
-      const q = L[V.li], I = relImage(q.slice(4, 7)); if (I) V.imgs.push(I.d);
-      V.li += Math.max(1, Math.floor(L.length / 200));
+    // jejak adaptif: tiap stride entri; bila citra melompat > 0,8 derajat dari titik sebelumnya, titik tengah (indeks pecahan,
+    // posisi diinterpolasi linear di log) disisipkan dulu lewat tumpukan, sampai selisih indeks < 0,05. Paling banyak 4 citra per frame
+    const logX = (f) => { const i = Math.min(Math.floor(f), L.length - 1), j = Math.min(i + 1, L.length - 1), t = f - i;
+      return [4, 5, 6].map((k) => L[i][k] + (L[j][k] - L[i][k]) * t); };
+    for (let k = 0; k < 4 && !V.moving; k++) {
+      let idx;
+      if (V.stack.length) idx = V.stack.pop();
+      else { if (V.li >= L.length || L[Math.floor(V.li)][3] > TR) break; idx = V.li; V.li += Math.max(1, Math.floor(L.length / 200)); }
+      const I = relImage(logX(idx));
+      if (!I) { V.lastIdx = idx; continue; }
+      const last = V.imgs[V.imgs.length - 1];
+      if (last && V.lastIdx >= 0 && idx - V.lastIdx > 0.05 && v3.dot(last, I.d) < 0.9999) { V.stack.push(idx, (V.lastIdx + idx) / 2); continue; }
+      V.imgs.push(I.d); V.lastIdx = idx;
     }
     if (now - V.nowT > 250) { V.nowT = now; V.now = Math.hypot(...MIS.x) > 1.0005 && !MIS.end ? relImage(MIS.x) : null; }
     const c = v3.norm(v3.mul(V.pos, -1)), I = V.cur && V.cur.I, tgt = I ? v3.norm(v3.add(c, I.d)) : c;   // garis bagi pusat dan citra wahana

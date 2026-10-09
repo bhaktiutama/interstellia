@@ -53,6 +53,7 @@ Kelompok 9 (G9, pandangan relai 22 rs; docs/gargantua/rumus-pandangan-relai.md):
   titik segaris relai-pusat = arah ke pusat; titik di balik piringan ditandai,
 - render pandangan relai tanpa nilai tidak valid, titik wahana tergambar,
 - suar dari 10 rs diterima relai saat waktu relai >= waktu tiba; suar dari dalam horizon tidak pernah diterima.
+- revisi 3: relai 4,6 derajat di atas piringan, susur dua arah: lompatan antar titik jejak <= 1 derajat; kartu akhir bawaan di kanan.
 Pakai: python tools/uji_misi_gargantua.py   (butuh: pip install playwright; CHROMIUM=<jalur> opsional, default /opt/pw-browsers/chromium
 bila ada). Tanpa GPU dipakai SwiftShader."""
 import asyncio, os, pathlib, sys
@@ -666,10 +667,24 @@ async def kelompok9(pg):
     f = m['flare']
     cek('suar: saat tiba, titik wahana yang terlihat relai = posisi saat E ditekan', f['seen'] and f['dtau'] < 1e-9 and f['dx'] < 1e-6, str(f))
     cek('penanda posisi sekarang: ada di luar horizon, tidak ada di dalam', m['nowOut'] and not m['nowIn'], f"{m['nowOut']} {m['nowIn']}")
+    # revisi 3: sudut pandang rendah (relai 4,6 derajat di atas piringan), susur melawan arus: jejak tanpa lompatan > 1 derajat
+    lo = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, V0 = () => G.REL.view; G.state.paused = true;
+      const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(a, b)))) * 180 / Math.PI;
+      const run = (sc, el) => { G.startMission(sc); G.setShip(true, 'relay'); for (let k = 0; k < 400 && !M.end; k++) if (G.misFly(1)) break;
+        const V = V0(); V.el = el; G.relPlace(); G.REL.Tx = 1e6; const t0 = performance.now(); let fr = 0;
+        for (; fr < 5000; fr++) { const n = V.imgs.length, li = V.li; G.relUpdate(0.016, 1e9 + fr * 16); if (V.imgs.length === n && V.li === li && !V.stack.length) break; }
+        const ms = performance.now() - t0; let jump = 0, at = 0;
+        for (let i = 1; i < V.imgs.length; i++) { const j = ang(V.imgs[i], V.imgs[i - 1]); if (j > jump) { jump = j; at = i; } }
+        return { n: V.imgs.length, log: G.REL.log.length, jump, at, frames: fr, msPerFrame: ms / Math.max(fr, 1) }; };
+      const out = { retro: run('skim', 0.08), pro: run('skimPro', 0.08) }; G.stopMission(); return out; }''')
+    cek('jejak relai sudut pandang rendah (4,6 derajat): susur dua arah tanpa lompatan > 1 derajat antar titik',
+        all(q['jump'] <= 1 and q['n'] > 100 for q in lo.values()),
+        '; '.join(f"{k}: {q['n']} titik (log {q['log']}), lompatan maks {q['jump']:.2f} derajat, {q['frames']} frame, {q['msPerFrame']:.1f} ms/frame" for k, q in lo.items()))
+    await pg.set_viewport_size({'width': 1280, 'height': 720})
     await pg.evaluate("() => { const G = window.__gargantua, M = G.MIS; G.startMission('polar'); G.state.paused = false; for (let i = 0; i < 20000 && !M.end; i++) G.stepMission(0.1); G.state.paused = true; }")
     await pg.wait_for_timeout(300)
     k = await pg.evaluate('''() => { const r = {}; const m = document.getElementById('mend'), sh = document.getElementById('mendShow');
-      r.shown = !m.hidden; r.bg = getComputedStyle(m).pointerEvents;
+      r.shown = !m.hidden; r.bg = getComputedStyle(m).pointerEvents; const cb = m.querySelector('.card').getBoundingClientRect(); r.right = cb.left > innerWidth / 2 - 40 && innerWidth - cb.right < 40;
       document.getElementById('mendClose').click(); r.closed = m.hidden; r.btn = !sh.hidden;
       sh.click(); r.reopen = !m.hidden && sh.hidden;
       const hh = m.querySelector('.hh'), b = hh.getBoundingClientRect(), x = b.left + 20, y = b.top + 8;
@@ -702,7 +717,7 @@ async def kelompok9(pg):
     cek('pandangan relai: seret kanan = arah pandang (posisi tetap), roda = zoom, klik ganda = posisi dan FOV awal',
         a2['pos'] == a1['pos'] and a2['manual'] and 25 <= a2['fov'] < 70 and a2['ok'] and abs(a3['pos'][1] - a0['pos'][1]) < 1e-9 and a3['fov'] == 70 and not a3['manual'],
         f"fov {a2['fov']:.1f}, awal y {a3['pos'][1]:.2f}")
-    cek('kartu akhir: latar tembus, x menutup, tombol ringkasan membuka lagi, kepala bisa diseret',
-        r['shown'] and r['bg'] == 'none' and r['closed'] and r['btn'] and r['reopen'] and 'translate(' in tr and tr != 'translate(0px, 0px)', f"{r} {tr}")
+    cek('kartu akhir: bawaan di kanan, latar tembus, x menutup, tombol ringkasan membuka lagi, kepala bisa diseret',
+        r['shown'] and r['right'] and r['bg'] == 'none' and r['closed'] and r['btn'] and r['reopen'] and 'translate(' in tr and tr != 'translate(0px, 0px)', f"{r} {tr}")
 
 asyncio.run(main())

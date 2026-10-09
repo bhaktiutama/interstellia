@@ -70,5 +70,29 @@ Balikan:
 | Suar muncul di posisi terakhir yang terlihat atau di posisi saat E ditekan | Keduanya sama. Kilat muncul di posisi saat E ditekan. Cahaya suar dan pulsa wahana dari saat yang sama menempuh jalan yang sama, jadi saat kilat tiba, titik wahana yang terlihat relai tepat berada di posisi itu (uji: selisih tau 0, selisih posisi 1,8e-15 rs) |
 
 - Penanda "sekarang": lingkaran putus-putus di citra posisi wahana saat ini (cahayanya belum tiba). Jarak antara penanda itu dan titik wahana = tunda cahaya. Di dalam horizon penanda hilang (tidak ada sinar yang keluar).
-- Jejak dibangun dari log sejak awal misi (cahaya yang sudah tiba), dicicil 3 titik per frame, sekitar 200 titik.
-- Kartu akhir misi tidak lagi menutup layar: latar tembus, kepala bisa diseret, x menutup, tombol "Ringkasan misi" di atas membukanya lagi. Pandangan relai tetap berjalan (waktu relai lanjut, suar yang masih di jalan tetap tiba).
+- Jejak dibangun dari log sejak awal misi (cahaya yang sudah tiba): sekitar 200 titik, dicicil paling banyak 4 citra per frame. Revisi 3 (9 Oktober), lihat bagian 6.
+- Kartu akhir misi tidak lagi menutup layar: bawaan di kanan (12 px dari tepi, lebar maks 500 px, tengah tegak) supaya pandangan relai yang masih berjalan terlihat, latar tembus, kepala bisa diseret, x menutup, tombol "Ringkasan misi" di atas membukanya lagi. Pandangan relai tetap berjalan (waktu relai lanjut, suar yang masih di jalan tetap tiba).
+
+## 6. Jejak di sudut pandang rendah (revisi 3)
+
+Masukan Bhakti: relai dipindah hampir sejajar piringan, jejak tampak bergerigi / kotak.
+
+| Sebab | Bukti (susur melawan arus, relai 4,6 derajat) |
+| --- | --- |
+| Jejak diambil tiap 3 entri log tanpa pengisian. Dekat lubang hitam lensa kuat dan sudut pandang rendah, jadi titik berurutan terpisah jauh di layar dan tergambar sebagai tali busur lurus | lompatan antar titik jejak sampai 6,1 derajat (di r 2,27) |
+| Log relai juga renggang menurut sudut: entri disatukan selama tau < 0,05 dan r hampir tetap, padahal di orbit hampir melingkar wahana berpindah sudut | entri berurutan pun melompat sampai 2,5 derajat |
+
+Perbaikan:
+
+| Bagian | Isi |
+| --- | --- |
+| `relLog()` | entri baru juga dibuat bila arah posisi berubah > 0,5 derajat dari entri sebelumnya (cos > 0,99996). `relSeen()` dan model waktu tiba G4 tidak berubah, hanya interpolasi lebih halus |
+| `relUpdate()` | titik tetap diambil tiap stride entri; bila citra melompat > 0,8 derajat dari titik sebelumnya (cos < 0,9999), titik tengah (indeks pecahan, posisi diinterpolasi linear di log) disisipkan lewat tumpukan sampai lompatan <= 0,8 derajat atau selisih indeks < 0,05 |
+| Biaya | paling banyak 4 citra per frame. SwiftShader (CPU): 2,5 sampai 4,1 ms per frame selama jejak dibangun (80 sampai 89 frame), lalu 0 |
+
+Hasil (uji kelompok 9, relai 4,6 derajat):
+
+| Skenario | Titik jejak | Lompatan maks |
+| --- | --- | --- |
+| Susur melawan arus | 286 | 0,81 derajat |
+| Susur searah arus | 269 | 0,80 derajat |
