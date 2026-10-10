@@ -8,7 +8,52 @@ Tujuan: suara bawaan ketiga experience tidak lagi terdengar datar dan seperti bi
 - Rencana: fondasi bersama `shared/audio.js` dulu (ruang, gerak, variasi, master), lalu perbaiki tiap experience, lalu rekaman CC0 hanya untuk efek yang memang sulit disintesis.
 - Karena Claude tidak bisa mendengar, tiap tahap diukur dengan alat `tools/ukur_suara.cjs` (angka "kedataran"), lalu Bhakti mendengar dengan daftar cek.
 
-## Diagnosis dari kode (keadaan sekarang)
+## Status
+
+| Tahap | Status | Catatan |
+| --- | --- | --- |
+| S0 | Selesai | `tools/ukur_suara.cjs`; hasil Gargantua di bawah |
+| S1 | Selesai | `shared/audio.js` (`window.AUDIOKIT`) |
+| S2 | Selesai, menunggu dengar Bhakti | Gargantua; `?snd=0` = suara lama persis |
+| S3-S7 | Belum | Menunggu hasil dengar S2 |
+
+## Hasil ukur S2 (Gargantua, render offline 12 s, detik pertama dibuang)
+
+Diukur `node tools/ukur_suara.cjs gargantua --md`. Lama = `audioBuildOld` (suara sebelum S2), baru = `audioBuildNew`.
+
+| Keadaan | Versi | RMS dBFS | Puncak dBFS | Variasi dB | Fluks | Pusat Hz | Loop | Korelasi L/R |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| kabin diam | lama | -33.5 | -28.4 | 0 | 0.108 | 124 | 1 | 1 |
+|  | baru | -34.9 | -24.1 | 0.6 | 0.31 | 886 | 0.142 | 0.779 |
+| pendorong (W) | lama | -32.8 | -23.8 | 0 | 0.474 | 4578 | 1 | 1 |
+|  | baru | -34.4 | -21.4 | 0.5 | 0.488 | 4767 | 0.128 | 0.623 |
+| mesin utama (Shift) | lama | -15.5 | -7.5 | 0.1 | 0.347 | 2416 | 1 | 1 |
+|  | baru | -14.4 | -5.4 | 1.1 | 0.347 | 2335 | 0.243 | 0.917 |
+| susur piringan + tumbukan | lama | -24 | -6.1 | 0.2 | 0.659 | 3678 | 0.233 | 1 |
+|  | baru | -24.1 | -5.7 | 0.7 | 0.625 | 2337 | 0.169 | 0.528 |
+| ping relai melambat | lama | -33.4 | -21.8 | 0.2 | 0.122 | 129 | 0.956 | 1 |
+|  | baru | -34.6 | -19.7 | 0.7 | 0.321 | 911 | 0.616 | 0.764 |
+| pasang surut dalam horizon | lama | -23.5 | -17.9 | 0.1 | 0.108 | 133 | 0.547 | 1 |
+|  | baru | -24.5 | -13.2 | 2.4 | 0.276 | 505 | 0.163 | 0.645 |
+| tesseract | lama | -24.4 | -15.4 | 0.2 | 0.099 | 193 | 0.586 | 1 |
+|  | baru | -24.4 | -9.4 | 1.3 | 0.259 | 1816 | 0.246 | 0.058 |
+| suar x2 | lama | -33.3 | -18.6 | 0.6 | 0.132 | 272 | 0.704 | 1 |
+|  | baru | -32 | -7.4 | 3 | 0.342 | 1991 | 0.696 | 0.621 |
+| kaca pecah | lama | -29.7 | -3.1 | 3.2 | 0.147 | 1081 | 0.113 | 1 |
+|  | baru | -31.1 | -2.7 | 3.2 | 0.348 | 1203 | 0.103 | 0.548 |
+
+Yang terbaca dari angka (bukan dari telinga):
+
+- Loop: kabin, pendorong, dan mesin versi lama = 1,0 (noise 2 s yang sama diulang terus; adegan ping 0,96), versi baru semua lapisan terus-menerus 0,13-0,25. Ping (0,62) dan suar (0,70) tinggi karena peristiwanya memang berulang (ping tiap 1,6 s).
+- Variasi kekerasan lama 0-0,2 dB (diam), baru 0,5-3 dB; fluks spektrum naik 2-3x di kabin, ping, pasang surut, tesseract.
+- Kekerasan rata-rata baru dalam -1,6 sampai +1,3 dB dari lama di semua keadaan (sengaja disetel agar volume yang biasa dipakai tidak berubah).
+- Pusat spektrum kabin naik 124 -> 886 Hz (kipas sirkulasi terdengar); bila terasa melelahkan di misi panjang, kipas bisa diturunkan.
+- Lebar stereo: lama mono (1,0), baru 0,53-0,92; tesseract 0,06 (lebar, tetap positif sehingga aman di speaker mono).
+- Puncak tertinggi kaca pecah -2,7 dBFS (lama -3,1).
+
+Biaya CPU (render offline 12 s di sandbox, termasuk analisis yang sama untuk keduanya): lama 0,4-0,9 s, baru 1,9-2,7 s (tesseract 3,7-4,4 s). Per komponen: ruang kabin 0,47 s, 2 kompresor master 0,27 s, 20 osilator 0,25 s, 10 loop noise 0,15-0,19 s. Audio berjalan di thread sendiri; FPS di MacBook M1 perlu dicek Bhakti.
+
+## Diagnosis dari kode (keadaan sebelum S2)
 
 | Experience | Lapisan | Cara dibuat sekarang | Kenapa terdengar datar / murah |
 | --- | --- | --- | --- |
@@ -65,6 +110,10 @@ Urutan yang disarankan: S0, S1, S2 (Gargantua paling sedikit lapisan dan bip rel
 | Kekerasan dan puncak master | Antarexperience tidak seragam | sama di ketiga experience |
 
 Angka ini alat bantu, bukan bukti bagus. Keputusan akhir tetap telinga Bhakti.
+
+## Cara membandingkan (Gargantua)
+
+Buka `experiences/gargantua/index.html` (suara baru) dan `experiences/gargantua/index.html?snd=0` (suara lama) di tab berbeda, mulai misi yang sama, dengarkan momen di daftar cek.
 
 ## Daftar cek dengar (S7, per experience)
 
