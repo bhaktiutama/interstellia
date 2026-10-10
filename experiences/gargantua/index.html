@@ -128,6 +128,7 @@
 <script src="assets/gx01.data.js"></script>
 <script src="../../shared/post.js"></script>
 <script src="../../shared/camera.js"></script>
+<script src="../../shared/audio.js"></script>
 
 <script>
 'use strict';
@@ -2666,11 +2667,14 @@ function main() {
      gemuruh piringan dan nada tesseract distilisasi. Lewat horizon tidak berbunyi apa-apa (tidak ada yang terasa di sana).
      audioMix() = fungsi murni (dipakai uji): tingkat tiap lapisan dari keadaan misi.
      ===================================================================== */
-  const AUDIO = { on: true, ctx: null, n: {}, pingT: 0.8, lastMix: null };
+  const AUDIO = { on: true, ctx: null, n: {}, lastMix: null };
   try { AUDIO.on = localStorage.getItem('gargantua.sound') !== '0'; } catch (e) { /* abaikan */ }
+  // S2 (docs/app/rencana-suara.md): tema suara baru lewat shared/audio.js; ?snd=0 = suara G7 lama persis (juga bila AUDIOKIT tidak termuat)
+  const SND_NEW = !/[?&]snd=0(&|$)/.test(location.search) && !!window.AUDIOKIT;
   function audioMix() {
-    const m = { hum: 0, thr: 0, main: 0, roar: 0, roarCut: 300, tidal: 0, tidalF: 40, tess: 0 };
-    if (TESV.on) { m.tess = Math.min(1, TESV.t / 3); return m; }
+    // ping: laju jam relai yang terlihat wahana saat pesan relai berbunyi (null = tidak ada ping); tT = waktu adegan tesseract
+    const m = { hum: 0, thr: 0, main: 0, roar: 0, roarCut: 300, tidal: 0, tidalF: 40, tess: 0, ping: null, tT: 0 };
+    if (TESV.on) { m.tess = Math.min(1, TESV.t / 3); m.tT = TESV.t; return m; }
     if (!MIS.on || MIS.end) return m;
     const K = MIS.keys, sh = K.has('ShiftLeft') || K.has('ShiftRight'), aiming = MIS.tes && !MIS.tes.locked;
     m.hum = 1;
@@ -2680,15 +2684,15 @@ function main() {
     const G = MIS.gas; if (G && !aiming) { m.roar = Math.min(1, G.dens * 1.3) * Math.min(1, 0.25 + G.v / 0.5); m.roarCut = 180 + 2200 * Math.min(1, G.v / 0.8); }
     const r = Math.hypot(...MIS.x);
     if (r < 1) { m.tidal = Math.min(1, (1 - r) * 1.2); m.tidalF = 38 + 260 * (1 - r) ** 2; }
+    if (!state.paused) m.ping = relMsg().rate;
     return m;
   }
-  function audioInit() {                                         // dibuat saat gerakan pengguna pertama (kebijakan putar otomatis)
-    if (AUDIO.ctx || !AUDIO.on) return;
-    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-    const c = new AC(), N = AUDIO.n; AUDIO.ctx = c;
+  /* ---------- G7 lama (dipakai bila ?snd=0): graf dan efek persis seperti sebelum S2, kini menerima konteks dari luar ---------- */
+  function audioBuildOld(c) {
+    const N = { pingT: 0.8 };
     const nb = c.createBuffer(1, c.sampleRate * 2, c.sampleRate), d = nb.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-    AUDIO.noise = nb;
+    N.noise = nb;
     N.master = c.createGain(); N.master.gain.value = 0.7;
     const comp = c.createDynamicsCompressor(); N.master.connect(comp); comp.connect(c.destination);
     const gain = (v = 0) => { const g = c.createGain(); g.gain.value = v; g.connect(N.master); return g; };
@@ -2706,6 +2710,183 @@ function main() {
     N.tidal = gain(); N.tidalO = osc('sine', 40); N.tidalO.connect(N.tidal);
     // tesseract (fiksi): akord harmonis berputar pelan
     N.tess = gain(); N.tessO = [110, 165, 220, 275, 330].map((f, i) => { const o = osc('sine', f), g = c.createGain(); g.gain.value = 0.22 / (1 + i * 0.4); o.connect(g); g.connect(N.tess); return o; });
+    return N;
+  }
+  function audioApplyOld(N, c, m, dt) {
+    const t = c.currentTime, set = (p, v, k = 0.08) => p.setTargetAtTime(v, t, k);
+    set(N.hum.gain, 0.05 * m.hum); set(N.thr.gain, 0.09 * m.thr, 0.03); set(N.main.gain, 0.35 * m.main, 0.1);
+    set(N.roar.gain, 0.32 * m.roar, 0.15); set(N.roarLp.frequency, m.roarCut, 0.2);
+    set(N.tidal.gain, 0.12 * m.tidal, 0.2); set(N.tidalO.frequency, m.tidalF, 0.2);
+    set(N.tess.gain, 0.25 * m.tess, 0.6);
+    if (m.tess) N.tessO.forEach((o, i) => set(o.frequency, [110, 165, 220, 275, 330][i] * (1 + 0.004 * Math.sin(m.tT * (0.31 + i * 0.17))), 0.3));
+    // pesan relai: bip tiap 1,6 s nyata, nada dikali laju jam relai yang terlihat wahana (memerah saat menjauh)
+    if (m.ping !== null && (N.pingT -= dt) <= 0) { N.pingT = 1.6; oldTone(N, c, Math.max(60, Math.min(4000, 880 * m.ping)), 0.18, 0.05, 'sine'); }
+  }
+  function oldTone(N, c, f, dur, vol, type = 'sine', f2 = null, t = c.currentTime) {
+    const o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(1e-4, t + dur);
+    o.connect(g); g.connect(N.master); o.start(t); o.stop(t + dur + 0.05);
+  }
+  function oldNoise(N, c, dur, vol, type, f, f2 = null, Q = 1) {
+    const s0 = c.createBufferSource(), bq = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime;
+    s0.buffer = N.noise; bq.type = type; bq.Q.value = Q; bq.frequency.setValueAtTime(f, t); if (f2) bq.frequency.exponentialRampToValueAtTime(f2, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(1e-4, t + dur);
+    s0.connect(bq); bq.connect(g); g.connect(N.master); s0.start(t, Math.random()); s0.stop(t + dur + 0.05);
+  }
+  const OLD_FX = {
+    impact: (N, c, vk, glass) => { oldNoise(N, c, 0.05 + 0.04 * Math.random(), 0.25 * Math.min(1.5, vk), 'highpass', 2500 + 2000 * Math.random()); if (glass > 60) oldTone(N, c, 2600 + 900 * Math.random(), 0.12, 0.05, 'triangle', 1400); },
+    flare: (N, c) => { oldNoise(N, c, 0.9, 0.3, 'bandpass', 400, 3000, 2); oldTone(N, c, 300, 0.6, 0.06, 'sine', 900); },
+    shatter: (N, c) => { oldNoise(N, c, 1.4, 0.6, 'highpass', 1800, 600); for (let i = 0; i < 6; i++) oldTone(N, c, 1800 + 2500 * Math.random(), 0.25, 0.05, 'triangle', 600, c.currentTime + i * 0.07); },
+  };
+
+  /* ---------- S2: tema suara baru ----------
+     Tetap distilisasi (ruang hampa tidak menghantarkan suara): semua yang terdengar merambat lewat badan GX-01, jadi semuanya lewat
+     satu ruang kabin kecil (konvolusi K.ROOMS.cabin). Tiap lapisan bergerak pelan (drift), efek sekali bunyi berlapis (transien, badan
+     modus, ekor ruang) dan berbeda tiap kali. Titik kendali lama (N.master, N.hum, N.thr, N.main, N.roar, N.roarLp, N.tidal, N.tidalO,
+     N.tess, N.tessO) tetap ada. Level lapisan disetel agar kekerasan rata-rata dekat dengan G7 lama (diukur tools/ukur_suara.cjs). */
+  const TESS_F = [110, 165, 220, 275, 330];
+  function audioBuildNew(c) {
+    const K = window.AUDIOKIT, N = { pingT: 0.8, r: K.rng(41), fx: K.voices(14), crk: K.voices(6), thrP: 0, mainP: 0, tick: 2 + 4 * Math.random() };
+    const pink = K.noise(c, 'pink', 12, 2), brown = K.noise(c, 'brown', 12), white = K.noise(c, 'white', 12, 2);   // cokelat (rendah) cukup mono
+    N.white = K.noise(c, 'white'); N.pinkM = K.noise(c, 'pink');
+    const M = K.master(c, c.destination, { gain: 0.7, low: 1.5, high: 1 });
+    N.master = M.input; N.out = M.out;
+    N.room = K.room(c, 'cabin', 1); N.room.out.connect(N.master);              // ruang kabin: semua lapisan mengirim sedikit
+    const bus = (dry, wet, hall = 0) => { const g = K.gain(c, 0); const d = K.gain(c, dry), w = K.gain(c, wet); g.connect(d).connect(N.master); g.connect(w).connect(N.room.send); if (hall) g.connect(K.gain(c, hall)).connect(N.hall.send); return g; };
+    const lp = (f, q) => K.filt(c, 'lowpass', f, q), bp = (f, q) => K.filt(c, 'bandpass', f, q), hp = (f, q) => K.filt(c, 'highpass', f, q);
+    const osc = (type, f) => { const o = c.createOscillator(); o.type = type; o.frequency.value = f; o.start(); return o; };
+    N.sfx = bus(0.85, 0.45); N.sfx.gain.value = 1;                             // bus efek sekali bunyi
+    // kabin: dengung listrik (55 Hz + harmonik sedikit tidak tepat = denyut pelan), kipas sirkulasi (stereo), badan rendah, deru kipas bernada
+    N.hum = bus(0.9, 0.25);
+    { const hm = K.gain(c, 1); hm.connect(N.hum); N.humEl = hm;
+      N.humO = [[55, 0.42, 'sine'], [110, 0.2, 'sine'], [165, 0.06, 'triangle'], [220, 0.025, 'sine']].map(([f, k, ty]) => { const o = osc(ty, f), g = K.gain(c, k); o.connect(g).connect(hm); return [o, f]; });
+      N.fanG = K.gain(c, 0.5); K.chain(K.loop(c, pink, N.r), bp(520, 0.55), N.fanG, N.hum);
+      N.whirF = bp(232, 9); N.whirG = K.gain(c, 0.35); K.chain(K.loop(c, pink, N.r), N.whirF, N.whirG, N.hum);
+      K.chain(K.loop(c, brown, N.r), lp(190, 0.7), K.gain(c, 0.3), N.hum); }
+    N.dHum = K.drift(3, 0.07); N.dFan = K.drift(4, 0.11); N.dDet = [K.drift(5, 0.03), K.drift(6, 0.04), K.drift(7, 0.05)];
+    // pendorong RCS: semburan gas (pita lebar, sedikit bergetar 13 Hz) + dengung badan rendah yang merambat ke kabin
+    N.thr = bus(0.85, 0.35);
+    { const am = K.gain(c, 0.85); K.flutter(c, am.gain, 14, 0.15, N.r);
+      K.chain(K.loop(c, white, N.r), hp(700, 0.7), bp(2100, 0.45), K.gain(c, 0.55), am, N.thr);
+      K.chain(K.loop(c, pink, N.r), lp(300, 0.8), K.gain(c, 0.7), N.thr); }
+    // mesin utama: dua gergaji sedikit sumbang lewat lowpass + pembentuk lunak (kasar), gemuruh cokelat, derak tengah bergetar 7 Hz
+    N.main = bus(0.9, 0.3);
+    { const mlp = lp(150, 0.9), sh = K.shaper(c, 2.2), mg = K.gain(c, 0.55);
+      N.mainO = [40.6, 41.5].map((f) => { const o = osc('sawtooth', f); o.connect(mlp); return [o, f]; }); N.dMain = [K.drift(8, 0.09), K.drift(9, 0.13)];
+      K.chain(mlp, sh, mg, N.main);
+      K.chain(K.loop(c, brown, N.r), lp(110, 0.7), K.gain(c, 0.75), N.main);
+      const rat = K.gain(c, 0.2); K.flutter(c, rat.gain, 9, 0.12, N.r); K.chain(K.loop(c, pink, N.r), bp(330, 1.4), rat, N.main); }
+    // gemuruh piringan: tiga pita noise stereo yang naik-turun sendiri-sendiri, lalu lowpass ikut laju gas; badan cokelat rendah
+    N.roar = bus(0.9, 0.3); N.roarLp = lp(300, 0.6); N.roarLp.connect(N.roar);
+    N.roarB = [[170, 0.8], [520, 0.75], [1450, 0.7]].map(([f, q], i) => { const g = K.gain(c, 0.5); K.chain(K.loop(c, pink, N.r), bp(f, q), g, N.roarLp); return { g, d: K.drift(20 + i, 0.18 + 0.07 * i) }; });
+    K.chain(K.loop(c, brown, N.r), lp(95, 0.7), K.gain(c, 0.55), N.roar);
+    // pasang surut: nada dasar + kuint sedikit sumbang + erangan struktur (cokelat lewat pita sempit di 2,2x nada)
+    N.tidal = bus(0.85, 0.4);
+    { N.tidalO = osc('sine', 40); N.tidalO.connect(K.gain(c, 0.55)).connect(N.tidal);
+      N.tidalO2 = osc('triangle', 60.2); N.tidalO2.connect(K.gain(c, 0.16)).connect(N.tidal);
+      N.groanF = bp(88, 7); K.chain(K.loop(c, brown, N.r), N.groanF, K.gain(c, 2.2), N.tidal); }
+    // tesseract (fiksi): akord yang sama (110-330 Hz) tapi tiap nada = dua segitiga sumbang + sinus satu oktaf di bawah, filter bergerak,
+    // tersebar kiri-kanan, ke ruang besar; ditambah udara tinggi yang berkilau pelan. Dibangun saat adegan tesseract pertama
+    // (15 osilator + gema 4,5 s tidak berjalan sia-sia sepanjang misi)
+    N.buildTess = () => {
+    N.hall = K.room(c, 'void', 1); N.hall.out.connect(N.master);
+    N.tess = bus(0.55, 0.1, 0.9);
+    N.tessO = TESS_F.map((f, i) => {
+      const v = K.gain(c, 0.2 / (1 + i * 0.4)), f2 = lp(900, 0.8), pn = K.pan(c, N.tess, -0.65 + 0.325 * i);
+      const a = osc('triangle', f * 0.9977), b = osc('triangle', f * 1.0023), s = osc('sine', f / 2);
+      a.connect(f2); b.connect(f2); s.connect(K.gain(c, 0.5)).connect(f2); K.chain(f2, v, pn);
+      return { frequency: a.frequency, a, b, s, f2, d: K.drift(60 + i, 0.05 + 0.02 * i) };
+    });
+    N.airG = K.gain(c, 0); K.chain(K.loop(c, white, N.r), hp(5200, 0.7), N.airG, N.tess);
+    };
+    return N;
+  }
+  function audioApplyNew(N, c, m, dt) {
+    const K = window.AUDIOKIT, t = c.currentTime, set = (p, v, k = 0.08) => p.setTargetAtTime(v, t, k), r = N.r;
+    // kabin bernapas pelan: dengung dan kipas tidak pernah diam sempurna
+    const dh = N.dHum(t), df = N.dFan(t);
+    set(N.hum.gain, 0.05 * m.hum); set(N.humEl.gain, 0.85 + 0.3 * dh, 0.5); set(N.fanG.gain, 0.38 + 0.25 * df, 0.5);
+    set(N.whirF.frequency, 232 * (0.97 + 0.06 * df), 0.6);
+    for (let i = 1; i < N.humO.length; i++) set(N.humO[i][0].frequency, N.humO[i][1] * (1 + 0.006 * (N.dDet[i - 1](t) - 0.5)), 0.8);   // harmonik bergeser 0-3 Hz: denyut berubah-ubah
+    set(N.thr.gain, 0.085 * m.thr, 0.03); set(N.main.gain, 0.22 * m.main, 0.1);
+    if (m.main) N.mainO.forEach(([o, f], i) => set(o.frequency, f * (0.985 + 0.03 * N.dMain[i](t)), 0.5));   // denyut dua gergaji tidak teratur
+    set(N.roar.gain, 0.5 * m.roar, 0.15); set(N.roarLp.frequency, m.roarCut, 0.2);
+    for (const B of N.roarB) set(B.g.gain, 0.25 + 0.6 * B.d(t), 0.3);
+    set(N.tidal.gain, 0.14 * m.tidal, 0.2); set(N.tidalO.frequency, m.tidalF, 0.2); set(N.tidalO2.frequency, m.tidalF * 1.505, 0.2); set(N.groanF.frequency, m.tidalF * 2.2, 0.3);
+    if (m.tess && !N.tessO) N.buildTess();
+    if (N.tessO) set(N.tess.gain, 0.2 * m.tess, 0.6);
+    if (m.tess) N.tessO.forEach((o, i) => { const f = TESS_F[i] * (1 + 0.004 * Math.sin(m.tT * (0.31 + i * 0.17))); set(o.a.frequency, f * 0.9977, 0.3); set(o.b.frequency, f * 1.0023, 0.3); set(o.s.frequency, f / 2, 0.3); set(o.f2.frequency, 500 + 1900 * o.d(t), 0.4); });
+    if (N.tessO) set(N.airG.gain, m.tess ? 0.005 + 0.01 * N.tessO[0].d(t * 1.7) : 0, 0.5);
+    // peristiwa: katup pendorong dan penyalaan mesin (tepi naik), detak struktur kabin, erangan pasang surut, derak gas piringan
+    if (m.thr > 0.05 && N.thrP <= 0.05) fxValve(N, c, t, m.thr);
+    if (m.main > 0.5 && N.mainP <= 0.5) fxIgnite(N, c, t);
+    N.thrP = m.thr; N.mainP = m.main;
+    if (m.hum > 0 && (N.tick -= dt) <= 0) { N.tick = 2.5 + 7 * r(); fxTick(N, c, t, 0.6 + 0.4 * r()); }
+    if (m.tidal > 0.05 && r() < dt * (0.4 + 2.2 * m.tidal) && N.crk.ok(t, t + 0.6)) fxCreak(N, c, t, m.tidal);
+    if (m.roar > 0.05 && r() < dt * 22 * m.roar && N.fx.ok(t, t + 0.03)) K.burst(c, N.sfx, t, { buf: N.white, type: 'highpass', f0: 2500 + 3000 * r(), q: 0.7, att: 0.0005, dur: 0.004 + 0.006 * r(), peak: 0.03 * m.roar * (0.4 + r()), pan: r() * 1.6 - 0.8, r });
+    if (m.ping !== null && (N.pingT -= dt) <= 0) { N.pingT = 1.6; fxPing(N, c, t, Math.max(60, Math.min(4000, 880 * m.ping))); }
+  }
+  // ping relai: badan seperti pelat logam kecil (parsial tak harmonis) + klik penerima + desis radio singkat; nada = 880 Hz x laju jam
+  function fxPing(N, c, t, f) {
+    const K = window.AUDIOKIT, j = 1 + 0.004 * (N.r() - 0.5);
+    K.modal(c, N.sfx, t, [[f * j, 1, 0.55], [f * 2.756 * j, 0.32, 0.24], [f * 5.404 * j, 0.1, 0.11], [f * 0.5, 0.16, 0.3]], { gain: 0.04, att: 0.002, click: 0.25, clickF: 3500, clickD: 0.003 });
+    K.burst(c, N.sfx, t, { buf: N.white, type: 'bandpass', f0: Math.min(6000, f * 1.6), q: 2.5, att: 0.003, dur: 0.07, peak: 0.012, r: N.r });
+  }
+  // detak kabin: logam kecil memuai / menyusut, sangat pelan, kiri atau kanan
+  function fxTick(N, c, t, k) {
+    const K = window.AUDIOKIT, r = N.r, f = 1700 + 2200 * r();
+    K.modal(c, K.pan(c, N.sfx, r() * 1.4 - 0.7), t, [[f, 1, 0.05], [f * 1.63, 0.5, 0.035], [f * 2.41, 0.25, 0.02]], { gain: 0.012 * k, click: 0.3, clickF: 4000, clickD: 0.002 });
+  }
+  function fxValve(N, c, t, k) {                                               // katup RCS terbuka: tok logam + hembusan awal
+    const K = window.AUDIOKIT, r = N.r, j = 0.92 + 0.16 * r();
+    K.modal(c, N.sfx, t, [[410 * j, 1, 0.07], [980 * j, 0.5, 0.05], [1730 * j, 0.25, 0.03]], { gain: 0.05 * (0.6 + 0.4 * k), click: 0.4, clickF: 2500, clickD: 0.004 });
+    K.burst(c, N.sfx, t, { buf: N.white, type: 'bandpass', f0: 3000, f1: 1500, q: 0.8, att: 0.004, dur: 0.18, peak: 0.05 * k, r });
+  }
+  function fxIgnite(N, c, t) {                                                 // mesin utama menyala: hentakan rendah + gemuruh bangkit
+    const K = window.AUDIOKIT;
+    K.modal(c, N.sfx, t, [[47, 1, 0.9], [94, 0.4, 0.55], [151, 0.2, 0.35]], { gain: 0.22, att: 0.01, bend: 0.85 });
+    K.burst(c, N.sfx, t, { buf: N.pinkM, type: 'lowpass', f0: 200, f1: 900, q: 0.7, att: 0.08, dur: 0.6, peak: 0.12, r: N.r });
+  }
+  function fxCreak(N, c, t, k) {                                               // erangan badan wahana diregang pasang surut
+    const K = window.AUDIOKIT, r = N.r, f = 180 + 520 * r() * (0.5 + k);
+    K.burst(c, K.pan(c, N.sfx, r() * 1.2 - 0.6), t, { buf: N.white, type: 'bandpass', f0: f, f1: f * (0.75 + 0.2 * r()), q: 14, att: 0.04, dur: 0.25 + 0.3 * r(), peak: 0.35 * (0.4 + k), r });
+  }
+  const NEW_FX = {
+    // tumbukan debu di kaca: klik tajam + 3-4 modus kaca (acak tiap butir) + ketuk badan bila keras; retak bila kaca > 60%
+    impact: (N, c, vk, glass) => {
+      const K = window.AUDIOKIT, r = N.r, t = c.currentTime, v = Math.min(1.5, vk);
+      if (!N.fx.ok(t, t + 0.25)) { K.burst(c, N.sfx, t, { buf: N.white, type: 'highpass', f0: 3500, att: 0.0005, dur: 0.005, peak: 0.08 * v, pan: r() * 1.4 - 0.7, r }); return; }
+      const out = K.pan(c, N.sfx, r() * 1.4 - 0.7), j = 0.88 + 0.24 * r(), damp = 1 - Math.min(0.6, glass / 150);
+      const modes = [1830, 2690, 3970, 5210, 6420].filter(() => r() < 0.75).map((f, i) => [f * j * (1 + 0.03 * (r() - 0.5)), (0.5 + 0.5 * r()) / (1 + 0.3 * i), (0.05 + 0.13 * r()) * damp]);
+      if (vk > 0.8) modes.push([260 * j, 0.5, 0.11], [410 * j, 0.25, 0.08]);
+      K.modal(c, out, t, modes, { gain: 0.1 * v, click: 1.6, clickF: 2600 + 1800 * r(), clickD: 0.004 + 0.004 * r() });
+      if (glass > 60) K.burst(c, out, t, { buf: N.white, type: 'highpass', f0: 2600, f1: 900, q: 0.8, att: 0.002, dur: 0.12 + 0.08 * r(), peak: 0.05, r });
+    },
+    // suar: hentakan peluncur + desing naik + desis ekor
+    flare: (N, c) => {
+      const K = window.AUDIOKIT, t = c.currentTime;
+      K.modal(c, N.sfx, t, [[72, 1, 0.35], [118, 0.5, 0.25], [233, 0.2, 0.12]], { gain: 0.2, att: 0.004, bend: 0.8, click: 0.2, clickF: 1500 });
+      K.burst(c, N.sfx, t, { buf: N.pinkM, type: 'bandpass', f0: 300, f1: 3200, q: 1.5, att: 0.05, dur: 0.9, peak: 0.26, r: N.r });
+      K.burst(c, N.sfx, t, { buf: N.white, type: 'highpass', f0: 4000, q: 0.7, att: 0.2, dur: 1.3, peak: 0.035, delay: 0.15, r: N.r });
+    },
+    // kaca pecah: retak keras, dentum badan, udara kabin lolos, puluhan serpih berdenting makin jarang
+    shatter: (N, c) => {
+      const K = window.AUDIOKIT, r = N.r, t = c.currentTime;
+      K.burst(c, N.sfx, t, { buf: N.white, type: 'highpass', f0: 1800, f1: 600, q: 0.7, att: 0.001, dur: 0.35, peak: 0.38, r });
+      K.modal(c, N.sfx, t, [[55, 1, 1.2], [83, 0.5, 0.9], [131, 0.25, 0.5]], { gain: 0.3, att: 0.006, bend: 0.9 });
+      K.burst(c, N.sfx, t, { buf: N.pinkM, type: 'lowpass', f0: 3000, f1: 200, q: 0.6, att: 0.02, dur: 2.2, peak: 0.32, r });
+      for (let i = 0; i < 28; i++) {
+        const ti = t + 0.02 + 1.6 * (i / 28) ** 1.8 + 0.03 * r(), f = 2500 + 4500 * r();
+        K.modal(c, K.pan(c, N.sfx, r() * 1.8 - 0.9), ti, [[f, 1, 0.05 + 0.15 * r()], [f * (1.4 + 0.5 * r()), 0.5, 0.04 + 0.08 * r()]], { gain: 0.05 * (1 - 0.6 * i / 28), click: 0.5, clickF: 5000, clickD: 0.002 });
+      }
+    },
+  };
+  const audioBuild = SND_NEW ? audioBuildNew : audioBuildOld, audioApply = SND_NEW ? audioApplyNew : audioApplyOld, FX = SND_NEW ? NEW_FX : OLD_FX;
+  function audioInit() {                                         // dibuat saat gerakan pengguna pertama (kebijakan putar otomatis)
+    if (AUDIO.ctx || !AUDIO.on) return;
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    const c = new AC(); AUDIO.ctx = c; AUDIO.n = audioBuild(c);
   }
   function setSound(on = !AUDIO.on) {
     AUDIO.on = on; try { localStorage.setItem('gargantua.sound', on ? '1' : '0'); } catch (e) { /* abaikan */ }
@@ -2716,32 +2897,24 @@ function main() {
   function updateAudio(dt) {
     const m = audioMix(); AUDIO.lastMix = m;
     const c = AUDIO.ctx; if (!c || !AUDIO.on) return;
-    const N = AUDIO.n, t = c.currentTime, set = (p, v, k = 0.08) => p.setTargetAtTime(v, t, k);
-    set(N.hum.gain, 0.05 * m.hum); set(N.thr.gain, 0.09 * m.thr, 0.03); set(N.main.gain, 0.35 * m.main, 0.1);
-    set(N.roar.gain, 0.32 * m.roar, 0.15); set(N.roarLp.frequency, m.roarCut, 0.2);
-    set(N.tidal.gain, 0.12 * m.tidal, 0.2); set(N.tidalO.frequency, m.tidalF, 0.2);
-    set(N.tess.gain, 0.25 * m.tess, 0.6);
-    if (m.tess) N.tessO.forEach((o, i) => set(o.frequency, [110, 165, 220, 275, 330][i] * (1 + 0.004 * Math.sin(TESV.t * (0.31 + i * 0.17))), 0.3));
-    // pesan relai: bip tiap 1,6 s nyata, nada dikali laju jam relai yang terlihat wahana (memerah saat menjauh)
-    if (MIS.on && !MIS.end && !state.paused && (AUDIO.pingT -= dt) <= 0) { AUDIO.pingT = 1.6; sfxTone(Math.max(60, Math.min(4000, 880 * relMsg().rate)), 0.18, 0.05, 'sine'); }
+    audioApply(AUDIO.n, c, m, dt);
   }
-  function sfxTone(f, dur, vol, type = 'sine', f2 = null) {
-    const c = AUDIO.ctx; if (!c || !AUDIO.on) return;
-    const o = c.createOscillator(), g = c.createGain(), t = c.currentTime;
-    o.type = type; o.frequency.setValueAtTime(f, t); if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
-    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(1e-4, t + dur);
-    o.connect(g); g.connect(AUDIO.n.master); o.start(t); o.stop(t + dur + 0.05);
+  const sfxGo = () => AUDIO.ctx && AUDIO.on && AUDIO.n.master;
+  const sfxImpact = (vk) => { if (sfxGo()) FX.impact(AUDIO.n, AUDIO.ctx, vk, MIS.glass); };
+  const sfxFlare = () => { if (sfxGo()) FX.flare(AUDIO.n, AUDIO.ctx); };
+  const sfxShatter = () => { if (sfxGo()) FX.shatter(AUDIO.n, AUDIO.ctx); };
+  /* S0: ukur satu keadaan secara offline (tools/ukur_suara.cjs). which 'old' / 'new', mix = kolom audioMix() (boleh fungsi t),
+     events = [[detik, 'impact' | 'flare' | 'shatter', vk]]. Mengembalikan angka AUDIOKIT.analyze(). */
+  async function audioMeasure(mix, which = 'new', sec = 12, events = []) {
+    const K = window.AUDIOKIT, B = which === 'old' ? audioBuildOld : audioBuildNew, A = which === 'old' ? audioApplyOld : audioApplyNew, F = which === 'old' ? OLD_FX : NEW_FX;
+    const base = { hum: 0, thr: 0, main: 0, roar: 0, roarCut: 300, tidal: 0, tidalF: 40, tess: 0, ping: null, tT: 0 };
+    const ev = events.slice().sort((a, b) => a[0] - b[0]);
+    return K.measure(B, (N, c, t, dt) => {
+      const m = Object.assign({}, base); for (const k in mix) m[k] = typeof mix[k] === 'function' ? mix[k](t) : mix[k];
+      A(N, c, m, dt);
+      while (ev.length && ev[0][0] <= t) { const [, kind, vk] = ev.shift(); F[kind](N, c, vk ?? 1, 0); }
+    }, sec, 1);
   }
-  function sfxNoise(dur, vol, type, f, f2 = null, Q = 1) {
-    const c = AUDIO.ctx; if (!c || !AUDIO.on) return;
-    const s0 = c.createBufferSource(), bq = c.createBiquadFilter(), g = c.createGain(), t = c.currentTime;
-    s0.buffer = AUDIO.noise; bq.type = type; bq.Q.value = Q; bq.frequency.setValueAtTime(f, t); if (f2) bq.frequency.exponentialRampToValueAtTime(f2, t + dur);
-    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(1e-4, t + dur);
-    s0.connect(bq); bq.connect(g); g.connect(AUDIO.n.master); s0.start(t, Math.random()); s0.stop(t + dur + 0.05);
-  }
-  const sfxImpact = (vk) => { sfxNoise(0.05 + 0.04 * Math.random(), 0.25 * Math.min(1.5, vk), 'highpass', 2500 + 2000 * Math.random()); if (MIS.glass > 60) sfxTone(2600 + 900 * Math.random(), 0.12, 0.05, 'triangle', 1400); };
-  const sfxFlare = () => { sfxNoise(0.9, 0.3, 'bandpass', 400, 3000, 2); sfxTone(300, 0.6, 0.06, 'sine', 900); };
-  const sfxShatter = () => { sfxNoise(1.4, 0.6, 'highpass', 1800, 600); for (let i = 0; i < 6; i++) setTimeout(() => sfxTone(1800 + 2500 * Math.random(), 0.25, 0.05, 'triangle', 600), i * 70); };
   // Musik dari file milik pengguna (seperti loadMusicFile() Copper): <audio> berulang lewat master, J putar / jeda, tidak disimpan antarsesi
   const MUSIC = { el: null, node: null, gain: null, name: '', on: false, vol: 0.6 };
   try { const v = parseFloat(localStorage.getItem('gargantua.musicVol')); if (isFinite(v)) MUSIC.vol = Math.min(1, Math.max(0, v)); } catch (e) { /* abaikan */ }
@@ -2860,7 +3033,7 @@ function main() {
     app: 'gargantua', canvas, ev0: 10, key: 0.7, minFocus: 0.7,
     lang: () => LANG, exit: () => togglePhoto(false), freeMode: () => { togglePhoto(false); togglePhoto(true, 'bebas'); },
     isLocked: () => false, unlock: () => {},
-    audio: () => (AUDIO.ctx && AUDIO.n && AUDIO.n.master ? { ctx: AUDIO.ctx, node: AUDIO.n.master } : null),
+    audio: () => (AUDIO.ctx && AUDIO.n && AUDIO.n.master ? { ctx: AUDIO.ctx, node: AUDIO.n.out || AUDIO.n.master } : null),   // S2: keluaran rantai master
     quality: () => (FMT.type === gl.HALF_FLOAT ? ({ ultra: 32, high: 24, medium: 16, low: 8 })[CONFIG.quality] || 16 : 1),
     photoH: () => ({ ultra: 2160, high: 1800, medium: 1440, low: 1200 })[CONFIG.quality] || 1200,   // tinggi foto tersimpan (px)
   });
@@ -3328,7 +3501,7 @@ function main() {
     SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
     misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, AE, stepMission,
     REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,
-    TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound, MUSIC, setMusic, loadMusicFile, relImage, imageDir, rayPhi, relViewInit, drawRelayView, relUpdate, relPlace,
+    TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound, audioMeasure, SND_NEW, sfxImpact, sfxFlare, sfxShatter, MUSIC, setMusic, loadMusicFile, relImage, imageDir, rayPhi, relViewInit, drawRelayView, relUpdate, relPlace,
     FUN, funZ, funL, drawFunnel, drawDash, bhRadiant, misGas };   // debugging hook
   requestAnimationFrame(frame);
 }
