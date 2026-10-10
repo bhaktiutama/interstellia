@@ -69,6 +69,10 @@
   #err[hidden] { display: none; }
 
   body.photo #ui, body.photo .overlay-text:not(#toast), body.photo #menuLink { opacity: 0; pointer-events: none; }
+  /* tombol kembali ke menu utama: sama dengan #menuBtn Copper (24f) */
+  #menuLink { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; z-index: 20; padding: 4px 10px; font-size: 12px;
+    color: var(--text); background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 8px; text-decoration: none; }
+  #menuLink:hover { border-color: var(--accent); color: #fff; }
   #toast { left: 50%; top: 30%; transform: translateX(-50%); font-size: 12px; color: #dfe3ea; background: rgba(10,11,15,0.7); padding: 8px 14px;
     border-radius: 8px; opacity: 0; }
   #toast.on { opacity: 1; }
@@ -102,7 +106,7 @@
   #tess[hidden] { display: none; }
   #mendRelay { display: block; width: 100%; height: 230px; margin: 8px 0; border-radius: 6px; }
   @media (max-width: 640px) {
-    #ui { top: 12px; right: 12px; left: 12px; width: auto; max-height: 60vh; }
+    #ui { top: calc(44px + env(safe-area-inset-top, 0px)); right: 12px; left: 12px; width: auto; max-height: 60vh; }
     #hint { display: none; }
     #uiTabs { border-bottom: 0; border-top: 1px solid var(--panel-border); padding: 8px 0 0; position: sticky; bottom: 0; background: var(--panel-bg); order: 2; }
     #uiBody { display: flex; flex-direction: column; }
@@ -776,7 +780,7 @@ const ID = {
   'Camera': 'Kamera', 'FOV (deg)': 'Sudut pandang (derajat)', 'Auto-orbit': 'Putar otomatis', 'Pause time (Space)': 'Hentikan waktu (Space)',
   'Film': 'Sinematik', 'Edge-on': 'Dari samping', 'Top-down': 'Dari atas', 'Close approach': 'Mendekat', 'Reset': 'Atur ulang', 'Screenshot': 'Tangkap layar',
   'FPS': 'FPS', 'Resolution': 'Resolusi', 'Max steps': 'Langkah maks', 'Distance': 'Jarak', 'Buffer': 'Buffer',
-  'Language': 'Bahasa', '< MENU': '< MENU',
+  'Language': 'Bahasa', 'Back to the main menu': 'Kembali ke menu utama',
   'Space pause · Q quality · P screen effects · U sound · J music · F photo · V vessel · R reset · H hide UI · ` panel · ? help': 'Space jeda · Q kualitas · P efek layar · U suara · J musik · F foto · V wahana · R atur ulang · H sembunyikan UI · ` panel · ? bantuan',
   'WebGL2 is not available in this browser or on this GPU.\n\nThis simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). Check that hardware acceleration is enabled in your browser settings.':
     'WebGL2 tidak tersedia di browser atau GPU ini.\n\nSimulasi ini butuh WebGL2 (Chrome, Edge, Firefox, Safari 15+). Pastikan akselerasi hardware aktif di pengaturan browser.',
@@ -1003,7 +1007,7 @@ function applyStaticLang() {
   ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
   $('#mendAgain').textContent = txt('Fly again'); $('#mendExit').textContent = txt('Exit mission');
   $('#mendShow').textContent = txt('Mission summary (Enter: fly again)'); $('#mendMove').textContent = txt('drag to move'); $('#mendClose').title = txt('Close');
-  const m = $('#menuLink'); if (m) m.href = `../../index.html?lang=${LANG}`;
+  const m = $('#menuLink'); if (m) { m.href = `../../index.html?lang=${LANG}`; m.title = txt('Back to the main menu'); }
 }
 applyStaticLang();
 document.addEventListener('DOMContentLoaded', applyStaticLang);   // tautan menu ada setelah skrip
@@ -1411,6 +1415,7 @@ function main() {
     MIS.gas = misGas();
     SHIP.on = true; state.tween = null;
     mendShow(false); $('#dash').hidden = false;
+    $('#ui').classList.add('collapsed');                          // fokus ke misi: panel kanan diciutkan (` atau klik judul membuka lagi)
     if (!MIS.tes) misPredict();
     toast(txt(S.info), MIS.tes ? 9 : 6);
     syncUI();
@@ -2216,11 +2221,12 @@ function main() {
       rows = [['GX-01', 'AMBANG'], [txt('Distance to centre'), `${fmtN(rs, 2)} rs · ${(rs * RS_KM).toExponential(3)} km`],
         ['', txt('Holding position. Start a fall from the panel (Mission).')]];
     }
-    const lh = 17 * s, pw = Math.min(420 * s, w - 24 * s), ph = rows.length * lh + 14 * s, x0 = 12 * s, y0 = 52 * s;
-    g.fillStyle = 'rgba(6,8,11,0.5)'; g.fillRect(x0, y0, pw, ph);
-    g.strokeStyle = 'rgba(240,164,90,0.35)'; g.lineWidth = s; g.strokeRect(x0, y0, pw, ph);
+    const mobile = innerWidth < 640;                              // ponsel: info kiri disembunyikan (menimpa panel dan pandangan)
+    const lh = 17 * s, pw = Math.min(420 * s, w - 24 * s), ph = mobile ? 0 : rows.length * lh + 14 * s, x0 = 12 * s, y0 = 44 * s;
+    if (!mobile) { g.fillStyle = 'rgba(6,8,11,0.5)'; g.fillRect(x0, y0, pw, ph);
+    g.strokeStyle = 'rgba(240,164,90,0.35)'; g.lineWidth = s; g.strokeRect(x0, y0, pw, ph); }
     g.font = `${12 * s}px ui-monospace, Menlo, Consolas, monospace`; g.textBaseline = 'middle';
-    rows.forEach(([a, b], i) => {
+    if (!mobile) rows.forEach(([a, b], i) => {
       const y = y0 + 7 * s + (i + 0.5) * lh;
       g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(a, x0 + 10 * s, y, 116 * s);
       g.fillStyle = MIS.on && i === 2 && misData().inside ? 'rgba(255,120,95,0.95)' : 'rgba(215,220,226,0.95)'; g.fillText(b, x0 + 130 * s, y, pw - 138 * s);
@@ -3335,6 +3341,6 @@ function main() {
 
 try { main(); } catch (e) { showError(String(e && e.message || e)); }
 </script>
-<a id="menuLink" href="../../index.html" style="position:fixed;left:16px;top:16px;z-index:20;padding:6px 10px;border-radius:8px;background:rgba(10,11,15,0.62);border:1px solid rgba(255,255,255,0.09);color:#cfd3da;font:11px ui-monospace,monospace;text-decoration:none;letter-spacing:.1em">&lt; MENU</a>
+<a id="menuLink" href="../../index.html" title="Back to the main menu">← Menu</a>
 </body>
 </html>
