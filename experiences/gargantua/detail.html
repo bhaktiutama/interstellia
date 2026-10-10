@@ -73,6 +73,7 @@
   .orb .tog .btn { padding: 5px 12px; font-size: 12px; }
   .orb .hcap { position: absolute; left: 0; right: 0; bottom: -64px; margin: 0; text-align: center; font-size: 13.5px; color: #c9c4c2; min-height: 42px; }
   .orb .turn { position: absolute; top: 4px; right: 0; font-size: 12px; color: var(--muted); text-align: right; }
+  .orb .hlab { position: absolute; left: 0; right: 0; top: 90%; transform: translateY(-82%); text-align: center; font: 650 10.5px/1 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: var(--muted); pointer-events: none; }
   .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-top: 34px; }
   .stat { background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015)); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
   .stat b { display: block; font-size: 23px; color: var(--ac); font-variant-numeric: tabular-nums; line-height: 1.2; }
@@ -198,6 +199,7 @@
     <div class="orb rv" style="--d:.2s">
       <canvas id="cvHero" role="img" aria-label="Ray-traced black hole with accretion disk"></canvas>
       <div class="turn" id="heroTurn"></div>
+      <div class="hlab" id="heroLab" aria-hidden="true"></div>
       <div class="tog"><button class="btn on" data-hv="film" type="button" data-t="h_film"></button><button class="btn" data-hv="phys" type="button" data-t="h_phys"></button></div>
       <p class="hcap" id="heroCap"></p>
     </div>
@@ -730,7 +732,7 @@ function geodesic(r0, L, E = 1, tmax = 6000, rcap = 1, rout = 60) {
    Peta piksel (kena piringan / tertangkap / langit) dihitung ulang hanya saat kemiringan pandang berubah;
    tiap frame cukup memutar tekstur piringan (Kepler) dan langit (kamera mengitari).
    ===================================================================== */
-const HB = { mode: 'film', inc: 82 * DEG, psi: 0.6, t: 0, NA: 1300, AMAX: 40 * DEG, TANF: Math.tan(26 * DEG), tr: null, map: null, res: 0, drag: null, dirty: true, lowUntil: 0, auto: 0.05, k: 6 };
+const HB = { mode: 'film', inc: 82 * DEG, psi: 0.6, t: 0, NA: 1300, AMAX: 40 * DEG, TANF: Math.tan(26 * DEG), tr: null, map: null, res: 0, drag: null, dirty: true, lowUntil: performance.now() + 700, auto: 0.05, k: 6, lab: '' };   // lowUntil awal: frame pertama N 130, resolusi penuh menyusul
 function heroTrace() {
   HB.tr = [];
   for (let i = 0; i < HB.NA; i++) {
@@ -743,12 +745,16 @@ function heroTrace() {
       if (r < 1) { cap = true; break; }
       if (r > 32 && x * vx + y * vy > 0) break;
       const h = Math.min(0.6, Math.max(0.006, 0.03 * r)) * Math.min(1, (r - 0.6) / 1.2);
-      const acc = (px, py) => { const q = px * px + py * py, k = -1.5 * hh / (q * q * Math.sqrt(q)); return [k * px, k * py]; };
-      const a1 = acc(x, y), a2 = acc(x + vx * h / 2, y + vy * h / 2), v2x = vx + a1[0] * h / 2, v2y = vy + a1[1] * h / 2;
-      const a3 = acc(x + v2x * h / 2, y + v2y * h / 2), v3x = vx + a2[0] * h / 2, v3y = vy + a2[1] * h / 2, a4 = acc(x + v3x * h, y + v3y * h);
-      const v4x = vx + a3[0] * h, v4y = vy + a3[1] * h;
+      // RK4 dengan a = -1,5 h^2 p / r^5, ditulis tanpa array sementara (sama persis dengan versi acc() lama)
+      let px = x, py = y, q = px * px + py * py, k = -1.5 * hh / (q * q * Math.sqrt(q)); const a1x = k * px, a1y = k * py;
+      px = x + vx * h / 2; py = y + vy * h / 2; q = px * px + py * py; k = -1.5 * hh / (q * q * Math.sqrt(q)); const a2x = k * px, a2y = k * py;
+      const v2x = vx + a1x * h / 2, v2y = vy + a1y * h / 2;
+      px = x + v2x * h / 2; py = y + v2y * h / 2; q = px * px + py * py; k = -1.5 * hh / (q * q * Math.sqrt(q)); const a3x = k * px, a3y = k * py;
+      const v3x = vx + a2x * h / 2, v3y = vy + a2y * h / 2;
+      px = x + v3x * h; py = y + v3y * h; q = px * px + py * py; k = -1.5 * hh / (q * q * Math.sqrt(q)); const a4x = k * px, a4y = k * py;
+      const v4x = vx + a3x * h, v4y = vy + a3y * h;
       x += h / 6 * (vx + 2 * v2x + 2 * v3x + v4x); y += h / 6 * (vy + 2 * v2y + 2 * v3y + v4y);
-      vx += h / 6 * (a1[0] + 2 * a2[0] + 2 * a3[0] + a4[0]); vy += h / 6 * (a1[1] + 2 * a2[1] + 2 * a3[1] + a4[1]);
+      vx += h / 6 * (a1x + 2 * a2x + 2 * a3x + a4x); vy += h / 6 * (a1y + 2 * a2y + 2 * a3y + a4y);
     }
     const n = Math.hypot(vx, vy);
     HB.tr.push({ u: Float32Array.from(U), w: Float32Array.from(W), cap, du: vx / n, dw: vy / n });
@@ -789,55 +795,66 @@ function heroMap(N) {
     const d = [t.du * o[0] + t.dw * e[0], t.du * o[1] + t.dw * e[1], t.du * o[2] + t.dw * e[2]];
     dir[k * 3] = d[0]; dir[k * 3 + 1] = d[1]; dir[k * 3 + 2] = d[2];
   }
-  const om = new Float32Array(N * N), tn = new Float32Array(N * N);
-  for (let k = 0; k < N * N; k++) if (kind[k] === 1) { om[k] = Math.sqrt(M / rr[k] ** 3); tn[k] = Tn(rr[k]); }
-  HB.map = { N, kind, rr, ph, sh, gg, dir, om, tn }; HB.res = N; HB.dirty = false;
+  // konstanta per piksel piringan, dihitung sekali (heroPaint tiap frame tinggal pola berputar): om, log r, tepi, warna dan
+  // pengali intensitas mode film (cF, aF) dan fisika (cP, aP); aX = k_exposure * (0,05 + 2,2 tn^3) * faktor mode
+  const om = new Float32Array(N * N), tn = new Float32Array(N * N), lr = new Float32Array(N * N), edge = new Float32Array(N * N);
+  const cF = new Float32Array(N * N * 3), cP = new Float32Array(N * N * 3), aF = new Float32Array(N * N), aP = new Float32Array(N * N);
+  for (let k = 0; k < N * N; k++) if (kind[k] === 1) {
+    const r = rr[k], t = Tn(r), s = sh[k], ib = 0.05 + 2.2 * t * t * t, f = FR[Math.min(255, Math.round(t * 255))], b = bbAt(Math.max(800, 7500 * t * s));
+    om[k] = Math.sqrt(M / r ** 3); tn[k] = t; lr[k] = Math.log(r); edge[k] = sstep(0, 0.3, r - 3) * (1 - sstep(12 - 0.35 * 9, 12, r));
+    cF[k * 3] = f[0]; cF[k * 3 + 1] = f[1]; cF[k * 3 + 2] = f[2]; cP[k * 3] = b[0]; cP[k * 3 + 1] = b[1]; cP[k * 3 + 2] = b[2];
+    aF[k] = 0.9 * ib * gg[k] * gg[k]; aP[k] = 0.35 * ib * 0.7 * s ** 4;
+  }
+  HB.map = { N, kind, rr, ph, sh, gg, dir, om, tn, lr, edge, cF, cP, aF, aP }; HB.res = N; HB.dirty = false;
   HB.img = new ImageData(N, N); HB.off = document.createElement('canvas'); HB.off.width = N; HB.off.height = N;
+  HB.glow = document.createElement('canvas'); HB.glow.width = HB.glow.height = Math.max(32, Math.round(N / 2));
 }
 function hHash(x, y, z) { let h = (x * 374761393 + y * 668265263 + z * 1274126177) | 0; h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; return (h >>> 0) / 4294967296; }
+const GAM = new Uint8ClampedArray(4097); for (let i = 0; i <= 4096; i++) GAM[i] = Math.min(255, 255 * Math.pow(i / 4096, 0.8));   // = min(255, 255 x^0,8)
+const gam = (x) => (x >= 1 ? 255 : x <= 0 ? 0 : GAM[(x * 4096 + 0.5) | 0]);
 function heroPaint() {
   const m = HB.map, N = m.N, D = HB.img.data, cp = Math.cos(HB.psi), sp = Math.sin(HB.psi), phys = HB.mode === 'phys', t = HB.t, P = 80;
-  const c1 = (t / P) % 1, c2 = (t / P + 0.5) % 1, w1 = 1 - Math.abs(2 * c1 - 1), SC = 64;
+  const c1 = (t / P) % 1, c2 = (t / P + 0.5) % 1, w1 = 1 - Math.abs(2 * c1 - 1), SC = 64, t1 = c1 * P, t2 = c2 * P;
+  const C = phys ? m.cP : m.cF, A = phys ? m.aP : m.aF;
   for (let k = 0; k < N * N; k++) {
     let R = 0, G = 0, Bc = 0; const kd = m.kind[k];
     if (kd === 1) {
-      const r = m.rr[k], lr = Math.log(r), base = m.ph[k] + HB.psi;
-      const pat = (ph) => 0.55 + 0.25 * Math.sin(9 * ph + 7 * lr) + 0.2 * Math.sin(23 * ph - 11 * lr + 1.7);
-      const pt = pat(base - m.om[k] * c2 * P) * (1 - w1) + pat(base - m.om[k] * c1 * P) * w1;
-      const tn = m.tn[k], edge = sstep(0, 0.3, r - 3) * (1 - sstep(12 - 0.35 * 9, 12, r));
-      let col, I = (0.05 + 2.2 * tn * tn * tn) * (0.35 + pt * 0.9);
-      if (phys) { const s = m.sh[k]; col = bbAt(Math.max(800, 7500 * tn * s)); I *= 0.7 * s ** 4; }
-      else { col = FR[Math.min(255, Math.round(tn * 255))]; I *= m.gg[k] * m.gg[k]; }
-      const v = (1 - Math.exp(-(phys ? 0.35 : 0.9) * I)) * edge;
-      R = col[0] * v; G = col[1] * v; Bc = col[2] * v;
+      // pola dua fase (sama dengan pat() lama): 0,55 + 0,25 sin(9 ph + 7 ln r) + 0,2 sin(23 ph - 11 ln r + 1,7)
+      const lr = m.lr[k], base = m.ph[k] + HB.psi, o = m.om[k], pA = base - o * t2, pB = base - o * t1;
+      const pt = (0.55 + 0.25 * Math.sin(9 * pA + 7 * lr) + 0.2 * Math.sin(23 * pA - 11 * lr + 1.7)) * (1 - w1)
+        + (0.55 + 0.25 * Math.sin(9 * pB + 7 * lr) + 0.2 * Math.sin(23 * pB - 11 * lr + 1.7)) * w1;
+      const v = (1 - Math.exp(-A[k] * (0.35 + pt * 0.9))) * m.edge[k];
+      R = C[k * 3] * v; G = C[k * 3 + 1] * v; Bc = C[k * 3 + 2] * v;
     } else if (kd === 0) {
       const dx = m.dir[k * 3], dy = m.dir[k * 3 + 1], dz = m.dir[k * 3 + 2];
       const x = dx * cp - dy * sp, y = dx * sp + dy * cp, z = dz;                // kamera mengitari = langit berputar
       const qx = x * SC, qy = y * SC, qz = z * SC, ix = Math.floor(qx), iy = Math.floor(qy), iz = Math.floor(qz);
       const h = hHash(ix, iy, iz); let b = 0;
       if (h < 0.08) { const ox = hHash(iy, iz, ix), oy = hHash(iz, ix, iy), oz = hHash(ix + 7, iy, iz), d2 = (qx - ix - ox) ** 2 + (qy - iy - oy) ** 2 + (qz - iz - oz) ** 2; b = Math.exp(-d2 / 0.006) * (0.3 + 1.6 * hHash(ix, iz, iy) ** 3); }
-      const band = Math.exp(-((0.5 * x + 0.3 * y + 0.81 * z) ** 2) / 0.04) * 0.05;
+      const bd = 0.5 * x + 0.3 * y + 0.81 * z, band = bd * bd < 0.25 ? Math.exp(-(bd * bd) / 0.04) * 0.05 : 0;   // di luar |bd| 0,5 sumbangannya < 0,2 tingkat warna
       R = b + band * 0.9; G = b + band * 0.8; Bc = b * 1.05 + band;
     }
-    const q = k * 4; D[q] = Math.min(255, 255 * Math.pow(R, 0.8)); D[q + 1] = Math.min(255, 255 * Math.pow(G, 0.8)); D[q + 2] = Math.min(255, 255 * Math.pow(Bc, 0.8)); D[q + 3] = 255;
+    const q = k * 4; D[q] = gam(R); D[q + 1] = gam(G); D[q + 2] = gam(Bc); D[q + 3] = 255;
   }
   HB.off.getContext('2d').putImageData(HB.img, 0, 0);
 }
 const hero = panel('cvHero', (o) => {
   const c = o.ctx, w = o.w, h = o.h;
   if (!HB.tr) heroTrace();
-  const want = performance.now() < HB.lowUntil ? 130 : Math.min(300, Math.round(Math.min(w, h) * 0.62));
+  const want = performance.now() < HB.lowUntil ? 130 : Math.min(300, Math.round(Math.min(w, h) * 0.62 * Q.s));   // Q.s < 1 hanya di perangkat lambat
   if (HB.dirty || !HB.map || HB.res !== want) heroMap(want);
   heroPaint();
   c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
   c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; c.drawImage(HB.off, 0, 0, w, h);
-  c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.35; c.filter = 'blur(6px)'; c.drawImage(HB.off, 0, 0, w, h); c.restore();
-  txt(c, w / 2, h * 0.9, `VIEW FROM 22 rs · ${Math.round(90 - HB.inc / DEG)}° ABOVE THE DISK`, COL.mu, 10.5, 'center', 650);
+  // cahaya lembut: blur 6 px layar dikerjakan di kanvas setengah resolusi gambar (setara, jauh lebih murah dari blur resolusi penuh)
+  const gl = HB.glow, gx = gl.getContext('2d'); gx.clearRect(0, 0, gl.width, gl.height); gx.filter = `blur(${(6 * gl.width / w).toFixed(2)}px)`; gx.drawImage(HB.off, 0, 0, gl.width, gl.height); gx.filter = 'none';
+  c.save(); c.globalCompositeOperation = 'lighter'; c.globalAlpha = 0.35; c.drawImage(gl, 0, 0, w, h); c.restore();
+  const lab = `VIEW FROM 22 rs · ${Math.round(90 - HB.inc / DEG)}° ABOVE THE DISK`; if (HB.lab !== lab) { HB.lab = lab; $('heroLab').textContent = lab; }   // label HTML agar tetap tajam di kanvas DPR 1
 }, (dt) => {
   HB.t += dt * HB.k; if (!HB.drag) HB.psi += dt * HB.auto;
   if (HB.lowUntil && performance.now() > HB.lowUntil && !HB.drag) { HB.lowUntil = 0; HB.dirty = true; }
   return true;
-});
+}, { dprMax: 1 });   // gambar sumber <= 300 px yang memang diperbesar: backing DPR 1 cukup (DPR 2 = 4x piksel raster tiap frame)
 {
   const el = $('cvHero');
   el.addEventListener('pointerdown', (e) => { HB.drag = { x: e.clientX, y: e.clientY }; el.setPointerCapture(e.pointerId); });
@@ -963,36 +980,59 @@ const RPRE = [1.5, 2.5, B_C + 0.0003, 2.7, 4, 7];
 /* =====================================================================
    03 PIRINGAN: Doppler + pergeseran merah, tanpa pembelokan cahaya
    ===================================================================== */
-const DK = { mode: 0, elev: 20, t: 0 };
+const DK = { mode: 0, elev: 20, t: 0, tint: 0.6 };   // tint = kuat glow kedua di atas belahan jauh (warna paling mirip versi shadow per sel)
 function diskShift(r, am, ce) {   // am = sudut di piringan (0 = kanan), ce = cos tinggi pandang
   const v = vGas(r), bl = -v * Math.cos(am) * ce, D = 1 / (Math.sqrt(1 - v * v) * (1 - bl)), g = Math.sqrt(1 - 1 / r) / Math.sqrt(1 - 1 / R_REL);
   return DK.mode === 0 ? 1 : DK.mode === 1 ? D : g * D;
 }
+// sel piringan: geometri dan warna dasar dihitung sekali per (ukuran, kemiringan, mode); tiap frame hanya pola berputar
+function diskCells(w, h, cx, cy, s, se, ce) {
+  const key = [w, h, DK.elev, DK.mode].join();
+  if (DK.cache && DK.cache.key === key) return DK.cache;
+  const NR = 22, NP = 96, n = NR * NP, pts = new Float32Array(n * 8), far = new Uint8Array(n), col = [], am_ = new Float32Array(n), om_ = new Float32Array(n), lr_ = new Float32Array(n), I0 = new Float32Array(n);
+  for (let j = 0; j < NR; j++) for (let k = 0; k < NP; k++) {
+    const q = j * NP + k, r0 = 3 * 4 ** (j / NR), r1 = 3 * 4 ** ((j + 1) / NR), a0 = (k * TAU) / NP, a1 = ((k + 1) * TAU) / NP, rm = (r0 + r1) / 2, am = (a0 + a1) / 2;
+    const tn = Tn(rm), sft = diskShift(rm, am, ce);
+    let c, I = 0.05 + 2.2 * tn ** 3;
+    if (DK.mode === 0) { c = FR[Math.min(255, Math.round(tn * 255))]; const g = Math.sqrt(1 - 1 / rm) / Math.sqrt(1 - 1 / R_REL); I *= g * g; }
+    else { c = bbAt(Math.max(800, 7500 * tn * sft)); I *= 0.7 * sft ** 4; }
+    // sel dilebarkan 0,35 px ke segala arah (= garis tepi 0,7 px lama yang menutup celah antarsel, tanpa stroke)
+    const dr = 0.35 / s, b0 = r0 - dr, b1 = r1 + dr, d0 = a0 - 0.35 / (r0 * s), d1 = a1 + 0.35 / (r0 * s);
+    [[b0, d0], [b1, d0], [b1, d1], [b0, d1]].forEach(([rr, aa], m) => { pts[q * 8 + m * 2] = cx + rr * s * Math.cos(aa); pts[q * 8 + m * 2 + 1] = cy - rr * s * Math.sin(aa) * se; });
+    far[q] = Math.sin(am) >= 0 ? 1 : 0; col.push(c); am_[q] = am; om_[q] = Math.sqrt(M / rm ** 3); lr_[q] = Math.log(rm); I0[q] = I;
+  }
+  return (DK.cache = { key, n, pts, far, col, am: am_, om: om_, lr: lr_, I0 });
+}
 const disk = panel('cvDisk', (o) => {
   const c = o.ctx, w = o.w, h = o.h, cx = w / 2, cy = h * 0.54, s = Math.min(w * 0.4, h * 0.9) / 12, e = DK.elev * DEG, se = Math.sin(e), ce = Math.cos(e);
   c.clearRect(0, 0, w, h); bgStars(c, w, h, 31, 70);
-  const NR = 22, NP = 96, cells = [];
-  for (let j = 0; j < NR; j++) for (let k = 0; k < NP; k++) {
-    const r0 = 3 * 4 ** (j / NR), r1 = 3 * 4 ** ((j + 1) / NR), a0 = (k * TAU) / NP, a1 = ((k + 1) * TAU) / NP, rm = (r0 + r1) / 2, am = (a0 + a1) / 2;
-    const tn = Tn(rm), sft = diskShift(rm, am, ce), om = Math.sqrt(M / rm ** 3);
-    const pat = 0.7 + 0.3 * Math.sin(9 * (am - om * DK.t) + 7 * Math.log(rm)) * Math.sin(4 * (am - om * DK.t) - 3 * Math.log(rm) + 1);
-    let col, I = (0.05 + 2.2 * tn ** 3) * pat;
-    if (DK.mode === 0) { col = FR[Math.min(255, Math.round(tn * 255))]; const g = Math.sqrt(1 - 1 / rm) / Math.sqrt(1 - 1 / R_REL); I *= g * g; }
-    else { col = bbAt(Math.max(800, 7500 * tn * sft)); I *= 0.7 * sft ** 4; }
-    const v = Math.pow(1 - Math.exp(-1.1 * I), 0.7);
-    const pt = [[r0, a0], [r1, a0], [r1, a1], [r0, a1]].map(([rr, aa]) => [cx + rr * s * Math.cos(aa), cy - rr * s * Math.sin(aa) * se]);
-    cells.push([Math.sin(am), pt, cssRGB(col, v)]);
+  const C = diskCells(w, h, cx, cy, s, se, ce), st = new Array(C.n);
+  for (let q = 0; q < C.n; q++) {
+    const ph = C.am[q] - C.om[q] * DK.t, lr = C.lr[q];
+    const pat = 0.7 + 0.3 * Math.sin(9 * ph + 7 * lr) * Math.sin(4 * ph - 3 * lr + 1);
+    st[q] = cssRGB(C.col[q], Math.pow(1 - Math.exp(-1.1 * C.I0[q] * pat), 0.7));
   }
-  const drawCells = (far) => { for (const [sn, pt, col] of cells) { if ((sn >= 0) !== far) continue; c.fillStyle = col; c.strokeStyle = col; c.lineWidth = 0.7; c.beginPath(); c.moveTo(pt[0][0], pt[0][1]); for (let i = 1; i < 4; i++) c.lineTo(pt[i][0], pt[i][1]); c.closePath(); c.fill(); c.stroke(); } };
-  glow(c, 'rgba(255,190,120,0.4)', 18); drawCells(true); noGlow(c);
+  const drawCells = (g, far) => { for (let q = 0; q < C.n; q++) { if (C.far[q] !== far) continue; const P = C.pts, b = q * 8; g.fillStyle = st[q]; g.beginPath(); g.moveTo(P[b], P[b + 1]); g.lineTo(P[b + 2], P[b + 3]); g.lineTo(P[b + 4], P[b + 5]); g.lineTo(P[b + 6], P[b + 7]); g.closePath(); g.fill(); } };
+  // belahan jauh + cahaya: dulu shadowBlur 18 per sel (~1.050 blur per frame); kini sel digambar ke kanvas lepas, lalu satu blur
+  // setengah resolusi (sigma 9 px = shadowBlur 18) diwarnai rgba(255,190,120,0.4) di bawahnya
+  const F = DK.F || (DK.F = document.createElement('canvas')), G = DK.G || (DK.G = document.createElement('canvas'));
+  if (F.width !== o.el.width || F.height !== o.el.height) { F.width = o.el.width; F.height = o.el.height; }
+  const gw = Math.max(16, Math.round(w / 2)), gh = Math.max(16, Math.round(h / 2)); if (G.width !== gw || G.height !== gh) { G.width = gw; G.height = gh; }
+  const f = F.getContext('2d'); f.setTransform(o.d, 0, 0, o.d, 0, 0); f.clearRect(0, 0, w, h); drawCells(f, 1);
+  const g = G.getContext('2d'); g.clearRect(0, 0, gw, gh); g.filter = `blur(${(9 * gw / w).toFixed(2)}px)`; g.drawImage(F, 0, 0, gw, gh); g.filter = 'none';
+  g.globalCompositeOperation = 'source-in'; g.fillStyle = 'rgba(255,190,120,0.4)'; g.fillRect(0, 0, gw, gh); g.globalCompositeOperation = 'source-over';
+  // dulu shadow tiap sel juga menimpa sel tetangga yang sudah tergambar (belahan jauh tampak lebih jingga): ditiru dengan glow
+  // kedua di atas belahan jauh; belahan dekat digambar sesudahnya tanpa glow, sama seperti dulu
+  c.drawImage(G, 0, 0, w, h); c.drawImage(F, 0, 0, w, h); c.globalAlpha = DK.tint; c.drawImage(G, 0, 0, w, h); c.globalAlpha = 1;
   c.fillStyle = '#000'; c.beginPath(); c.arc(cx, cy, s * 1.0, 0, TAU); c.fill();
-  drawCells(false);
+  drawCells(c, 0);
   // panah arah gas
   if (DK.mode) { pillC(c, 14, h - 18, 'coming toward you', COL.te, 10.5); pillC(c, w - 14, h - 18, 'moving away', COL.red, 10.5, 'right'); }
   corner(c, `DISK SEEN ${DK.elev}° ABOVE ITS PLANE · NO LENSING`);
   cornerR(c, w, ['FILM MODE', 'DOPPLER', 'DOPPLER + REDSHIFT'][DK.mode], DK.mode ? COL.te : COL.ac);
 }, (dt) => { DK.t += dt * 6; return true; });
 function updDisk() {
+  DK.cache = null;
   const ce = Math.cos(DK.elev * DEG), v = vGas(3) * ce;
   const ratio = DK.mode ? ((1 + v) / (1 - v)) ** 4 : 1;
   $('dEo').textContent = fmt(DK.elev, 0) + '°'; setP($('dE'));
