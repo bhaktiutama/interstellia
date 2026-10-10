@@ -9,7 +9,10 @@ Bagian:
   vr0  halaman uji docs/app/vr/uji-webxr.html: sesi terbuka, framebuffer 2 mata, warna latar beda per mata, kepala dan tombol terbaca
   vr1  prototipe jalur render docs/app/vr/uji-jalur-render.html (shared/vr.js): kedua mata tergambar lewat rantai efek layar,
        paralaks antar mata, belok patah, menu VR (X) tergambar, keluar VR
-Bagian experience ditambahkan oleh tahap VR2-VR4 (lihat BAGIAN).
+  vr2  Gargantua (experiences/gargantua): tombol Masuk VR, kedua mata tergambar (ray tracer + efek layar ke viewport mata),
+       kokpit misi berparalaks, kepala memutar pandangan, stik kiri = W (MIS.keys), picu kanan = suar, belok patah,
+       notifikasi di headset, menu VR, keluar VR lalu loop layar jalan lagi
+Bagian experience lain ditambahkan oleh tahap VR3-VR4 (lihat BAGIAN).
 """
 import asyncio, json, os, pathlib, sys
 from playwright.async_api import async_playwright
@@ -73,7 +76,65 @@ async def vr1(b, out):
     out[f"vr1: tanpa error halaman {pg.errs[:2]}"] = not pg.errs
     await pg.close()
 
-BAGIAN = {'vr0': vr0, 'vr1': vr1}
+async def tunggu_frame(pg, n=6):
+    await pg.evaluate(f'(async () => {{ const f0 = __xrTiruan.frames; while (__xrTiruan.frames < f0 + {n}) await new Promise((r) => setTimeout(r, 30)); }})()')
+
+async def vr2(b, out):
+    pg = await buka(b, 'experiences/gargantua/index.html', '?lang=id')
+    await pg.wait_for_function('window.__gargantua !== undefined && window.VRKIT && VRKIT.ok', timeout=60000)
+    out['vr2: tombol Masuk VR muncul'] = await pg.evaluate('!!document.getElementById("vrBtn")')
+    await pg.evaluate('VRKIT.enter()')
+    await pg.wait_for_function('__gargantua.GV.on && __xrTiruan.frames > 8', timeout=60000)
+    await tunggu_frame(pg)
+    m = await pg.evaluate(MATA)
+    G = await pg.evaluate('({ rs: __gargantua.GV.rs, sw: 0 })')
+    out[f"vr2: kedua mata tergambar di luar misi (rata-rata {m['L']['mean']:.0f} / {m['R']['mean']:.0f}, terang {m['L']['lit']:.2f} / {m['R']['lit']:.2f}, skala {G['rs']})"] = m['L']['mean'] > 3 and m['R']['mean'] > 3 and m['L']['lit'] > 0.02
+    f0 = await pg.evaluate('__gargantua.state.frame')
+    await tunggu_frame(pg, 4)
+    out['vr2: dunia berjalan dari loop headset (tickWorld)'] = await pg.evaluate(f'__gargantua.state.frame > {f0} && __gargantua.GV.idle')
+    # misi di kokpit: interior dekat = paralaks besar antar mata
+    await pg.evaluate("const G = __gargantua; G.startMission('polar'); G.SHIP.view = 'cockpit'")
+    await tunggu_frame(pg)
+    m = await pg.evaluate(MATA)
+    out[f"vr2: kokpit misi tergambar (rata-rata {m['L']['mean']:.0f}), beda antar mata {m['diff']:.1f} (paralaks interior)"] = m['L']['mean'] > 3 and m['diff'] > 2
+    a = await pg.evaluate('__xrTiruan.readEye(0).rgba')
+    await pg.evaluate('__xrTiruan.head.yaw = 1.2'); await tunggu_frame(pg)
+    bb = await pg.evaluate('__xrTiruan.readEye(0).rgba')
+    d = sum(abs(x - y) for x, y in zip(a, bb)) / (len(a) / 4)
+    await pg.evaluate('__xrTiruan.head.yaw = 0')
+    out[f"vr2: kepala menoleh 69 derajat mengubah gambar mata kiri (beda {d:.1f})"] = d > 5
+    await pg.evaluate('__xrTiruan.axes("left", 0, -0.9)'); await tunggu_frame(pg, 3)
+    w = await pg.evaluate('__gargantua.MIS.keys.has("KeyW")')
+    await pg.evaluate('__xrTiruan.axes("left", 0, 0)'); await tunggu_frame(pg, 3)
+    w2 = await pg.evaluate('__gargantua.MIS.keys.has("KeyW")')
+    out['vr2: stik kiri maju = W (dorong) selama ditahan, lepas = berhenti'] = w and not w2
+    n0 = await pg.evaluate('__gargantua.REL.flares.length')
+    await pg.evaluate('__xrTiruan.pad("right", 0, 1)'); await tunggu_frame(pg, 3); await pg.evaluate('__xrTiruan.pad("right", 0, 0)'); await tunggu_frame(pg, 2)
+    n1 = await pg.evaluate('__gargantua.REL.flares.length')
+    out[f"vr2: picu kanan = suar ({n0} -> {n1}), notifikasi di headset {await pg.evaluate('VRKIT.noteOn()')}"] = n1 == min(4, n0 + 1) and await pg.evaluate('VRKIT.noteOn()')
+    await pg.evaluate('__xrTiruan.axes("right", 0.9, 0)'); await tunggu_frame(pg, 4); await pg.evaluate('__xrTiruan.axes("right", 0, 0)'); await tunggu_frame(pg, 2)
+    yaw = await pg.evaluate('__gargantua.GV.yaw')
+    out[f"vr2: belok patah stik kanan ({yaw * 180 / 3.14159:.0f} derajat)"] = abs(abs(yaw * 180 / 3.14159) - 30) < 1
+    await pg.evaluate('__xrTiruan.pad("right", 4, 1)'); await tunggu_frame(pg, 3); await pg.evaluate('__xrTiruan.pad("right", 4, 0)'); await tunggu_frame(pg, 2)
+    out['vr2: A mengganti tampilan (kokpit -> relai)'] = await pg.evaluate('__gargantua.SHIP.view === "relay"')
+    # menu: beda gambar dengan / tanpa panel dibanding beda dua frame tanpa panel (adegan tetap bergerak)
+    BEDA = '(a, b) => { let d = 0; for (let k = 0; k < a.length; k += 4) d += Math.abs(a[k] - b[k]) + Math.abs(a[k + 1] - b[k + 1]) + Math.abs(a[k + 2] - b[k + 2]); return d / (a.length / 4); }'
+    rows = await pg.evaluate('(VRKIT.drawPanel(), VRKIT.panel.rows.map((r) => r.label()))')   # baris menu selama misi
+    await pg.evaluate('__gargantua.stopMission(); __gargantua.state.paused = true'); await tunggu_frame(pg, 3)   # luar misi + jeda: adegan diam
+    await pg.evaluate('window.__fa = __xrTiruan.readEye(0).rgba'); await tunggu_frame(pg, 2)
+    await pg.evaluate('window.__fb = __xrTiruan.readEye(0).rgba')
+    await pg.evaluate('__xrTiruan.pad("left", 4, 1)'); await tunggu_frame(pg, 2); await pg.evaluate('__xrTiruan.pad("left", 4, 0)'); await tunggu_frame(pg, 2)
+    d0, d1 = await pg.evaluate(f'(() => {{ const D = {BEDA}, c = __xrTiruan.readEye(0).rgba; return [D(__fa, __fb), D(__fb, c)]; }})()')
+    out[f"vr2: X membuka menu VR (beda gambar {d1:.1f} vs antar frame {d0:.1f}), baris {rows[4:7]}"] = await pg.evaluate('VRKIT.menu') and d1 > 3 * d0 + 5 and any('GX-01' in r for r in rows)
+    await pg.evaluate('VRKIT.exit()'); await pg.wait_for_timeout(300)
+    f1 = await pg.evaluate('__gargantua.state.frame')
+    try: await pg.wait_for_function(f'__gargantua.state.frame > {f1} + 1', timeout=30000)   # SwiftShader: frame layar sekitar 1 s
+    except Exception: pass
+    out['vr2: keluar VR, loop layar jalan lagi, tombol misi VR dilepas'] = await pg.evaluate(f'!__gargantua.GV.on && __gargantua.state.frame > {f1} + 1 && !VRKIT.on && !__gargantua.MIS.keys.size')
+    out[f"vr2: tanpa error halaman {pg.errs[:2]}"] = not pg.errs
+    await pg.close()
+
+BAGIAN = {'vr0': vr0, 'vr1': vr1, 'vr2': vr2}
 
 async def main():
     pilih = [a for a in sys.argv[1:] if a in BAGIAN] or list(BAGIAN)

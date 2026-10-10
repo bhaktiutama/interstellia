@@ -129,6 +129,7 @@
 <script src="assets/gx01.data.js"></script>
 <script src="../../shared/post.js"></script>
 <script src="../../shared/camera.js"></script>
+<script src="../../shared/vr.js"></script>
 
 <script>
 'use strict';
@@ -192,6 +193,7 @@ out vec4 outColor;
 uniform vec2  uRes;
 uniform vec3  uCamPos, uCamFwd, uCamRight, uCamUp;
 uniform float uTanHalf, uPixAngle;
+uniform float uVR; uniform vec2 uTanC, uTanS;   // VR2: frustum mata tidak simetris (tangen pusat dan setengah lebar), 0 = desktop
 uniform float uTime;
 uniform int   uMaxSteps, uOct;
 uniform float uStepK, uEscape;
@@ -418,6 +420,7 @@ vec3 sky(vec3 d) {
 void main() {
   vec2 uv = (2.0 * gl_FragCoord.xy - uRes) / uRes.y;
   vec3 dir = normalize(uCamFwd + (uv.x * uCamRight + uv.y * uCamUp) * uTanHalf);
+  if (uVR > 0.5) { vec2 tn = uTanC + (2.0 * gl_FragCoord.xy / uRes - 1.0) * uTanS; dir = normalize(uCamFwd + tn.x * uCamRight + tn.y * uCamUp); }
 
   vec3 pos = uCamPos;
   vec3 vel = dir;
@@ -723,10 +726,10 @@ void main() {
 const DUST_FS = COMMON + `
 precision mediump sampler3D;
 in vec2 vUv; out vec4 o;
-uniform sampler3D uNoise; uniform vec3 uSrc, uTint; uniform float uDust, uTime, uTanHalf, uAsp, uEnc;
+uniform sampler3D uNoise; uniform vec3 uSrc, uTint; uniform float uDust, uTime, uTanHalf, uAsp, uEnc; uniform vec2 uTanC;
 void main() {
   vec2 q = vUv * 2.0 - 1.0;
-  vec3 d = normalize(vec3(q.x * uTanHalf * uAsp, q.y * uTanHalf, -1.0));
+  vec3 d = normalize(vec3(uTanC.x + q.x * uTanHalf * uAsp, uTanC.y + q.y * uTanHalf, -1.0));   // VR2: uTanC pusat frustum mata (0 di layar)
   float c = dot(d, uSrc);
   vec3 e1 = normalize(cross(uSrc, abs(uSrc.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0))), e2 = cross(uSrc, e1);
   vec3 pp = d - uSrc * c;
@@ -975,6 +978,12 @@ const ID = {
   'Photo': 'Foto',
   'All sounds are synthesized. Space carries no sound: cabin, thruster and impact sounds travel through the hull; the disk roar is distilled. Crossing the horizon makes no sound.': 'Semua suara disintesis. Ruang hampa tidak menghantarkan suara: suara kabin, pendorong, dan tumbukan merambat lewat badan wahana; gemuruh piringan distilisasi. Lewat horizon tidak berbunyi.',
   'Disk light': 'Cahaya piringan', 'View': 'Tampilan', 'Cockpit': 'Kokpit', 'Chase': 'Kamera luar', 'Vessel': 'Wahana',
+  // VR2: menu VR (shared/vr.js) dan notifikasi di headset
+  'View (A): {v}': 'Tampilan (A): {v}', 'Relay': 'Relai', 'Sound: {s}': 'Suara: {s}', 'on': 'nyala', 'off': 'mati',
+  'VR: left stick thrust, right stick up/down R/F, right grip main engine, right trigger flare, left trigger attitude, A view, B autopilot':
+    'VR: stik kiri dorong, stik kanan atas/bawah R/F, genggam kanan mesin utama, picu kanan suar, picu kiri sikap, A tampilan, B autopilot',
+  'VR: left stick orbits and zooms, right stick turns, A vessel and view, left stick click pauses':
+    'VR: stik kiri mengitari dan zoom, stik kanan belok, A wahana dan tampilan, klik stik kiri jeda',
 };
 const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
 function applyStaticLang() {
@@ -1098,6 +1107,10 @@ function main() {
   }
   function freeTarget(t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); }
 
+  // VR2 (docs/app/rencana-vr.md): keadaan VR. tan = [pusat x, pusat y, setengah x, setengah y] tangen frustum mata, head = pose
+  // mata di ruang acuan (sudah dikali belok rig GV.yaw), out = viewport mata di framebuffer XR untuk pass akhir. Di layar biasa
+  // tan, head, out null: semua jalur desktop sama persis seperti sebelum VR2.
+  const GV = { on: false, tan: null, head: null, out: null, yaw: 0, rs: 0.5, keys: new Set(), idle: false, ft: 0, slow: 0, fast: 0, orbit: false };
   let T = null;   // all render targets
   function buildTargets(sw, sh) {
     if (T && T.sw === sw && T.sh === sh) return;
@@ -1121,6 +1134,7 @@ function main() {
   function pass(prog, target, setup) {
     gl.useProgram(prog.p);
     if (target) { gl.bindFramebuffer(gl.FRAMEBUFFER, target.fb); gl.viewport(0, 0, target.w, target.h); }
+    else if (GV.out) { gl.bindFramebuffer(gl.FRAMEBUFFER, GV.out.fb); gl.viewport(GV.out.x, GV.out.y, GV.out.w, GV.out.h); }   // VR2: viewport mata
     else { gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, canvas.width, canvas.height); }
     setup(prog);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
@@ -1947,7 +1961,15 @@ function main() {
     const e = Math.max(-1.45, Math.min(1.45, chaseE0() + MIS.orb.pitch)), y = MIS.orb.yaw;
     return v3.add(a, [d * Math.cos(e) * Math.sin(y), d * Math.sin(e), d * Math.cos(e) * Math.cos(y)]);
   }
+  // VR2: pose kepala diterapkan pada basis pandang (kepala berputar di dalam wahana / di titik kamera). Ruang acuan: x kanan,
+  // y atas, -z depan = r, u, f basis. Mata raster (meter, berpusat di wahana) ikut bergeser; ray tracer (satuan rs) tidak.
   function viewBasis() {
+    const B = viewBase();
+    if (!GV.head) return B;
+    const m = GV.head, map = (x, y, z) => [0, 1, 2].map((k) => B.r[k] * x + B.u[k] * y - B.f[k] * z);
+    return { ...B, f: map(-m[8], -m[9], -m[10]), r: map(m[0], m[1], m[2]), u: map(m[4], m[5], m[6]), eye: B.eye ? v3.add(B.eye, map(m[12], m[13], m[14])) : B.eye };
+  }
+  function viewBase() {
     let S, obs = null;
     if (MIS.on && SHIP.view === 'relay' && REL.view) {           // G9: kamera di relai 22 rs ke garis bagi pusat dan citra wahana; seret = manual
       const V = REL.view, B0 = attTo(V.aim || v3.norm(v3.mul(V.pos, -1)), [0, 1, 0]), L = V.look;
@@ -1976,7 +1998,7 @@ function main() {
     // G3b: guncangan (arus debu + hentakan tumbukan), sudut kecil; mata tetap, jadi ray tracer dan raster tetap selaras
     const G = MIS.on && !MIS.end ? MIS.gas : null;
     const amp = G ? 0.0035 * G.dens * Math.min(1, G.v / 0.5) + 0.006 * MIS.shake : 0;
-    if (amp > 1e-5) {
+    if (amp > 1e-5 && !GV.on) {                                  // VR2: tanpa guncangan kamera di headset (mual)
       const t = MIS.clock, ya = amp * (Math.sin(t * 37.1) + 0.6 * Math.sin(t * 61.7 + 1.3)), pa = amp * (Math.sin(t * 43.3 + 0.7) + 0.5 * Math.sin(t * 71.9 + 2.1));
       const f = v3.norm(v3.add(B.f, v3.add(v3.mul(B.r, ya), v3.mul(B.u, pa)))), r = v3.norm(v3.cross(f, B.u));
       Object.assign(B, { f, r, u: v3.cross(r, f) });
@@ -2108,7 +2130,11 @@ function main() {
     const t = VR.map((row) => -v3.dot(row, B.eye));
     const mv = [rot[0], rot[1], rot[2], 0, rot[3], rot[4], rot[5], 0, rot[6], rot[7], rot[8], 0, t[0], t[1], t[2], 1];
     const n = SHIP.near[SHIP.view], fa = 4000, fy = 1 / tanHalf, asp = sw / sh;
-    const proj = [fy / asp, 0, 0, 0, 0, fy, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0];
+    let proj = [fy / asp, 0, 0, 0, 0, fy, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0];
+    if (GV.tan) {                                                       // VR2: frustum mata tidak simetris
+      const [cx, cy, hx, hy] = GV.tan;
+      proj = [1 / hx, 0, 0, 0, 0, 1 / hy, 0, 0, cx / hx, cy / hy, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0];
+    }
     return { S, VR, rot, mv, proj };
   }
   function drawShip(B, sw, sh, tanHalf) {
@@ -2190,7 +2216,8 @@ function main() {
       gl.uniform1i(p.u('uNoise'), 6); gl.uniform3fv(p.u('uSrc'), sv);
       gl.uniform3f(p.u('uTint'), 0.05 + li[0] * 0.05, 0.06 + li[1] * 0.05, 0.08 + li[2] * 0.05);
       gl.uniform1f(p.u('uDust'), k); gl.uniform1f(p.u('uTime'), MIS.clock * (0.3 + 3 * G.v)); gl.uniform1f(p.u('uTanHalf'), tanHalf);
-      gl.uniform1f(p.u('uAsp'), sw / sh); gl.uniform1f(p.u('uEnc'), FMT.enc);
+      gl.uniform1f(p.u('uAsp'), GV.tan ? GV.tan[2] / GV.tan[3] : sw / sh); gl.uniform1f(p.u('uEnc'), FMT.enc);
+      gl.uniform2f(p.u('uTanC'), GV.tan ? GV.tan[0] : 0, GV.tan ? GV.tan[1] : 0);
     });
     gl.disable(gl.BLEND);
   }
@@ -2816,7 +2843,7 @@ function main() {
   const POST_MODES = [{ name: 'High', bloom: 1, streak: 1, grain: 1, vig: 1 }, { name: 'Medium', bloom: 0.5, streak: 0, grain: 0, vig: 1 },
                       { name: 'Off', bloom: 0, streak: 0, grain: 0, vig: 0 }];
   let toastT = 0;
-  function toast(msg, sec = 2) { const el = $('#toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), sec * 1000); }
+  function toast(msg, sec = 2) { if (GV.on) VRKIT.toast(msg, sec); const el = $('#toast'); el.textContent = msg; el.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), sec * 1000); }
   function cycleQuality() {
     const order = ['ultra', 'high', 'medium', 'low'], q = order[(order.indexOf(CONFIG.quality) + 1) % order.length];
     applyQuality(q); syncUI(); toast(txt('Quality: {q}').replace('{q}', txt(q[0].toUpperCase() + q.slice(1))));
@@ -3097,12 +3124,8 @@ function main() {
     state.fpsFrames = 0; state.fpsTime = 0;
   }
 
-  function frame(now) {
-    if (state.halt) return;   // debugging hook: stops the loop
-    const dt = Math.min(0.1, Math.max(0, (now - state.last) / 1000));
-    state.last = now;
-    if (CAMKIT.on && !camAllowed()) togglePhoto(false);
-    if (CAMKIT.cap) { camCapture(dt); requestAnimationFrame(frame); return; }   // K: subframe foto (layar dibekukan)
+  // langkah dunia satu frame (dipakai frame() layar dan vrFrame() headset)
+  function tickWorld(dt) {
     // G3: selama misi piringan berputar menurut waktu wajar wahana (gerak relatif gas dan wahana konsisten), lihat stepMission
     if (!state.paused && !(MIS.on && !MIS.end)) state.simTime += dt * CONFIG.timeScale * CONFIG.disk.speed;
     state.frame = (state.frame + 1) >>> 0;
@@ -3116,14 +3139,24 @@ function main() {
     }
     if (cam.autoOrbit && !state.paused && pointers.size === 0) cam.yaw += cam.orbitSpeed * dt;
 
+    state.simTime += stepMission(dt) * CONFIG.disk.speed;
+    updateAudio(dt);                                                 // G7: suara
+    relStep(dt);                                                     // G4: waktu relai, zoom dan sinar diagram
+  }
+  function frame(now) {
+    if (state.halt) return;   // debugging hook: stops the loop
+    if (GV.on) { GV.idle = true; return; }                           // VR2: headset menggerakkan loop sendiri (vrFrame)
+    const dt = Math.min(0.1, Math.max(0, (now - state.last) / 1000));
+    state.last = now;
+    if (CAMKIT.on && !camAllowed()) togglePhoto(false);
+    if (CAMKIT.cap) { camCapture(dt); requestAnimationFrame(frame); return; }   // K: subframe foto (layar dibekukan)
+
     resize();
     const sw = Math.max(8, Math.round(canvas.width * CONFIG.renderScale));
     const sh = Math.max(8, Math.round(canvas.height * CONFIG.renderScale));
     buildTargets(sw, sh);
 
-    state.simTime += stepMission(dt) * CONFIG.disk.speed;
-    updateAudio(dt);                                                 // G7: suara
-    relStep(dt);                                                     // G4: waktu relai, zoom dan sinar diagram
+    tickWorld(dt);
     const b = viewBasis();
     const q = Q();
     let tanHalf = Math.tan((b.fov || cam.fov) * Math.PI / 360);
@@ -3169,6 +3202,8 @@ function main() {
       gl.uniform3fv(p.u('uCamRight'), b.r); gl.uniform3fv(p.u('uCamUp'), b.u);
       gl.uniform1f(p.u('uTanHalf'), tanHalf);
       gl.uniform1f(p.u('uPixAngle'), 2 * tanHalf / sh);
+      gl.uniform1f(p.u('uVR'), GV.tan ? 1 : 0);                        // VR2: tanHalf = setengah tinggi frustum mata
+      if (GV.tan) { gl.uniform2f(p.u('uTanC'), GV.tan[0], GV.tan[1]); gl.uniform2f(p.u('uTanS'), GV.tan[2], GV.tan[3]); }
       gl.uniform1f(p.u('uTime'), state.simTime);
       gl.uniform1i(p.u('uMaxSteps'), b.obs ? Math.min(600, Math.round(q.steps * 1.6)) : q.steps);   // G2: sinar dari dalam horizon butuh lebih banyak langkah
       gl.uniform1f(p.u('uFall'), b.obs ? 1 : 0);
@@ -3243,9 +3278,10 @@ function main() {
       const KU = CAMKIT.U;                                           // K: kamera (mati = E.x 0)
       gl.uniform1f(p.u('uStreakAmt'), po.streak * PM.streak); gl.uniform1f(p.u('uGrain'), KU.E[0] > 0.5 ? 0 : po.grain * PM.grain);
       gl.uniform4fv(p.u('uCamE'), KU.E); gl.uniform4fv(p.u('uCamL'), KU.L); gl.uniform4fv(p.u('uCamR'), KU.R); gl.uniform4fv(p.u('uCamM'), KU.M);
-      gl.uniform2f(p.u('uCamT'), 1 / canvas.width, 1 / canvas.height);
+      const ow = GV.out ? GV.out.w : canvas.width, oh = GV.out ? GV.out.h : canvas.height;   // VR2: ukuran viewport mata
+      gl.uniform2f(p.u('uCamT'), 1 / ow, 1 / oh);
       gl.uniform1f(p.u('uVig'), po.vignette * PM.vig); gl.uniform1f(p.u('uDec'), dec);
-      gl.uniform2f(p.u('uRes'), canvas.width, canvas.height);
+      gl.uniform2f(p.u('uRes'), ow, oh);
       gl.uniform1ui(p.u('uFrame'), state.paused ? 0 : state.frame);
     });
 
@@ -3291,12 +3327,96 @@ function main() {
     }
     CAMKIT.draw();
   }
+  /* =====================================================================
+     VR2 (docs/app/rencana-vr.md): Gargantua di headset lewat shared/vr.js, backend WebGL2 mentah.
+     Tiap mata: ray tracer + wahana ke T.scene seukuran mata x GV.rs, efek layar lama, komposit ke viewport mata di framebuffer
+     XR (GV.out). Kepala memutar arah pandang di titik kamera / kursi pilot; belok rig GV.yaw dari stik kanan. Skala render
+     adaptif GV.rs (target 45 fps penuh ruang, ASW Rift menggandakan). HUD HTML (#dash, kartu akhir, tesseract) tidak tampil di
+     headset: data misi ada di layar MFD kokpit dan baris pertama menu VR; notifikasi lewat VRKIT.toast.
+     ===================================================================== */
+  function vrInput(dt) {
+    const I = VRKIT.in; if (!I) return;
+    const want = new Set();
+    if (!VRKIT.menu) {
+      if (I.down.a) cycleShipView();
+      if (I.down.ls) { state.paused = !state.paused; syncUI(); toast(txt(state.paused ? 'Paused' : 'Running'), 1.2); }
+      if (MIS.on) {                                                 // stik = tombol misi (MIS.keys), sama dengan papan ketik
+        const [mx, my] = I.move, ly = I.look[1];
+        if (my < -0.5) want.add('KeyW'); if (my > 0.5) want.add('KeyS');
+        if (mx < -0.5) want.add('KeyA'); if (mx > 0.5) want.add('KeyD');
+        if (ly < -0.5) want.add('KeyR'); if (ly > 0.5) want.add('KeyF');
+        if (I.grip > 0.5) want.add('ShiftLeft');
+        if (I.down.trig) { if (MIS.end) startMission(MIS.sc); else if (MIS.tes && !MIS.tes.locked) tesLaunch(); else fireFlare(); }
+        if (I.down.b) toggleAP();
+        if (I.down.trigL) { MIS.lock = LOCKS[(LOCKS.indexOf(MIS.lock) + 1) % LOCKS.length]; toast(txt(lockName(MIS.lock)), 2); syncUI(); }
+      } else {                                                      // luar misi: stik kiri mengitari (yaw) dan mendekat / menjauh
+        const [mx, my] = I.move;
+        if (Math.abs(mx) > 0.15) cam.yaw += mx * 0.6 * dt;
+        if (Math.abs(my) > 0.15) cam.dist = clampDist(cam.dist * Math.exp(my * 0.7 * dt));
+        VRKIT.motion(Math.hypot(Math.abs(mx) > 0.15 ? mx : 0, Math.abs(my) > 0.15 ? my : 0) * 4);
+      }
+    }
+    for (const k of GV.keys) if (!want.has(k)) MIS.keys.delete(k);
+    for (const k of want) MIS.keys.add(k);
+    GV.keys = want;
+    if (I.turn) GV.yaw += I.turn;
+  }
+  function vrFrame(t, eyes, xf, dt) {
+    vrInput(dt);
+    tickWorld(dt);
+    const q = Q(), K = VRKIT, ov = K.raw(gl);
+    for (const e of eyes) {
+      const P = e.proj, tL = (P[8] - 1) / P[0], tR = (P[8] + 1) / P[0], tB = (P[9] - 1) / P[5], tT = (P[9] + 1) / P[5];
+      GV.tan = [(tL + tR) / 2, (tB + tT) / 2, (tR - tL) / 2, (tT - tB) / 2];
+      GV.head = K.m4.mul(K.m4.yaw(GV.yaw), e.world);
+      const sw = Math.max(8, Math.round(e.vp.w * GV.rs)), sh = Math.max(8, Math.round(e.vp.h * GV.rs));
+      buildTargets(sw, sh);
+      drawScene(viewBasis(), q, sw, sh, GV.tan[3]);
+      if (e.i === 0) autoExposure(dt);                              // G3a: sekali per frame (mata kiri)
+      GV.out = { fb: K.fb, x: e.vp.x, y: e.vp.y, w: e.vp.w, h: e.vp.h };
+      drawPost();
+      GV.out = null;
+      ov.overlay(e.i, 0);
+    }
+    GV.tan = GV.head = null;
+    // skala render adaptif: rata-rata waktu frame > 1/50 s selama 1 s = turun 0,05; < 1/85 s selama 3 s = naik (paling tinggi skala preset)
+    GV.ft = GV.ft ? GV.ft * 0.95 + dt * 0.05 : dt;
+    GV.slow = GV.ft > 1 / 50 ? GV.slow + dt : 0; GV.fast = GV.ft < 1 / 85 ? GV.fast + dt : 0;
+    if (GV.slow > 1) { GV.rs = Math.max(0.3, +(GV.rs - 0.05).toFixed(2)); GV.slow = 0; }
+    if (GV.fast > 3) { GV.rs = Math.min(q.scale, +(GV.rs + 0.05).toFixed(2)); GV.fast = 0; }
+  }
+  function vrStart() {
+    VRKIT.raw(gl);                                                  // program lapisan atas dikompilasi sekali saat masuk
+    GV.on = true; GV.yaw = 0; GV.rs = Math.min(0.6, Q().scale); GV.ft = GV.slow = GV.fast = 0;
+    if (state.photo || CAMKIT.on) togglePhoto(false);
+    GV.orbit = cam.autoOrbit; cam.autoOrbit = false; state.tween = null;   // tanpa gerak kamera otomatis di headset
+    if (!$('#help').hidden) toggleHelp(false);
+    toast(txt(MIS.on ? 'VR: left stick thrust, right stick up/down R/F, right grip main engine, right trigger flare, left trigger attitude, A view, B autopilot'
+      : 'VR: left stick orbits and zooms, right stick turns, A vessel and view, left stick click pauses'), 6);
+  }
+  function vrEnd() {
+    GV.on = false; GV.tan = GV.head = GV.out = null;
+    for (const k of GV.keys) MIS.keys.delete(k);
+    GV.keys = new Set(); cam.autoOrbit = GV.orbit;
+    if (GV.idle) { GV.idle = false; state.last = performance.now(); requestAnimationFrame(frame); }
+  }
+  const vrView = () => txt(SHIP.view === 'cockpit' ? 'Cockpit' : SHIP.view === 'relay' ? 'Relay' : 'Chase');
+  VRKIT.init({ backend: 'raw', gl, lang: () => LANG, frame: vrFrame, start: vrStart, end: vrEnd,
+    items: () => [
+      { label: () => (MIS.on ? `GX-01 · r ${fmtN(Math.hypot(...MIS.x), 3)} rs · ${txt('proper time')} ${fmtTau(MIS.tau)}` : 'Gargantua'), act: () => {} },
+      { label: () => txt(MIS.on ? 'End mission (Esc)' : 'Start mission'), act: () => { if (MIS.on) { stopMission(); toast(txt('Mission ended'), 2); } else startMission(MIS.sc); } },
+      { label: () => txt('Scenario') + ': ' + txt(SCEN[MIS.sc].name), act: () => { const k = Object.keys(SCEN); MIS.sc = k[(k.indexOf(MIS.sc) + 1) % k.length]; syncUI(); } },
+      { label: () => txt('View (A): {v}').replace('{v}', SHIP.on ? vrView() : txt('Off')), act: () => cycleShipView() },
+      { label: () => txt('Quality: {q}').replace('{q}', txt(CONFIG.quality[0].toUpperCase() + CONFIG.quality.slice(1))), act: () => { cycleQuality(); GV.rs = Math.min(GV.rs, Q().scale); } },
+      { label: () => txt('Sound: {s}').replace('{s}', txt(AUDIO.on ? 'on' : 'off')), act: () => setSound() },
+    ] });
+
   window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
     SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
     misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, AE, stepMission,
     REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,
     TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound, relImage, imageDir, rayPhi, relViewInit, drawRelayView, relUpdate, relPlace,
-    FUN, funZ, funL, drawFunnel, drawDash, bhRadiant, misGas };   // debugging hook
+    FUN, funZ, funL, drawFunnel, drawDash, bhRadiant, misGas, GV, vrFrame, tickWorld };   // debugging hook
   PROFKIT.mark('Siap'); PROFKIT.ready();                             // P0: alat ukur (?prof=1)
   requestAnimationFrame(frame);
 }

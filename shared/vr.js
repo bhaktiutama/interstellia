@@ -21,6 +21,9 @@
    Kenyamanan: VRKIT.motion(v) host melapor kecepatan gerak semu (m/s) -> VRKIT.vig 0..1 (kuat vinyet terowongan);
      belok patah 30 / 45 derajat atau halus; pusatkan ulang (Y) -> VRKIT.recenter = { yaw, p } dikurangkan dari pose kepala.
    Setelan di localStorage 'lazarus.vr': { turn: 30 | 45 | 0 (halus), vig: 0 | 1 | 2, scale: 0,7 | 0,85 | 1 }.
+   Notifikasi: VRKIT.toast(teks, detik) = label kecil 1,5 m di depan mata, sedikit di bawah tengah (pengganti toast HTML yang
+     tidak terlihat di headset). Lapisan atas: VRKIT.three(THREE).overlay(...) untuk three.js, VRKIT.raw(gl).overlay(i, gelap)
+     untuk WebGL2 mentah (Gargantua): panel menu, sinar, notifikasi, vinyet ke viewport mata di VRKIT.fb.
    ===================================================================== */
 (function () {
   'use strict';
@@ -53,6 +56,13 @@
     yaw(a, o = new Float32Array(16)) { const c = Math.cos(a), s = Math.sin(a); o.set([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]); return o; },
     pt(m, p) { return [m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]]; },
     dir(m, d) { return [m[0] * d[0] + m[4] * d[1] + m[8] * d[2], m[1] * d[0] + m[5] * d[1] + m[9] * d[2], m[2] * d[0] + m[6] * d[1] + m[10] * d[2]]; },
+    // tangen frustum mata [kiri, kanan, bawah, atas] dari matriks proyeksi XR, dan proyeksi yang sama dengan near / far host
+    // (three.js host merender dengan renderer.xr mati, jadi depthNear / depthFar sesi tidak ikut kamera host)
+    tans(P) { return [(P[8] - 1) / P[0], (P[8] + 1) / P[0], (P[9] - 1) / P[5], (P[9] + 1) / P[5]]; },
+    projNF(P, n, f, o = new Float32Array(16)) {
+      const [l, r, b, t] = M4.tans(P);
+      o.set([2 / (r - l), 0, 0, 0, 0, 2 / (t - b), 0, 0, (r + l) / (r - l), (t + b) / (t - b), -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0]); return o;
+    },
   };
   // pose ruang acuan setelah pusatkan ulang: R(-yaw0) * (pose - p0)
   function recentered(m) {
@@ -236,6 +246,29 @@
     if (P.hover !== old) P.dirty = true;
     return { m: P.m, w: PANEL.w, h: PANEL.h };
   };
+  // ---------- notifikasi di headset ----------
+  const TW = 768, TH = 96, TOAST = { w: 0.6, h: 0.075, z: 1.5, y: -0.28 };
+  K.note = { canvas: null, text: '', until: 0, dirty: false };
+  K.toast = function (msg, sec = 2) { const N = K.note; N.text = String(msg || ''); N.until = performance.now() + sec * 1000; N.dirty = true; };
+  K.noteOn = function () { return K.note.text && performance.now() < K.note.until; };
+  K.drawNote = function () {
+    const N = K.note; if (!N.canvas) { N.canvas = document.createElement('canvas'); N.canvas.width = TW; N.canvas.height = TH; }
+    const g = N.canvas.getContext('2d'); g.clearRect(0, 0, TW, TH);
+    g.font = '30px system-ui, sans-serif';
+    let t = N.text; while (t.length > 4 && g.measureText(t).width > TW - 48) t = t.slice(0, -2);
+    if (t !== N.text) t = t.replace(/.$/, '…');
+    const w = Math.min(TW, g.measureText(t).width + 48);
+    g.fillStyle = 'rgba(12,14,18,0.85)'; g.fillRect((TW - w) / 2, 8, w, TH - 16);
+    g.strokeStyle = '#e8b765'; g.lineWidth = 2; g.strokeRect((TW - w) / 2 + 1, 9, w - 2, TH - 18);
+    g.fillStyle = '#f1ede4'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(t, TW / 2, TH / 2 + 1);
+    N.dirty = false; return N.canvas;
+  };
+  // pose notifikasi ruang acuan untuk mata i: ikut kepala (mata i dikali geser ke depan-bawah)
+  K.notePose = function (i) {
+    const e = K.eyes[i]; if (!e) return null;
+    return M4.mul(e.world, new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, TOAST.y, -TOAST.z, 1]));
+  };
+
   function panelClick() { const P = K.panel; if (P.hover >= 0 && P.rows[P.hover]) { P.rows[P.hover].act(); P.dirty = true; } }
 
   // ---------- three.js: target mata, panel, sinar, vinyet ----------
@@ -264,7 +297,10 @@
     const rayG = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, 0, -1], 3));
     const ray = new THREE.Line(rayG, new THREE.LineBasicMaterial({ color: 0xe8b765, depthTest: false, transparent: true, toneMapped: false }));
     ray.renderOrder = 1e6 + 1; ray.matrixAutoUpdate = false; ray.frustumCulled = false;
-    const ui = new THREE.Scene(); ui.add(panel, ray);
+    const noteTex = new THREE.CanvasTexture(K.drawNote()); noteTex.colorSpace = THREE.SRGBColorSpace;
+    const note = new THREE.Mesh(new THREE.PlaneGeometry(TOAST.w, TOAST.h), new THREE.MeshBasicMaterial({ map: noteTex, toneMapped: false, depthTest: false, transparent: true }));
+    note.renderOrder = 1e6 + 2; note.matrixAutoUpdate = false; note.frustumCulled = false;
+    const ui = new THREE.Scene(); ui.add(panel, ray, note);
     const vig = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: { uK: { value: 0 }, uDark: { value: 0 } }, transparent: true, depthTest: false, depthWrite: false,
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }', fragmentShader: K.VIG_FS }));
     vig.frustumCulled = false;
@@ -272,18 +308,23 @@
     const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), m4 = new THREE.Matrix4(), cam = new THREE.PerspectiveCamera();
     cam.matrixAutoUpdate = false; cam.matrixWorldAutoUpdate = false; ui.matrixWorldAutoUpdate = false;   // matriks diisi manual tiap mata
     K._three = {
-      panel, ray, ui, vig, vigS,
+      panel, ray, note, ui, vig, vigS,
       // gambar panel menu + sinar ke mata i (setelah pass akhir), rig = Matrix4 dunia dari ruang acuan
       overlay(renderer, i, rig, dark = 0) {
         const e = K.eyes[i], t = K.eyeTarget(i); if (!e || !t) return;
         const ac = renderer.autoClear; renderer.autoClear = false;      // lapisan di atas gambar mata (tanpa membersihkan)
         renderer.setRenderTarget(t);
-        const pp = K.panelPose();
-        if (pp) {
-          if (P.dirty) { K.drawPanel(); panelTex.needsUpdate = true; }
-          panel.matrix.copy(rig).multiply(m4.fromArray(pp.m)); panel.matrixWorld.copy(panel.matrix); panel.visible = true;
+        const pp = K.panelPose(), nOn = K.noteOn();
+        panel.visible = false; ray.visible = false; note.visible = false;
+        if (nOn) {
+          if (K.note.dirty) { K.drawNote(); noteTex.needsUpdate = true; }
+          note.matrix.copy(rig).multiply(m4.fromArray(K.notePose(i))); note.matrixWorld.copy(note.matrix); note.visible = true;
+        }
+        if (pp || nOn) {
+          if (pp && P.dirty) { K.drawPanel(); panelTex.needsUpdate = true; }
+          if (pp) { panel.matrix.copy(rig).multiply(m4.fromArray(pp.m)); panel.matrixWorld.copy(panel.matrix); panel.visible = true; }
           const I = K.in;
-          if (I && I.ray) { ray.matrix.copy(rig).multiply(m4.fromArray(I.ray.m)).multiply(new THREE.Matrix4().makeScale(1, 1, P.hit ? P.hit[3] : 3)); ray.matrixWorld.copy(ray.matrix); ray.visible = true; } else ray.visible = false;
+          if (pp && I && I.ray) { ray.matrix.copy(rig).multiply(m4.fromArray(I.ray.m)).multiply(new THREE.Matrix4().makeScale(1, 1, P.hit ? P.hit[3] : 3)); ray.matrixWorld.copy(ray.matrix); ray.visible = true; } else ray.visible = false;
           cam.matrixWorld.copy(rig).multiply(m4.fromArray(e.world)); cam.matrixWorldInverse.copy(cam.matrixWorld).invert(); cam.projectionMatrix.fromArray(e.proj); cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
           renderer.render(ui, cam);
         }
@@ -292,5 +333,76 @@
       },
     };
     return K._three;
+  };
+
+  // ---------- WebGL2 mentah (Gargantua): panel, sinar, notifikasi, vinyet ----------
+  // Satu program ES3 tanpa atribut (gl_VertexID): mode 0 = kuad bertekstur di ruang acuan, 1 = garis sinar, 2 = vinyet layar penuh.
+  // Keadaan GL yang disentuh disimpan lalu dikembalikan (program, VAO, tekstur unit 0, blend, depth, cull, scissor, unpack).
+  K.raw = function (gl) {
+    if (K._raw) return K._raw;
+    const VS = `#version 300 es
+      uniform mat4 uM; uniform int uMode; uniform vec2 uSz; out vec2 vUv;
+      void main() {
+        vec2 q = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
+        if (uMode == 2) { vUv = q; gl_Position = vec4(q * 2.0 - 1.0, 0.0, 1.0); return; }
+        if (uMode == 1) { vUv = vec2(0.0); gl_Position = uM * vec4(0.0, 0.0, -uSz.x * float(gl_VertexID), 1.0); return; }
+        vUv = vec2(q.x, 1.0 - q.y); gl_Position = uM * vec4((q.x - 0.5) * uSz.x, (q.y - 0.5) * uSz.y, 0.0, 1.0);
+      }`;
+    const FS = `#version 300 es
+      precision highp float; precision highp int; uniform int uMode; uniform sampler2D uTex; uniform float uK, uDark; in vec2 vUv; out vec4 o;
+      void main() {
+        if (uMode == 0) { o = texture(uTex, vUv); return; }
+        if (uMode == 1) { o = vec4(0.91, 0.72, 0.4, 1.0); return; }
+        float r = length((vUv - 0.5) * vec2(1.0, 1.15)) * 2.0;
+        float a = max(uDark, uK * smoothstep(0.95 - 0.5 * uK, 1.25 - 0.45 * uK, r));
+        o = vec4(0.0, 0.0, 0.0, clamp(a, 0.0, 1.0));
+      }`;
+    const sh = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('VRKIT raw: ' + gl.getShaderInfoLog(s)); return s; };
+    const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('VRKIT raw: ' + gl.getProgramInfoLog(p));
+    const U = {}; for (const n of ['uM', 'uMode', 'uSz', 'uTex', 'uK', 'uDark']) U[n] = gl.getUniformLocation(p, n);
+    const vao = gl.createVertexArray();
+    const mkTex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
+    const panelTex = mkTex(), noteTex = mkTex(); let panelUp = false, noteUp = false;
+    const upload = (t, cv) => { gl.bindTexture(gl.TEXTURE_2D, t); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, cv); };
+    const clip = (e, m) => M4.mul(e.proj, M4.mul(M4.invRigid(e.world), m));
+    K._raw = {
+      overlay(i, dark = 0) {
+        const e = K.eyes[i]; if (!e || !K.fb) return;
+        const pp = K.panelPose(), nOn = K.noteOn(), vg = K.vig > 0.01 || dark > 0.001;
+        if (!pp && !nOn && !vg) return;
+        const S = { prog: gl.getParameter(gl.CURRENT_PROGRAM), vao: gl.getParameter(gl.VERTEX_ARRAY_BINDING), at: gl.getParameter(gl.ACTIVE_TEXTURE),
+          blend: gl.isEnabled(gl.BLEND), depth: gl.isEnabled(gl.DEPTH_TEST), cull: gl.isEnabled(gl.CULL_FACE), sc: gl.isEnabled(gl.SCISSOR_TEST),
+          bs: gl.getParameter(gl.BLEND_SRC_RGB), bd: gl.getParameter(gl.BLEND_DST_RGB), bsa: gl.getParameter(gl.BLEND_SRC_ALPHA), bda: gl.getParameter(gl.BLEND_DST_ALPHA),
+          fy: gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL), pm: gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL) };
+        gl.activeTexture(gl.TEXTURE0); const t0 = gl.getParameter(gl.TEXTURE_BINDING_2D);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, K.fb); gl.viewport(e.vp.x, e.vp.y, e.vp.w, e.vp.h);
+        gl.useProgram(p); gl.bindVertexArray(vao);
+        gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.SCISSOR_TEST);
+        gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.uniform1i(U.uTex, 0);
+        if (pp) {
+          if (K.panel.dirty || !panelUp) { upload(panelTex, K.drawPanel()); panelUp = true; }
+          gl.bindTexture(gl.TEXTURE_2D, panelTex); gl.uniform1i(U.uMode, 0); gl.uniform2f(U.uSz, PANEL.w, PANEL.h);
+          gl.uniformMatrix4fv(U.uM, false, clip(e, pp.m)); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          const I = K.in;
+          if (I && I.ray) { gl.uniform1i(U.uMode, 1); gl.uniform2f(U.uSz, K.panel.hit ? K.panel.hit[3] : 3, 0); gl.uniformMatrix4fv(U.uM, false, clip(e, I.ray.m)); gl.drawArrays(gl.LINES, 0, 2); }
+        }
+        if (nOn) {
+          if (K.note.dirty || !noteUp) { upload(noteTex, K.drawNote()); noteUp = true; }
+          gl.bindTexture(gl.TEXTURE_2D, noteTex); gl.uniform1i(U.uMode, 0); gl.uniform2f(U.uSz, TOAST.w, TOAST.h);
+          gl.uniformMatrix4fv(U.uM, false, clip(e, K.notePose(i))); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        }
+        if (vg) { gl.uniform1i(U.uMode, 2); gl.uniform1f(U.uK, K.vig); gl.uniform1f(U.uDark, dark); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
+        gl.bindTexture(gl.TEXTURE_2D, t0); gl.activeTexture(S.at);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, S.fy); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, S.pm);
+        gl.blendFuncSeparate(S.bs, S.bd, S.bsa, S.bda);
+        (S.blend ? gl.enable : gl.disable).call(gl, gl.BLEND); (S.depth ? gl.enable : gl.disable).call(gl, gl.DEPTH_TEST);
+        (S.cull ? gl.enable : gl.disable).call(gl, gl.CULL_FACE); (S.sc ? gl.enable : gl.disable).call(gl, gl.SCISSOR_TEST);
+        gl.useProgram(S.prog); gl.bindVertexArray(S.vao);
+      },
+    };
+    return K._raw;
   };
 })();
