@@ -1,6 +1,6 @@
 # Rencana VR: Dukungan VR PC (Oculus Rift CV1, GTX 1060)
 
-Per 9 Oktober 2026 · Status: rencana, belum dikerjakan. Berlaku untuk Gargantua, Millar's World, dan Copper Corn Station (urutan pengerjaan sama dengan urutan ini).
+Per 9 Oktober 2026 · Status 10 Oktober 2026: VR0-VR7 dikerjakan di branch `claude/performa-muat` dan lulus uji dengan XR tiruan (tanpa headset); VR8 menunggu pemilik di Rift CV1 + GTX 1060. Berlaku untuk Gargantua, Millar's World, dan Copper Corn Station (urutan pengerjaan sama dengan urutan ini).
 
 ## Ringkasan
 
@@ -131,6 +131,42 @@ Prinsip turun: pertama skala framebuffer (1,0 -> 0,7), lalu preset, lalu 45 Hz (
 | ASW tidak berlaku untuk aplikasi WebXR | Belum diketahui | Frame terlewat = gambar tersendat, bukan disisipkan | Diperiksa di VR0 dengan Oculus Debug Tool; bila tidak ada, target menjadi 90 Hz murni dengan preset lebih rendah |
 | Perubahan jalur render merusak tampilan desktop | Sedang | Melanggar "Pertahankan yang ada" | Semua cabang VR di belakang `VRKIT.on`; `tools/uji_vr.py` membandingkan render desktop dengan commit sebelum tahap |
 | NaN di shader per mata (frustum tidak simetris, `normalize()` vektor nol) | Sedang | Titik putih berkedip lewat bloom | Aturan Catatan GPU `CLAUDE.md`; uji nilai tidak valid di VR7 |
+
+## Status pengerjaan (10 Oktober 2026)
+
+Ringkasan:
+- VR0-VR7 selesai di kode, diuji otomatis dengan XR tiruan `tools/xr_tiruan.js` (SwiftShader, tanpa headset): `tools/uji_vr.py` 48 cek lulus.
+- Belum diukur di Rift CV1 / GTX 1060: FPS, kenyamanan, dan apakah Chrome / Edge membuka sesi WebXR dengan runtime Oculus (VR0 di perangkat).
+- Render desktop tidak berubah: Gargantua 0 piksel berbeda di 3 kasus (dibanding commit sebelum VR2); Copper dan Millar semua cabang VR di belakang `XRC.on` / `XRV.on`, uji lama tetap lulus (lihat tabel).
+
+| Tahap | Status | Isi yang dikerjakan | Beda dari rencana |
+| --- | --- | --- | --- |
+| VR0 | Selesai (kode) | `docs/app/vr/uji-webxr.html`, `window.__vr0`, Salin hasil | Pemilik belum mencoba di Rift |
+| VR1 | Selesai | `shared/vr.js` (VRKIT), prototipe `docs/app/vr/uji-jalur-render.html`, XR tiruan | Calon B dipilih; salinan ke framebuffer XR = pass akhir langsung ke viewport mata (`VRKIT.eyeTarget(i)`), bukan `blitFramebuffer` |
+| VR2 | Selesai | Gargantua: sinar per mata dari tangen frustum (`uVR`, `uTanC`, `uTanS`), kepala di `viewBasis()`, wahana / debu / partikel ikut proyeksi mata, `tickWorld()`, `vrFrame()`, lapisan atas `VRKIT.raw(gl)` | Ray tracer dirender per mata (bukan siklop sekali) dengan skala adaptif `GV.rs` 0,3-skala preset; siklop jadi kandidat VR8. MFD kokpit 3D tetap; `#dash` diganti baris info di menu VR |
+| VR3 | Selesai | Millar: `XRV`, rig jalan kaki / kokpit / kamera luar, `vrEyeCam()` (near / far dan depth log kamera Millar lewat `VRKIT.m4.projNF`), adegan orbit keberangkatan per mata, preset Sedang selama VR, BOB / visor / butiran / vinyet / TAA mati | Kedatangan sinematik dilewati; keberangkatan tetap diputar (rig = kamera sinematik); tersapu = layar gelap 0,8 tanpa fade 0,3 s |
+| VR4 | Selesai | Copper: `XRC`, rig = kamera lama pitch 0 diputar balik yaw kepala (atas = ke sumbu), `farCam` per mata rotasi saja, `postBegin()` ukuran mata, `fsPass()` ke viewport mata, stik kiri = joystik sentuh analog | Preset Sedang (bukan Rendah) selama VR; SSR dan TAA mati; peta M belum jadi panel kanvas |
+| VR5 | Sebagian | Pose genggaman `VRKIT.in.hands`, kotak kontroler di lapisan atas (three dan WebGL2), lengan tubuh M6 Millar mengikuti kontroler (`armReach`) | Tongkat kokpit belum digenggam langsung (tetap lewat stik / tombol); ambil barang tetap picu (E tahan) |
+| VR6 | Selesai | Lencana VR di menu (`KEYS`), `docs/app/tombol.md` bagian kontroler VR, baris VR di bantuan ? ketiga experience, `CLAUDE.md` | - |
+| VR7 | Selesai | `tools/uji_vr.py` vr0-vr4: dua mata tergambar, paralaks, tanpa nilai tidak valid di HDR mata, gerak ke arah kepala, belok patah, tombol, menu, kontroler, keluar VR | Pembanding desktop otomatis hanya Gargantua (deterministik); Copper / Millar lewat uji lama |
+| VR8 | Menunggu pemilik | Ukur di GTX 1060, setel `GV.rs` / `XRV.rs` / `XRC.rs`, preset, skala framebuffer | - |
+
+| Uji | Hasil |
+| --- | --- |
+| `tools/uji_vr.py` (vr0-vr4) | 48 / 48 lulus |
+| `tools/uji_misi_gargantua.py` | 103 / 103 lulus (pembanding G1 kini memakai `?v4=0`) |
+| `tools/uji_millar.py` | 129 / 130; gagal M5c percikan (-200 mm) juga gagal di versi sebelum VR3 dengan angka sama, jadi bukan dari VR |
+| `tools/uji_bahasa.py` | Lulus |
+| `tools/ukur_muat.py cooper-station --cek` | Lulus (0 program baru di frame pertama dan saat tombol) |
+
+Pemetaan kontroler sebenarnya ada di `docs/app/tombol.md` (sedikit berbeda dari tabel usulan di atas: B = tampilan / kamera luar / autopilot, bukan kembali).
+
+Yang perlu diperiksa pemilik di VR8:
+1. VR0: apakah sesi terbuka di Chrome / Edge, ukuran framebuffer, FPS.
+2. FPS per experience di Rift (Oculus Debug Tool) dan skala render yang dipilih adaptif.
+3. Kenyamanan 10 menit: jalan dengan stik, belok patah, kokpit, motor Copper.
+4. Kesesuaian kedua mata: tidak ada garis tengah, terang sama.
+5. Rig Copper di lift / hub nol-g / trem (diuji otomatis hanya jalan kaki).
 
 ## Verifikasi
 
