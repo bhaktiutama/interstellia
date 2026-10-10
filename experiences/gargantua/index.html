@@ -86,6 +86,12 @@
   #help td:first-child { color: var(--accent); white-space: nowrap; }
   #dash { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   #dash[hidden] { display: none; }
+  /* ponsel saat misi: pilih jendela bawah (relai / corong / sembunyi) tanpa membuka panel */
+  #mobView { position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 6px; z-index: 12; }
+  #mobView[hidden] { display: none; }
+  #mobView button { font: inherit; font-size: 12px; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--panel-border); background: var(--panel-bg); color: var(--text); }
+  #mobView button.on { border-color: var(--accent); color: #fff; }
+  body.misMob #caption, body.photo #mobView { display: none; }
   body.photo #dash { display: none; }
   /* G9: kartu akhir tidak menutup layar: latar tembus (pandangan relai tetap berjalan), kepala diseret, x menutup */
   #mend { position: fixed; inset: 0; display: grid; place-items: center end; padding-right: 12px; background: transparent; z-index: 12; pointer-events: none; }   /* G9: bawaan di kanan */
@@ -124,6 +130,7 @@
 <div id="toast" class="overlay-text"></div>
 <div id="help" hidden><div class="card"><div class="hh"><span id="helpTitle">Help</span><button type="button" id="helpClose">Close (?)</button></div><table id="helpRows"></table></div></div>
 <canvas id="dash" hidden></canvas>
+<div id="mobView" hidden><button type="button" data-v="relay"></button><button type="button" data-v="funnel"></button><button type="button" data-v="off"></button></div>
 <canvas id="tess" hidden></canvas>
 <button type="button" id="mendShow" hidden></button>
 <div id="mend" hidden><div class="card"><div class="hh"><span id="mendTitle"></span><span class="mv" id="mendMove"></span><button type="button" id="mendClose" aria-label="Close">&times;</button></div><div id="mendBody"></div><canvas id="mendRelay"></canvas>
@@ -780,7 +787,7 @@ const ID = {
   'Camera': 'Kamera', 'FOV (deg)': 'Sudut pandang (derajat)', 'Auto-orbit': 'Putar otomatis', 'Pause time (Space)': 'Hentikan waktu (Space)',
   'Film': 'Sinematik', 'Edge-on': 'Dari samping', 'Top-down': 'Dari atas', 'Close approach': 'Mendekat', 'Reset': 'Atur ulang', 'Screenshot': 'Tangkap layar',
   'FPS': 'FPS', 'Resolution': 'Resolusi', 'Max steps': 'Langkah maks', 'Distance': 'Jarak', 'Buffer': 'Buffer',
-  'Language': 'Bahasa', 'Back to the main menu': 'Kembali ke menu utama',
+  'Language': 'Bahasa', 'Back to the main menu': 'Kembali ke menu utama', 'Relay': 'Relai', 'Funnel': 'Corong', 'Hide': 'Sembunyikan',
   'Space pause · Q quality · P screen effects · U sound · J music · F photo · V vessel · R reset · H hide UI · ` panel · ? help': 'Space jeda · Q kualitas · P efek layar · U suara · J musik · F foto · V wahana · R atur ulang · H sembunyikan UI · ` panel · ? bantuan',
   'WebGL2 is not available in this browser or on this GPU.\n\nThis simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). Check that hardware acceleration is enabled in your browser settings.':
     'WebGL2 tidak tersedia di browser atau GPU ini.\n\nSimulasi ini butuh WebGL2 (Chrome, Edge, Firefox, Safari 15+). Pastikan akselerasi hardware aktif di pengaturan browser.',
@@ -2196,8 +2203,12 @@ function main() {
   }
   // HUD di atas render (kanvas 2D): panel ringkas kiri atas + baris kendali bawah; dalam misi untuk kedua tampilan
   const dash = $('#dash'); let dashT = 0;
+  const MOBV = { el: $('#mobView'), v: 'relay', names: { relay: 'Relay', funnel: 'Funnel', off: 'Hide' } };
+  try { const v = localStorage.getItem('gargantua.mobView'); if (MOBV.names[v]) MOBV.v = v; } catch (e) { /* abaikan */ }
+  for (const b of MOBV.el.children) b.addEventListener('click', () => { MOBV.v = b.dataset.v; dashT = 0; try { localStorage.setItem('gargantua.mobView', MOBV.v); } catch (e) { /* abaikan */ } b.blur(); });
   function drawDash(now) {
-    if (dash.hidden || now - dashT < 100) return; dashT = now;
+    if (dash.hidden) { if (!MOBV.el.hidden) { MOBV.el.hidden = true; document.body.classList.remove('misMob'); } return; }
+    if (now - dashT < 100) return; dashT = now;
     const dpr = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
     if (dash.width !== w || dash.height !== h) { dash.width = w; dash.height = h; }
     const g = dash.getContext('2d'), s = dpr; g.clearRect(0, 0, w, h);
@@ -2222,18 +2233,44 @@ function main() {
         ['', txt('Holding position. Start a fall from the panel (Mission).')]];
     }
     const mobile = innerWidth < 640;                              // ponsel: info kiri disembunyikan (menimpa panel dan pandangan)
-    const lh = 17 * s, pw = Math.min(420 * s, w - 24 * s), ph = mobile ? 0 : rows.length * lh + 14 * s, x0 = 12 * s, y0 = 44 * s;
-    if (!mobile) { g.fillStyle = 'rgba(6,8,11,0.5)'; g.fillRect(x0, y0, pw, ph);
-    g.strokeStyle = 'rgba(240,164,90,0.35)'; g.lineWidth = s; g.strokeRect(x0, y0, pw, ph); }
-    g.font = `${12 * s}px ui-monospace, Menlo, Consolas, monospace`; g.textBaseline = 'middle';
-    if (!mobile) rows.forEach(([a, b], i) => {
-      const y = y0 + 7 * s + (i + 0.5) * lh;
-      g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(a, x0 + 10 * s, y, 116 * s);
-      g.fillStyle = MIS.on && i === 2 && misData().inside ? 'rgba(255,120,95,0.95)' : 'rgba(215,220,226,0.95)'; g.fillText(b, x0 + 130 * s, y, pw - 138 * s);
-    });
+    // kotak info kiri bergaya HUD Copper: sudut membulat, latar gelap, garis tepi tipis, baris judul, label redup kiri, nilai kanan
+    const lh = 18 * s, padX = 12 * s, padY = 10 * s, x0 = 12 * s, y0 = 44 * s, gap = 14 * s, fTitle = `${10.5 * s}px ui-monospace, Menlo, Consolas, monospace`, fRow = `${12 * s}px ui-monospace, Menlo, Consolas, monospace`;
+    const title = rows[0][1] ? `${rows[0][0]} · ${rows[0][1]}`.toUpperCase() : rows[0][0];
+    let ph = 0;
+    g.textBaseline = 'middle';
+    if (!mobile) {
+      g.font = fRow; let kw = 0, vw = 0;
+      for (let i = 1; i < rows.length; i++) { kw = Math.max(kw, g.measureText(rows[i][0]).width); vw = Math.max(vw, g.measureText(rows[i][1]).width); }
+      g.font = fTitle; const tw = g.measureText(title).width;
+      const pw = Math.min(w - 24 * s, Math.max(kw + gap + vw, tw) + 2 * padX);
+      ph = 2 * padY + 16 * s + (rows.length - 1) * lh;
+      g.beginPath(); if (g.roundRect) g.roundRect(x0, y0, pw, ph, 8 * s); else g.rect(x0, y0, pw, ph);
+      g.fillStyle = 'rgba(12,14,18,0.72)'; g.fill(); g.strokeStyle = 'rgba(255,255,255,0.10)'; g.lineWidth = s; g.stroke();
+      g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(title, x0 + padX, y0 + padY + 8 * s, pw - 2 * padX);
+      g.font = fRow; const kx = Math.min(kw, (pw - 2 * padX) * 0.4);
+      for (let i = 1; i < rows.length; i++) {
+        const [a, b] = rows[i], y = y0 + padY + 16 * s + (i - 0.5) * lh;
+        g.fillStyle = 'rgba(139,146,156,0.95)'; g.textAlign = 'left'; g.fillText(a, x0 + padX, y, kx);
+        g.fillStyle = MIS.on && i === 2 && misData().inside ? 'rgba(255,120,95,0.95)' : 'rgba(217,221,227,0.95)';
+        g.textAlign = 'right'; g.fillText(b, x0 + pw - padX, y, pw - 2 * padX - kx - gap);
+      }
+      g.textAlign = 'left';
+    }
+    // ponsel: pilihan jendela bawah tanpa membuka panel (Relai / Corong / Sembunyikan), localStorage gargantua.mobView
+    const mobOn = mobile && MIS.on && !MIS.end;
+    if (MOBV.el.hidden === mobOn) MOBV.el.hidden = !mobOn;
+    document.body.classList.toggle('misMob', mobOn);
+    if (mobOn) for (const b of MOBV.el.children) { const t = txt(MOBV.names[b.dataset.v]); if (b.textContent !== t) b.textContent = t; b.classList.toggle('on', b.dataset.v === MOBV.v); }
     if (MIS.on && SHIP.view === 'relay') drawRelayView(g, w, h, s, now);   // G9: titik cahaya wahana, jejak, kilat suar
     if (MIS.on && !MIS.end) {
       const chase = SHIP.view === 'chase', aiming = MIS.tes && !MIS.tes.locked;
+      if (mobile) {                                              // satu jendela selebar layar di atas tombol pilihan
+        const ur = $('#ui').getBoundingClientRect(), top = ur.bottom * s + 10 * s, bot = h - 56 * s, ww = w - 24 * s, wh = Math.min(380 * s, bot - top);
+        if (MOBV.v === 'relay' && wh > 190 * s) drawRelay(g, x0, bot - wh, ww, wh, s);
+        if (MOBV.v === 'funnel') { const mh = aiming ? Math.min(ww * 1.08, bot - top) : wh; if (mh > 150 * s) (aiming ? drawTesMap : drawFunnel)(g, x0, bot - mh, ww, mh, s, now); }
+        if (MIS.tes && SHIP.view !== 'relay') drawGateMark(g, w, h, s);
+        return;
+      }
       const hint = aiming ? txt('Aim: W/S angle d (Shift coarse) · A/D orbit plane · Enter lock and go · drag = orbit camera · V view · M relay · Esc end')
         : SHIP.view === 'relay' ? txt('Relay view: drag = move the relay around the black hole · right-drag = look · wheel = zoom · double-click = reset · keys still steer GX-01 · V view · E flare · Esc end')
         : MIS.ap.on ? txt(chase ? 'Autopilot: R/F height · W/S descent · O off · drag = orbit camera · right-drag = look · X attitude · Z time · V view · E flare · M relay · Esc end'
