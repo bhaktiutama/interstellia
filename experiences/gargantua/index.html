@@ -92,6 +92,13 @@
   #mobView button { font: inherit; font-size: 12px; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--panel-border); background: var(--panel-bg); color: var(--text); }
   #mobView button.on { border-color: var(--accent); color: #fff; }
   body.misMob #caption, body.photo #mobView { display: none; }
+  /* tombol ciutkan / tampilkan tiap kotak info di kanvas HUD (info, relai, corong) */
+  #boxBtns .boxBtn { position: fixed; z-index: 12; font: inherit; font-size: 12px; line-height: 1; padding: 4px 7px; border-radius: 6px; cursor: pointer;
+    border: 1px solid var(--panel-border); background: rgba(12,14,18,0.72); color: var(--text); white-space: nowrap; }
+  #boxBtns .boxBtn:hover { border-color: var(--accent); color: #fff; }
+  #boxBtns .boxBtn[hidden] { display: none; }
+  /* H: semua kotak info, tombol menu, dan pilihan ponsel ikut tersembunyi (seperti .hidden-ui Copper) */
+  body.hideUI #boxBtns, body.hideUI #menuLink, body.hideUI #mobView, body.photo #boxBtns { display: none !important; }
   body.photo #dash { display: none; }
   /* G9: kartu akhir tidak menutup layar: latar tembus (pandangan relai tetap berjalan), kepala diseret, x menutup */
   #mend { position: fixed; inset: 0; display: grid; place-items: center end; padding-right: 12px; background: transparent; z-index: 12; pointer-events: none; }   /* G9: bawaan di kanan */
@@ -130,6 +137,7 @@
 <div id="toast" class="overlay-text"></div>
 <div id="help" hidden><div class="card"><div class="hh"><span id="helpTitle">Help</span><button type="button" id="helpClose">Close (?)</button></div><table id="helpRows"></table></div></div>
 <canvas id="dash" hidden></canvas>
+<div id="boxBtns"></div>
 <div id="mobView" hidden><button type="button" data-v="relay"></button><button type="button" data-v="funnel"></button><button type="button" data-v="off"></button></div>
 <canvas id="tess" hidden></canvas>
 <button type="button" id="mendShow" hidden></button>
@@ -787,7 +795,7 @@ const ID = {
   'Camera': 'Kamera', 'FOV (deg)': 'Sudut pandang (derajat)', 'Auto-orbit': 'Putar otomatis', 'Pause time (Space)': 'Hentikan waktu (Space)',
   'Film': 'Sinematik', 'Edge-on': 'Dari samping', 'Top-down': 'Dari atas', 'Close approach': 'Mendekat', 'Reset': 'Atur ulang', 'Screenshot': 'Tangkap layar',
   'FPS': 'FPS', 'Resolution': 'Resolusi', 'Max steps': 'Langkah maks', 'Distance': 'Jarak', 'Buffer': 'Buffer',
-  'Language': 'Bahasa', 'Back to the main menu': 'Kembali ke menu utama', 'Relay': 'Relai', 'Funnel': 'Corong', 'Hide': 'Sembunyikan',
+  'Language': 'Bahasa', 'Back to the main menu': 'Kembali ke menu utama', 'Relay': 'Relai', 'Funnel': 'Corong', 'Hide': 'Sembunyikan', 'Info': 'Info', 'Minimize': 'Ciutkan', 'Show': 'Tampilkan',
   'Space pause · Q quality · P screen effects · U sound · J music · F photo · V vessel · R reset · H hide UI · ` panel · ? help': 'Space jeda · Q kualitas · P efek layar · U suara · J musik · F foto · V wahana · R atur ulang · H sembunyikan UI · ` panel · ? bantuan',
   'WebGL2 is not available in this browser or on this GPU.\n\nThis simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). Check that hardware acceleration is enabled in your browser settings.':
     'WebGL2 tidak tersedia di browser atau GPU ini.\n\nSimulasi ini butuh WebGL2 (Chrome, Edge, Firefox, Safari 15+). Pastikan akselerasi hardware aktif di pengaturan browser.',
@@ -2203,12 +2211,31 @@ function main() {
   }
   // HUD di atas render (kanvas 2D): panel ringkas kiri atas + baris kendali bawah; dalam misi untuk kedua tampilan
   const dash = $('#dash'); let dashT = 0;
+  // kotak info yang bisa diciutkan: info kiri dan peta corong (relai memakai REL.on, sama dengan M dan panel); localStorage gargantua.boxes
+  const BOX = { info: true, funnel: true }, BOXB = {}, BOX_NAME = { info: 'Info', relay: 'Relay', funnel: 'Funnel' };
+  try { const o = JSON.parse(localStorage.getItem('gargantua.boxes') || '{}'); for (const k in BOX) if (typeof o[k] === 'boolean') BOX[k] = o[k]; } catch (e) { /* abaikan */ }
+  for (const k of ['info', 'relay', 'funnel']) {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'boxBtn'; b.hidden = true;
+    b.addEventListener('click', () => {
+      if (k === 'relay') { REL.on = !REL.on; syncUI(); }
+      else { BOX[k] = !BOX[k]; try { localStorage.setItem('gargantua.boxes', JSON.stringify(BOX)); } catch (e) { /* abaikan */ } }
+      dashT = 0; b.blur();
+    });
+    $('#boxBtns').appendChild(b); BOXB[k] = b;
+  }
+  // terbuka = tombol kecil di pojok kanan atas kotak (x = tepi kanan); tertutup = label "+ nama" di titik jangkar kotak (right = rata kanan)
+  function boxBtn(k, open, x, y, s, right) {
+    const b = BOXB[k], t = open ? '−' : '+ ' + txt(BOX_NAME[k]); b.hidden = false;
+    if (b.textContent !== t) { b.textContent = t; b.title = txt(open ? 'Minimize' : 'Show'); }
+    b.style.left = `${x / s}px`; b.style.top = `${y / s}px`; b.style.transform = right ? 'translateX(-100%)' : '';
+  }
   const MOBV = { el: $('#mobView'), v: 'relay', names: { relay: 'Relay', funnel: 'Funnel', off: 'Hide' } };
   try { const v = localStorage.getItem('gargantua.mobView'); if (MOBV.names[v]) MOBV.v = v; } catch (e) { /* abaikan */ }
   for (const b of MOBV.el.children) b.addEventListener('click', () => { MOBV.v = b.dataset.v; dashT = 0; try { localStorage.setItem('gargantua.mobView', MOBV.v); } catch (e) { /* abaikan */ } b.blur(); });
   function drawDash(now) {
-    if (dash.hidden) { if (!MOBV.el.hidden) { MOBV.el.hidden = true; document.body.classList.remove('misMob'); } return; }
+    if (dash.hidden) { if (!MOBV.el.hidden) { MOBV.el.hidden = true; document.body.classList.remove('misMob'); } for (const k in BOXB) BOXB[k].hidden = true; return; }
     if (now - dashT < 100) return; dashT = now;
+    for (const k in BOXB) BOXB[k].hidden = true;                  // yang digambar frame ini memunculkan tombolnya lagi lewat boxBtn()
     const dpr = Math.min(window.devicePixelRatio || 1, 2), w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
     if (dash.width !== w || dash.height !== h) { dash.width = w; dash.height = h; }
     const g = dash.getContext('2d'), s = dpr; g.clearRect(0, 0, w, h);
@@ -2233,20 +2260,23 @@ function main() {
         ['', txt('Holding position. Start a fall from the panel (Mission).')]];
     }
     const mobile = innerWidth < 640;                              // ponsel: info kiri disembunyikan (menimpa panel dan pandangan)
+    const hideAll = document.body.classList.contains('hideUI');  // H: semua kotak info disembunyikan
     // kotak info kiri bergaya HUD Copper: sudut membulat, latar gelap, garis tepi tipis, baris judul, label redup kiri, nilai kanan
     const lh = 18 * s, padX = 12 * s, padY = 10 * s, x0 = 12 * s, y0 = 44 * s, gap = 14 * s, fTitle = `${10.5 * s}px ui-monospace, Menlo, Consolas, monospace`, fRow = `${12 * s}px ui-monospace, Menlo, Consolas, monospace`;
     const title = rows[0][1] ? `${rows[0][0]} · ${rows[0][1]}`.toUpperCase() : rows[0][0];
-    let ph = 0;
+    let ph = 0, pw = 0;
     g.textBaseline = 'middle';
-    if (!mobile) {
+    if (!mobile && !hideAll && !BOX.info) boxBtn('info', false, x0, y0, s);
+    if (!mobile && !hideAll && BOX.info) {
       g.font = fRow; let kw = 0, vw = 0;
       for (let i = 1; i < rows.length; i++) { kw = Math.max(kw, g.measureText(rows[i][0]).width); vw = Math.max(vw, g.measureText(rows[i][1]).width); }
       g.font = fTitle; const tw = g.measureText(title).width;
-      const pw = Math.min(w - 24 * s, Math.max(kw + gap + vw, tw) + 2 * padX);
+      pw = Math.min(w - 24 * s, Math.max(kw + gap + vw, tw + 26 * s) + 2 * padX);
       ph = 2 * padY + 16 * s + (rows.length - 1) * lh;
       g.beginPath(); if (g.roundRect) g.roundRect(x0, y0, pw, ph, 8 * s); else g.rect(x0, y0, pw, ph);
       g.fillStyle = 'rgba(12,14,18,0.72)'; g.fill(); g.strokeStyle = 'rgba(255,255,255,0.10)'; g.lineWidth = s; g.stroke();
-      g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(title, x0 + padX, y0 + padY + 8 * s, pw - 2 * padX);
+      g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(title, x0 + padX, y0 + padY + 8 * s, pw - 2 * padX - 26 * s);
+      boxBtn('info', true, x0 + pw - 6 * s, y0 + 6 * s, s, true);
       g.font = fRow; const kx = Math.min(kw, (pw - 2 * padX) * 0.4);
       for (let i = 1; i < rows.length; i++) {
         const [a, b] = rows[i], y = y0 + padY + 16 * s + (i - 0.5) * lh;
@@ -2257,11 +2287,12 @@ function main() {
       g.textAlign = 'left';
     }
     // ponsel: pilihan jendela bawah tanpa membuka panel (Relai / Corong / Sembunyikan), localStorage gargantua.mobView
-    const mobOn = mobile && MIS.on && !MIS.end;
+    const mobOn = mobile && MIS.on && !MIS.end && !hideAll;
     if (MOBV.el.hidden === mobOn) MOBV.el.hidden = !mobOn;
     document.body.classList.toggle('misMob', mobOn);
     if (mobOn) for (const b of MOBV.el.children) { const t = txt(MOBV.names[b.dataset.v]); if (b.textContent !== t) b.textContent = t; b.classList.toggle('on', b.dataset.v === MOBV.v); }
     if (MIS.on && SHIP.view === 'relay') drawRelayView(g, w, h, s, now);   // G9: titik cahaya wahana, jejak, kilat suar
+    if (hideAll) return;
     if (MIS.on && !MIS.end) {
       const chase = SHIP.view === 'chase', aiming = MIS.tes && !MIS.tes.locked;
       if (mobile) {                                              // satu jendela selebar layar di atas tombol pilihan
@@ -2283,14 +2314,16 @@ function main() {
       g.fillStyle = 'rgba(215,220,226,0.85)'; g.fillText(hint, w / 2, h - 24 * s, tw - 12 * s); g.textAlign = 'left';
       // G4: jendela relai + diagram ruang-waktu di bawah HUD (M)
       const top = y0 + ph + 10 * s, rh = Math.min(380 * s, h - 44 * s - top), rw = Math.min(340 * s, w - 24 * s);
-      if (REL.on && rh > 190 * s) drawRelay(g, x0, h - 44 * s - rh, rw, rh, s);
+      if (REL.on && rh > 190 * s) { drawRelay(g, x0, h - 44 * s - rh, rw, rh, s); boxBtn('relay', true, x0 + rw - 6 * s, h - 44 * s - rh + 6 * s, s, true); }
+      else if (!REL.on) boxBtn('relay', false, x0, h - 44 * s - 24 * s, s);
       {                                                          // kanan bawah: G5 peta orbit saat membidik (besar), G8 peta corong (ukuran = jendela relai)
         let mw = aiming ? Math.min(400 * s, w * 0.42) : rw, right = w - 12 * s;
         const ui = $('#ui'), ur = ui.getBoundingClientRect();     // panel kontrol terbuka: peta di kiri panel
         if (!ui.classList.contains('collapsed') && !ui.classList.contains('hidden') && ur.bottom * s > h - 44 * s - (aiming ? mw : rh)) right = ur.left * s - 12 * s;
         mw = Math.min(mw, right - (REL.on ? x0 + rw + 12 * s : x0));   // tidak menimpa jendela relai
         const mh = aiming ? Math.min(mw * 1.08, h - 100 * s) : rh;
-        if (mw > 200 * s && (aiming ? mh > 150 * s : rh > 190 * s)) (aiming ? drawTesMap : drawFunnel)(g, right - mw, h - 44 * s - mh, mw, mh, s, now);
+        if (!BOX.funnel) boxBtn('funnel', false, right, h - 44 * s - 24 * s, s, true);
+        else if (mw > 200 * s && (aiming ? mh > 150 * s : rh > 190 * s)) { (aiming ? drawTesMap : drawFunnel)(g, right - mw, h - 44 * s - mh, mw, mh, s, now); boxBtn('funnel', true, right - 6 * s, h - 44 * s - mh + 6 * s, s, true); }
         if (MIS.tes && SHIP.view !== 'relay') drawGateMark(g, w, h, s);
       }
     }
@@ -2973,7 +3006,7 @@ function main() {
     if (c === 'Escape' && SHIP.on) { setShip(false); return; }
     if (c === 'KeyV') { cycleShipView(); return; }
     if (c === 'Space') { e.preventDefault(); state.paused = !state.paused; syncUI(); toast(txt(state.paused ? 'Paused' : 'Running'), 1.2); }
-    else if (c === 'KeyH') { $('#ui').classList.toggle('hidden'); $('#caption').classList.toggle('hidden'); $('#hint').classList.toggle('hidden'); }
+    else if (c === 'KeyH') { $('#ui').classList.toggle('hidden'); $('#caption').classList.toggle('hidden'); $('#hint').classList.toggle('hidden'); document.body.classList.toggle('hideUI', $('#ui').classList.contains('hidden')); dashT = 0; }
     else if (c === 'Backquote') { $('#ui').classList.remove('hidden'); $('#ui').classList.toggle('collapsed'); }
     else if (c === 'KeyQ') cycleQuality();
     else if (c === 'KeyU') setSound();

@@ -70,6 +70,11 @@
   .lhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); letter-spacing: .06em; }
   .lhead button, #labBtns button, #labMus button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
   #labBtns, #labMus { display: grid; gap: 4px; }
+  /* panel bertab seperti Copper dan Gargantua (labTab) */
+  #labTabs { display: flex; flex-wrap: wrap; gap: 3px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+  #labTabs button { flex: 1 1 auto; font: inherit; font-size: 11px; padding: 5px 6px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); color: var(--ink); cursor: pointer; }
+  #labTabs button.on { border-color: var(--accent); color: #fff; background: rgba(232, 183, 101, 0.18); }
+  #labBtns button[hidden], #labVol[hidden], #labMus[hidden] { display: none; }
   #labMus { margin-top: 8px; } #labMus label { font-size: 12px; color: var(--muted); margin-top: 2px; }
   #labVol { display: grid; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted); }
   #labVol label, #labMus label { display: grid; gap: 2px; } #labVol input, #labMus input { width: 100%; accent-color: var(--accent); }
@@ -110,6 +115,7 @@
 <div id="keys" class="panel play" data-t-html="keys"></div>
 <div id="lab" class="panel" hidden>
   <div class="lhead"><span data-t="Panel kontrol">Panel kontrol</span><button type="button" id="labClose" data-t="Tutup (`)">Tutup (`)</button></div>
+  <div id="labTabs"></div>
   <div id="labBtns"></div>
   <div id="labVol"><label><span id="volT"></span><input type="range" id="volR" min="0" max="100"></label><label><span id="ambT"></span><input type="range" id="ambR" min="0" max="100"></label></div>
   <div id="labMus"><button type="button" id="musTog"></button><button type="button" id="musPick"></button><input id="inMusicFile" type="file" accept="audio/*" hidden><label><span id="musT"></span><input type="range" id="musR" min="0" max="100"></label></div>
@@ -327,7 +333,7 @@ const I18N = { en: {
   'Gelombang': 'Wave', 'Tiba dalam': 'Arrives in', 'sudah lewat': 'passed', 'di luar': 'outside', 'Goyangan planet': 'Planet wobble',
   'Tampilan': 'View', 'Kecepatan waktu': 'Time speed', 'Jalan kaki': 'On foot', 'Drone 60 m': 'Drone 60 m', 'Tinggi 1,5 km': 'High 1.5 km',
   'Grafik': 'Graphics', 'GPU (langit / laut / scene / post)': 'GPU (sky / sea / scene / post)', 'Ombak angin': 'Wind waves', 'Arus': 'Current', 'ke arah gelombang': 'toward the wave',
-  'Gerak kepala: {m}': 'Head bob: {m}', 'Tubuh: {m}': 'Body: {m}', 'Visor: {m}': 'Visor: {m}', 'Tipis': 'Thin', 'Penuh': 'Full', 'Bayangan': 'Shadow only', 'Tampil': 'Visible', 'Mati': 'Off', 'Suara: {m}': 'Sound: {m}', 'Nyala': 'On', 'Suara': 'Sound', 'Volume': 'Volume', 'Angin dan laut': 'Wind and sea', 'Halus': 'Subtle', 'Normal': 'Normal',
+  'Gerak kepala: {m}': 'Head bob: {m}', 'Tubuh: {m}': 'Body: {m}', 'Visor: {m}': 'Visor: {m}', 'Tipis': 'Thin', 'Penuh': 'Full', 'Bayangan': 'Shadow only', 'Tampil': 'Visible', 'Mati': 'Off', 'Suara: {m}': 'Sound: {m}', 'Nyala': 'On', 'Suara': 'Sound', 'Waktu': 'Time', 'Gerak': 'Motion', 'Volume': 'Volume', 'Angin dan laut': 'Wind and sea', 'Halus': 'Subtle', 'Normal': 'Normal',
   'tahun': 'y', 'hari': 'd', 'jam': 'h', 'mnt': 'min', 'dtk': 's',
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
   'Gelombang dipanggil: {d} km': 'Wave summoned: {d} km',
@@ -2578,26 +2584,40 @@ function savePhoto() {           // dipanggil tepat setelah frame digambar (tanp
 // Panel kontrol (`) dan bantuan (? / F1)
 const labEl = document.getElementById('lab'), helpEl = document.getElementById('help');
 const LAB = [
-  ['Q', () => t('Grafik: {p}', { p: t(PRESETS[PRESET.idx].name) + (PRESET.auto ? t(' (otomatis)') : '') }), cyclePreset],
-  ['P', () => t('Efek layar: {m}', { m: t(POST_MODES[POST.mode].name) }), cyclePost],
-  ['N', () => t('Suasana: {m}', { m: t(MOODS[MOOD.idx].key) }), cycleMood],
-  ['U', () => t('Suara: {m}', { m: t(AUDIO.on ? 'Nyala' : 'Mati') }), toggleSound],
-  ['', () => t('Gerak kepala: {m}', { m: t(BOB_LEVELS[BOB.level][0]) }), cycleBob],
-  ['Z', () => t('Kecepatan waktu: {x}', { x: CONFIG.speeds[P.speed] + 'x' }), cycleSpeed],
-  ['V', () => t('Tampilan: {v}', { v: t(CONFIG.views[P.view].key) }), cycleView],
-  ['M', () => t('Radar: {m}', { m: t(MIS.radar ? 'Nyala' : 'Mati') }), () => toggleRadar()],
-  ['', () => t('Pandangan orbit'), () => startCine('orbit')],
-  ['', () => t('Mulai ulang misi'), () => restartMission()],
-  ['G', () => t('Panggil gelombang'), summonWave],
-  ['F', () => t('Mode foto'), () => togglePhoto(true)],
-  ['R', () => t('Kembali ke titik awal'), resetPlayer],
-  ['', () => t('Visor: {m}', { m: t(VISOR_LEVELS[VISOR.level][0]) }), cycleVisor],
-  ['', () => t('Tubuh: {m}', { m: t(BODY_LEVELS[BODY.level][0]) }), cycleBody],
+  ['Q', () => t('Grafik: {p}', { p: t(PRESETS[PRESET.idx].name) + (PRESET.auto ? t(' (otomatis)') : '') }), cyclePreset, 'grafik'],
+  ['P', () => t('Efek layar: {m}', { m: t(POST_MODES[POST.mode].name) }), cyclePost, 'grafik'],
+  ['N', () => t('Suasana: {m}', { m: t(MOODS[MOOD.idx].key) }), cycleMood, 'waktu'],
+  ['U', () => t('Suara: {m}', { m: t(AUDIO.on ? 'Nyala' : 'Mati') }), toggleSound, 'suara'],
+  ['', () => t('Gerak kepala: {m}', { m: t(BOB_LEVELS[BOB.level][0]) }), cycleBob, 'gerak'],
+  ['Z', () => t('Kecepatan waktu: {x}', { x: CONFIG.speeds[P.speed] + 'x' }), cycleSpeed, 'waktu'],
+  ['V', () => t('Tampilan: {v}', { v: t(CONFIG.views[P.view].key) }), cycleView, 'gerak'],
+  ['M', () => t('Radar: {m}', { m: t(MIS.radar ? 'Nyala' : 'Mati') }), () => toggleRadar(), 'misi'],
+  ['', () => t('Pandangan orbit'), () => startCine('orbit'), 'misi'],
+  ['', () => t('Mulai ulang misi'), () => restartMission(), 'misi'],
+  ['G', () => t('Panggil gelombang'), summonWave, 'misi'],
+  ['F', () => t('Mode foto'), () => togglePhoto(true), 'grafik'],
+  ['R', () => t('Kembali ke titik awal'), resetPlayer, 'gerak'],
+  ['', () => t('Visor: {m}', { m: t(VISOR_LEVELS[VISOR.level][0]) }), cycleVisor, 'gerak'],
+  ['', () => t('Tubuh: {m}', { m: t(BODY_LEVELS[BODY.level][0]) }), cycleBody, 'gerak'],
 ];
-LAB.forEach(([k, , fn]) => {
+LAB.forEach(([k, , fn, tab]) => {
   const b = document.createElement('button'); b.type = 'button';
-  b.addEventListener('click', () => { fn(); b.blur(); }); b.dataset.k = k; document.getElementById('labBtns').appendChild(b);
+  b.addEventListener('click', () => { fn(); b.blur(); }); b.dataset.k = k; b.dataset.tab = tab; document.getElementById('labBtns').appendChild(b);
 });
+// tab panel (seperti labTab() Copper): tab aktif diingat di localStorage millar.labTab
+const LAB_TABS = [['misi', 'Misi'], ['waktu', 'Waktu'], ['gerak', 'Gerak'], ['grafik', 'Grafik'], ['suara', 'Suara']];
+let labTabId = 'misi';
+try { const v = localStorage.getItem('millar.labTab'); if (LAB_TABS.some(([id]) => id === v)) labTabId = v; } catch (e) { /* abaikan */ }
+for (const [id] of LAB_TABS) {
+  const b = document.createElement('button'); b.type = 'button'; b.dataset.ltab = id;
+  b.addEventListener('click', () => { labTab(id); b.blur(); }); document.getElementById('labTabs').appendChild(b);
+}
+function labTab(id) {
+  labTabId = id; try { localStorage.setItem('millar.labTab', id); } catch (e) { /* abaikan */ }
+  document.querySelectorAll('#labTabs button').forEach((b) => b.classList.toggle('on', b.dataset.ltab === id));
+  document.querySelectorAll('#labBtns button').forEach((b) => { b.hidden = b.dataset.tab !== id; });
+  document.getElementById('labVol').hidden = document.getElementById('labMus').hidden = id !== 'suara';
+}
 function setVol(k, v) {
   AUDIO[k] = Math.min(1, Math.max(0, v)); try { localStorage.setItem(k === 'vol' ? 'millar.vol' : 'millar.amb', String(AUDIO[k])); } catch (e) { /* abaikan */ }
   if (AUDIO.ctx) { if (k === 'vol') AUDIO.master.gain.setTargetAtTime(AUDIO.on ? 0.85 * AUDIO.vol : 0, AUDIO.ctx.currentTime, 0.05); else AUDIO.ambBus.gain.setTargetAtTime(AUDIO.amb, AUDIO.ctx.currentTime, 0.05); }
@@ -2605,7 +2625,8 @@ function setVol(k, v) {
 for (const [id, k] of [['volR', 'vol'], ['ambR', 'amb']]) document.getElementById(id).addEventListener('input', (e) => { setVol(k, e.target.value / 100); syncLab(); });
 function syncLab() {
   document.getElementById('volR').value = Math.round(AUDIO.vol * 100); document.getElementById('ambR').value = Math.round(AUDIO.amb * 100);
-  document.getElementById('volT').textContent = t('Volume') + ': ' + Math.round(AUDIO.vol * 100) + '%'; document.getElementById('ambT').textContent = t('Angin dan laut') + ': ' + Math.round(AUDIO.amb * 100) + '%'; document.querySelectorAll('#labBtns button').forEach((b, i) => { b.innerHTML = `<span>${LAB[i][1]()}</span><kbd>${LAB[i][0]}</kbd>`; }); syncMusic(); }
+  document.getElementById('volT').textContent = t('Volume') + ': ' + Math.round(AUDIO.vol * 100) + '%'; document.getElementById('ambT').textContent = t('Angin dan laut') + ': ' + Math.round(AUDIO.amb * 100) + '%'; document.querySelectorAll('#labBtns button').forEach((b, i) => { b.innerHTML = `<span>${LAB[i][1]()}</span><kbd>${LAB[i][0]}</kbd>`; }); syncMusic();
+  document.querySelectorAll('#labTabs button').forEach((b) => { b.textContent = t(LAB_TABS.find(([id]) => id === b.dataset.ltab)[1]); }); labTab(labTabId); }
 function toggleLab(on = labEl.hidden) { labEl.hidden = !on; if (on) { syncLab(); if (document.pointerLockElement) document.exitPointerLock(); } }
 function buildHelp() {
   const rows = [
