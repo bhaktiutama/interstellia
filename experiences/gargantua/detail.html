@@ -589,8 +589,10 @@ let LANG = 'id';
 }
 const L = () => (LANG === 'en' ? 1 : 0);
 const T = (k, v) => { let s = S[k] ? S[k][L()] : k; if (v) for (const n in v) s = s.split('{' + n + '}').join(v[n]); return s; };
-const fmt = (n, d = 0) => n.toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtE = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });   // label kanvas
+const NF = new Map();   // Intl.NumberFormat per (bahasa, digit): toLocaleString membuat formatter baru tiap panggilan (~25x lebih lambat)
+const nf = (loc, d) => { const k = loc + d; let f = NF.get(k); if (!f) NF.set(k, (f = new Intl.NumberFormat(loc, { minimumFractionDigits: d, maximumFractionDigits: d }))); return f; };
+const fmt = (n, d = 0) => nf(LANG === 'en' ? 'en-US' : 'id-ID', d).format(n);
+const fmtE = (n, d = 0) => nf('en-US', d).format(n);   // label kanvas
 const sci = (x, d = 1) => { const e = Math.floor(Math.log10(Math.abs(x))), m = x / 10 ** e; return (LANG === 'en' ? m.toFixed(d) : m.toFixed(d).replace('.', ',')) + 'e' + e; };
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -614,7 +616,7 @@ function panel(id, draw, step, opt = {}) {
     const r = el.getBoundingClientRect(), dpr = devicePixelRatio || 1, d = Math.max(Math.min(dpr, 1), Math.min(dpr, o.dprMax) * Q.s);
     if (r.width < 2) return;
     o.w = r.width; o.h = r.height; o.d = d; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
-    ctx.setTransform(d, 0, 0, d, 0, 0); o.draw(o);
+    ctx.setTransform(d, 0, 0, d, 0, 0); o.req();   // panel di luar layar digambar saat masuk layar (muat lebih cepat)
   };
   new ResizeObserver(o.fit).observe(el);
   new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; if (o.vis && o.dirty) o.draw(o); }, { rootMargin: '80px' }).observe(el);
@@ -637,11 +639,20 @@ function loop(now) {
   qTune(ms, busy, now);
   requestAnimationFrame(loop);
 }
+// bagian yang sedang (hampir) terlihat; pemutar yang tertunda disusulkan saat bagiannya masuk layar
+const SECVIS = new Set();
+const secIO = new IntersectionObserver((es) => { for (const e of es) { if (e.isIntersecting) { SECVIS.add(e.target); for (const s of SIMS) if (s.pend && s.sec === e.target) s.sync(true); } else SECVIS.delete(e.target); } }, { rootMargin: '200px' });
+document.querySelectorAll('section').forEach((el) => secIO.observe(el));
 // pemutar umum: Jalankan / Jeda / Lanjut + slider waktu + label kecepatan (pola bab Coriolis Copper)
 function player(key, opt) {
   const s = { t: 0, T: opt.T, play: false, done: false, opt };
   s.btn = () => { if (opt.btn) $(opt.btn).textContent = T(s.play ? 'pause' : s.done || s.t === 0 ? 'run' : 'resume'); };
-  s.sync = () => { if (opt.slider) { const el = $(opt.slider); el.value = s.T ? s.t / s.T : 0; setP(el); } if (opt.update) opt.update(); };
+  // angka dan gambar hanya diperbarui bila bagiannya terlihat; di luar layar ditunda (pend) lalu disusulkan saat bagian masuk layar
+  s.sec = opt.btn || opt.slider ? $(opt.btn || opt.slider).closest('section') : null;
+  s.sync = (force) => {
+    if (!force && s.sec && !SECVIS.has(s.sec)) { s.pend = true; return; }
+    s.pend = false; if (opt.slider) { const el = $(opt.slider); el.value = s.T ? s.t / s.T : 0; setP(el); } if (opt.update) opt.update();
+  };
   s.go = () => { s.t = 0; s.done = false; s.play = true; if (opt.reset) opt.reset(); s.btn(); s.sync(); };
   s.toggle = () => { if (s.play) { s.play = false; s.btn(); return; } if (s.done || s.t >= s.T || s.t === 0) { s.go(); return; } s.play = true; s.btn(); };
   s.seek = (f) => { s.play = false; s.t = clamp(f, 0, 1) * s.T; s.done = s.t >= s.T; if (opt.seek) opt.seek(); s.btn(); s.sync(); };
@@ -668,6 +679,17 @@ function pillC(c, x, y, s, col = COL.ink, size = 11.5, align = 'left') {
   c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s, x0 + w / 2, y + 0.5); c.textBaseline = 'alphabetic';
 }
 function glow(c, col, blur) { c.shadowColor = col; c.shadowBlur = blur; }
+// pengganti murah shadowBlur untuk garis panjang dan cincin: tiga garis lebar tembus pandang di bawah garis asli. shadowBlur
+// mengaburkan seluruh kotak batas garis tiap frame (mahal untuk cincin selebar kanvas); ini hanya tiga stroke. Panggil tepat
+// sebelum c.stroke(); kekuatan puncak mengikuti profil Gauss sigma = blur / 2 untuk garis setebal lineWidth.
+function haloStroke(c, col, blur) {
+  const lw = c.lineWidth, ss = c.strokeStyle, ga = c.globalAlpha, p = Math.max(0.08, Math.min(0.6, lw / (blur * 1.25)));
+  c.strokeStyle = col;
+  c.lineWidth = lw + blur * 1.8; c.globalAlpha = ga * 0.2 * p; c.stroke();
+  c.lineWidth = lw + blur; c.globalAlpha = ga * 0.35 * p; c.stroke();
+  c.lineWidth = lw + blur * 0.5; c.globalAlpha = ga * 0.5 * p; c.stroke();
+  c.lineWidth = lw; c.strokeStyle = ss; c.globalAlpha = ga;
+}
 function noGlow(c) { c.shadowBlur = 0; }
 function corner(c, s, x = 14) { txt(c, x, 22, s, COL.mu, 10.5, 'left', 650); }
 function cornerR(c, w, s, col = COL.mu) { txt(c, w - 14, 22, s, col, 10.5, 'right', 650); }
@@ -894,7 +916,7 @@ const ana = panel('cvAna', (o) => {
   const ar = -0.6 + Math.sqrt(M / 22 ** 3) * AN.t, rx = cx + 22 * s * Math.cos(ar), ry = cy - 22 * s * Math.sin(ar);
   if (Math.abs(rx - cx) < w && Math.abs(ry - cy) < h) { glow(c, COL.te, 10); c.fillStyle = COL.te; c.fillRect(rx - 6, ry - 3, 12, 6); c.fillRect(rx - 13, ry - 0.8, 26, 1.6); noGlow(c); }
   // jarak terpilih: cincin + benda mengorbit dengan laju sudut di sana (dipercepat)
-  const r = AN.r; c.strokeStyle = COL.ac; c.lineWidth = 2.2; glow(c, COL.ac, 12); c.beginPath(); c.arc(cx, cy, r * s, 0, TAU); c.stroke(); noGlow(c);
+  const r = AN.r; c.strokeStyle = COL.ac; c.lineWidth = 2.2; c.beginPath(); c.arc(cx, cy, r * s, 0, TAU); haloStroke(c, COL.ac, 12); c.stroke();
   if (r > 1.5) { const a = 0.8 + Math.sqrt(M / r ** 3) * AN.t; const x = cx + r * s * Math.cos(a), y = cy - r * s * Math.sin(a); glow(c, '#fff', 12); c.fillStyle = r < 3 ? COL.vi : '#fff'; c.beginPath(); c.arc(x, y, 4, 0, TAU); c.fill(); noGlow(c); }
   else if (r > 1) { c.fillStyle = COL.red; for (let i = 0; i < 6; i++) { const a = i * 1.05 + AN.t * 0.05, q = r - ((AN.t * 0.02 + i * 0.17) % 1) * (r - 1); c.beginPath(); c.arc(cx + q * s * Math.cos(a), cy - q * s * Math.sin(a), 2.5, 0, TAU); c.fill(); } }
   // label
@@ -948,9 +970,9 @@ const ray = panel('cvRay', (o) => {
   if (RY.res) {
     const P = RY.res.P, n = P.length / 2, upto = Math.max(1, Math.floor(RYS.t * (n - 1)));
     const near = Math.abs(Math.abs(RY.b) - B_C) < 0.05, col = RY.res.cap && RYS.t >= 1 ? COL.red : near ? COL.te : COL.ac2;
-    c.strokeStyle = col; c.lineWidth = 2.4; glow(c, col, 12); c.beginPath();
+    c.strokeStyle = col; c.lineWidth = 2.4; c.beginPath();
     for (let i = 0; i <= upto; i++) i ? c.lineTo(X(P[2 * i]), Y(P[2 * i + 1])) : c.moveTo(X(P[0]), Y(P[1]));
-    c.stroke();
+    haloStroke(c, col, 12); c.stroke();
     const hx = X(P[2 * upto]), hy = Y(P[2 * upto + 1]); c.fillStyle = '#fff'; glow(c, '#fff', 18); c.beginPath(); c.arc(hx, hy, 4.5, 0, TAU); c.fill(); noGlow(c);
   }
   // penanda b
@@ -985,21 +1007,23 @@ function diskShift(r, am, ce) {   // am = sudut di piringan (0 = kanan), ce = co
   const v = vGas(r), bl = -v * Math.cos(am) * ce, D = 1 / (Math.sqrt(1 - v * v) * (1 - bl)), g = Math.sqrt(1 - 1 / r) / Math.sqrt(1 - 1 / R_REL);
   return DK.mode === 0 ? 1 : DK.mode === 1 ? D : g * D;
 }
+const DK_V = new Float32Array(2049); for (let i = 0; i <= 2048; i++) DK_V[i] = Math.pow(1 - Math.exp(-i / 256), 0.7);
+const DK_S = [];   // cache string warna sel
 // sel piringan: geometri dan warna dasar dihitung sekali per (ukuran, kemiringan, mode); tiap frame hanya pola berputar
 function diskCells(w, h, cx, cy, s, se, ce) {
   const key = [w, h, DK.elev, DK.mode].join();
   if (DK.cache && DK.cache.key === key) return DK.cache;
-  const NR = 22, NP = 96, n = NR * NP, pts = new Float32Array(n * 8), far = new Uint8Array(n), col = [], am_ = new Float32Array(n), om_ = new Float32Array(n), lr_ = new Float32Array(n), I0 = new Float32Array(n);
+  const NR = 22, NP = 96, n = NR * NP, pts = new Float32Array(n * 8), far = new Uint8Array(n), col = new Uint16Array(n), am_ = new Float32Array(n), om_ = new Float32Array(n), lr_ = new Float32Array(n), I0 = new Float32Array(n);
   for (let j = 0; j < NR; j++) for (let k = 0; k < NP; k++) {
     const q = j * NP + k, r0 = 3 * 4 ** (j / NR), r1 = 3 * 4 ** ((j + 1) / NR), a0 = (k * TAU) / NP, a1 = ((k + 1) * TAU) / NP, rm = (r0 + r1) / 2, am = (a0 + a1) / 2;
     const tn = Tn(rm), sft = diskShift(rm, am, ce);
     let c, I = 0.05 + 2.2 * tn ** 3;
-    if (DK.mode === 0) { c = FR[Math.min(255, Math.round(tn * 255))]; const g = Math.sqrt(1 - 1 / rm) / Math.sqrt(1 - 1 / R_REL); I *= g * g; }
-    else { c = bbAt(Math.max(800, 7500 * tn * sft)); I *= 0.7 * sft ** 4; }
+    if (DK.mode === 0) { c = Math.min(255, Math.round(tn * 255)); const g = Math.sqrt(1 - 1 / rm) / Math.sqrt(1 - 1 / R_REL); I *= g * g; }
+    else { c = 256 + Math.max(0, Math.min(255, Math.round((Math.max(800, 7500 * tn * sft) - 800) / 60))); I *= 0.7 * sft ** 4; }   // indeks warna: 0-255 FR, 256-511 BB (= bbAt)
     // sel dilebarkan 0,35 px ke segala arah (= garis tepi 0,7 px lama yang menutup celah antarsel, tanpa stroke)
     const dr = 0.35 / s, b0 = r0 - dr, b1 = r1 + dr, d0 = a0 - 0.35 / (r0 * s), d1 = a1 + 0.35 / (r0 * s);
     [[b0, d0], [b1, d0], [b1, d1], [b0, d1]].forEach(([rr, aa], m) => { pts[q * 8 + m * 2] = cx + rr * s * Math.cos(aa); pts[q * 8 + m * 2 + 1] = cy - rr * s * Math.sin(aa) * se; });
-    far[q] = Math.sin(am) >= 0 ? 1 : 0; col.push(c); am_[q] = am; om_[q] = Math.sqrt(M / rm ** 3); lr_[q] = Math.log(rm); I0[q] = I;
+    far[q] = Math.sin(am) >= 0 ? 1 : 0; col[q] = c; am_[q] = am; om_[q] = Math.sqrt(M / rm ** 3); lr_[q] = Math.log(rm); I0[q] = I;
   }
   return (DK.cache = { key, n, pts, far, col, am: am_, om: om_, lr: lr_, I0 });
 }
@@ -1010,7 +1034,9 @@ const disk = panel('cvDisk', (o) => {
   for (let q = 0; q < C.n; q++) {
     const ph = C.am[q] - C.om[q] * DK.t, lr = C.lr[q];
     const pat = 0.7 + 0.3 * Math.sin(9 * ph + 7 * lr) * Math.sin(4 * ph - 3 * lr + 1);
-    st[q] = cssRGB(C.col[q], Math.pow(1 - Math.exp(-1.1 * C.I0[q] * pat), 0.7));
+    // v = (1 - exp(-1,1 I))^0,7 dari LUT, warna sebagai string yang di-cache per (indeks warna, v dalam 128 tingkat; galat <= 1 tingkat RGB)
+    const x = 1.1 * C.I0[q] * pat * 256, i = x | 0, v = x >= 2048 ? 1 : DK_V[i] + (DK_V[i + 1] - DK_V[i]) * (x - i), vi = Math.round(v * 128), key = C.col[q] * 129 + vi;
+    st[q] = DK_S[key] || (DK_S[key] = cssRGB(C.col[q] < 256 ? FR[C.col[q]] : BB[C.col[q] - 256], vi / 128));
   }
   const drawCells = (g, far) => { for (let q = 0; q < C.n; q++) { if (C.far[q] !== far) continue; const P = C.pts, b = q * 8; g.fillStyle = st[q]; g.beginPath(); g.moveTo(P[b], P[b + 1]); g.lineTo(P[b + 2], P[b + 3]); g.lineTo(P[b + 4], P[b + 5]); g.lineTo(P[b + 6], P[b + 7]); g.closePath(); g.fill(); } };
   // belahan jauh + cahaya: dulu shadowBlur 18 per sel (~1.050 blur per frame); kini sel digambar ke kanvas lepas, lalu satu blur
@@ -1057,6 +1083,13 @@ function seenR(T) {   // jarak wahana yang terlihat relai pada waktu PG T (T_arr
   for (let i = 0; i < 60; i++) { const m = (a + b) / 2; if (ta(m) > T) a = m; else b = m; }
   return (a + b) / 2;
 }
+// kurva "yang dilihat relai": tabel seenR() 401 titik (dihitung sekali) + interpolasi; titik dan angka tetap memakai seenR() persis
+let SEEN_TAB = null;
+function seenAt(T) {
+  if (!SEEN_TAB) { SEEN_TAB = new Float64Array(401); for (let i = 0; i <= 400; i++) SEEN_TAB[i] = seenR((i * F_TMAX) / 400); }
+  const x = clamp(T / F_TMAX, 0, 1) * 400, i = Math.min(399, Math.floor(x)), f = x - i;
+  return SEEN_TAB[i] + (SEEN_TAB[i + 1] - SEEN_TAB[i]) * f;
+}
 const FL = { flags: {} };
 const FS = player('fall', { T: F_TMAX, btn: 'fPlay', slider: 'fTs', rate: fRate, reset: () => { FL.flags = {}; $('fVerd').textContent = T('f_out'); },
   update: () => { fallRead(); fall.req(); }, during: () => fallEvents(), end: () => fallEvents(),
@@ -1072,7 +1105,7 @@ function fallRead() {
   const t = FS.t, alive = t < T_END, r = alive ? rOfTau(22, t) : 0;
   $('fOwn').textContent = hms(Math.min(t, T_END) * TS); $('fRel').textContent = hms(t * REL_CLK * TS);
   $('fR').textContent = alive ? fmt(r, r < 0.1 ? 4 : 2) + ' rs' : '0';
-  $('fSeen').textContent = fmt(seenR(t), seenR(t) < 1.01 ? 5 : 2) + ' rs';
+  const sr = seenR(t); $('fSeen').textContent = fmt(sr, sr < 1.01 ? 5 : 2) + ' rs';
   $('fTide').textContent = alive ? (tidalG(Math.max(r, 1e-3)) < 0.01 ? sci(tidalG(Math.max(r, 1e-3))) : fmt(Math.min(tidalG(Math.max(r, 1e-3)), 9999), 2)) + ' g' : '∞';
   $('fSpd').textContent = !alive ? '–' : r > 1 ? fmt(Math.sqrt(1 / r), 3) + ' c' : (LANG === 'en' ? 'no one hovers' : 'tidak ada yang diam');
   $('fTso').textContent = fmt(t, 1) + ' rs/c';
@@ -1087,7 +1120,7 @@ const fall = panel('cvFall', (o) => {
   c.strokeStyle = 'rgba(243,165,90,0.18)'; c.lineWidth = 1;
   for (let k = 1; k <= 11; k++) { const rr = (22 * k) / 11, y = FY(rr), rx = rr * sR; c.beginPath(); c.ellipse(fcx, y, rx, rx * 0.16, 0, 0, TAU); c.stroke(); }
   for (const sg of [1, -1]) { c.strokeStyle = 'rgba(243,165,90,0.55)'; c.lineWidth = 1.6; c.beginPath(); for (let i = 0; i <= 120; i++) { const rr = 22 * (i / 120) ** 2, x = fcx + sg * rr * sR, y = FY(rr); i ? c.lineTo(x, y) : c.moveTo(x, y); } c.stroke(); }
-  c.strokeStyle = COL.red; c.lineWidth = 2; glow(c, COL.red, 8); c.beginPath(); c.ellipse(fcx, FY(1), sR, sR * 0.16, 0, 0, TAU); c.stroke(); noGlow(c);
+  c.strokeStyle = COL.red; c.lineWidth = 2; c.beginPath(); c.ellipse(fcx, FY(1), sR, sR * 0.16, 0, 0, TAU); haloStroke(c, COL.red, 8); c.stroke();
   txt(c, fcx + sR + 8, FY(1) + 4, 'horizon', COL.red, 10.5);
   const showR = alive ? r : 0, crx = fcx + showR * sR * 0.98, cry = FY(Math.max(showR, 0)) - 3;
   glow(c, COL.ac, 14); c.fillStyle = alive ? COL.ac : '#555'; c.beginPath(); c.arc(crx, cry, 5, 0, TAU); c.fill(); noGlow(c);
@@ -1105,7 +1138,7 @@ const fall = panel('cvFall', (o) => {
   c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(gx0, Y(1), gw, Y(0) - Y(1)); c.strokeStyle = COL.red; c.setLineDash([5, 4]); c.beginPath(); c.moveTo(gx0, Y(1)); c.lineTo(gx0 + gw, Y(1)); c.stroke(); c.setLineDash([]);
   // kurva penuh (pudar) + bagian yang sudah lewat (terang)
   const own = (upto, a) => { c.strokeStyle = COL.ac; c.globalAlpha = a; c.lineWidth = 2.4; c.beginPath(); for (let i = 0; i <= 200; i++) { const T_ = (Math.min(upto, T_END) * i) / 200; const p = [X(T_), Y(rOfTau(22, T_))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); c.globalAlpha = 1; };
-  const seen = (upto, a) => { c.strokeStyle = COL.te; c.globalAlpha = a; c.lineWidth = 2; c.setLineDash([6, 4]); c.beginPath(); for (let i = 0; i <= 200; i++) { const T_ = (upto * i) / 200; const p = [X(T_ * REL_CLK), Y(seenR(T_))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); c.setLineDash([]); c.globalAlpha = 1; };
+  const seen = (upto, a) => { c.strokeStyle = COL.te; c.globalAlpha = a; c.lineWidth = 2; c.setLineDash([6, 4]); c.beginPath(); for (let i = 0; i <= 200; i++) { const T_ = (upto * i) / 200; const p = [X(T_ * REL_CLK), Y(seenAt(T_))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); c.setLineDash([]); c.globalAlpha = 1; };
   own(F_TMAX, 0.2); seen(F_TMAX, 0.2); own(t, 1); seen(t, 1);
   if (alive) { glow(c, COL.ac, 12); c.fillStyle = COL.ac; c.beginPath(); c.arc(X(t), Y(r), 4.5, 0, TAU); c.fill(); }
   glow(c, COL.te, 12); c.fillStyle = COL.te; c.beginPath(); c.arc(X(t * REL_CLK), Y(seenR(t)), 4, 0, TAU); c.fill(); noGlow(c);
@@ -1167,7 +1200,7 @@ const stp = panel('cvST', (o) => {
   // garis "sekarang"
   c.strokeStyle = 'rgba(255,255,255,0.25)'; c.beginPath(); c.moveTo(x0, Y(t)); c.lineTo(x0 + gw, Y(t)); c.stroke();
   // relai
-  glow(c, COL.te, 10); c.strokeStyle = COL.te; c.lineWidth = 3; c.beginPath(); c.moveTo(X(22), Y(0)); c.lineTo(X(22), Y(t)); c.stroke(); noGlow(c);
+  c.strokeStyle = COL.te; c.lineWidth = 3; c.beginPath(); c.moveTo(X(22), Y(0)); c.lineTo(X(22), Y(t)); haloStroke(c, COL.te, 10); c.stroke();
   c.strokeStyle = 'rgba(143,211,220,0.25)'; c.lineWidth = 3; c.beginPath(); c.moveTo(X(22), Y(t)); c.lineTo(X(22), y0); c.stroke();
   // wahana (pudar penuh, terang sampai sekarang)
   const craft = (upto, a, lw) => { c.strokeStyle = COL.ac; c.globalAlpha = a; c.lineWidth = lw; c.beginPath(); for (let i = 0; i <= 160; i++) { const T_ = (Math.min(upto, T_END) * i) / 160; const p = [X(rOfTau(22, T_)), Y(T_)]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); c.globalAlpha = 1; };
@@ -1188,7 +1221,7 @@ const stp = panel('cvST', (o) => {
       for (let i = 0; i <= 260; i++) { const rr = p.re + (22 - p.re) * (i / 260) ** 1.7, Tq = p.te + Gout(rr) - Gout(p.re); if (Tq > t) break; const pt = [X(rr), Y(Tq)]; i ? c.lineTo(...pt) : c.moveTo(...pt); head = pt; }
       c.stroke();
       if (head && !p.got) { glow(c, col, 12); c.fillStyle = col; c.beginPath(); c.arc(head[0], head[1], 3.5, 0, TAU); c.fill(); noGlow(c); }
-      if (p.got) { c.strokeStyle = col; c.lineWidth = 3; glow(c, col, 10); c.beginPath(); c.moveTo(X(22) - 8, Y(p.arr)); c.lineTo(X(22) + 8, Y(p.arr)); c.stroke(); noGlow(c); }
+      if (p.got) { c.strokeStyle = col; c.lineWidth = 3; c.beginPath(); c.moveTo(X(22) - 8, Y(p.arr)); c.lineTo(X(22) + 8, Y(p.arr)); haloStroke(c, col, 10); c.stroke(); }
     } else {
       c.strokeStyle = COL.red; c.lineWidth = 1.6; c.beginPath(); let head = null;
       for (let i = 0; i < p.pts.length; i += 3) { const [rr, Tq] = p.pts[i]; if (Tq > t) break; const pt = [X(rr), Y(Tq)]; i ? c.lineTo(...pt) : c.moveTo(...pt); head = pt; }
@@ -1241,7 +1274,7 @@ const orbp = panel('cvOrb', (o) => {
     for (const V of [0.9, 1.0, 1.1]) { c.beginPath(); c.moveTo(x0, Y(V)); c.lineTo(x0 + gw, Y(V)); c.stroke(); txt(c, x0 - 6, Y(V) + 3, fmtE(V, 1), COL.mu, 10, 'right'); }
     c.save(); c.beginPath(); c.rect(x0, y0, gw, gh); c.clip();
     c.strokeStyle = COL.vi; c.globalAlpha = 0.35; c.lineWidth = 1.4; c.beginPath(); for (let i = 0; i <= 300; i++) { const r = 1 + i * 0.05, p = [X(r), Y((1 - 1 / r) * (1 + 4 / (r * r)))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); c.globalAlpha = 1;
-    c.strokeStyle = COL.ac2; c.lineWidth = 2.2; glow(c, COL.ac2, 8); c.beginPath(); for (let i = 0; i <= 300; i++) { const r = 1 + i * 0.05, p = [X(r), Y((1 - 1 / r) * (1 + (L * L) / (r * r)))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); noGlow(c);
+    c.strokeStyle = COL.ac2; c.lineWidth = 2.2; c.beginPath(); for (let i = 0; i <= 300; i++) { const r = 1 + i * 0.05, p = [X(r), Y((1 - 1 / r) * (1 + (L * L) / (r * r)))]; i ? c.lineTo(...p) : c.moveTo(...p); }  haloStroke(c, COL.ac2, 8); c.stroke();
     c.strokeStyle = COL.ac; c.setLineDash([6, 4]); c.beginPath(); c.moveTo(x0, Y(1)); c.lineTo(x0 + gw, Y(1)); c.stroke(); c.setLineDash([]);
     if (OR.path) { const i = orbIdx(), r = OR.path.r[i]; if (r <= 16) { glow(c, '#fff', 12); c.fillStyle = '#fff'; c.beginPath(); c.arc(X(r), Y(1), 5, 0, TAU); c.fill(); noGlow(c); } }
     c.restore();
@@ -1259,10 +1292,10 @@ const orbp = panel('cvOrb', (o) => {
   c.strokeStyle = 'rgba(255,255,255,0.2)'; c.setLineDash([2, 4]); c.beginPath(); c.moveTo(sx, sy); c.lineTo(cx, cy); c.stroke(); c.setLineDash([]);
   if (OR.path) {
     const g = OR.path, i = orbIdx(), P = (k) => [cx + g.r[k] * s * Math.cos(g.ph[k]), cy - g.r[k] * s * Math.sin(g.ph[k])];
-    c.strokeStyle = COL.ac2; c.lineWidth = 2.2; glow(c, COL.ac2, 10); c.beginPath();
+    c.strokeStyle = COL.ac2; c.lineWidth = 2.2; c.beginPath();
     const stepK = Math.max(1, Math.floor(i / 1500));
     for (let k = 0; k <= i; k += stepK) { const p = P(k); k ? c.lineTo(...p) : c.moveTo(...p); }
-    const ph = P(i); c.lineTo(...ph); c.stroke();
+    const ph = P(i); c.lineTo(...ph); haloStroke(c, COL.ac2, 10); c.stroke();
     c.fillStyle = '#fff'; glow(c, '#fff', 16); c.beginPath(); c.arc(ph[0], ph[1], 4.5, 0, TAU); c.fill(); noGlow(c);
   }
   glow(c, COL.ac, 10); c.fillStyle = COL.ac; c.beginPath(); c.arc(sx, sy, 5, 0, TAU); c.fill(); noGlow(c);
@@ -1323,7 +1356,7 @@ const sky = panel('cvSky', (o) => {
   }
   c.globalAlpha = 1;
   const a90 = Math.acos(b), r90 = (R0 * a90) / (Math.PI / 2);
-  c.strokeStyle = COL.te; c.lineWidth = 1.6; c.setLineDash([5, 4]); glow(c, COL.te, 8); c.beginPath(); c.arc(cx, cy, r90, 0, TAU); c.stroke(); c.setLineDash([]); noGlow(c);
+  c.strokeStyle = COL.te; c.lineWidth = 1.6; c.setLineDash([5, 4]); c.beginPath(); c.arc(cx, cy, r90, 0, TAU); haloStroke(c, COL.te, 8); c.stroke(); c.setLineDash([]);
   pillC(c, cx, cy + r90 + 14, `former side stars (90°) now at ${fmtE(a90 / DEG, 1)}°`, COL.te, 10.5, 'center');
   c.strokeStyle = COL.ac; c.lineWidth = 1.5; c.beginPath(); c.moveTo(cx - 8, cy); c.lineTo(cx + 8, cy); c.moveTo(cx, cy - 8); c.lineTo(cx, cy + 8); c.stroke();
   corner(c, 'LOOKING AHEAD · FORWARD HALF OF THE SKY'); cornerR(c, w, `β = ${fmtE(b, 2)}`, COL.ac);

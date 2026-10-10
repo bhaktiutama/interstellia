@@ -567,8 +567,10 @@ let LANG = 'id';
 }
 const L = () => (LANG === 'en' ? 1 : 0);
 const T = (k, v) => { let s = S[k] ? S[k][L()] : k; if (v) for (const n in v) s = s.split('{' + n + '}').join(v[n]); return s; };
-const fmt = (n, d = 0) => n.toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtE = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });   // label kanvas
+const NF = new Map();   // Intl.NumberFormat per (bahasa, digit): toLocaleString membuat formatter baru tiap panggilan (~25x lebih lambat)
+const nf = (loc, d) => { const k = loc + d; let f = NF.get(k); if (!f) NF.set(k, (f = new Intl.NumberFormat(loc, { minimumFractionDigits: d, maximumFractionDigits: d }))); return f; };
+const fmt = (n, d = 0) => nf(LANG === 'en' ? 'en-US' : 'id-ID', d).format(n);
+const fmtE = (n, d = 0) => nf('en-US', d).format(n);   // label kanvas
 const sci = (x, d = 1) => { const e = Math.floor(Math.log10(Math.abs(x))), m = x / 10 ** e; return (LANG === 'en' ? m.toFixed(d) : m.toFixed(d).replace('.', ',')) + 'e' + e; };
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -592,7 +594,7 @@ function panel(id, draw, step, opt = {}) {
     const r = el.getBoundingClientRect(), dpr = devicePixelRatio || 1, d = Math.max(Math.min(dpr, 1), Math.min(dpr, o.dprMax) * Q.s);
     if (r.width < 2) return;
     o.w = r.width; o.h = r.height; o.d = d; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
-    ctx.setTransform(d, 0, 0, d, 0, 0); o.draw(o);
+    ctx.setTransform(d, 0, 0, d, 0, 0); o.req();   // panel di luar layar digambar saat masuk layar (muat lebih cepat)
   };
   new ResizeObserver(o.fit).observe(el);
   new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; if (o.vis && o.dirty) o.draw(o); }, { rootMargin: '80px' }).observe(el);
@@ -615,11 +617,20 @@ function loop(now) {
   qTune(ms, busy, now);
   requestAnimationFrame(loop);
 }
+// bagian yang sedang (hampir) terlihat; pemutar yang tertunda disusulkan saat bagiannya masuk layar
+const SECVIS = new Set();
+const secIO = new IntersectionObserver((es) => { for (const e of es) { if (e.isIntersecting) { SECVIS.add(e.target); for (const s of SIMS) if (s.pend && s.sec === e.target) s.sync(true); } else SECVIS.delete(e.target); } }, { rootMargin: '200px' });
+document.querySelectorAll('section').forEach((el) => secIO.observe(el));
 // pemutar umum: Jalankan / Jeda / Lanjut + slider waktu + label kecepatan (pola bab Coriolis Copper)
 function player(key, opt) {
   const s = { t: 0, T: opt.T, play: false, done: false, opt };
   s.btn = () => { if (opt.btn) $(opt.btn).textContent = T(s.play ? 'pause' : s.done || s.t === 0 ? 'run' : 'resume'); };
-  s.sync = () => { if (opt.slider) { const el = $(opt.slider); el.value = s.T ? s.t / s.T : 0; setP(el); } if (opt.update) opt.update(); };
+  // angka dan gambar hanya diperbarui bila bagiannya terlihat; di luar layar ditunda (pend) lalu disusulkan saat bagian masuk layar
+  s.sec = opt.btn || opt.slider ? $(opt.btn || opt.slider).closest('section') : null;
+  s.sync = (force) => {
+    if (!force && s.sec && !SECVIS.has(s.sec)) { s.pend = true; return; }
+    s.pend = false; if (opt.slider) { const el = $(opt.slider); el.value = s.T ? s.t / s.T : 0; setP(el); } if (opt.update) opt.update();
+  };
   s.go = () => { s.t = 0; s.done = false; s.play = true; if (opt.reset) opt.reset(); s.btn(); s.sync(); };
   s.toggle = () => { if (s.play) { s.play = false; s.btn(); return; } if (s.done || s.t >= s.T || s.t === 0) { s.go(); return; } s.play = true; s.btn(); };
   s.seek = (f) => { s.play = false; s.t = clamp(f, 0, 1) * s.T; s.done = s.t >= s.T; if (opt.seek) opt.seek(); s.btn(); s.sync(); };
@@ -646,6 +657,17 @@ function pillC(c, x, y, s, col = COL.ink, size = 11.5, align = 'left') {
   c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s, x0 + w / 2, y + 0.5); c.textBaseline = 'alphabetic';
 }
 function glow(c, col, blur) { c.shadowColor = col; c.shadowBlur = blur; }
+// pengganti murah shadowBlur untuk garis panjang dan cincin: tiga garis lebar tembus pandang di bawah garis asli. shadowBlur
+// mengaburkan seluruh kotak batas garis tiap frame (mahal untuk cincin selebar kanvas); ini hanya tiga stroke. Panggil tepat
+// sebelum c.stroke(); kekuatan puncak mengikuti profil Gauss sigma = blur / 2 untuk garis setebal lineWidth.
+function haloStroke(c, col, blur) {
+  const lw = c.lineWidth, ss = c.strokeStyle, ga = c.globalAlpha, p = Math.max(0.08, Math.min(0.6, lw / (blur * 1.25)));
+  c.strokeStyle = col;
+  c.lineWidth = lw + blur * 1.8; c.globalAlpha = ga * 0.2 * p; c.stroke();
+  c.lineWidth = lw + blur; c.globalAlpha = ga * 0.35 * p; c.stroke();
+  c.lineWidth = lw + blur * 0.5; c.globalAlpha = ga * 0.5 * p; c.stroke();
+  c.lineWidth = lw; c.strokeStyle = ss; c.globalAlpha = ga;
+}
 function noGlow(c) { c.shadowBlur = 0; }
 function corner(c, s, x = 14) { txt(c, x, 22, s, COL.mu, 10.5, 'left', 650); }
 function cornerR(c, w, s, col = COL.mu) { txt(c, w - 14, 22, s, col, 10.5, 'right', 650); }
@@ -803,7 +825,7 @@ const tm = panel('cvTime', (o) => {
   c.clearRect(0, 0, w, h); bgStars(c, w, h, 9, 90);
   // jam planet
   const cx = w * 0.2, cy = h * 0.52, R0 = Math.min(w * 0.15, h * 0.36);
-  c.fillStyle = '#0b1418'; c.strokeStyle = COL.ac; c.lineWidth = 3; glow(c, COL.ac, 14); c.beginPath(); c.arc(cx, cy, R0, 0, TAU); c.fill(); c.stroke(); noGlow(c);
+  c.fillStyle = '#0b1418'; c.strokeStyle = COL.ac; c.lineWidth = 3; c.beginPath(); c.arc(cx, cy, R0, 0, TAU); haloStroke(c, COL.ac, 14); c.fill(); c.stroke();   // halo dulu: bagian dalam tertutup isi, seperti shadow
   for (let i = 0; i < 60; i++) { const a = (i / 60) * TAU, l = i % 5 ? 0.94 : 0.86; c.strokeStyle = i % 5 ? 'rgba(255,255,255,0.3)' : COL.ink; c.lineWidth = i % 5 ? 1 : 2; c.beginPath(); c.moveTo(cx + Math.sin(a) * R0 * l, cy - Math.cos(a) * R0 * l); c.lineTo(cx + Math.sin(a) * R0 * 0.98, cy - Math.cos(a) * R0 * 0.98); c.stroke(); }
   const hand = (frac, len, lw, col) => { const a = frac * TAU; c.strokeStyle = col; c.lineWidth = lw; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.sin(a) * R0 * len, cy - Math.cos(a) * R0 * len); c.stroke(); };
   hand((t / 3600) % 1, 0.55, 4, COL.ink); hand((t / 60) % 1, 0.8, 2.5, COL.ink); hand(t % 1, 0.9, 1.4, COL.ac);
@@ -854,7 +876,7 @@ const spp = panel('cvSpin', (o) => {
   txt(c, x0 + gw / 2, y0 + gh + 30, '1 − a (gap to maximum spin)', COL.mu, 10, 'center');
   c.strokeStyle = COL.red; c.setLineDash([6, 4]); c.beginPath(); c.moveTo(x0, Y(DIL)); c.lineTo(x0 + gw, Y(DIL)); c.stroke(); c.setLineDash([]);
   txt(c, x0 + 6, Y(DIL) - 6, 'Millar 61,362x', COL.red, 10.5, 'left', 650);
-  c.strokeStyle = COL.ac; c.lineWidth = 2.4; glow(c, COL.ac, 8); c.beginPath(); for (let i = 0; i <= 160; i++) { const q = i / 10, p = [X(q), Y(kerrIsco(10 ** -q).ut)]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); noGlow(c);
+  c.strokeStyle = COL.ac; c.lineWidth = 2.4; c.beginPath(); for (let i = 0; i <= 160; i++) { const q = i / 10, p = [X(q), Y(kerrIsco(10 ** -q).ut)]; i ? c.lineTo(...p) : c.moveTo(...p); }  haloStroke(c, COL.ac, 8); c.stroke();
   glow(c, '#fff', 14); c.fillStyle = '#fff'; c.beginPath(); c.arc(X(SP.q), Y(k.ut), 5, 0, TAU); c.fill(); noGlow(c);
   txt(c, x0, 22, 'DILATION ON THE INNERMOST STABLE ORBIT', COL.mu, 10.5, 'left', 650);
   // pandangan atas: horizon dan ISCO (skala log agar terlihat)
@@ -1052,8 +1074,8 @@ const obp = panel('cvOrb', (o) => {
   c.fillStyle = 'rgba(127,185,196,0.25)'; c.fillRect(X(Math.min(t, 40) >= wt ? wt : wt), Y(WV.H), X(40) - X(wt), Y(0) - Y(WV.H));
   c.strokeStyle = COL.red; c.setLineDash([6, 4]); c.beginPath(); c.moveTo(x0, Y(WV.H)); c.lineTo(x0 + gw, Y(WV.H)); c.stroke(); c.setLineDash([]);
   txt(c, x0 + 4, Y(WV.H) - 6, 'crest 1,200 m · wave arrives at ' + fmtE(wt, 0) + ' s', COL.red, 10);
-  c.strokeStyle = OB.shift ? COL.ac : COL.ac2; c.lineWidth = 2.4; glow(c, COL.ac, 8); c.beginPath();
-  for (let i = 0; i <= 200; i++) { const tt = (Math.min(t, 40) * i) / 200, p = [X(tt), Y(obAlt(tt))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); noGlow(c);
+  c.strokeStyle = OB.shift ? COL.ac : COL.ac2; c.lineWidth = 2.4; c.beginPath();
+  for (let i = 0; i <= 200; i++) { const tt = (Math.min(t, 40) * i) / 200, p = [X(tt), Y(obAlt(tt))]; i ? c.lineTo(...p) : c.moveTo(...p); } haloStroke(c, COL.ac, 8); c.stroke();
   c.fillStyle = '#fff'; c.beginPath(); c.arc(X(Math.min(t, 40)), Y(obAlt(t)), 4.5, 0, TAU); c.fill();
   txt(c, x0, 18, 'CLIMB · ' + (OB.shift ? '65' : '40') + ' m/s', COL.mu, 10.5, 'left', 650);
   // kanan: orbit berskala
