@@ -265,8 +265,10 @@ UJI = r"""
 
   // 5h. tombol standar (patokan Copper Corn Station, docs/app/tombol.md)
   {
-    const key = (code) => dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
-    const up = (code) => dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
+    // tombol dikirim ke document.body seperti keyboard asli: bila dikirim ke window, window jadi target dan penangan fase tangkap
+    // CAMKIT (didaftarkan belakangan) berjalan sesudah penangan Millar, sehingga F langsung dianggap "keluar kamera"
+    const key = (code) => document.body.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+    const up = (code) => document.body.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
     const r = {}, p0 = M.PRESET.idx, s0 = M.AUDIO.on, b0 = M.BOB.level;
     key('KeyQ'); up('KeyQ'); r.Q = M.PRESET.idx === (p0 + 1) % M.PRESETS.length;
     key('KeyP'); up('KeyP'); r.P = M.POST.mode === 1; key('KeyP'); up('KeyP'); key('KeyP'); up('KeyP'); r.P3 = M.POST.mode === 0;

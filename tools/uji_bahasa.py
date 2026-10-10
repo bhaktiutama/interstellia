@@ -13,7 +13,7 @@ UJI = r"""
   const sisa = [], asing = [];
   const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = w.nextNode(); n; n = w.nextNode()) {
-    if (/^(SCRIPT|STYLE)$/.test(n.parentNode.nodeName) || n.parentNode.closest('#hud .v, #prompt, #toast, #labResult')) continue;
+    if (/^(SCRIPT|STYLE)$/.test(n.parentNode.nodeName) || n.parentNode.closest('#hud .v, #prompt, #toast, #labResult, #camHelpRows')) continue;   // #camHelpRows: diisi CAMKIT dari kamus STR sendiri (shared/camera.js)
     const k = n.nodeValue.trim(); if (!/[A-Za-z]{2}/.test(k) || nama.has(k) || vals.has(k)) continue;
     if (keys.has(k) && EN[k] !== k) sisa.push(k); else if (!keys.has(k) && !S.LANG.labels.has(n.parentNode.id)) asing.push(k);
   }

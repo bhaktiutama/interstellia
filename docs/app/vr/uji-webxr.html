@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uji WebXR (VR0)</title>
+<style>
+  /* VR0 (docs/app/rencana-vr.md): halaman uji kelayakan headset tanpa three.js. Hasil disalin lalu dikirim ke rencana VR. */
+  :root { --ink: #dfe3ea; --muted: #8a919c; --line: rgba(255,255,255,0.14); --accent: #e8b765; --ok: #7fd18b; --bad: #ef7d7d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b0d11; color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { font-weight: 300; letter-spacing: .12em; text-transform: uppercase; font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  button { font: inherit; padding: 10px 16px; border-radius: 8px; border: 1px solid var(--accent); background: rgba(232,183,101,0.18); color: #fff; cursor: pointer; margin: 4px 6px 4px 0; }
+  button:disabled { opacity: .45; cursor: default; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  td { border-bottom: 1px solid var(--line); padding: 6px 4px; vertical-align: top; }
+  td:first-child { color: var(--muted); width: 42%; }
+  .ok { color: var(--ok); } .bad { color: var(--bad); }
+  ol { color: var(--muted); padding-left: 20px; } ol b { color: var(--ink); }
+  pre { white-space: pre-wrap; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; font-size: 12px; max-height: 240px; overflow: auto; }
+  canvas { display: block; width: 100%; height: 180px; border: 1px solid var(--line); border-radius: 8px; margin-top: 8px; background: #000; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Uji WebXR</h1>
+  <p class="sub">VR0 rencana VR (Oculus Rift CV1, GTX 1060). Halaman ini tidak memakai three.js: hanya mengecek apakah browser bisa membuka sesi VR, berapa resolusi dan FPS-nya, dan apakah kepala, kontroler, dan tombol terbaca.</p>
+  <ol>
+    <li>Pasang <b>software PC Meta (Oculus)</b>, Rift terpasang dan terdeteksi. Di software itu: Settings, General, <b>OpenXR Runtime</b> = Oculus (aktifkan bila ada tombolnya).</li>
+    <li>Buka halaman ini di <b>Chrome</b>, lalu ulangi di <b>Edge</b>. Bila tidak bisa: coba <code>chrome://flags</code> cari "WebXR" atau "OpenXR", atau jadikan SteamVR runtime OpenXR.</li>
+    <li>Tekan <b>Masuk VR</b>, pakai headset 20 detik, tekan semua tombol Touch (picu, genggam, A, B, X, Y, stik), gerakkan kepala, lalu <b>Keluar VR</b>.</li>
+    <li>Tekan <b>Salin hasil</b> dan kirim teksnya.</li>
+  </ol>
+  <div>
+    <button id="enter" type="button" disabled>Masuk VR</button>
+    <button id="exit" type="button" disabled>Keluar VR</button>
+    <button id="copy" type="button">Salin hasil</button>
+  </div>
+  <table id="tab"></table>
+  <canvas id="c"></canvas>
+  <pre id="log"></pre>
+</main>
+<script>
+'use strict';
+(() => {
+  const $ = (s) => document.querySelector(s);
+  const R = {                                                          // hasil yang disalin
+    ua: navigator.userAgent, xr: !!navigator.xr, supported: null, err: [], session: null,
+    fbW: 0, fbH: 0, views: 0, viewSize: [], fps: 0, frames: 0, minDt: 0, maxDt: 0, refSpace: null,
+    headMoved: 0, inputs: {}, buttons: {}, axesMax: {}, parallel: null, gpu: null,
+  };
+  const log = (s) => { $('#log').textContent += s + '\n'; };
+  const rows = [
+    ['Browser', () => R.ua.replace(/^Mozilla\/5\.0 /, '').slice(0, 90)],
+    ['navigator.xr', () => R.xr ? ok('ada') : bad('tidak ada (browser tanpa WebXR)')],
+    ['immersive-vr didukung', () => R.supported == null ? '...' : R.supported ? ok('ya') : bad('tidak')],
+    ['GPU (WebGL2)', () => R.gpu || '-'],
+    ['Kompilasi shader paralel', () => R.parallel == null ? '-' : R.parallel ? ok('ada') : bad('tidak ada')],
+    ['Sesi', () => R.session || '-'],
+    ['Ruang acuan', () => R.refSpace || '-'],
+    ['Framebuffer XR', () => R.fbW ? `${R.fbW} x ${R.fbH} px` : '-'],
+    ['Jumlah mata / ukuran per mata', () => R.views ? `${R.views} / ${R.viewSize.join(', ')}` : '-'],
+    ['FPS sesi (rata-rata)', () => R.frames ? `${R.fps.toFixed(1)} (frame ${R.frames}, jarak ${R.minDt.toFixed(1)}-${R.maxDt.toFixed(1)} ms)` : '-'],
+    ['Kepala bergerak', () => R.frames ? (R.headMoved > 0.05 ? ok(`${R.headMoved.toFixed(2)} m`) : `${R.headMoved.toFixed(3)} m`) : '-'],
+    ['Kontroler', () => Object.keys(R.inputs).length ? Object.entries(R.inputs).map(([k, v]) => `${k}: ${v}`).join('; ') : '-'],
+    ['Tombol ditekan (indeks gamepad)', () => Object.keys(R.buttons).length ? Object.entries(R.buttons).map(([k, v]) => `${k}: [${[...v].sort((a, b) => a - b).join(', ')}]`).join('; ') : '-'],
+    ['Stik maks |sumbu|', () => Object.keys(R.axesMax).length ? Object.entries(R.axesMax).map(([k, v]) => `${k}: [${v.map((a) => a.toFixed(2)).join(', ')}]`).join('; ') : '-'],
+    ['Galat', () => R.err.length ? bad(R.err.join(' | ')) : '-'],
+  ];
+  function ok(s) { return `<span class="ok">${s}</span>`; }
+  function bad(s) { return `<span class="bad">${s}</span>`; }
+  function draw() { $('#tab').innerHTML = rows.map(([a, f]) => `<tr><td>${a}</td><td>${f()}</td></tr>`).join(''); }
+  draw();
+
+  // ---------- WebGL2: kubus sederhana di sekitar pemain, warna latar beda per mata ----------
+  const canvas = $('#c');
+  const gl = canvas.getContext('webgl2', { xrCompatible: true, antialias: true });
+  if (!gl) { R.err.push('WebGL2 tidak tersedia'); draw(); return; }
+  try {
+    const e = gl.getExtension('WEBGL_debug_renderer_info');
+    R.gpu = e ? gl.getParameter(e.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER);
+    R.parallel = !!gl.getExtension('KHR_parallel_shader_compile');
+  } catch (e) { /* abaikan */ }
+  const VS = `#version 300 es
+    in vec3 aP; in vec3 aN; uniform mat4 uP, uV, uM; out vec3 vN;
+    void main() { vN = mat3(uM) * aN; gl_Position = uP * uV * uM * vec4(aP, 1.0); }`;
+  const FS = `#version 300 es
+    precision highp float; in vec3 vN; uniform vec3 uC; out vec4 o;
+    void main() { float l = 0.35 + 0.65 * max(dot(normalize(vN), normalize(vec3(0.4, 1.0, 0.3))), 0.0); o = vec4(uC * l, 1.0); }`;
+  const sh = (t, s) => { const x = gl.createShader(t); gl.shaderSource(x, s); gl.compileShader(x); if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(x)); return x; };
+  const prog = gl.createProgram(); gl.attachShader(prog, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(prog);
+  const U = (n) => gl.getUniformLocation(prog, n);
+  // kubus satuan: 6 muka x 2 segitiga, normal per muka
+  const P = [], N = [];
+  [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]].forEach((n) => {
+    const a = [n[1], n[2], n[0]], b = [n[2], n[0], n[1]], c = (s, t) => [0, 1, 2].map((i) => 0.5 * (n[i] + s * a[i] + t * b[i]));
+    for (const [s, t] of [[-1, -1], [1, -1], [1, 1], [-1, -1], [1, 1], [-1, 1]]) { P.push(...c(s, t)); N.push(...n); }
+  });
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  for (const [name, data] of [['aP', P], ['aN', N]]) {
+    const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+    const loc = gl.getAttribLocation(prog, name); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 3, gl.FLOAT, false, 0, 0);
+  }
+  const M = (x, y, z, s) => new Float32Array([s, 0, 0, 0, 0, s, 0, 0, 0, 0, s, 0, x, y, z, 1]);
+  const CUBES = [];                                                   // lingkaran 12 kubus 2 m dari pemain, satu besar di depan
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; CUBES.push([M(Math.sin(a) * 2, 1.2, -Math.cos(a) * 2, 0.25), [0.4 + 0.5 * (i % 3 === 0), 0.6, 0.9 - 0.4 * (i % 2)]]); }
+  CUBES.push([M(0, 1.5, -3, 0.8), [0.95, 0.75, 0.4]]);
+  CUBES.push([M(0, -0.02, 0, 3), [0.18, 0.2, 0.24]]);                 // lantai (kubus pipih kurang lebih)
+  function drawScene(proj, view, extra) {
+    gl.useProgram(prog); gl.bindVertexArray(vao); gl.enable(gl.DEPTH_TEST);
+    gl.uniformMatrix4fv(U('uP'), false, proj); gl.uniformMatrix4fv(U('uV'), false, view);
+    for (const [m, c] of CUBES.concat(extra)) { gl.uniformMatrix4fv(U('uM'), false, m); gl.uniform3fv(U('uC'), c); gl.drawArrays(gl.TRIANGLES, 0, 36); }
+  }
+
+  // ---------- WebXR ----------
+  let session = null, ref = null, t0 = 0, last = 0, head0 = null;
+  async function check() {
+    if (!navigator.xr) { draw(); return; }
+    try { R.supported = await navigator.xr.isSessionSupported('immersive-vr'); } catch (e) { R.supported = false; R.err.push('isSessionSupported: ' + e.message); }
+    $('#enter').disabled = !R.supported; draw();
+  }
+  async function enter() {
+    try {
+      session = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] });
+    } catch (e) { R.err.push('requestSession: ' + e.message); draw(); return; }
+    R.session = 'immersive-vr terbuka'; $('#enter').disabled = true; $('#exit').disabled = false;
+    session.addEventListener('end', () => { session = null; R.session += ', ditutup'; $('#enter').disabled = !R.supported; $('#exit').disabled = true; draw(); });
+    try { await gl.makeXRCompatible(); } catch (e) { R.err.push('makeXRCompatible: ' + e.message); }
+    const layer = new XRWebGLLayer(session, gl, { antialias: true });
+    session.updateRenderState({ baseLayer: layer });
+    R.fbW = layer.framebufferWidth; R.fbH = layer.framebufferHeight;
+    for (const t of ['local-floor', 'local']) { try { ref = await session.requestReferenceSpace(t); R.refSpace = t; break; } catch (e) { /* coba berikutnya */ } }
+    session.addEventListener('inputsourceschange', () => {
+      for (const s of session.inputSources) R.inputs[s.handedness || '?'] = `${s.targetRayMode}${s.gamepad ? ', gamepad ' + (s.gamepad.mapping || 'tanpa mapping') + ' ' + s.gamepad.buttons.length + ' tombol' : ''}${s.profiles && s.profiles.length ? ', ' + s.profiles[0] : ''}`;
+      draw();
+    });
+    t0 = 0; R.frames = 0; R.minDt = 1e9; R.maxDt = 0;
+    session.requestAnimationFrame(onFrame);
+    draw();
+  }
+  function onFrame(t, frame) {
+    const s = frame.session; s.requestAnimationFrame(onFrame);
+    if (last) { const dt = t - last; R.minDt = Math.min(R.minDt, dt); R.maxDt = Math.max(R.maxDt, dt); }
+    last = t; if (!t0) t0 = t; R.frames++; R.fps = R.frames > 1 ? (R.frames - 1) / ((t - t0) / 1000) : 0;
+    const pose = frame.getViewerPose(ref);
+    if (!pose) return;
+    const hp = pose.transform.position;
+    if (!head0) head0 = [hp.x, hp.y, hp.z]; else R.headMoved = Math.max(R.headMoved, Math.hypot(hp.x - head0[0], hp.y - head0[1], hp.z - head0[2]));
+    const extra = [];
+    for (const src of s.inputSources) {                                // kubus kecil di genggaman, menyala bila tombol ditekan
+      const g = src.gripSpace && frame.getPose(src.gripSpace, ref), h = src.handedness || '?';
+      let pressed = false;
+      if (src.gamepad) {
+        src.gamepad.buttons.forEach((b, i) => { if (b.pressed) { pressed = true; (R.buttons[h] = R.buttons[h] || new Set()).add(i); } });
+        const am = R.axesMax[h] = R.axesMax[h] || src.gamepad.axes.map(() => 0);
+        src.gamepad.axes.forEach((a, i) => { am[i] = Math.max(am[i] || 0, Math.abs(a)); });
+      }
+      if (g) { const m = new Float32Array(g.transform.matrix); m[0] *= 0.08; m[5] *= 0.08; m[10] *= 0.08; m[1] *= 0.08; m[2] *= 0.08; m[4] *= 0.08; m[6] *= 0.08; m[8] *= 0.08; m[9] *= 0.08; extra.push([m, pressed ? [1, 0.9, 0.3] : [0.8, 0.8, 0.85]]); }
+    }
+    const layer = s.renderState.baseLayer;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, layer.framebuffer);
+    R.views = pose.views.length; R.viewSize = [];
+    pose.views.forEach((v, i) => {
+      const vp = layer.getViewport(v); R.viewSize.push(`${vp.width} x ${vp.height}`);
+      gl.viewport(vp.x, vp.y, vp.width, vp.height); gl.enable(gl.SCISSOR_TEST); gl.scissor(vp.x, vp.y, vp.width, vp.height);
+      const c = i === 0 ? [0.10, 0.04, 0.05] : [0.04, 0.05, 0.12];   // kiri kemerahan, kanan kebiruan: tiap mata harus melihat warnanya sendiri
+      gl.clearColor(c[0], c[1], c[2], 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      drawScene(v.projectionMatrix, v.transform.inverse.matrix, extra);
+    });
+    gl.disable(gl.SCISSOR_TEST);
+    if (R.frames % 45 === 0) draw();
+  }
+  $('#enter').addEventListener('click', enter);
+  $('#exit').addEventListener('click', () => { if (session) session.end(); });
+  $('#copy').addEventListener('click', () => {
+    const out = JSON.stringify(R, (k, v) => (v instanceof Set ? [...v] : v), 1);
+    (navigator.clipboard ? navigator.clipboard.writeText(out) : Promise.reject()).then(() => { $('#copy').textContent = 'Tersalin'; }, () => { log(out); $('#copy').textContent = 'Lihat teks di bawah'; });
+  });
+  // pratinjau di monitor (tanpa headset): kamera diam
+  const id4 = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, -1.4, 0, 1]);
+  function preview() {
+    if (!session) {
+      const w = canvas.clientWidth, h = canvas.clientHeight; if (canvas.width !== w) { canvas.width = w; canvas.height = h; }
+      const f = 1 / Math.tan(0.6), a = w / h, n = 0.05, fa = 50;
+      const proj = new Float32Array([f / a, 0, 0, 0, 0, f, 0, 0, 0, 0, (fa + n) / (n - fa), -1, 0, 0, 2 * fa * n / (n - fa), 0]);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, w, h); gl.clearColor(0.05, 0.05, 0.08, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      drawScene(proj, id4, []);
+    }
+    requestAnimationFrame(preview);
+  }
+  preview();
+  window.__vr0 = R;                                                   // dipakai uji otomatis (XR tiruan)
+  check();
+})();
+</script>
+</body>
+</html>

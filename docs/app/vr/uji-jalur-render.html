@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Uji Jalur Render VR</title>
+<style>
+  /* VR1 (docs/app/rencana-vr.md): prototipe jalur render per mata dengan rantai efek layar, dipakai Copper dan Millar. */
+  html, body { margin: 0; height: 100%; background: #08090c; color: #dfe3ea; font: 14px system-ui, sans-serif; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #info { position: fixed; left: 12px; top: 10px; max-width: 520px; background: rgba(0,0,0,.6); padding: 8px 10px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<div id="info">Prototipe jalur render VR: adegan ke target HDR seukuran satu mata, lalu pass akhir (tone map + pertajam) ke viewport mata di framebuffer XR. Tombol Masuk VR di kanan bawah (hanya bila headset tersedia).</div>
+<script src="../../../shared/vr.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+const renderer = new THREE.WebGLRenderer({ antialias: false });
+renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight); document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0x101420);
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.05, 200); camera.position.set(0, 1.6, 0);
+const hemi = new THREE.HemisphereLight(0xcfe0ff, 0x302820, 1.2); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 2); sun.position.set(3, 6, 2); scene.add(sun);
+for (let i = 0; i < 9; i++) {                                         // kubus pada jarak 0,6-8 m: paralaks dekat besar, jauh kecil
+  const d = 0.6 + i * i * 0.1, a = (i - 4) * 0.22;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(0.2 + d * 0.06, 0.2 + d * 0.06, 0.2 + d * 0.06), new THREE.MeshStandardMaterial({ color: new THREE.Color().setHSL(i / 9, 0.6, 0.55) }));
+  m.position.set(Math.sin(a) * d, 1.5 + (i % 3 - 1) * 0.15, -Math.cos(a) * d); scene.add(m);
+}
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshStandardMaterial({ color: 0x404850 })); floor.rotation.x = -Math.PI / 2; scene.add(floor);
+// rantai efek layar mini: HDR -> pass akhir (ACES sederhana + pertajam), seperti Copper / Millar
+const hdr = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });
+const fsS = new THREE.Scene(), fsC = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const fin = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: { tSrc: { value: hdr.texture }, uPx: { value: new THREE.Vector2() } }, depthTest: false, depthWrite: false,
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: `uniform sampler2D tSrc; uniform vec2 uPx; varying vec2 vUv;
+    vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+    void main() { vec3 c = texture2D(tSrc, vUv).rgb, n = texture2D(tSrc, vUv + vec2(uPx.x, 0.0)).rgb + texture2D(tSrc, vUv - vec2(uPx.x, 0.0)).rgb;
+      c = aces(max(c + (c - 0.5 * n) * 0.2, 0.0)); gl_FragColor = vec4(pow(c, vec3(1.0 / 2.2)), 1.0); }` }));
+fin.frustumCulled = false; fsS.add(fin);
+function renderView(cam, w, h, out) {                                // satu "mata" (atau layar biasa): adegan -> HDR -> pass akhir
+  if (hdr.width !== w || hdr.height !== h) hdr.setSize(w, h);
+  renderer.setRenderTarget(hdr); renderer.clear(); renderer.render(scene, cam);
+  fin.material.uniforms.uPx.value.set(1 / w, 1 / h);
+  renderer.setRenderTarget(out); renderer.render(fsS, fsC);
+}
+const rig = new THREE.Matrix4().makeTranslation(0, 1.6, 0), eyeCam = new THREE.PerspectiveCamera();
+eyeCam.matrixAutoUpdate = false;
+const VRU = { frames: 0 };
+VRKIT.init({ backend: 'three', renderer, lang: () => 'id',
+  start() { VRU.frames = 0; },
+  end() { renderer.setSize(innerWidth, innerHeight); },
+  frame(t, eyes) {
+    VRU.frames++;
+    const ov = VRKIT.three(THREE);
+    renderer.xr.enabled = false;                                      // kamera mata dipakai apa adanya (bukan ArrayCamera XR)
+    for (const e of eyes) {
+      eyeCam.matrixWorld.copy(rig).multiply(new THREE.Matrix4().fromArray(e.world));
+      eyeCam.matrixWorldInverse.copy(eyeCam.matrixWorld).invert();
+      eyeCam.projectionMatrix.fromArray(e.proj); eyeCam.projectionMatrixInverse.copy(eyeCam.projectionMatrix).invert();
+      renderView(eyeCam, e.vp.w, e.vp.h, VRKIT.eyeTarget(e.i));
+      ov.overlay(renderer, e.i, rig);
+    }
+    VRKIT.eyeTargetDone();
+    renderer.xr.enabled = true;
+  },
+}).then((ok) => { window.__jalur = { ok, VRU, THREE, renderer }; });
+function loop() { if (!VRKIT.on) { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderView(camera, innerWidth, innerHeight, null); } requestAnimationFrame(loop); }
+loop();
+</script>
+</body>
+</html>
