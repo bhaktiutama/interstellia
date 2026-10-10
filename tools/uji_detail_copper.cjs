@@ -54,6 +54,19 @@ const ok = (name, cond, info = '') => { console.log(`${cond ? 'OK   ' : 'GAGAL'}
     await pg.click('#lUp'); await pg.waitForTimeout(2500);
     const h = await pg.evaluate(() => parseFloat(document.getElementById('lH').textContent.replace(/[^\d,.]/g, '').replace(',', '.')));
     ok(`${tag}: lift bergerak`, h > 10, h + ' m');
+    // performa: panel di luar layar tidak digambar walau simulasinya berjalan, lalu langsung tergambar saat masuk layar
+    if (tag === 'desktop') {
+      await pg.evaluate(() => { document.getElementById('coriolis').scrollIntoView({ behavior: 'instant' }); }); await pg.waitForTimeout(200);
+      await pg.evaluate(() => { window.__detail.CS.play = false, document.getElementById('cPlay').click(); }); await pg.waitForTimeout(200);
+      await pg.evaluate(() => document.getElementById('galeri').scrollIntoView({ behavior: 'instant' })); await pg.waitForTimeout(300);
+      const n0 = await pg.evaluate(() => PANELS.find((q) => q.el.id === 'cvIn').n); await pg.waitForTimeout(700);
+      const n1 = await pg.evaluate(() => PANELS.find((q) => q.el.id === 'cvIn').n);
+      await pg.evaluate(() => document.getElementById('cvIn').scrollIntoView({ behavior: 'instant', block: 'center' })); await pg.waitForTimeout(300);
+      const n2 = await pg.evaluate(() => PANELS.find((q) => q.el.id === 'cvIn').n);
+      ok('performa: cvIn tidak digambar di luar layar, digambar lagi saat terlihat', n1 === n0 && n2 > n1, `${n0} -> ${n1} -> ${n2}`);
+      const q = await pg.evaluate(() => { const p = PANELS.find((x) => x.el.id === 'cvIn'), dpr = devicePixelRatio, w0 = p.el.width; qSet(2); const w1 = p.el.width, want = Math.round(p.w * Math.max(Math.min(dpr, 1), Math.min(dpr, 2) * 0.65)); qSet(0); return [w0, w1, p.el.width, want, dpr]; });
+      ok('performa: resolusi adaptif Q (skala 0,65, DPR efektif >= 1) lalu pulih', q[1] === q[3] && q[2] === q[0], `DPR ${q[4]}: ${q[0]} -> ${q[1]} -> ${q[2]} px`);
+    }
     const over = await pg.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     ok(`${tag}: tanpa gulir mendatar`, over <= 0, over + ' px');
     await pg.click(`#lang button[data-lang="${lang === 'id' ? 'en' : 'id'}"]`);

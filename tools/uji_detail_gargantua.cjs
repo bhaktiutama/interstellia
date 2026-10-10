@@ -77,6 +77,30 @@ const go = (pg, id) => pg.evaluate((id) => document.getElementById(id).scrollInt
     await go(pg, 'orbit'); await pg.click('#oFine'); await pg.waitForTimeout(1200);
     const o1 = await pg.evaluate(() => ({ t: window.__detail.OS.t, path: !!window.__detail.OR.path }));
     ok(`${tag}: orbit beranimasi`, o1.path && o1.t > 0 && o1.t < 1, o1.t.toFixed(2));
+    // performa: panel di luar layar tidak digambar walau simulasinya berjalan, lalu langsung tergambar saat masuk layar
+    if (tag === 'desktop') {
+      // P1-P4 performa: hero tanpa blur resolusi penuh (DPR 1), piringan tanpa shadowBlur per sel
+      const fx = await pg.evaluate(() => { const r = { heroFilter: 0, diskShadow: 0 };
+        for (const [id, prop, key] of [['cvHero', 'filter', 'heroFilter'], ['cvDisk', 'shadowBlur', 'diskShadow']]) {
+          const p = PANELS.find((q) => q.el.id === id), c = p.ctx, d = Object.getOwnPropertyDescriptor(CanvasRenderingContext2D.prototype, prop);
+          Object.defineProperty(c, prop, { configurable: true, get() { return d.get.call(c); }, set(v) { if (v && v !== 'none') r[key]++; d.set.call(c, v); } });
+          p.draw(p); delete c[prop];
+        }
+        return { ...r, heroD: PANELS.find((q) => q.el.id === 'cvHero').d };
+      });
+      ok('hero tanpa filter blur di kanvas utama, backing DPR 1', fx.heroFilter === 0 && fx.heroD === 1, `filter ${fx.heroFilter}, DPR ${fx.heroD}`);
+      ok('piringan tanpa shadowBlur per sel', fx.diskShadow === 0, `shadowBlur diset ${fx.diskShadow}x`);
+      await pg.evaluate(() => { document.getElementById('jatuh').scrollIntoView({ behavior: 'instant' }); }); await pg.waitForTimeout(200);
+      await pg.evaluate(() => { window.__detail.FS.go(); }); await pg.waitForTimeout(200);
+      await pg.evaluate(() => document.getElementById('galeri').scrollIntoView({ behavior: 'instant' })); await pg.waitForTimeout(300);
+      const n0 = await pg.evaluate(() => PANELS.find((q) => q.el.id === 'cvFall').n); await pg.waitForTimeout(700);
+      const n1 = await pg.evaluate(() => PANELS.find((q) => q.el.id === 'cvFall').n);
+      await pg.evaluate(() => document.getElementById('cvFall').scrollIntoView({ behavior: 'instant', block: 'center' })); await pg.waitForTimeout(300);
+      const n2 = await pg.evaluate(() => PANELS.find((q) => q.el.id === 'cvFall').n);
+      ok('performa: cvFall tidak digambar di luar layar, digambar lagi saat terlihat', n1 === n0 && n2 > n1, `${n0} -> ${n1} -> ${n2}`);
+      const q = await pg.evaluate(() => { const p = PANELS.find((x) => x.el.id === 'cvFall'), dpr = devicePixelRatio, w0 = p.el.width; qSet(2); const w1 = p.el.width, want = Math.round(p.w * Math.max(Math.min(dpr, 1), Math.min(dpr, 2) * 0.65)); qSet(0); return [w0, w1, p.el.width, want, dpr]; });
+      ok('performa: resolusi adaptif Q (skala 0,65, DPR efektif >= 1) lalu pulih', q[1] === q[3] && q[2] === q[0], `DPR ${q[4]}: ${q[0]} -> ${q[1]} -> ${q[2]} px`);
+    }
     const over = await pg.evaluate(() => document.documentElement.scrollWidth - innerWidth);
     ok(`${tag}: tanpa gulir mendatar`, over <= 0, over + ' px');
     await pg.click(`#lang button[data-lang="${lang === 'id' ? 'en' : 'id'}"]`);
@@ -85,6 +109,13 @@ const go = (pg, id) => pg.evaluate((id) => document.getElementById(id).scrollInt
     ok(`${tag}: tanpa error`, errs.length === 0, errs.slice(0, 3).join(' | '));
     ok(`${tag}: tanpa tombol bergaris bawah`, (await underlined(pg)).length === 0, (await underlined(pg)).join(' | '));
     await pg.close();
+  }
+  {   // resolusi adaptif di layar DPR 2: skala 0,65 -> backing 1,3x lebar CSS, lalu pulih ke 2x
+    const pq = await b.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+    await pq.goto(url('experiences/gargantua/detail.html')); await pq.waitForFunction('window.__detailReady === true');
+    const q = await pq.evaluate(() => { const p = PANELS.find((x) => x.el.id === 'cvSky'), w0 = p.el.width; qSet(2); const w1 = p.el.width; qSet(0); return [p.w, w0, w1, p.el.width]; });
+    ok('DPR 2: resolusi adaptif Q 2x -> 1,3x -> 2x', q[1] === Math.round(q[0] * 2) && q[2] === Math.round(q[0] * 1.3) && q[3] === q[1], q.slice(1).join(' -> ') + ' px');
+    await pq.close();
   }
   const pg = await b.newPage(); const errs = [];
   pg.on('pageerror', (e) => errs.push(e.message));

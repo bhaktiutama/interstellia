@@ -546,8 +546,10 @@ let LANG = 'id';
 }
 const L = () => (LANG === 'en' ? 1 : 0);
 const T = (k, v) => { let s = S[k] ? S[k][L()] : k; if (v) for (const n in v) s = s.split('{' + n + '}').join(v[n]); return s; };
-const fmt = (n, d = 0) => n.toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtE = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });   // label kanvas
+const NF = new Map();   // Intl.NumberFormat per (bahasa, digit): toLocaleString membuat formatter baru tiap panggilan (~25x lebih lambat)
+const nf = (loc, d) => { const k = loc + d; let f = NF.get(k); if (!f) NF.set(k, (f = new Intl.NumberFormat(loc, { minimumFractionDigits: d, maximumFractionDigits: d }))); return f; };
+const fmt = (n, d = 0) => nf(LANG === 'en' ? 'en-US' : 'id-ID', d).format(n);
+const fmtE = (n, d = 0) => nf('en-US', d).format(n);   // label kanvas
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const dist = (m) => (Math.abs(m) >= 1000 ? fmt(m / 1000, 2) + ' km' : Math.abs(m) >= 10 ? fmt(m, 1) + ' m' : Math.abs(m) >= 1 ? fmt(m, 2) + ' m' : fmt(m * 100, 1) + ' cm');
@@ -556,27 +558,41 @@ const dur = (s) => (s >= 120 ? fmt(s / 60, 1) + (LANG === 'en' ? ' min' : ' meni
 let MASS = 70;
 
 /* =====================================================================
-   Kanvas: ukuran ikut CSS + DPR, satu loop animasi untuk semua panel yang terlihat
+   Kanvas: ukuran ikut CSS + DPR (resolusi adaptif Q), satu loop animasi untuk semua panel yang terlihat; req() = gambar bila terlihat
    ===================================================================== */
 const PANELS = [];
-function panel(id, draw, step) {
-  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, vis: false, step };
-  o.draw = (p) => { if (p.w > 20 && p.h > 20) draw(p); };   // belum berukuran: jangan gambar (radius negatif)
-  const fit = () => {
-    const r = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+// Q = resolusi adaptif: skala backing kanvas turun bertahap (1 -> 0,8 -> 0,65, DPR efektif >= 1) bila frame > 22 ms selama 1,5 s
+// saat ada animasi, naik lagi bila < 14 ms selama 4 s (ditahan 30 s bila langsung lambat lagi). PC cepat tetap skala 1.
+const Q = { i: 0, steps: [1, 0.8, 0.65], s: 1, ema: 16.7, slow: 0, fast: 0, up: 0, hold: 0 };
+function panel(id, draw, step, opt = {}) {
+  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, d: 1, vis: false, step, dirty: false, n: 0, dprMax: opt.dprMax || 2 };
+  o.draw = (p) => { if (p.w > 20 && p.h > 20) { draw(p); o.n++; o.dirty = false; } };   // belum berukuran: jangan gambar (radius negatif)
+  o.req = () => { if (o.vis) o.draw(o); else o.dirty = true; };                       // di luar layar: tunda, digambar saat masuk layar
+  o.fit = () => {
+    const r = el.getBoundingClientRect(), dpr = devicePixelRatio || 1, d = Math.max(Math.min(dpr, 1), Math.min(dpr, o.dprMax) * Q.s);
     if (r.width < 2) return;
-    o.w = r.width; o.h = r.height; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
-    ctx.setTransform(d, 0, 0, d, 0, 0); o.draw(o);
+    o.w = r.width; o.h = r.height; o.d = d; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
+    ctx.setTransform(d, 0, 0, d, 0, 0); o.req();   // panel di luar layar digambar saat masuk layar (muat lebih cepat)
   };
-  new ResizeObserver(fit).observe(el);
-  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; }, { rootMargin: '80px' }).observe(el);
+  new ResizeObserver(o.fit).observe(el);
+  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; if (o.vis && o.dirty) o.draw(o); }, { rootMargin: '80px' }).observe(el);
   PANELS.push(o); return o;
 }
+function qTune(ms, busy, now) {
+  if (!busy || document.hidden || ms > 250) return;                                  // frame diam atau jeda tab tidak dihitung
+  Q.ema += (ms - Q.ema) * 0.1;
+  if (Q.ema > 22) { Q.fast = 0; Q.slow += ms; if (Q.slow > 1500 && Q.i < Q.steps.length - 1) { if (now - Q.up < 5000) Q.hold = now + 30000; qSet(Q.i + 1); } }
+  else if (Q.ema < 14) { Q.slow = 0; Q.fast += ms; if (Q.fast > 4000 && Q.i > 0 && now > Q.hold) { Q.up = now; qSet(Q.i - 1); } }
+  else { Q.slow = 0; Q.fast = 0; }
+}
+function qSet(i) { Q.i = i; Q.s = Q.steps[i]; Q.slow = Q.fast = 0; Q.ema = 16.7; for (const p of PANELS) p.fit(); }
 let lastT = performance.now();
 function loop(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  const ms = now - lastT, dt = Math.min(0.05, ms / 1000); lastT = now;
+  let busy = CS.play;
   if (CS.play) cStep(dt, now / 1000);   // simulasi Coriolis tetap jalan walau panelnya tergulir keluar layar (ponsel: tombol di bawah panel)
-  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) p.draw(p);
+  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) { p.draw(p); busy = true; }
+  qTune(ms, busy, now);
   requestAnimationFrame(loop);
 }
 // alat gambar
@@ -591,6 +607,17 @@ function pillC(c, x, y, s, col = COL.ink, size = 11.5, align = 'left') {
   c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s, x0 + w / 2, y + 0.5); c.textBaseline = 'alphabetic';
 }
 function glow(c, col, blur) { c.shadowColor = col; c.shadowBlur = blur; }
+// pengganti murah shadowBlur untuk garis panjang dan cincin: tiga garis lebar tembus pandang di bawah garis asli. shadowBlur
+// mengaburkan seluruh kotak batas garis tiap frame (mahal untuk cincin selebar kanvas); ini hanya tiga stroke. Panggil tepat
+// sebelum c.stroke(); kekuatan puncak mengikuti profil Gauss sigma = blur / 2 untuk garis setebal lineWidth.
+function haloStroke(c, col, blur) {
+  const lw = c.lineWidth, ss = c.strokeStyle, ga = c.globalAlpha, p = Math.max(0.08, Math.min(0.6, lw / (blur * 1.25)));
+  c.strokeStyle = col;
+  c.lineWidth = lw + blur * 1.8; c.globalAlpha = ga * 0.2 * p; c.stroke();
+  c.lineWidth = lw + blur; c.globalAlpha = ga * 0.35 * p; c.stroke();
+  c.lineWidth = lw + blur * 0.5; c.globalAlpha = ga * 0.5 * p; c.stroke();
+  c.lineWidth = lw; c.strokeStyle = ss; c.globalAlpha = ga;
+}
 function noGlow(c) { c.shadowBlur = 0; }
 function corner(c, s) { txt(c, 14, 22, s, COL.mu, 10.5, 'left', 650); }
 function arrow(c, x0, y0, x1, y1, col, w = 2) {
@@ -651,14 +678,14 @@ const hero = panel('cvHero', (o) => {
     for (let i = 0; i < 120; i++) { const x = cx - D / 2 + rnd() * D, y = cy - D / 2 + rnd() * D; rnd(); rnd(); const rr = Math.hypot(x - cx, y - cy), a = Math.atan2(y - cy, x - cx) + rotSky;
       if (rr < r + 30) continue; c.beginPath(); c.arc(cx, cy, rr, a - W * 10, a); c.stroke(); }
     c.strokeStyle = COL.te; c.lineWidth = 2.2; glow(c, COL.te, 8);
-    for (const a0 of [-0.6, 2.54]) { const rr = r + 52 * (r / 150); c.beginPath(); c.arc(cx, cy, rr, a0, a0 + 0.8); c.stroke(); const e = a0 + 0.8; arrow(c, cx + Math.cos(e - 0.1) * rr, cy + Math.sin(e - 0.1) * rr, cx + Math.cos(e) * rr, cy + Math.sin(e) * rr, COL.te, 2.2); }
+    for (const a0 of [-0.6, 2.54]) { const rr = r + 52 * (r / 150); c.beginPath(); c.arc(cx, cy, rr, a0, a0 + 0.8); noGlow(c); haloStroke(c, COL.te, 8); c.stroke(); glow(c, COL.te, 8); const e = a0 + 0.8; arrow(c, cx + Math.cos(e - 0.1) * rr, cy + Math.sin(e - 0.1) * rr, cx + Math.cos(e) * rr, cy + Math.sin(e) * rr, COL.te, 2.2); }
     noGlow(c); c.restore();
   }
   const ga = c.createRadialGradient(cx, cy, 0, cx, cy, r);
   ga.addColorStop(0, 'rgba(255,242,194,0.55)'); ga.addColorStop(0.25, 'rgba(109,143,179,0.32)'); ga.addColorStop(1, 'rgba(22,38,58,0.92)');
   c.fillStyle = ga; c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.fill();
   drawLand(c, cx, cy, r, rotLand, r / 150);
-  glow(c, COL.cu, 10); c.strokeStyle = COL.cu; c.lineWidth = 2.5; c.beginPath(); c.arc(cx, cy, r + 16 * kk, 0, TAU); c.stroke(); noGlow(c);
+  c.strokeStyle = COL.cu; c.lineWidth = 2.5; c.beginPath(); c.arc(cx, cy, r + 16 * kk, 0, TAU); haloStroke(c, COL.cu, 10); c.stroke();
   for (let i = 0; i < 12; i++) { const A = i * TAU / 12 + rotLand; c.strokeStyle = 'rgba(217,189,98,0.55)'; c.lineWidth = 2; c.beginPath(); c.moveTo(cx + Math.sin(A) * (r + 16 * kk), cy + Math.cos(A) * (r + 16 * kk)); c.lineTo(cx + Math.sin(A) * (r + 23 * kk), cy + Math.cos(A) * (r + 23 * kk)); c.stroke(); }
   glow(c, '#fff6d6', 28); c.fillStyle = '#fff6d6'; c.beginPath(); c.arc(cx, cy, 6, 0, TAU); c.fill(); noGlow(c);
   for (const b of [100, 220, 330]) { const A = b * Math.PI / 180 + rotLand; person(c, cx + Math.sin(A) * (r - 18 * kk), cy + Math.cos(A) * (r - 18 * kk), Math.atan2(-Math.cos(A), -Math.sin(A)), kk * 0.95); }
@@ -670,12 +697,12 @@ const hero = panel('cvHero', (o) => {
   // panah putar
   if (k < 0.5) {
     c.strokeStyle = COL.cu; c.lineWidth = 2.4; glow(c, COL.cu, 8);
-    for (const a0 of [200, 20]) { c.beginPath(); const s0 = (a0 * Math.PI) / 180; c.arc(cx, cy, r + 40 * kk, -s0, -s0 - 0.9, true); c.stroke(); const e = -s0 - 0.9; arrow(c, cx + Math.cos(e + 0.12) * (r + 40 * kk), cy + Math.sin(e + 0.12) * (r + 40 * kk), cx + Math.cos(e) * (r + 40 * kk), cy + Math.sin(e) * (r + 40 * kk), COL.cu, 2.4); }
+    for (const a0 of [200, 20]) { c.beginPath(); const s0 = (a0 * Math.PI) / 180; c.arc(cx, cy, r + 40 * kk, -s0, -s0 - 0.9, true); noGlow(c); haloStroke(c, COL.cu, 8); c.stroke(); glow(c, COL.cu, 8); const e = -s0 - 0.9; arrow(c, cx + Math.cos(e + 0.12) * (r + 40 * kk), cy + Math.sin(e + 0.12) * (r + 40 * kk), cx + Math.cos(e) * (r + 40 * kk), cy + Math.sin(e) * (r + 40 * kk), COL.cu, 2.4); }
     noGlow(c);
   }
 }, (dt) => { HERO.k += clamp(HERO.kt - HERO.k, -dt / 0.6, dt / 0.6); const t = performance.now() / 1000 - HERO.t0, f = ((W * t) / TAU) % 1; $('heroTurn').innerHTML = `${T('h_turn')} · ${T('h_real')}<br><b>${fmt(f * 63.44, 1)} / ${fmt(63.4, 1)} s</b>`; return true; });
 function heroCap() { $('heroCap').textContent = T(HERO.view === 'out' ? 'h_cap_out' : 'h_cap_in'); }
-document.querySelectorAll('[data-hv]').forEach((b) => b.addEventListener('click', () => { HERO.view = b.dataset.hv; HERO.kt = HERO.view === 'in' ? 1 : 0; document.querySelectorAll('[data-hv]').forEach((x) => x.classList.toggle('on', x === b)); heroCap(); hero.draw(hero); }));
+document.querySelectorAll('[data-hv]').forEach((b) => b.addEventListener('click', () => { HERO.view = b.dataset.hv; HERO.kt = HERO.view === 'in' ? 1 : 0; document.querySelectorAll('[data-hv]').forEach((x) => x.classList.toggle('on', x === b)); heroCap(); hero.req(); }));
 
 /* =====================================================================
    02 Gravitasi vs ketinggian
@@ -688,12 +715,12 @@ const grav = panel('cvGrav', (o) => {
   const gw = c.createLinearGradient(0, fy, 0, ty); gw.addColorStop(0, 'rgba(217,189,98,0.5)'); gw.addColorStop(1, 'rgba(143,211,220,0.12)');
   c.fillStyle = gw; c.beginPath(); c.moveTo(x0, fy); c.lineTo(x0 + wm, fy); c.lineTo(x0, ty); c.closePath(); c.fill();
   const ge = c.createLinearGradient(0, fy, 0, ty); ge.addColorStop(0, COL.cu); ge.addColorStop(1, COL.te);
-  glow(c, COL.cu, 8); c.strokeStyle = ge; c.lineWidth = 3; c.beginPath(); c.moveTo(x0 + wm, fy); c.lineTo(x0, ty); c.stroke(); noGlow(c);
+  c.strokeStyle = ge; c.lineWidth = 3; c.beginPath(); c.moveTo(x0 + wm, fy); c.lineTo(x0, ty); haloStroke(c, COL.cu, 8); c.stroke();
   for (let m = 0; m <= 1000; m += 250) { txt(c, x0 - w * 0.2, Y(m) + 4, `${fmtE(m)} m`, COL.mu, 11, 'right'); c.strokeStyle = 'rgba(255,255,255,0.06)'; c.lineWidth = 1; c.beginPath(); c.moveTo(x0 - w * 0.18, Y(m)); c.lineTo(x0 + wm, Y(m)); c.stroke(); }
   // lantai, sumbu
   const gg = c.createLinearGradient(0, fy, 0, h); gg.addColorStop(0, '#3d5a2c'); gg.addColorStop(1, '#0d110b'); c.fillStyle = gg; c.fillRect(0, fy, w, h - fy);
-  glow(c, COL.cu, 8); c.strokeStyle = COL.cu; c.lineWidth = 2; c.beginPath(); c.moveTo(0, fy); c.lineTo(w, fy); c.stroke();
-  c.strokeStyle = '#fff6d6'; c.setLineDash([2, 5]); c.beginPath(); c.moveTo(0, ty); c.lineTo(w, ty); c.stroke(); c.setLineDash([]); noGlow(c);
+  c.strokeStyle = COL.cu; c.lineWidth = 2; c.beginPath(); c.moveTo(0, fy); c.lineTo(w, fy); haloStroke(c, COL.cu, 8); c.stroke();
+  c.strokeStyle = '#fff6d6'; c.setLineDash([2, 5]); c.beginPath(); c.moveTo(0, ty); c.lineTo(w, ty); haloStroke(c, COL.cu, 8); c.stroke(); c.setLineDash([]);
   txt(c, w - 10, ty - 8, 'axis · sunline', '#fff6d6', 11, 'right');
   // menara 221 m dan dek
   const tx = x0 - w * 0.11, H = fy - Y(221);
@@ -714,7 +741,7 @@ function updGrav() {
   $('gG').textContent = fmt(g, 3) + ' g'; $('gKg').textContent = fmt(MASS * g, 1) + ' kg';
   $('gJump').textContent = g < 0.01 ? '∞' : dist(0.5 / g); $('gCup').textContent = g < 0.001 ? '∞' : dur(Math.sqrt(2 / (g * G)));
   document.querySelectorAll('[data-gh]').forEach((b) => b.classList.toggle('on', +b.dataset.gh === GR.h));
-  grav.draw(grav);
+  grav.req();
 }
 $('gH').addEventListener('input', (e) => { GR.h = +e.target.value; updGrav(); });
 document.querySelectorAll('[data-gh]').forEach((b) => b.addEventListener('click', () => { GR.h = +b.dataset.gh; updGrav(); }));
@@ -757,7 +784,7 @@ function drawSim(o, mode) {
   // tanah
   c.lineWidth = 60; c.strokeStyle = '#18221a'; c.beginPath(); c.arc(cx, cy, Rs + 30, 0, TAU); c.stroke();
   c.lineWidth = 10; c.strokeStyle = '#2e4224'; c.beginPath(); c.arc(cx, cy, Rs + 5, 0, TAU); c.stroke();
-  glow(c, COL.cu, 8); c.lineWidth = 2.2; c.strokeStyle = COL.cu; c.beginPath(); c.arc(cx, cy, Rs, 0, TAU); c.stroke(); noGlow(c);
+  c.lineWidth = 2.2; c.strokeStyle = COL.cu; c.beginPath(); c.arc(cx, cy, Rs, 0, TAU); haloStroke(c, COL.cu, 8); c.stroke();
   // garis-garis lantai (memperlihatkan lantai bergerak di panel kiri)
   const rotF = inr ? W * t : 0, step = 26 / Rs, vc = Math.atan2(w / 2 - cx, h / 2 - cy), span = Math.hypot(w, h) / Rs;
   const k0 = Math.floor((vc - span - rotF) / step), k1 = Math.ceil((vc + span - rotF) / step);
@@ -773,9 +800,9 @@ function drawSim(o, mode) {
     c.strokeStyle = COL.cu2; c.lineWidth = 2; c.beginPath(); c.moveTo(bx - tx_, by - ty_); c.lineTo(bx + tx_, by + ty_); c.stroke();
   } else { glow(c, COL.te, 10); c.fillStyle = COL.te; c.beginPath(); c.arc(cx + ux * Rs, cy + uy * Rs, 4.5, 0, TAU); c.fill(); noGlow(c); }
   // jejak lintasan sampai t
-  c.strokeStyle = COL.te; c.lineWidth = 2.2; glow(c, COL.te, 6); c.beginPath();
+  c.strokeStyle = COL.te; c.lineWidth = 2.2; c.beginPath();
   for (let i = 0; i <= N; i++) { const tt = Math.min(t, (tr.T * i) / N), p = P(tt); i ? c.lineTo(X(p), Y(p)) : c.moveTo(X(p), Y(p)); if (tt >= t) break; }
-  c.stroke(); noGlow(c);
+  haloStroke(c, COL.te, 6); c.stroke();
   // titik hantu
   for (let k = 0; k <= 8; k++) { const tt = (tr.T * k) / 8; if (tt > t + 1e-9) break; const p = P(tt); c.fillStyle = 'rgba(232,236,242,0.45)'; c.beginPath(); c.arc(X(p), Y(p), 3, 0, TAU); c.fill(); }
   // bola
@@ -799,7 +826,7 @@ function drawSim(o, mode) {
 const cvIn = panel('cvIn', (o) => drawSim(o, 'in'), cStep);
 const cvRot = panel('cvRot', (o) => drawSim(o, 'rot'), cStep);
 function cStep(dt, now) {
-  if (CS.lastNow === now) return CS.play || CS.done; CS.lastNow = now;
+  if (CS.lastNow === now) return CS.play; CS.lastNow = now;   // selesai = gambar diam (sudah digambar cDrawAll), tidak perlu digambar ulang tiap frame
   if (!CS.play) return false;
   const tr = CS.tr;
   CS.t = Math.min(tr.T, CS.t + (dt * tr.T) / cDur());
@@ -810,7 +837,7 @@ function cStep(dt, now) {
 const cDur = () => clamp(CS.tr.T, 3, 9);
 function cClock() { const ts = $('cTs'); ts.value = CS.tr.T ? CS.t / CS.tr.T : 0; setP(ts); $('cTso').textContent = dur(CS.t); }
 function cBtn() { $('cPlay').textContent = T(CS.play ? 'c3_pause' : CS.done || CS.t === 0 ? 'c3_play' : 'c3_resume'); }
-function cDrawAll() { cvIn.draw(cvIn); cvRot.draw(cvRot); }
+function cDrawAll() { cvIn.req(); cvRot.req(); }
 function cGo() { CS.t = 0; CS.done = false; CS.play = true; $('cVerd').textContent = ''; cBtn(); }
 function cToggle() { if (CS.play) { CS.play = false; cBtn(); return; } if (CS.done || CS.t >= CS.tr.T) { cGo(); return; } CS.play = true; cBtn(); }
 function cResult() {
@@ -848,8 +875,8 @@ const fount = panel('cvFount', (o) => {
   txt(c, nx - 8, Y(tr.hmax * 0.7), 'straight up?', COL.mu, 11.5, 'right');
   // aliran tetes
   for (const d of FT.drops) { const p = tr.rot(d.a); c.fillStyle = 'rgba(217,246,251,0.9)'; c.beginPath(); c.arc(X(p.s), Y(p.h), 2.1, 0, TAU); c.fill(); }
-  c.strokeStyle = 'rgba(191,238,244,0.55)'; c.lineWidth = 3; glow(c, COL.te, 8); c.beginPath();
-  for (let i = 0; i <= 80; i++) { const p = tr.rot((tr.T * i) / 80); i ? c.lineTo(X(p.s), Y(p.h)) : c.moveTo(X(p.s), Y(p.h)); } c.stroke(); noGlow(c);
+  c.strokeStyle = 'rgba(191,238,244,0.55)'; c.lineWidth = 3; c.beginPath();
+  for (let i = 0; i <= 80; i++) { const p = tr.rot((tr.T * i) / 80); i ? c.lineTo(X(p.s), Y(p.h)) : c.moveTo(X(p.s), Y(p.h)); } haloStroke(c, COL.te, 8); c.stroke();
   const lx = X(tr.land);
   for (let i = 0; i < 3; i++) { c.strokeStyle = `rgba(217,246,251,${0.7 - i * 0.2})`; c.lineWidth = 1; c.beginPath(); c.ellipse(lx, fy + 2, 8 + i * 9, 2.5 + i * 2.5, 0, 0, TAU); c.stroke(); }
   c.strokeStyle = '#fff'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(nx, fy + 40); c.lineTo(lx, fy + 40); c.moveTo(nx, fy + 34); c.lineTo(nx, fy + 46); c.moveTo(lx, fy + 34); c.lineTo(lx, fy + 46); c.stroke();
@@ -865,7 +892,7 @@ const fount = panel('cvFount', (o) => {
 function updFount() {
   FT.tr = traj(0, FT.v); FT.drops = []; setP($('fV'));
   $('fVo').textContent = fmt(FT.v, 1) + ' m/s'; $('fPeak').textContent = dist(FT.tr.hmax); $('fLand').textContent = dist(FT.tr.land);
-  $('fEst').textContent = dist((4 / 3) * W * FT.v ** 3 / G ** 2); fount.draw(fount);
+  $('fEst').textContent = dist((4 / 3) * W * FT.v ** 3 / G ** 2); fount.req();
 }
 $('fV').addEventListener('input', (e) => { FT.v = +e.target.value; updFount(); });
 
@@ -884,7 +911,7 @@ const rain = panel('cvRain', (o) => {
     c.strokeStyle = near ? 'rgba(255,233,184,0.95)' : 'rgba(143,211,220,0.55)'; c.lineWidth = 1.2 + RN.v * 0.06; c.lineCap = 'round';
     c.beginPath(); c.moveTo(x, y); c.lineTo(x + L_ * sl, y - L_); c.stroke();
   }
-  c.fillStyle = '#0f1720'; c.fillRect(0, gy, w, h - gy); glow(c, COL.cu, 8); c.strokeStyle = COL.cu; c.lineWidth = 2; c.beginPath(); c.moveTo(0, gy); c.lineTo(w, gy); c.stroke(); noGlow(c);
+  c.fillStyle = '#0f1720'; c.fillRect(0, gy, w, h - gy); c.strokeStyle = COL.cu; c.lineWidth = 2; c.beginPath(); c.moveTo(0, gy); c.lineTo(w, gy); haloStroke(c, COL.cu, 8); c.stroke();
   for (const px of [0.18, 0.45, 0.85]) { c.fillStyle = 'rgba(93,127,155,0.45)'; c.beginPath(); c.ellipse(px * w, gy + 12, 34, 4, 0, 0, TAU); c.fill(); }
   c.fillStyle = '#2a3240'; c.fillRect(lpx - 2, lpy, 4, gy - lpy); c.strokeStyle = '#2a3240'; c.lineWidth = 4; c.beginPath(); c.moveTo(lpx, lpy + 2); c.quadraticCurveTo(lpx, lpy - 8, lpx - 18, lpy - 4); c.stroke();
   glow(c, '#ffe9b8', 18); c.fillStyle = '#ffe9b8'; c.beginPath(); c.ellipse(lpx - 20, lpy, 7, 3, 0, 0, TAU); c.fill(); noGlow(c);
@@ -905,7 +932,7 @@ const rain = panel('cvRain', (o) => {
 function updRain() {
   const vl = (2 * W * RN.v * RN.v) / G, deg = Math.atan(vl / RN.v) * 180 / Math.PI; setP($('rV'));
   $('rVo').textContent = fmt(RN.v, 1) + ' m/s'; $('rTilt').textContent = fmt(deg, 1) + '°'; $('rDrift').textContent = fmt(vl, 2) + ' m/s';
-  $('rKind').textContent = S.rain_k[L()][RN.v < 3.5 ? 0 : RN.v < 5.5 ? 1 : RN.v < 7.5 ? 2 : 3]; rain.draw(rain);
+  $('rKind').textContent = S.rain_k[L()][RN.v < 3.5 ? 0 : RN.v < 5.5 ? 1 : RN.v < 7.5 ? 2 : 3]; rain.req();
 }
 $('rV').addEventListener('input', (e) => { RN.v = +e.target.value; updRain(); });
 
@@ -933,7 +960,7 @@ const ring = panel('cvRing', (o) => {
   // pengukur
   const g = Math.pow(W * R + WT.v / 3.6, 2) / R / G, gx = w - 70, gy = h - 40, gr = 46;
   c.lineWidth = 7; c.strokeStyle = 'rgba(255,255,255,0.1)'; c.beginPath(); c.arc(gx, gy, gr, Math.PI, 0); c.stroke();
-  const f = clamp(g / 4, 0, 1); c.strokeStyle = col; glow(c, col, 8); c.beginPath(); c.arc(gx, gy, gr, Math.PI, Math.PI + f * Math.PI); c.stroke(); noGlow(c);
+  const f = clamp(g / 4, 0, 1); c.strokeStyle = col; c.beginPath(); c.arc(gx, gy, gr, Math.PI, Math.PI + f * Math.PI); haloStroke(c, col, 8); c.stroke();
   const na = Math.PI + clamp(1 / 4, 0, 1) * Math.PI; c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath(); c.moveTo(gx + Math.cos(na) * (gr - 8), gy + Math.sin(na) * (gr - 8)); c.lineTo(gx + Math.cos(na) * (gr + 8), gy + Math.sin(na) * (gr + 8)); c.stroke();
   txt(c, gx, gy - 6, `${fmtE(g, 2)} g`, col, 17, 'center', 700); txt(c, gx, gy + 12, '1 g mark', COL.mu, 9.5, 'center');
 }, (dt) => {
@@ -947,7 +974,7 @@ function updW() {
   $('wJump').textContent = g < 0.005 ? '∞' : dist(0.5 / g); $('wAbs').textContent = fmt(Math.abs(W * R * 3.6 + v), 1) + ' km/h';
   const ver = Math.abs(v + W * R * 3.6) < 3 ? T('w_float') : v < -W * R * 3.6 ? T('w_neg') : Math.abs(v) > 150 ? T('w_over') : '';
   $('wVerd').textContent = ver; document.querySelectorAll('[data-wv]').forEach((b) => b.classList.toggle('on', +b.dataset.wv === v));
-  WT.trail = []; ring.draw(ring);
+  WT.trail = []; ring.req();
 }
 $('wV').addEventListener('input', (e) => { WT.v = +e.target.value; updW(); });
 document.querySelectorAll('[data-wv]').forEach((b) => b.addEventListener('click', () => { WT.v = +b.dataset.wv; $('wV').value = WT.v; updW(); }));
@@ -974,10 +1001,10 @@ const lift = panel('cvLift', (o) => {
   const gw = c.createLinearGradient(sx - ww / 2, 0, sx + ww / 2, 0); gw.addColorStop(0, '#1a212c'); gw.addColorStop(0.5, '#2a3442'); gw.addColorStop(1, '#171d27');
   c.fillStyle = gw; c.fillRect(sx - ww / 2, ty, ww, fy - ty);
   const gs = c.createLinearGradient(0, fy, 0, ty); gs.addColorStop(0, COL.cu); gs.addColorStop(1, COL.te);
-  glow(c, COL.te, 8); c.strokeStyle = gs; c.lineWidth = 3; c.beginPath(); c.moveTo(sx, fy); c.lineTo(sx, ty); c.stroke(); noGlow(c);
+  c.strokeStyle = gs; c.lineWidth = 3; c.beginPath(); c.moveTo(sx, fy); c.lineTo(sx, ty); haloStroke(c, COL.te, 8); c.stroke();
   const gx1 = nar ? sx + 40 : w * 0.36;
-  c.fillStyle = '#2a3a22'; c.fillRect(0, fy, gx1, h - fy); glow(c, COL.cu, 6); c.strokeStyle = COL.cu; c.lineWidth = 2; c.beginPath(); c.moveTo(0, fy); c.lineTo(gx1, fy); c.stroke(); noGlow(c);
-  c.strokeStyle = COL.te; c.lineWidth = 2.5; glow(c, COL.te, 10); c.beginPath(); c.ellipse(sx, ty - 6, ww * 0.6, 12, 0, 0, TAU); c.stroke(); noGlow(c);
+  c.fillStyle = '#2a3a22'; c.fillRect(0, fy, gx1, h - fy); c.strokeStyle = COL.cu; c.lineWidth = 2; c.beginPath(); c.moveTo(0, fy); c.lineTo(gx1, fy); haloStroke(c, COL.cu, 6); c.stroke();
+  c.strokeStyle = COL.te; c.lineWidth = 2.5; c.beginPath(); c.ellipse(sx, ty - 6, ww * 0.6, 12, 0, 0, TAU); haloStroke(c, COL.te, 10); c.stroke();
   if (!nar) { txt(c, sx + ww * 0.6 + 8, ty - 2, 'hub 0 g', COL.te, 11, 'left', 600); for (let m = 250; m <= 1000; m += 250) txt(c, sx - ww / 2 - 8, Y(Math.min(m, LD)) + 4, `${fmtE(m)} m`, COL.mu, 10, 'right'); }
   // kabin
   const cy_ = Y(S_.hgt); c.fillStyle = COL.ink; glow(c, '#fff', 10); c.beginPath(); c.roundRect ? c.roundRect(sx - 10, cy_ - 14, 20, 14, 3) : c.rect(sx - 10, cy_ - 14, 20, 14); c.fill(); noGlow(c);
@@ -1028,7 +1055,7 @@ function updLift() {
   else if (LF.run && LF.a > 0) v = T('l_acc');
   else if (LF.run) v = T('l_cruise', { dir: T(S_.side > 0 ? 'l_dir_a' : 'l_dir_b'), a: fmt(Math.abs(S_.tilt), 0) + '°' });
   $('lVerd').textContent = v;
-  if (!lift.vis) return; lift.draw(lift);
+  if (!lift.vis) return; lift.req();
 }
 function liftGo(dir) { LF.dir = dir; LF.d = 0; LF.t = 0; LF.done = false; LF.run = true; const q = liftV(0, LF.f); LF.v = q.v; LF.a = q.a; updLift(); }
 $('lUp').addEventListener('click', () => liftGo(1));
@@ -1050,14 +1077,14 @@ const orb = panel('cvOrb', (o) => {
   for (let i = 0; i < 5; i++) { const y = cy - h * 0.3 + i * h * 0.15; arrow(c, w * 0.05, y, w * 0.13, y, 'rgba(243,165,90,0.7)', 1.5); }
   const um = c.createLinearGradient(cx, 0, w, 0); um.addColorStop(0, 'rgba(0,0,0,0.85)'); um.addColorStop(1, 'rgba(0,0,0,0.12)'); c.fillStyle = um; c.fillRect(cx, cy - rs, w - cx, rs * 2);
   c.strokeStyle = 'rgba(255,255,255,0.4)'; c.setLineDash([3, 6]); c.lineWidth = 1; c.beginPath(); c.arc(cx, cy, ro, 0, TAU); c.stroke(); c.setLineDash([]);
-  glow(c, COL.or, 10); c.strokeStyle = COL.or; c.lineWidth = 5; c.lineCap = 'round'; c.beginPath(); c.arc(cx, cy, ro, -HALF, HALF); c.stroke(); noGlow(c);
+  c.strokeStyle = COL.or; c.lineWidth = 5; c.lineCap = 'round'; c.beginPath(); c.arc(cx, cy, ro, -HALF, HALF); haloStroke(c, COL.or, 10); c.stroke();
   // Saturnus
   const ringP = (half) => { c.save(); c.translate(cx, cy); c.rotate(-0.24); c.strokeStyle = 'rgba(230,211,168,0.85)'; c.lineWidth = Math.max(2, rs * 0.16); c.beginPath(); c.ellipse(0, 0, rs * 2.2, rs * 0.42, 0, half ? Math.PI : 0, half ? TAU : Math.PI); c.stroke(); c.restore(); };
   ringP(true);
   const sb = c.createLinearGradient(cx, cy - rs, cx, cy + rs); ['#d9c08e', '#c8a873', '#e6d3a8', '#b8925e', '#e2c895', '#c49f69', '#b08a58'].forEach((col, i, a) => sb.addColorStop(i / (a.length - 1), col));
   c.fillStyle = sb; c.beginPath(); c.arc(cx, cy, rs, 0, TAU); c.fill();
   const nt = c.createLinearGradient(cx - rs, 0, cx + rs, 0); nt.addColorStop(0.35, 'rgba(0,0,0,0)'); nt.addColorStop(1, 'rgba(0,0,0,0.85)'); c.fillStyle = nt; c.beginPath(); c.arc(cx, cy, rs, 0, TAU); c.fill();
-  if (ecl) { c.strokeStyle = 'rgba(255,190,120,0.9)'; glow(c, COL.or, 18); c.lineWidth = 1.5; c.beginPath(); c.arc(cx, cy, rs + 1.5, 0, TAU); c.stroke(); noGlow(c); }
+  if (ecl) { c.strokeStyle = 'rgba(255,190,120,0.9)'; c.lineWidth = 1.5; c.beginPath(); c.arc(cx, cy, rs + 1.5, 0, TAU); haloStroke(c, COL.or, 18); c.stroke(); }
   ringP(false);
   // stasiun
   const p = phiOf(OB.t), sx = cx + Math.cos(p) * ro, sy = cy + Math.sin(p) * ro;
@@ -1083,7 +1110,7 @@ function updOrb(draw = true) {
   $('oSun').textContent = e ? '0 %' : '100 %';
   const nxt = e ? (t1 - OB.t + P_ORB) % P_ORB : (t0 - OB.t + P_ORB) % P_ORB;
   $('oNext').textContent = hh(nxt); $('oNextL').textContent = T(e ? 'o_left' : 'o_next');
-  if (draw) orb.draw(orb);
+  if (draw) orb.req();
 }
 $('oT').addEventListener('input', (e) => { OB.t = +e.target.value; updOrb(); });
 $('oPlay').addEventListener('click', () => { OB.play = !OB.play; $('oPlay').textContent = T(OB.play ? 'c7_pause' : 'c7_play'); });

@@ -567,8 +567,10 @@ let LANG = 'id';
 }
 const L = () => (LANG === 'en' ? 1 : 0);
 const T = (k, v) => { let s = S[k] ? S[k][L()] : k; if (v) for (const n in v) s = s.split('{' + n + '}').join(v[n]); return s; };
-const fmt = (n, d = 0) => n.toLocaleString(LANG === 'en' ? 'en-US' : 'id-ID', { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtE = (n, d = 0) => n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });   // label kanvas
+const NF = new Map();   // Intl.NumberFormat per (bahasa, digit): toLocaleString membuat formatter baru tiap panggilan (~25x lebih lambat)
+const nf = (loc, d) => { const k = loc + d; let f = NF.get(k); if (!f) NF.set(k, (f = new Intl.NumberFormat(loc, { minimumFractionDigits: d, maximumFractionDigits: d }))); return f; };
+const fmt = (n, d = 0) => nf(LANG === 'en' ? 'en-US' : 'id-ID', d).format(n);
+const fmtE = (n, d = 0) => nf('en-US', d).format(n);   // label kanvas
 const sci = (x, d = 1) => { const e = Math.floor(Math.log10(Math.abs(x))), m = x / 10 ** e; return (LANG === 'en' ? m.toFixed(d) : m.toFixed(d).replace('.', ',')) + 'e' + e; };
 const $ = (id) => document.getElementById(id);
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
@@ -577,34 +579,58 @@ const dur = (s) => (s >= 3 * 86400 ? fmt(s / 86400, 1) + (LANG === 'en' ? ' days
 function setP(inp) { const p = ((+inp.value - +inp.min) / (+inp.max - +inp.min)) * 100; inp.style.setProperty('--p', p + '%'); }
 
 /* =====================================================================
-   Kanvas: ukuran ikut CSS + DPR, satu loop animasi; simulasi berjalan walau panelnya tergulir keluar
+   Kanvas: ukuran ikut CSS + DPR (resolusi adaptif Q), satu loop animasi; simulasi berjalan walau panelnya tergulir keluar,
+   tetapi kanvasnya hanya digambar bila terlihat (req(): ditunda lalu digambar sekali saat masuk layar)
    ===================================================================== */
 const PANELS = [], SIMS = [];
-function panel(id, draw, step) {
-  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, vis: false, step };
-  o.draw = (p) => { if (p.w > 20 && p.h > 20) draw(p); };
-  const fit = () => {
-    const r = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+// Q = resolusi adaptif: skala backing kanvas turun bertahap (1 -> 0,8 -> 0,65, DPR efektif >= 1) bila frame > 22 ms selama 1,5 s
+// saat ada animasi, naik lagi bila < 14 ms selama 4 s (ditahan 30 s bila langsung lambat lagi). PC cepat tetap skala 1.
+const Q = { i: 0, steps: [1, 0.8, 0.65], s: 1, ema: 16.7, slow: 0, fast: 0, up: 0, hold: 0 };
+function panel(id, draw, step, opt = {}) {
+  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, d: 1, vis: false, step, dirty: false, n: 0, dprMax: opt.dprMax || 2 };
+  o.draw = (p) => { if (p.w > 20 && p.h > 20) { draw(p); o.n++; o.dirty = false; } };   // belum berukuran: jangan gambar (radius negatif)
+  o.req = () => { if (o.vis) o.draw(o); else o.dirty = true; };                       // di luar layar: tunda, digambar saat masuk layar
+  o.fit = () => {
+    const r = el.getBoundingClientRect(), dpr = devicePixelRatio || 1, d = Math.max(Math.min(dpr, 1), Math.min(dpr, o.dprMax) * Q.s);
     if (r.width < 2) return;
-    o.w = r.width; o.h = r.height; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
-    ctx.setTransform(d, 0, 0, d, 0, 0); o.draw(o);
+    o.w = r.width; o.h = r.height; o.d = d; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
+    ctx.setTransform(d, 0, 0, d, 0, 0); o.req();   // panel di luar layar digambar saat masuk layar (muat lebih cepat)
   };
-  new ResizeObserver(fit).observe(el);
-  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; }, { rootMargin: '80px' }).observe(el);
+  new ResizeObserver(o.fit).observe(el);
+  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; if (o.vis && o.dirty) o.draw(o); }, { rootMargin: '80px' }).observe(el);
   PANELS.push(o); return o;
 }
+function qTune(ms, busy, now) {
+  if (!busy || document.hidden || ms > 250) return;                                  // frame diam atau jeda tab tidak dihitung
+  Q.ema += (ms - Q.ema) * 0.1;
+  if (Q.ema > 22) { Q.fast = 0; Q.slow += ms; if (Q.slow > 1500 && Q.i < Q.steps.length - 1) { if (now - Q.up < 5000) Q.hold = now + 30000; qSet(Q.i + 1); } }
+  else if (Q.ema < 14) { Q.slow = 0; Q.fast += ms; if (Q.fast > 4000 && Q.i > 0 && now > Q.hold) { Q.up = now; qSet(Q.i - 1); } }
+  else { Q.slow = 0; Q.fast = 0; }
+}
+function qSet(i) { Q.i = i; Q.s = Q.steps[i]; Q.slow = Q.fast = 0; Q.ema = 16.7; for (const p of PANELS) p.fit(); }
 let lastT = performance.now();
 function loop(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
-  for (const s of SIMS) s.tick(dt);
-  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) p.draw(p);
+  const ms = now - lastT, dt = Math.min(0.05, ms / 1000); lastT = now;
+  let busy = false;
+  for (const s of SIMS) { s.tick(dt); busy = busy || s.play; }
+  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) { p.draw(p); busy = true; }
+  qTune(ms, busy, now);
   requestAnimationFrame(loop);
 }
+// bagian yang sedang (hampir) terlihat; pemutar yang tertunda disusulkan saat bagiannya masuk layar
+const SECVIS = new Set();
+const secIO = new IntersectionObserver((es) => { for (const e of es) { if (e.isIntersecting) { SECVIS.add(e.target); for (const s of SIMS) if (s.pend && s.sec === e.target) s.sync(true); } else SECVIS.delete(e.target); } }, { rootMargin: '200px' });
+document.querySelectorAll('section').forEach((el) => secIO.observe(el));
 // pemutar umum: Jalankan / Jeda / Lanjut + slider waktu + label kecepatan (pola bab Coriolis Copper)
 function player(key, opt) {
   const s = { t: 0, T: opt.T, play: false, done: false, opt };
   s.btn = () => { if (opt.btn) $(opt.btn).textContent = T(s.play ? 'pause' : s.done || s.t === 0 ? 'run' : 'resume'); };
-  s.sync = () => { if (opt.slider) { const el = $(opt.slider); el.value = s.T ? s.t / s.T : 0; setP(el); } if (opt.update) opt.update(); };
+  // angka dan gambar hanya diperbarui bila bagiannya terlihat; di luar layar ditunda (pend) lalu disusulkan saat bagian masuk layar
+  s.sec = opt.btn || opt.slider ? $(opt.btn || opt.slider).closest('section') : null;
+  s.sync = (force) => {
+    if (!force && s.sec && !SECVIS.has(s.sec)) { s.pend = true; return; }
+    s.pend = false; if (opt.slider) { const el = $(opt.slider); el.value = s.T ? s.t / s.T : 0; setP(el); } if (opt.update) opt.update();
+  };
   s.go = () => { s.t = 0; s.done = false; s.play = true; if (opt.reset) opt.reset(); s.btn(); s.sync(); };
   s.toggle = () => { if (s.play) { s.play = false; s.btn(); return; } if (s.done || s.t >= s.T || s.t === 0) { s.go(); return; } s.play = true; s.btn(); };
   s.seek = (f) => { s.play = false; s.t = clamp(f, 0, 1) * s.T; s.done = s.t >= s.T; if (opt.seek) opt.seek(); s.btn(); s.sync(); };
@@ -631,6 +657,17 @@ function pillC(c, x, y, s, col = COL.ink, size = 11.5, align = 'left') {
   c.fillStyle = col; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText(s, x0 + w / 2, y + 0.5); c.textBaseline = 'alphabetic';
 }
 function glow(c, col, blur) { c.shadowColor = col; c.shadowBlur = blur; }
+// pengganti murah shadowBlur untuk garis panjang dan cincin: tiga garis lebar tembus pandang di bawah garis asli. shadowBlur
+// mengaburkan seluruh kotak batas garis tiap frame (mahal untuk cincin selebar kanvas); ini hanya tiga stroke. Panggil tepat
+// sebelum c.stroke(); kekuatan puncak mengikuti profil Gauss sigma = blur / 2 untuk garis setebal lineWidth.
+function haloStroke(c, col, blur) {
+  const lw = c.lineWidth, ss = c.strokeStyle, ga = c.globalAlpha, p = Math.max(0.08, Math.min(0.6, lw / (blur * 1.25)));
+  c.strokeStyle = col;
+  c.lineWidth = lw + blur * 1.8; c.globalAlpha = ga * 0.2 * p; c.stroke();
+  c.lineWidth = lw + blur; c.globalAlpha = ga * 0.35 * p; c.stroke();
+  c.lineWidth = lw + blur * 0.5; c.globalAlpha = ga * 0.5 * p; c.stroke();
+  c.lineWidth = lw; c.strokeStyle = ss; c.globalAlpha = ga;
+}
 function noGlow(c) { c.shadowBlur = 0; }
 function corner(c, s, x = 14) { txt(c, x, 22, s, COL.mu, 10.5, 'left', 650); }
 function cornerR(c, w, s, col = COL.mu) { txt(c, w - 14, 22, s, col, 10.5, 'right', 650); }
@@ -774,21 +811,21 @@ const tD = (f) => Math.pow(10, f * Math.log10(7200));                 // 1 s sam
 const tF = (s) => Math.log10(s) / Math.log10(7200);
 const TM = { target: 3600 * Math.pow(10, 0.6 * Math.log10(7200)) / 3600 };
 const TS = player('time', { T: 60, btn: 'tPlay', rate: () => TS.T / 5, reset: () => { TS.T = TM.target; $('tVerd').textContent = ''; },
-  update: () => { timeRead(); tm.draw(tm); }, end: () => { $('tVerd').textContent = T('t_done', { p: human(TS.T), o: human(outS(TS.T)) }); } });
+  update: () => { timeRead(); tm.req(); }, end: () => { $('tVerd').textContent = T('t_done', { p: human(TS.T), o: human(outS(TS.T)) }); } });
 function timeRead() {
   const t = TS.t;
   $('tPlanet').textContent = t < 120 ? fmt(t, 1) + ' s' : human(t); $('tOut').textContent = human(outS(t)); $('tEarth').textContent = fmt(outS(t) / YEAR, 2) + (LANG === 'en' ? ' laps' : ' putaran');
   $('tDo').textContent = TM.target < 120 ? fmt(TM.target, 2) + ' s' : human(TM.target); setP($('tD'));
   $('tSpeed').textContent = T('t_speed', { k: fmt(TS.T / 5, TS.T / 5 < 10 ? 1 : 0) });
 }
-function timeSet(s, go) { TM.target = s; $('tD').value = tF(s); TS.T = s; TS.t = 0; TS.done = false; TS.play = false; TS.btn(); timeRead(); tm.draw(tm); if (go) TS.go(); }
+function timeSet(s, go) { TM.target = s; $('tD').value = tF(s); TS.T = s; TS.t = 0; TS.done = false; TS.play = false; TS.btn(); timeRead(); tm.req(); if (go) TS.go(); }
 $('tD').addEventListener('input', (e) => timeSet(tD(+e.target.value), false));
 const tm = panel('cvTime', (o) => {
   const c = o.ctx, w = o.w, h = o.h, t = TS.t;
   c.clearRect(0, 0, w, h); bgStars(c, w, h, 9, 90);
   // jam planet
   const cx = w * 0.2, cy = h * 0.52, R0 = Math.min(w * 0.15, h * 0.36);
-  c.fillStyle = '#0b1418'; c.strokeStyle = COL.ac; c.lineWidth = 3; glow(c, COL.ac, 14); c.beginPath(); c.arc(cx, cy, R0, 0, TAU); c.fill(); c.stroke(); noGlow(c);
+  c.fillStyle = '#0b1418'; c.strokeStyle = COL.ac; c.lineWidth = 3; c.beginPath(); c.arc(cx, cy, R0, 0, TAU); haloStroke(c, COL.ac, 14); c.fill(); c.stroke();   // halo dulu: bagian dalam tertutup isi, seperti shadow
   for (let i = 0; i < 60; i++) { const a = (i / 60) * TAU, l = i % 5 ? 0.94 : 0.86; c.strokeStyle = i % 5 ? 'rgba(255,255,255,0.3)' : COL.ink; c.lineWidth = i % 5 ? 1 : 2; c.beginPath(); c.moveTo(cx + Math.sin(a) * R0 * l, cy - Math.cos(a) * R0 * l); c.lineTo(cx + Math.sin(a) * R0 * 0.98, cy - Math.cos(a) * R0 * 0.98); c.stroke(); }
   const hand = (frac, len, lw, col) => { const a = frac * TAU; c.strokeStyle = col; c.lineWidth = lw; c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + Math.sin(a) * R0 * len, cy - Math.cos(a) * R0 * len); c.stroke(); };
   hand((t / 3600) % 1, 0.55, 4, COL.ink); hand((t / 60) % 1, 0.8, 2.5, COL.ink); hand(t % 1, 0.9, 1.4, COL.ac);
@@ -824,9 +861,9 @@ function spRead() {
   $('sR').textContent = fmt(k.r, k.r < 1.01 ? 5 : 3) + ' GM/c²'; $('sD').textContent = fmt(k.ut, k.ut < 10 ? 2 : 0) + 'x';
   $('sY').textContent = human(3600 * k.ut);
 }
-$('sE').addEventListener('input', (e) => { SPS.play = false; SPS.btn(); SP.q = +e.target.value; spRead(); spp.draw(spp); });
-$('sMillar').addEventListener('click', () => { SPS.play = false; SPS.btn(); SP.q = -Math.log10(1.333e-14); spRead(); spp.draw(spp); });
-$('sZero').addEventListener('click', () => { SPS.play = false; SPS.btn(); SP.q = 0; spRead(); spp.draw(spp); });
+$('sE').addEventListener('input', (e) => { SPS.play = false; SPS.btn(); SP.q = +e.target.value; spRead(); spp.req(); });
+$('sMillar').addEventListener('click', () => { SPS.play = false; SPS.btn(); SP.q = -Math.log10(1.333e-14); spRead(); spp.req(); });
+$('sZero').addEventListener('click', () => { SPS.play = false; SPS.btn(); SP.q = 0; spRead(); spp.req(); });
 const SPT = { t: 0 };
 const spp = panel('cvSpin', (o) => {
   const c = o.ctx, w = o.w, h = o.h, e = spE(), k = kerrIsco(e);
@@ -839,7 +876,7 @@ const spp = panel('cvSpin', (o) => {
   txt(c, x0 + gw / 2, y0 + gh + 30, '1 − a (gap to maximum spin)', COL.mu, 10, 'center');
   c.strokeStyle = COL.red; c.setLineDash([6, 4]); c.beginPath(); c.moveTo(x0, Y(DIL)); c.lineTo(x0 + gw, Y(DIL)); c.stroke(); c.setLineDash([]);
   txt(c, x0 + 6, Y(DIL) - 6, 'Millar 61,362x', COL.red, 10.5, 'left', 650);
-  c.strokeStyle = COL.ac; c.lineWidth = 2.4; glow(c, COL.ac, 8); c.beginPath(); for (let i = 0; i <= 160; i++) { const q = i / 10, p = [X(q), Y(kerrIsco(10 ** -q).ut)]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); noGlow(c);
+  c.strokeStyle = COL.ac; c.lineWidth = 2.4; c.beginPath(); for (let i = 0; i <= 160; i++) { const q = i / 10, p = [X(q), Y(kerrIsco(10 ** -q).ut)]; i ? c.lineTo(...p) : c.moveTo(...p); }  haloStroke(c, COL.ac, 8); c.stroke();
   glow(c, '#fff', 14); c.fillStyle = '#fff'; c.beginPath(); c.arc(X(SP.q), Y(k.ut), 5, 0, TAU); c.fill(); noGlow(c);
   txt(c, x0, 22, 'DILATION ON THE INNERMOST STABLE ORBIT', COL.mu, 10.5, 'left', 650);
   // pandangan atas: horizon dan ISCO (skala log agar terlihat)
@@ -884,7 +921,7 @@ const hzE = (f) => Math.pow(10, Math.log10(0.5) + f * (Math.log10(50) - Math.log
 const hzF = (v) => (Math.log10(v) - Math.log10(0.5)) / (Math.log10(50) - Math.log10(0.5));
 const HZ_D0 = 200e3;
 const HZS = player('hz', { T: HZ_D0 / WV.v, btn: 'hPlay', slider: 'hTs', rate: () => 100, reset: () => { HZ.flag = ''; },
-  update: () => { hzRead(); hz.draw(hz); } });
+  update: () => { hzRead(); hz.req(); } });
 const hzVis = () => horizon(HZ.eye) + horizon(HZ.H);
 function hzRead() {
   const d = HZ_D0 - WV.v * HZS.t, vis = hzVis(), warn = vis / WV.v;
@@ -894,8 +931,8 @@ function hzRead() {
   $('hDist').textContent = fmt(Math.max(0, d) / 1e3, 1) + ' km'; $('hTso').textContent = clockS(HZS.t);
   $('hVerd').textContent = d <= 0 ? T('z_hit') : d <= vis ? T('z_seen', { m: fmt(d / WV.v / 60, 1), y: human(outS(d / WV.v)) }) : T('z_hidden');
 }
-$('hE').addEventListener('input', (e) => { HZ.eye = hzE(+e.target.value); hzRead(); hz.draw(hz); });
-$('hW').addEventListener('input', (e) => { HZ.H = +e.target.value; hzRead(); hz.draw(hz); });
+$('hE').addEventListener('input', (e) => { HZ.eye = hzE(+e.target.value); hzRead(); hz.req(); });
+$('hW').addEventListener('input', (e) => { HZ.H = +e.target.value; hzRead(); hz.req(); });
 const hz = panel('cvHz', (o) => {
   const c = o.ctx, w = o.w, h = o.h, d = HZ_D0 - WV.v * HZS.t, vis = hzVis();
   c.clearRect(0, 0, w, h); bgStars(c, w, h, 21, 50);
@@ -935,7 +972,7 @@ const hz = panel('cvHz', (o) => {
    ===================================================================== */
 const WVX = { run: 0, x0: 6000, swept: false };
 const WVS = player('wave', { T: WVX.x0 / WV.v + 4, btn: 'wPlay', slider: 'wTs', rate: () => 4, reset: () => { WVX.swept = false; $('wVerd').textContent = T('w_start'); },
-  during: () => waveEvents(), seek: () => { WVX.swept = false; waveEvents(); }, update: () => { waveRead(); wvp.draw(wvp); } });
+  during: () => waveEvents(), seek: () => { WVX.swept = false; waveEvents(); }, update: () => { waveRead(); wvp.req(); } });
 const wvPlayer = (t) => (WVX.run ? -Math.min(t, WVX.x0 / WV.v) * 4.2 : 0);   // posisi pemain (m, negatif = menjauh)
 const wvFront = (t) => WVX.x0 - WV.v * t;                                     // muka gelombang (m, gelombang bergerak ke -x... ke arah pemain di 0)
 function waveState(t) {
@@ -1010,7 +1047,7 @@ $('lA').addEventListener('input', (e) => { LB.amp = +e.target.value; $('lAo').te
 const OB = { shift: true, wave0: 4000 };
 const obClimb = () => climbT(1300, OB.shift ? 65 : 40);
 const OBS = player('orb', { T: 40 + P_ORB, btn: 'oPlay', slider: 'oTs', rate: (t) => (t < 40 ? 2 : 450), reset: () => { $('oVerd').textContent = T('o_start'); },
-  during: () => obEvents(), seek: () => obEvents(), update: () => { obRead(); obp.draw(obp); } });
+  during: () => obEvents(), seek: () => obEvents(), update: () => { obRead(); obp.req(); } });
 const obAlt = (t) => Math.min(1300, climbZ(Math.min(t, 40), OB.shift ? 65 : 40));
 const obWaveT = () => OB.wave0 / WV.v;                                   // 32 s sampai gelombang tiba
 function obEvents() {
@@ -1037,8 +1074,8 @@ const obp = panel('cvOrb', (o) => {
   c.fillStyle = 'rgba(127,185,196,0.25)'; c.fillRect(X(Math.min(t, 40) >= wt ? wt : wt), Y(WV.H), X(40) - X(wt), Y(0) - Y(WV.H));
   c.strokeStyle = COL.red; c.setLineDash([6, 4]); c.beginPath(); c.moveTo(x0, Y(WV.H)); c.lineTo(x0 + gw, Y(WV.H)); c.stroke(); c.setLineDash([]);
   txt(c, x0 + 4, Y(WV.H) - 6, 'crest 1,200 m · wave arrives at ' + fmtE(wt, 0) + ' s', COL.red, 10);
-  c.strokeStyle = OB.shift ? COL.ac : COL.ac2; c.lineWidth = 2.4; glow(c, COL.ac, 8); c.beginPath();
-  for (let i = 0; i <= 200; i++) { const tt = (Math.min(t, 40) * i) / 200, p = [X(tt), Y(obAlt(tt))]; i ? c.lineTo(...p) : c.moveTo(...p); } c.stroke(); noGlow(c);
+  c.strokeStyle = OB.shift ? COL.ac : COL.ac2; c.lineWidth = 2.4; c.beginPath();
+  for (let i = 0; i <= 200; i++) { const tt = (Math.min(t, 40) * i) / 200, p = [X(tt), Y(obAlt(tt))]; i ? c.lineTo(...p) : c.moveTo(...p); } haloStroke(c, COL.ac, 8); c.stroke();
   c.fillStyle = '#fff'; c.beginPath(); c.arc(X(Math.min(t, 40)), Y(obAlt(t)), 4.5, 0, TAU); c.fill();
   txt(c, x0, 18, 'CLIMB · ' + (OB.shift ? '65' : '40') + ' m/s', COL.mu, 10.5, 'left', 650);
   // kanan: orbit berskala
