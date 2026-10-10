@@ -511,7 +511,21 @@ async def kelompok7(pg):
       [...document.querySelectorAll('#uiBody .btns button')].find((b) => b.textContent === 'Bahasa Indonesia').click();
       return { tabs: tabs.map((b) => b.textContent), n, vis, after, lbl, ls: localStorage.getItem('gargantua.panelTab') }; }''')
     cek('panel bertab: 7 tab, hanya satu pane tampil, tab diingat setelah ganti bahasa, semua kontrol tetap ada',
-        len(t['tabs']) == 7 and t['vis'] == ['disk'] and t['after'] == 'disk' and t['lbl'] == 'Disk' and t['ls'] == 'disk' and t['n'] == 38, str(t))
+        len(t['tabs']) == 7 and t['vis'] == ['disk'] and t['after'] == 'disk' and t['lbl'] == 'Disk' and t['ls'] == 'disk' and t['n'] == 42, str(t))   # 38 + musik: putar / jeda, pilih file, input file, volume
+    # --- musik dari file sendiri (seperti Copper): J putar / jeda, volume tersimpan ---
+    mu = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MUSIC, n = 4800, b = new ArrayBuffer(44 + n * 2), v = new DataView(b);
+      const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, 48000, true); v.setUint32(28, 96000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+      const none = !M.el; G.loadMusicFile(new File([b], 'uji.wav', { type: 'audio/wav' }));
+      const on1 = M.on, el = !!M.el && M.el.loop, gain = !!M.gain;
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' })); const on2 = M.on;
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' })); const on3 = M.on;
+      const lbl = [...document.querySelectorAll('#uiBody .btns button')].some((x) => x.textContent.includes('Musik: diputar'));
+      M.el.pause(); M.on = false;
+      return { none, on1, el, gain, on2, on3, lbl, name: M.name }; }''')
+    cek('musik dari file: dimuat dan diputar berulang lewat master, J jeda lalu putar, label panel ikut',
+        mu['none'] and mu['on1'] and mu['el'] and mu['gain'] and not mu['on2'] and mu['on3'] and mu['lbl'] and mu['name'] == 'uji.wav', str(mu))
     await kelompok8(pg)
 
 async def kelompok8(pg):

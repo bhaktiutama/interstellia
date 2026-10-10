@@ -777,7 +777,7 @@ const ID = {
   'Film': 'Sinematik', 'Edge-on': 'Dari samping', 'Top-down': 'Dari atas', 'Close approach': 'Mendekat', 'Reset': 'Atur ulang', 'Screenshot': 'Tangkap layar',
   'FPS': 'FPS', 'Resolution': 'Resolusi', 'Max steps': 'Langkah maks', 'Distance': 'Jarak', 'Buffer': 'Buffer',
   'Language': 'Bahasa', '< MENU': '< MENU',
-  'Space pause · Q quality · P screen effects · U sound · F photo · V vessel · R reset · H hide UI · ` panel · ? help': 'Space jeda · Q kualitas · P efek layar · U suara · F foto · V wahana · R atur ulang · H sembunyikan UI · ` panel · ? bantuan',
+  'Space pause · Q quality · P screen effects · U sound · J music · F photo · V vessel · R reset · H hide UI · ` panel · ? help': 'Space jeda · Q kualitas · P efek layar · U suara · J musik · F foto · V wahana · R atur ulang · H sembunyikan UI · ` panel · ? bantuan',
   'WebGL2 is not available in this browser or on this GPU.\n\nThis simulation needs WebGL2 (Chrome, Edge, Firefox, Safari 15+). Check that hardware acceleration is enabled in your browser settings.':
     'WebGL2 tidak tersedia di browser atau GPU ini.\n\nSimulasi ini butuh WebGL2 (Chrome, Edge, Firefox, Safari 15+). Pastikan akselerasi hardware aktif di pengaturan browser.',
   'WebGL context lost. Reload the page to restart.': 'Konteks WebGL hilang. Muat ulang halaman untuk memulai lagi.',
@@ -965,6 +965,18 @@ const ID = {
   'tesseract gate (fiction)': 'gerbang tesseract (fiksi)',
   'tesseract gate in': 'gerbang tesseract dalam',
   'Sound (U)': 'Suara (U)',
+  'Music': 'Musik',
+  'Music: {f}': 'Musik: {f}',
+  'Music: none': 'Musik: belum ada',
+  'Music: playing': 'Musik: diputar',
+  'Music: paused': 'Musik: dijeda',
+  'Music: playing (J)': 'Musik: diputar (J)',
+  'Music: paused (J)': 'Musik: dijeda (J)',
+  'Music volume': 'Volume musik',
+  'Choose music file...': 'Pilih file musik...',
+  'No music file yet: choose one in the panel (`), Sound tab': 'Belum ada file musik: pilih di panel (`), tab Suara',
+  'Music from your own file: play / pause (choose the file in the panel, Sound tab)': 'Musik dari file sendiri: putar / jeda (pilih file di panel, tab Suara)',
+  'Your own music file (MP3, OGG, WAV, ...) loops through the sound master. It is not saved: choose it again after reloading.': 'File musik sendiri (MP3, OGG, WAV, ...) diputar berulang lewat master suara. Tidak disimpan: pilih lagi setelah halaman dimuat ulang.',
   'Sound: on (U)': 'Suara: nyala (U)',
   'Sound: off (U)': 'Suara: mati (U)',
   'Sound on / off: synthesized; space carries no sound, so cabin and impact sounds travel through the hull, the disk roar is distilled': 'Suara nyala / mati: disintesis; ruang hampa tidak menghantarkan suara, jadi suara kabin dan tumbukan merambat lewat badan wahana, gemuruh piringan distilisasi',
@@ -984,7 +996,7 @@ function applyStaticLang() {
   $('#helpRows').innerHTML = [
     [txt('Drag / wheel / pinch'), txt('Orbit and zoom the camera')], ['1 - 4', txt('Camera presets: film, edge-on, top-down, close approach')],
     ['Space', txt('Pause / resume time')], ['Q', txt('Quality preset: Ultra, High, Medium, Low')],
-    ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')], ['U', txt('Sound on / off: synthesized; space carries no sound, so cabin and impact sounds travel through the hull, the disk roar is distilled')], ['F', txt('Rangefinder camera outside a mission or while paused (keys below); the old free photo mode is in the camera panel')],
+    ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')], ['U', txt('Sound on / off: synthesized; space carries no sound, so cabin and impact sounds travel through the hull, the disk roar is distilled')], ['J', txt('Music from your own file: play / pause (choose the file in the panel, Sound tab)')], ['F', txt('Rangefinder camera outside a mission or while paused (keys below); the old free photo mode is in the camera panel')],
     ['V · Esc', txt('Vessel view: GX-01 chase camera / cockpit (Esc exits)')], [txt('Mission'), txt('Start a mission from the panel (`): 10 ways to fall in, two of them skimming the disk, one aiming for the fictional tesseract')],
     [txt('In the mission'), txt('Mission keys: W/S A/D R/F thrust, Shift main engine, drag orbits the chase camera around the vessel (double-click resets; in the cockpit drag turns the nose), right-drag turns the nose, X attitude (centre, level, track, free), O autopilot skim, E flare, M relay view and spacetime diagram, Z time, V view (chase camera, cockpit, relay at 22 rs), Esc ends; tesseract scenario: W/S angle, A/D plane, Enter locks the aim')], ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
     [`<b>${CAMKIT.helpHead(LANG)}</b>`, ''], ...CAMKIT.helpRows(LANG),   // K: tombol mode kamera
@@ -2730,6 +2742,29 @@ function main() {
   const sfxImpact = (vk) => { sfxNoise(0.05 + 0.04 * Math.random(), 0.25 * Math.min(1.5, vk), 'highpass', 2500 + 2000 * Math.random()); if (MIS.glass > 60) sfxTone(2600 + 900 * Math.random(), 0.12, 0.05, 'triangle', 1400); };
   const sfxFlare = () => { sfxNoise(0.9, 0.3, 'bandpass', 400, 3000, 2); sfxTone(300, 0.6, 0.06, 'sine', 900); };
   const sfxShatter = () => { sfxNoise(1.4, 0.6, 'highpass', 1800, 600); for (let i = 0; i < 6; i++) setTimeout(() => sfxTone(1800 + 2500 * Math.random(), 0.25, 0.05, 'triangle', 600), i * 70); };
+  // Musik dari file milik pengguna (seperti loadMusicFile() Copper): <audio> berulang lewat master, J putar / jeda, tidak disimpan antarsesi
+  const MUSIC = { el: null, node: null, gain: null, name: '', on: false, vol: 0.6 };
+  try { const v = parseFloat(localStorage.getItem('gargantua.musicVol')); if (isFinite(v)) MUSIC.vol = Math.min(1, Math.max(0, v)); } catch (e) { /* abaikan */ }
+  function loadMusicFile(file) {
+    if (!AUDIO.on) setSound(true); else audioInit();
+    const c = AUDIO.ctx; if (!c) return;
+    if (c.state === 'suspended') c.resume();
+    if (MUSIC.el) { MUSIC.el.pause(); MUSIC.node.disconnect(); URL.revokeObjectURL(MUSIC.el.src); }
+    if (!MUSIC.gain) { MUSIC.gain = c.createGain(); MUSIC.gain.gain.value = MUSIC.vol; MUSIC.gain.connect(AUDIO.n.master); }
+    const el = new Audio(URL.createObjectURL(file)); el.loop = true;
+    MUSIC.node = c.createMediaElementSource(el); MUSIC.node.connect(MUSIC.gain);
+    MUSIC.el = el; MUSIC.name = file.name; setMusic(true);
+    toast(txt('Music: {f}').replace('{f}', file.name), 2);
+  }
+  function setMusic(on = !MUSIC.on) {
+    if (!MUSIC.el) { toast(txt('No music file yet: choose one in the panel (`), Sound tab'), 2.5); return; }
+    MUSIC.on = on; if (on) MUSIC.el.play().catch(() => {}); else MUSIC.el.pause();
+    syncUI(); toast(txt(on ? 'Music: playing (J)' : 'Music: paused (J)'), 1.5);
+  }
+  function setMusicVol(v) {
+    MUSIC.vol = Math.min(1, Math.max(0, v)); try { localStorage.setItem('gargantua.musicVol', String(MUSIC.vol)); } catch (e) { /* abaikan */ }
+    if (MUSIC.gain) MUSIC.gain.gain.setTargetAtTime(MUSIC.vol, AUDIO.ctx.currentTime, 0.05);
+  }
   for (const ev of ['keydown', 'pointerdown']) window.addEventListener(ev, () => { if (AUDIO.on) { audioInit(); if (AUDIO.ctx && AUDIO.ctx.state === 'suspended') AUDIO.ctx.resume(); } }, { capture: true });
 
   /* =====================================================================
@@ -2899,6 +2934,7 @@ function main() {
     else if (c === 'Backquote') { $('#ui').classList.remove('hidden'); $('#ui').classList.toggle('collapsed'); }
     else if (c === 'KeyQ') cycleQuality();
     else if (c === 'KeyU') setSound();
+    else if (c === 'KeyJ') setMusic();
     else if (c === 'KeyP') cyclePost();
     else if (c === 'KeyR') resetCamera();
     else if (c === 'Digit1') setPreset('film');
@@ -2957,6 +2993,10 @@ function main() {
     { tab: 'sound', label: 'Sound' },
     { type: 'check', label: 'Sound (U)', get: () => AUDIO.on, set: (v) => { if (v !== AUDIO.on) setSound(v); } },
     { type: 'note', text: 'All sounds are synthesized. Space carries no sound: cabin, thruster and impact sounds travel through the hull; the disk roar is distilled. Crossing the horizon makes no sound.' },
+    { sec: 'Music' },
+    { type: 'music' },
+    { type: 'range', label: 'Music volume', get: () => MUSIC.vol, set: setMusicVol, min: 0, max: 1, step: 0.01 },
+    { type: 'note', text: 'Your own music file (MP3, OGG, WAV, ...) loops through the sound master. It is not saved: choose it again after reloading.' },
     { tab: 'more', label: 'More' },
     { type: 'keys' },
     { type: 'lang' },
@@ -3025,7 +3065,7 @@ function main() {
         body.appendChild(ro);
       } else if (c.type === 'keys') {
         const keys = document.createElement('div'); keys.className = 'keys';
-        keys.textContent = txt('Space pause · Q quality · P screen effects · U sound · F photo · V vessel · R reset · H hide UI · ` panel · ? help');
+        keys.textContent = txt('Space pause · Q quality · P screen effects · U sound · J music · F photo · V vessel · R reset · H hide UI · ` panel · ? help');
         body.appendChild(keys);
       } else if (c.type === 'lang') {
         const lr = document.createElement('div'); lr.className = 'sec'; lr.textContent = txt('Language'); body.appendChild(lr);
@@ -3036,6 +3076,16 @@ function main() {
           lb.appendChild(b);
         }
         body.appendChild(lb);
+      } else if (c.type === 'music') {                              // putar / jeda (J) + pilih file musik sendiri
+        const box = document.createElement('div'); box.className = 'btns';
+        const tog = document.createElement('button'), pick = document.createElement('button'), inp = document.createElement('input');
+        tog.type = pick.type = 'button'; inp.type = 'file'; inp.accept = 'audio/*'; inp.hidden = true;
+        pick.textContent = txt('Choose music file...');
+        const sync = () => { tog.innerHTML = `<kbd>J</kbd>${txt(!MUSIC.el ? 'Music: none' : MUSIC.on ? 'Music: playing' : 'Music: paused')}`; tog.title = MUSIC.name; };
+        tog.addEventListener('click', () => { setMusic(); tog.blur(); });
+        pick.addEventListener('click', () => { inp.click(); pick.blur(); });
+        inp.addEventListener('change', () => { const f = inp.files && inp.files[0]; if (f) loadMusicFile(f); inp.value = ''; });
+        box.append(tog, pick, inp); body.appendChild(box); syncers.push(sync);
       } else if (c.type === 'note') {
         const d = document.createElement('div'); d.className = 'keys'; d.textContent = txt(c.text); body.appendChild(d);
       }
@@ -3278,7 +3328,7 @@ function main() {
     SHIP, setShip, cycleShipView, viewBasis, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
     misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, AE, stepMission,
     REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,
-    TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound, relImage, imageDir, rayPhi, relViewInit, drawRelayView, relUpdate, relPlace,
+    TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound, MUSIC, setMusic, loadMusicFile, relImage, imageDir, rayPhi, relViewInit, drawRelayView, relUpdate, relPlace,
     FUN, funZ, funL, drawFunnel, drawDash, bhRadiant, misGas };   // debugging hook
   requestAnimationFrame(frame);
 }

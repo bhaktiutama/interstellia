@@ -58,7 +58,7 @@ Hanya berlaku selama mode kamera aktif, sama di ketiga experience. Tombol khusus
 | C | Motor |
 | O · X | Jalan otomatis · turbo |
 | K | Kualitas vegetasi |
-| J | Musik |
+| J | Musik (Copper: generatif / file sendiri / mati; Gargantua dan Millar: putar / jeda musik dari file sendiri, file dipilih di panel) |
 | Y | Tur sinematik |
 
 Pengecualian yang sudah ada: Millar G = panggil gelombang raksasa (aksi eksperimen, setara G jatuhkan bola di Copper). Millar M = radar misi (setara M peta di Copper), E = ambil barang / naik ke KS-07 / mendarat (setara E aksi di Copper). Di wahana Millar berlaku tombol pesawat Copper: W/S, A/D, R/F (Space juga naik), Shift, mouse, V kamera, E.

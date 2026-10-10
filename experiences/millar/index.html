@@ -65,16 +65,17 @@
     background: rgba(232,183,101,0.2); color: #fff; cursor: pointer; }
   #start .links { margin-top: 10px; font-size: 12.5px; }
   #start .links a { color: var(--muted); }
-  #lab { right: 16px; top: 60px; width: 290px; padding: 10px 12px; z-index: 6; }
+  #lab { right: 16px; top: 60px; width: 290px; padding: 10px 12px; z-index: 6; max-height: calc(100vh - 76px); overflow-y: auto; }
   #lab[hidden], #help[hidden] { display: none; }
   .lhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); letter-spacing: .06em; }
-  .lhead button, #labBtns button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
-  #labBtns { display: grid; gap: 4px; }
+  .lhead button, #labBtns button, #labMus button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+  #labBtns, #labMus { display: grid; gap: 4px; }
+  #labMus { margin-top: 8px; } #labMus label { font-size: 12px; color: var(--muted); margin-top: 2px; }
   #labVol { display: grid; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted); }
-  #labVol label { display: grid; gap: 2px; } #labVol input { width: 100%; accent-color: var(--accent); }
-  #labBtns button { display: flex; justify-content: space-between; gap: 8px; text-align: left; }
-  #labBtns button:hover, .lhead button:hover { border-color: var(--accent); }
-  #labBtns kbd { color: var(--muted); font: inherit; }
+  #labVol label, #labMus label { display: grid; gap: 2px; } #labVol input, #labMus input { width: 100%; accent-color: var(--accent); }
+  #labBtns button, #labMus button { display: flex; justify-content: space-between; gap: 8px; text-align: left; }
+  #labBtns button:hover, #labMus button:hover, .lhead button:hover { border-color: var(--accent); }
+  #labBtns kbd, #labMus kbd { color: var(--muted); font: inherit; }
   #help { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(10,12,15,0.35); z-index: 7; }
   #help .card { width: min(580px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; background: rgba(12,14,18,0.86);
     border: 1px solid var(--line); border-radius: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
@@ -110,6 +111,7 @@
   <div class="lhead"><span data-t="Panel kontrol">Panel kontrol</span><button type="button" id="labClose" data-t="Tutup (`)">Tutup (`)</button></div>
   <div id="labBtns"></div>
   <div id="labVol"><label><span id="volT"></span><input type="range" id="volR" min="0" max="100"></label><label><span id="ambT"></span><input type="range" id="ambR" min="0" max="100"></label></div>
+  <div id="labMus"><button type="button" id="musTog"></button><button type="button" id="musPick"></button><input id="inMusicFile" type="file" accept="audio/*" hidden><label><span id="musT"></span><input type="range" id="musR" min="0" max="100"></label></div>
 </div>
 <div id="help" hidden>
   <div class="card">
@@ -270,7 +272,7 @@ let LANG = 'id';
   LANG = ok(c) ? c : 'id';
 }
 // Tombol mengikuti standar aplikasi (patokan Copper Corn Station): docs/app/tombol.md
-const KEYS_ID = '<b>Klik</b> kunci mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat<br><b>M</b> radar &middot; <b>E</b> ambil / naik &middot; <b>V</b> tampilan &middot; <b>G</b> panggil gelombang &middot; <b>Z</b> kecepatan waktu &middot; <b>N</b> suasana<br><b>Q</b> grafik &middot; <b>P</b> efek layar &middot; <b>U</b> suara &middot; <b>F</b> foto &middot; <b>R</b> kembali &middot; <b>H</b> sembunyikan<br><b>`</b> panel &middot; <b>?</b> bantuan';
+const KEYS_ID = '<b>Klik</b> kunci mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat<br><b>M</b> radar &middot; <b>E</b> ambil / naik &middot; <b>V</b> tampilan &middot; <b>G</b> panggil gelombang &middot; <b>Z</b> kecepatan waktu &middot; <b>N</b> suasana<br><b>Q</b> grafik &middot; <b>P</b> efek layar &middot; <b>U</b> suara &middot; <b>J</b> musik &middot; <b>F</b> foto &middot; <b>R</b> kembali &middot; <b>H</b> sembunyikan<br><b>`</b> panel &middot; <b>?</b> bantuan';
 const I18N = { en: {
   '< Menu': '< Menu', 'Kembali ke menu utama': 'Back to main menu', 'Mulai': 'Start',
   'Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar': 'Water planet near Gargantua · 1.3 g · 1 hour = 7 years outside',
@@ -311,6 +313,10 @@ const I18N = { en: {
   'Panggil gelombang raksasa (20 km di depan)': 'Summon the giant wave (20 km ahead)', 'Kecepatan waktu 1x, 5x, 20x, 60x': 'Time speed 1x, 5x, 20x, 60x',
   'Suasana: otomatis, mendung, senja': 'Mood: auto, overcast, dusk', 'Kualitas grafik: Ultra, Tinggi, Sedang, Rendah, Hemat': 'Graphics quality: Ultra, High, Medium, Low, Saver',
   'Efek layar: tinggi, sedang, mati (bloom, butiran, vinyet)': 'Screen effects: high, medium, off (bloom, grain, vignette)', 'Suara nyala / mati': 'Sound on / off',
+  'Musik: {f}': 'Music: {f}', 'Musik: belum ada': 'Music: none', 'Musik: diputar': 'Music: playing', 'Musik: dijeda': 'Music: paused',
+  'Musik: diputar (J)': 'Music: playing (J)', 'Musik: dijeda (J)': 'Music: paused (J)', 'Pilih file musik...': 'Choose music file...', 'Volume musik': 'Music volume',
+  'Belum ada file musik: pilih di panel (`)': 'No music file yet: choose one in the panel (`)',
+  'Musik dari file sendiri: putar / jeda (pilih file di panel `)': 'Music from your own file: play / pause (choose the file in the panel `)',
   'Mode foto: UI disembunyikan, Enter simpan PNG, F atau Esc keluar': 'Photo mode: UI hidden, Enter saves PNG, F or Esc exits',
   'Kembali ke titik awal · sembunyikan HUD': 'Back to start point · hide HUD', 'Panel kontrol (gerak kepala, tubuh, visor)': 'Control panel (head bob, body, visor)',
   'Tampilkan / tutup bantuan ini': 'Show / close this help', '? (atau F1)': '? (or F1)', '` (backtick)': '` (backtick)', 'Mouse': 'Mouse',
@@ -325,7 +331,7 @@ const I18N = { en: {
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
   'Gelombang dipanggil: {d} km': 'Wave summoned: {d} km',
   'Grafik: {p}': 'Graphics: {p}', 'Shuttle KS-07': 'Shuttle KS-07', 'Suasana: {m}': 'Mood: {m}', 'FPS rendah: grafik diturunkan ke {p}.': 'Low FPS: graphics lowered to {p}.',
-  [KEYS_ID]: '<b>Click</b> lock mouse &middot; <b>WASD</b> walk &middot; <b>Shift</b> run &middot; <b>Space</b> jump<br><b>M</b> radar &middot; <b>E</b> pick up / board &middot; <b>V</b> view &middot; <b>G</b> summon wave &middot; <b>Z</b> time speed &middot; <b>N</b> mood<br><b>Q</b> graphics &middot; <b>P</b> screen effects &middot; <b>U</b> sound &middot; <b>F</b> photo &middot; <b>R</b> reset &middot; <b>H</b> hide<br><b>`</b> panel &middot; <b>?</b> help',
+  [KEYS_ID]: '<b>Click</b> lock mouse &middot; <b>WASD</b> walk &middot; <b>Shift</b> run &middot; <b>Space</b> jump<br><b>M</b> radar &middot; <b>E</b> pick up / board &middot; <b>V</b> view &middot; <b>G</b> summon wave &middot; <b>Z</b> time speed &middot; <b>N</b> mood<br><b>Q</b> graphics &middot; <b>P</b> screen effects &middot; <b>U</b> sound &middot; <b>J</b> music &middot; <b>F</b> photo &middot; <b>R</b> reset &middot; <b>H</b> hide<br><b>`</b> panel &middot; <b>?</b> help',
 } };
 function t(src, vars) {
   let s = LANG !== 'id' && I18N[LANG] && I18N[LANG][src] !== undefined ? I18N[LANG][src] : src;
@@ -2598,7 +2604,7 @@ function setVol(k, v) {
 for (const [id, k] of [['volR', 'vol'], ['ambR', 'amb']]) document.getElementById(id).addEventListener('input', (e) => { setVol(k, e.target.value / 100); syncLab(); });
 function syncLab() {
   document.getElementById('volR').value = Math.round(AUDIO.vol * 100); document.getElementById('ambR').value = Math.round(AUDIO.amb * 100);
-  document.getElementById('volT').textContent = t('Volume') + ': ' + Math.round(AUDIO.vol * 100) + '%'; document.getElementById('ambT').textContent = t('Angin dan laut') + ': ' + Math.round(AUDIO.amb * 100) + '%'; document.querySelectorAll('#labBtns button').forEach((b, i) => { b.innerHTML = `<span>${LAB[i][1]()}</span><kbd>${LAB[i][0]}</kbd>`; }); }
+  document.getElementById('volT').textContent = t('Volume') + ': ' + Math.round(AUDIO.vol * 100) + '%'; document.getElementById('ambT').textContent = t('Angin dan laut') + ': ' + Math.round(AUDIO.amb * 100) + '%'; document.querySelectorAll('#labBtns button').forEach((b, i) => { b.innerHTML = `<span>${LAB[i][1]()}</span><kbd>${LAB[i][0]}</kbd>`; }); syncMusic(); }
 function toggleLab(on = labEl.hidden) { labEl.hidden = !on; if (on) { syncLab(); if (document.pointerLockElement) document.exitPointerLock(); } }
 function buildHelp() {
   const rows = [
@@ -2608,7 +2614,7 @@ function buildHelp() {
     ['V', t('Tampilan: jalan kaki, drone 60 m, tinggi 1,5 km')], ['G', t('Panggil gelombang raksasa (20 km di depan)')],
     ['Z', t('Kecepatan waktu 1x, 5x, 20x, 60x')], ['N', t('Suasana: otomatis, mendung, senja')],
     ['Q', t('Kualitas grafik: Ultra, Tinggi, Sedang, Rendah, Hemat')], ['P', t('Efek layar: tinggi, sedang, mati (bloom, butiran, vinyet)')],
-    ['U', t('Suara nyala / mati')], ['F', t('Kamera rangefinder (tombolnya di bawah); Foto bebas lama dari panel kamera')],
+    ['U', t('Suara nyala / mati')], ['J', t('Musik dari file sendiri: putar / jeda (pilih file di panel `)')], ['F', t('Kamera rangefinder (tombolnya di bawah); Foto bebas lama dari panel kamera')],
     ['R · H', t('Kembali ke titik awal · sembunyikan HUD')], [t('` (backtick)'), t('Panel kontrol (gerak kepala, tubuh, visor)')],
     [t('? (atau F1)'), t('Tampilkan / tutup bantuan ini')],
   ];
@@ -2636,7 +2642,7 @@ addEventListener('keydown', (e) => {
     if (e.code === 'KeyV') FLY.view = 1 - FLY.view;
     if (e.code === 'KeyM') toggleRadar();
     if (e.code === 'Backquote') toggleLab();
-    if (!['KeyQ', 'KeyP', 'KeyN', 'KeyU', 'KeyZ', 'KeyH', 'KeyG'].includes(e.code)) return;   // tombol umum tetap jalan
+    if (!['KeyQ', 'KeyP', 'KeyN', 'KeyU', 'KeyJ', 'KeyZ', 'KeyH', 'KeyG'].includes(e.code)) return;   // tombol umum tetap jalan
   }
   if (e.code === 'KeyF') { togglePhoto(undefined, PHOTO.last); return; }   // K: jenis terakhir (bawaan kamera rangefinder)
   if (e.code === 'KeyM') toggleRadar();
@@ -2651,6 +2657,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyP') cyclePost();
   if (e.code === 'KeyN') cycleMood();
   if (e.code === 'KeyU') toggleSound();
+  if (e.code === 'KeyJ') setMusic();
   if (e.code === 'KeyR') resetPlayer();
   if (e.code === 'KeyH') document.body.classList.toggle('hide');
   if (e.code === 'Space' && P.view === 0 && P.ground) { P.vy = CONFIG.jumpV; P.ground = false; }
@@ -2868,6 +2875,39 @@ function setSound(on) {
   AUDIO.on = on; try { localStorage.setItem('millar.sound', on ? '1' : '0'); } catch (e) { /* abaikan */ }
   if (AUDIO.ctx) AUDIO.master.gain.setTargetAtTime(on ? 0.85 * AUDIO.vol : 0, AUDIO.ctx.currentTime, 0.05);
 }
+// Musik dari file milik pengguna (seperti loadMusicFile() Copper): <audio> berulang langsung ke master (tidak diredam bawah air),
+// J putar / jeda, volume di panel (localStorage millar.musicVol), file tidak disimpan antarsesi
+const MUSIC = { el: null, node: null, gain: null, name: '', on: false, vol: 0.6 };
+try { const v = parseFloat(localStorage.getItem('millar.musicVol')); if (isFinite(v)) MUSIC.vol = Math.min(1, Math.max(0, v)); } catch (e) { /* abaikan */ }
+function loadMusicFile(file) {
+  startAudio(); const c = AUDIO.ctx; if (!c) return;
+  if (!AUDIO.on) setSound(true);
+  if (MUSIC.el) { MUSIC.el.pause(); MUSIC.node.disconnect(); URL.revokeObjectURL(MUSIC.el.src); }
+  if (!MUSIC.gain) { MUSIC.gain = c.createGain(); MUSIC.gain.gain.value = MUSIC.vol; MUSIC.gain.connect(AUDIO.master); }
+  const el = new Audio(URL.createObjectURL(file)); el.loop = true;
+  MUSIC.node = c.createMediaElementSource(el); MUSIC.node.connect(MUSIC.gain);
+  MUSIC.el = el; MUSIC.name = file.name; setMusic(true);
+  toast(t('Musik: {f}', { f: file.name.replace(/[<>&]/g, '') }), 2);
+}
+function setMusic(on = !MUSIC.on) {
+  if (!MUSIC.el) { toast(t('Belum ada file musik: pilih di panel (`)'), 2.5); return; }
+  MUSIC.on = on; if (on) MUSIC.el.play().catch(() => {}); else MUSIC.el.pause();
+  toast(t(on ? 'Musik: diputar (J)' : 'Musik: dijeda (J)'), 1.5); syncLab();
+}
+function setMusicVol(v) {
+  MUSIC.vol = Math.min(1, Math.max(0, v)); try { localStorage.setItem('millar.musicVol', String(MUSIC.vol)); } catch (e) { /* abaikan */ }
+  if (MUSIC.gain) MUSIC.gain.gain.setTargetAtTime(MUSIC.vol, AUDIO.ctx.currentTime, 0.05);
+}
+function syncMusic() {
+  document.getElementById('musTog').innerHTML = `<span>${t(!MUSIC.el ? 'Musik: belum ada' : MUSIC.on ? 'Musik: diputar' : 'Musik: dijeda')}</span><kbd>J</kbd>`;
+  document.getElementById('musTog').title = MUSIC.name;
+  document.getElementById('musPick').innerHTML = `<span>${t('Pilih file musik...')}</span><kbd></kbd>`;
+  document.getElementById('musR').value = Math.round(MUSIC.vol * 100); document.getElementById('musT').textContent = t('Volume musik') + ': ' + Math.round(MUSIC.vol * 100) + '%';
+}
+document.getElementById('musTog').addEventListener('click', (e) => { setMusic(); e.currentTarget.blur(); });
+document.getElementById('musPick').addEventListener('click', (e) => { document.getElementById('inMusicFile').click(); e.currentTarget.blur(); });
+document.getElementById('inMusicFile').addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) loadMusicFile(f); e.target.value = ''; });
+document.getElementById('musR').addEventListener('input', (e) => { setMusicVol(e.target.value / 100); syncMusic(); });
 // Letupan pendek noise tersaring (cipratan, gemericik, hantaman)
 function burst(freq, q, peak, dur, pan, type = 'bandpass', buf) {
   const A = AUDIO, c = A.ctx; if (!c || !A.on) return;
@@ -4018,7 +4058,7 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   frontX, waveTop, waterAt, drawdown, seabed, chopAt, CHOP, stepPlayer, simStep, start: () => start(true), startWithCine: start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_, OCEAN, makeOcean, updateOcean,
   RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, CROWN, spawnCrown, stepCrown, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
   DYN, SWEEP, currentAt, SPRAY, US, ZS, ARC, M_COMP, waveG, waveHz, COMMON,
-  AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact,
+  AUDIO, audioMix, startAudio, setSound, updateAudio, sfxSplash, sfxImpact, MUSIC, setMusic, loadMusicFile,
   PHOTO, togglePhoto, POST_MODES, LAB, toggleLab, toggleHelp, cycleBob, BODY, BODY_LEVELS, bodyMat, cycleBody, updateBody, updateMood, setMood, makeRipple, VISOR, VISOR_LEVELS, updateVisor, visorSplash, cycleVisor, postRender, GDIR, bodyPose, bodyLegs, bobDrop, fpCamera, setBodyDetail, BODY_DETAIL, skinBody, handCurl, armReach, bodySeat, legIK, flyCamera, bodyFootAt, bodyLegAt,
   FLY, boardShip, flyLand, updateFly, flyReset, placeShip,
   MIS, missionSites, startMission, stopMission, restartMission, finishMission, updateMission, missionAction, toggleRadar, radarFix, setMode, setLevel, fmtMS,
