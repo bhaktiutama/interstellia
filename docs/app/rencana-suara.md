@@ -12,12 +12,14 @@ Tujuan: suara bawaan ketiga experience tidak lagi terdengar datar dan seperti bi
 
 | Tahap | Status | Catatan |
 | --- | --- | --- |
-| S0 | Selesai | `tools/ukur_suara.cjs`; hasil Gargantua di bawah |
-| S1 | Selesai | `shared/audio.js` (`window.AUDIOKIT`) |
-| S2 | Selesai, menunggu dengar Bhakti | Gargantua; `?snd=0` = suara lama persis |
-| S3-S7 | Belum | Menunggu hasil dengar S2 |
+| S0 | Dibatalkan | `tools/ukur_suara.cjs` dihapus (masih ada di commit `ca80416`) |
+| S1 | Dibatalkan | `shared/audio.js` dihapus (masih ada di commit `ca80416`) |
+| S2 | Dibatalkan | Hasil dengar Bhakti: suara baru Gargantua jauh lebih jelek dan kurang realistis dari sebelumnya. Suara G7 lama dikembalikan persis (versi commit `fe3a9d9`) |
+| S3-S7 | Ditunda | Pendekatan sintesis berlapis tidak dilanjutkan tanpa keputusan baru |
 
-## Hasil ukur S2 (Gargantua, render offline 12 s, detik pertama dibuang)
+Pelajaran: angka ukur (loop, variasi, fluks) membaik, tapi telinga menilai sebaliknya. Angka "kurang datar" tidak sama dengan "lebih realistis"; berikutnya keputusan suara dimulai dari dengar, bukan dari angka.
+
+## Hasil ukur S2 (arsip, versi yang dibatalkan; Gargantua, render offline 12 s, detik pertama dibuang)
 
 Diukur `node tools/ukur_suara.cjs gargantua --md`. Lama = `audioBuildOld` (suara sebelum S2), baru = `audioBuildNew`.
 
