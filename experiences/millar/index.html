@@ -166,6 +166,7 @@
 <script src="../../shared/kestrel.js"></script>
 <script src="../../shared/post.js"></script>
 <script src="../../shared/camera.js"></script>
+<script src="../../shared/vr.js"></script>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
 </script>
@@ -283,6 +284,8 @@ let LANG = 'id';
 // Tombol mengikuti standar aplikasi (patokan Copper Corn Station): docs/app/tombol.md
 const KEYS_ID = '<b>Klik</b> kunci mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat<br><b>M</b> radar &middot; <b>E</b> ambil / naik &middot; <b>V</b> tampilan &middot; <b>G</b> panggil gelombang &middot; <b>Z</b> kecepatan waktu &middot; <b>N</b> suasana<br><b>Q</b> grafik &middot; <b>P</b> efek layar &middot; <b>U</b> suara &middot; <b>F</b> foto &middot; <b>R</b> kembali &middot; <b>H</b> sembunyikan<br><b>`</b> panel &middot; <b>?</b> bantuan';
 const I18N = { en: {
+  'VR: stik kiri jalan / terbang, stik kanan belok (terbang: naik-turun), genggam kanan lari, picu kanan E (ambil, naik, mendarat), A lompat, B tampilan, tekan stik kiri radar':
+    'VR: left stick walk / fly, right stick turn (flying: up/down), right grip run, right trigger E (pick up, board, land), A jump, B view, click left stick radar',
   '< Menu': '< Menu', 'Kembali ke menu utama': 'Back to main menu', 'Mulai': 'Start',
   'Memuat...': 'Loading...', 'Menyiapkan shader...': 'Preparing shaders...', 'Langit dan lensa Gargantua...': 'Sky and Gargantua lens...', 'Pemanasan GPU...': 'Warming up the GPU...', 'Siap': 'Ready',
   'Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar': 'Water planet near Gargantua · 1.3 g · 1 hour = 7 years outside',
@@ -396,6 +399,10 @@ const V4 = { off: new URLSearchParams(location.search).get('v4') === '0' };
 // wahana tidak berkedip; MSAA tetap). ?v5=0 = sebelum V5; ?taa=0. Noda lensa tidak dipakai: langit mendung terang merata
 // membuat noda tampak di seluruh layar, dan pemain berhelm (visor sudah punya tetes air dan embun sendiri)
 const V5 = { off: new URLSearchParams(location.search).get('v5') === '0' };
+// VR3 (docs/app/rencana-vr.md): keadaan VR. out = target mata XR untuk pass akhir (pengganti kanvas), rig = Matrix4 dunia dari
+// ruang acuan headset, yaw = belok rig (stik kanan), rs = skala target efek layar terhadap viewport mata (adaptif). on false =
+// semua jalur layar biasa sama persis seperti sebelum VR3.
+const XRV = { on: false, out: null, rig: null, yaw: 0, rs: 0.7, w: 0, h: 0, held: new Set(), idle: false, ft: 0, slow: 0, fast: 0, prev: null, hands: [null, null] };
 const TAA = { off: V5.off || new URLSearchParams(location.search).get('taa') === '0', act: false, valid: false, i: 0, hist: [], cur: 0,
   prevVP: new THREE.Matrix4(), P: new THREE.Matrix4(), PI: new THREE.Matrix4() };
 
@@ -1661,7 +1668,7 @@ function taaEnd() {                                                  // sesudah 
   camera.projectionMatrix.copy(TAA.P); camera.projectionMatrixInverse.copy(TAA.PI);
   TAA.prevVP.multiplyMatrices(TAA.P, camera.matrixWorldInverse);
 }
-function pass(mat, target) { fsq.material = mat; renderer.setRenderTarget(target); renderer.render(postScene, postCam); }
+function pass(mat, target) { fsq.material = mat; renderer.setRenderTarget(target === null && XRV.out ? XRV.out : target); renderer.render(postScene, postCam); }   // VR3: kanvas = viewport mata
 function makePost(w, h, P) {
   for (const r of [POST.hdr, POST.ldr, ...POST.down, ...POST.up, ...TAA.hist]) if (r) r.dispose();
   const opt = { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false };
@@ -1690,7 +1697,7 @@ function postRender(time) {
       pass(M_UP, Up[i]); src = Up[i];
     }
   }
-  M_COMP.uniforms.uBloomK.value = 0.08 * PM.bloom; M_FINAL.uniforms.uGrain.value = CAMKIT.U.E[0] > 0.5 ? 0 : PRESETS[PRESET.idx].grain * PM.grain; M_FINAL.uniforms.uVig.value = PM.vig;   // K: derau sensor menggantikan butiran
+  M_COMP.uniforms.uBloomK.value = 0.08 * PM.bloom; M_FINAL.uniforms.uGrain.value = CAMKIT.U.E[0] > 0.5 || XRV.on ? 0 : PRESETS[PRESET.idx].grain * PM.grain; M_FINAL.uniforms.uVig.value = XRV.on ? 0 : PM.vig;   // VR3: beda antar mata = persaingan binokular   // K: derau sensor menggantikan butiran
   { const C = M_COMP.uniforms; C.tDepth.value = POST.hdr.depthTexture || null; C.uHasD.value = POST.hdr.depthTexture ? 1 : 0; C.uCamPI.value.copy(camera.projectionMatrixInverse); C.uCamCW.value.copy(camera.matrixWorld); }
   M_COMP.uniforms.tHdr.value = POST.hdr.texture; M_COMP.uniforms.tBloom.value = src.texture; pass(M_COMP, POST.ldr);
   let fin = POST.ldr;
@@ -1738,6 +1745,7 @@ function viewSize() {
   return [Math.max(1, Math.round(innerWidth * pr)), Math.max(1, Math.round(innerHeight * pr))];
 }
 function resize() {
+  if (XRV.on) { makePost(XRV.w, XRV.h, PRESETS[PRESET.idx]); return; }   // VR3: ukuran kanvas dipegang sesi XR; efek layar seukuran mata
   const [w, h] = viewSize();
   renderer.setPixelRatio(1); renderer.setSize(w, h, false);
   camera.aspect = w / h; camera.updateProjectionMatrix();
@@ -1766,7 +1774,7 @@ function applyPreset(i) {
   const au = document.getElementById('presetAuto'); if (au) au.checked = PRESET.auto;
 }
 function autoPreset(dt) {
-  if (!PRESET.auto || !STATE.started || CAMKIT.on) return;           // K: mode kamera (tangkap / rekam) tidak mengubah resolusi atau preset
+  if (!PRESET.auto || !STATE.started || CAMKIT.on || XRV.on) return;   // VR3: skala adaptif sendiri (vrFrame)           // K: mode kamera (tangkap / rekam) tidak mengubah resolusi atau preset
   if (!PHOTO.on && DYN.update(dt, fps)) resize();                     // V0: turunkan resolusi dulu, preset hanya bila skala sudah minimum
   PRESET.low = fps < 30 && (DYN.atMin() || !DYN.opt.on) ? PRESET.low + dt : Math.max(0, PRESET.low - dt);
   if (PRESET.low > 4 && PRESET.idx < PRESETS.length - 1) { applyPreset(PRESET.idx + 1); PRESET.low = -6; toast(t('FPS rendah: grafik diturunkan ke {p}.', { p: t(PRESETS[PRESET.idx].name) }), 3); }
@@ -2411,6 +2419,8 @@ function updateBody(dtp) {
     if (S) { S.item.updateWorldMatrix(true, false); S.item.getWorldPosition(B.reachT); }
     B.reach += ((S ? 1 : 0) - B.reach) * (dtp >= 1 ? 1 : 1 - Math.exp(-dtp / 0.15)); if (B.reach < 1e-3) B.reach = 0;
     if (B.reach > 0) { B.group.updateMatrixWorld(true); armReach(1, B.reachT, smoothstep01(0, 1, B.reach), POLE_PICK); }
+    // VR5: lengan mengikuti kontroler Touch (kanan tetap menjangkau barang saat tahan E)
+    if (XRV.on) for (let i = 0; i < 2; i++) if (XRV.hands[i] && !(i === 1 && B.reach > 0)) { B.group.updateMatrixWorld(true); armReach(i, XRV.hands[i], 1, i ? POLE_R : POLE_L); }
   }
   // M6i: tekuk jari: pilot menggenggam tongkat (kanan) dan tuas (kiri); ambil barang: tangan kanan membuka saat menjangkau, menutup saat tahan E hampir selesai
   { const H = Cb.hand, kt = dtp >= 1 ? 1 : 1 - Math.exp(-dtp / H.tau), T = B.handT || [H.rest, H.rest];
@@ -2449,7 +2459,7 @@ const _vF = new THREE.Vector3(), _vG = new THREE.Vector3();
 function visorSplash(k) { if (VISOR.wet < 0.02) VISOR.seed = Math.floor(Math.random() * 997); VISOR.wet = Math.min(1, VISOR.wet + k); }
 function updateVisor(dt) {
   const V = VISOR, Cv = CONFIG.visor, mv = Math.min(1, BOB.amp / 0.034) * (P.ground ? 1 : 0);
-  V.on = V.level > 0 && P.view === 0 && !FLY.on && !CINE.on && !PHOTO.on;
+  V.on = V.level > 0 && P.view === 0 && !FLY.on && !CINE.on && !PHOTO.on && !XRV.on;   // VR3: tanpa bingkai helm layar di headset
   V.ex += (Math.max(BOB.run, 0.3 * mv) - V.ex) * (1 - Math.exp(-dt / Cv.exTau)); if (V.ex < 1e-3) V.ex = 0;
   V.br = (V.br + dt * (Cv.breathRest + (Cv.breathRun - Cv.breathRest) * V.ex)) % 1;
   V.fog = Cv.fogMax * V.ex * (0.55 + 0.45 * Math.max(0, Math.sin(2 * Math.PI * V.br)));   // hembusan menebalkan embun; diam lama = 0
@@ -2511,7 +2521,7 @@ const keys = {};
 const CLK = { planet: 0, swept: 0, white: 0, msgT: 0 };
 const SWEEP = { on: false, t: 0, rx: 0, ry: 0, rz: 0, wx: 0, wy: 0, wz: 0, under: 0 };
 const msgEl = document.getElementById('msg'), whiteEl = document.getElementById('white');
-function toast(html, s = 4) { msgEl.innerHTML = html; msgEl.classList.add('on'); CLK.msgT = s; }
+function toast(html, s = 4) { if (XRV.on) VRKIT.toast(String(html).replace(/<[^>]+>/g, ''), s); msgEl.innerHTML = html; msgEl.classList.add('on'); CLK.msgT = s; }
 function resetPlayer() { P.x = 0; P.z = 0; P.vy = 0; P.vx = 0; P.vz = 0; P.y = seabed(0, 0) + CONFIG.eye; P.ground = true; RIP.fresh = true; }
 resetPlayer();
 function lockPointer() {                              // kunci kursor; tolakan (sudah terkunci, tanpa gestur) diabaikan, termasuk promise
@@ -3830,7 +3840,7 @@ function worldStep(dt, now) {                         // K: simulasi + kamera (f
   SKYU.uTime.value = STATE.visT; GU_.uTime.value = STATE.visT * 1.5;   // waktu piringan (satuan rs/c), sekitar 30 s per putaran di tepi dalam
 
   const onFoot = P.view === 0 && !FLY.on, AM = updateAudio(dt, dist);
-  if (!(PHOTO.on && PHOTO.kind === 'kamera')) { // FOV naik sedikit saat lari (M6a-2); diam tepat 70, tidak berubah di mode foto (K: kamera mengatur sendiri)
+  if (!(PHOTO.on && PHOTO.kind === 'kamera') && !XRV.on) { // FOV naik sedikit saat lari (M6a-2); diam tepat 70, tidak berubah di mode foto (K: kamera mengatur sendiri)
     const f = 70 + (onFoot && !PHOTO.on ? CONFIG.walk.fovRun * BOB.run : 0);
     if (Math.abs(camera.fov - f) > 0.01) camSetFov(f);
   }
@@ -3853,6 +3863,7 @@ function worldStep(dt, now) {                         // K: simulasi + kamera (f
   if ((hudT -= dt) <= 0) { hudT = 0.2; updateHud(depthNow, dist, wob); }
 }
 function frame(now) {
+  if (XRV.on) { XRV.idle = true; return; }                // VR3: headset menggerakkan loop sendiri (vrFrame)
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
   if (CAMKIT.cap) { camCapture(dt, now); requestAnimationFrame(frame); return; }   // K: subframe foto (layar dibekukan)
@@ -4106,6 +4117,137 @@ window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, app
   SHIP, shipPush, shipDist, shipMat, KS, shipToWorld, worldToShip, CK, COCKPIT, cockpitUpdate,
   CINE, startCine, cineStep, cineStop, cineSkip, ORB, orbScene, orbCam, orbShip, orbPlanet, renderOrbit, beginPlay, orbPlaceShip, orbShipCam, ORB_U, SEA_ROT,
   SHD, SHD_SIZE, makeShadow, updateShadow, playerAtDoor, warmPresets, presetDefs };
+/* =====================================================================
+   VR3 (docs/app/rencana-vr.md): Millar's World di headset lewat shared/vr.js (backend three, jalur render calon B).
+   Tiap mata: kamera = rig x pose mata (proyeksi XR dengan near / far dan depth log kamera Millar), adegan ke POST.hdr seukuran
+   mata x XRV.rs, efek layar lama, pass akhir ke viewport mata (XRV.out). Rig: jalan kaki = posisi pemain + belok XRV.yaw (arah
+   jalan ikut kepala), kokpit = sikap wahana penuh (kokpit jadi kerangka acuan), kamera luar / drone / sinematik = posisi kamera.
+   Kenyamanan: tanpa gerak kepala (BOB), tanpa guncangan dan putaran tersapu, tanpa bingkai visor layar, sinematik kedatangan
+   dilewati, vinyet saat bergerak (VRKIT.motion). Tombol Touch dikirim sebagai tombol papan ketik (keydown / keyup) sehingga
+   semua aksi lama berlaku. TAA mati di VR (riwayat per mata belum ada).
+   ===================================================================== */
+const _xrM = new THREE.Matrix4(), _xrE = new THREE.Matrix4(), _xrS = new THREE.Vector3(), _xrV = new THREE.Vector3(), _xrP = new THREE.Vector3(), _xrQ = new THREE.Quaternion();
+XRV.rig = new THREE.Matrix4();
+function vrKeys(want) {
+  for (const c of want) if (!XRV.held.has(c)) document.body.dispatchEvent(new KeyboardEvent('keydown', { code: c, bubbles: true }));
+  for (const c of XRV.held) if (!want.has(c)) document.body.dispatchEvent(new KeyboardEvent('keyup', { code: c, bubbles: true }));
+  XRV.held = want;
+}
+function vrInput() {
+  const I = VRKIT.in, want = new Set(); if (!I) return;
+  if (!VRKIT.menu && STATE.started && !CINE.on) {
+    const [mx, my] = I.move;
+    if (my < -0.5) want.add('KeyW'); if (my > 0.5) want.add('KeyS'); if (mx < -0.5) want.add('KeyA'); if (mx > 0.5) want.add('KeyD');
+    if (I.grip > 0.5) want.add('ShiftLeft');
+    if (I.trig > 0.5) want.add('KeyE');
+    if (I.a > 0.5) want.add('Space');
+    if (I.b > 0.5) want.add('KeyV');
+    if (I.ls > 0.5) want.add('KeyM');                                        // tekan stik kiri = radar (rencana VR, tabel kontroler)
+    if (FLY.on) { if (I.look[1] < -0.5) want.add('KeyR'); if (I.look[1] > 0.5) want.add('KeyF'); }
+    if (I.turn && !(FLY.on && FLY.view === 1)) XRV.yaw += I.turn;          // di kursi pilot belok = arah wahana (A/D)
+  }
+  vrKeys(want);
+}
+function vrRig() {
+  const M = XRV.rig;
+  if (CINE.on) M.compose(camera.position, camera.quaternion, _xrS.set(1, 1, 1));
+  else if (FLY.on && FLY.view === 1) {
+    const S = SHIP.mesh; S.updateMatrix();
+    M.compose(_xrV.set(CK.eye[0], CK.eye[1], CK.eye[2]).applyMatrix4(S.matrix), S.quaternion, _xrS.set(1, 1, 1));
+  } else if (FLY.on) M.makeRotationY(FLY.yaw + FLY.lookY + XRV.yaw).setPosition(camera.position);
+  else M.makeRotationY(XRV.yaw).setPosition(P.x, P.y + (SWEEP.on ? SWEEP.t * 6 : 0), P.z);
+}
+// kamera mata: rig x pose mata (tr = skala translasi kepala, 1e-3 untuk adegan orbit dalam km)
+function vrEyeCam(e, cam, tr = 1) {
+  _xrE.fromArray(e.world); _xrE.elements[12] *= tr; _xrE.elements[13] *= tr; _xrE.elements[14] *= tr;
+  _xrM.multiplyMatrices(XRV.rig, _xrE); _xrM.decompose(cam.position, cam.quaternion, _xrS);
+  cam.updateMatrixWorld(true);
+  cam.projectionMatrix.fromArray(VRKIT.m4.projNF(e.proj, cam.near, cam.far)); cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+  const tn = VRKIT.m4.tans(e.proj); return tn[3] - tn[2];                     // 2 tan(setengah FOV tegak)
+}
+function vrFrame(t, eyes, xf, dt) {
+  const K = VRKIT, ov = K.three(THREE), now = performance.now();
+  if (CINE.on && CINE.kind !== 'depart') cineSkip();                          // kedatangan dan pandangan orbit panel dilewati
+  if (!STATE.started && !CINE.on) start(true);
+  vrInput();
+  const e0 = eyes[0];
+  if (!FLY.on && !CINE.on) { P.yaw = XRV.yaw + Math.atan2(e0.world[8], e0.world[10]); P.pitch = 0; }   // arah jalan = arah kepala
+  fps += (1 / Math.max(dt, 1e-3) - fps) * 0.05;
+  worldStep(dt, now);
+  vrRig();
+  // VR5: posisi dunia genggaman kontroler untuk lengan tubuh; kotak kontroler VRKIT hanya bila tubuh tidak tampil
+  ['left', 'right'].forEach((hd, i) => { const m = K.in && K.in.hands[hd]; XRV.hands[i] = m ? (XRV.hands[i] || new THREE.Vector3()).set(m[12], m[13], m[14]).applyMatrix4(XRV.rig) : null; });
+  K.showHands = !(BODY.level === 2 && STATE.started && !CINE.on);
+  const dark = SWEEP.on ? 0.8 : 0;                                            // tersapu: layar gelap, bukan kamera berguling
+  const w = Math.max(16, Math.round(e0.vp.w * XRV.rs)), h = Math.max(16, Math.round(e0.vp.h * XRV.rs));
+  if (w !== XRV.w || h !== XRV.h) { XRV.w = w; XRV.h = h; makePost(w, h, PRESETS[PRESET.idx]); }
+  TAA.act = false;
+  renderer.xr.enabled = false;                                                // kamera mata dipakai apa adanya (bukan ArrayCamera XR)
+  if (CINE.on && CINE.orbit) {                                                // M4: adegan orbit keberangkatan, satuan km
+    updateGCube();
+    const p0 = _xrP.copy(orbCam.position), q0 = _xrQ.copy(orbCam.quaternion);
+    XRV.rig.compose(p0, q0, _xrS.set(1, 1, 1));
+    for (const e of eyes) {
+      const tv = vrEyeCam(e, orbCam, 1e-3);
+      orbSky.position.copy(orbCam.position); ORB_U.uCam.value.copy(orbCam.position); ORB_U.uPxS.value = h / tv;
+      renderer.setRenderTarget(POST.hdr); renderer.clear(); renderer.render(orbScene, orbCam);
+      XRV.out = K.eyeTarget(e.i); postRender(now / 1000); XRV.out = null;
+      ov.overlay(renderer, e.i, XRV.rig, dark);
+    }
+    orbCam.position.copy(p0); orbCam.quaternion.copy(q0); orbCam.updateProjectionMatrix();
+  } else {
+    updateGCube(); updateSkyCube(); updateOcean(); updateRipple(dt);
+    probeOcean(P.x, P.z); updateShadow();
+    for (const e of eyes) {
+      const tv = vrEyeCam(e, camera);
+      U.uCam.value.copy(camera.position); U.uPix.value = tv / h; splMat.uniforms.uScale.value = h / tv;
+      renderer.setRenderTarget(POST.hdr); renderer.clear(); renderer.render(scene, camera);
+      XRV.out = K.eyeTarget(e.i); postRender(now / 1000); XRV.out = null;
+      ov.overlay(renderer, e.i, XRV.rig, dark);
+    }
+  }
+  K.eyeTargetDone();
+  renderer.xr.enabled = true;
+  if (PHOTO.shot) PHOTO.shot = false;
+  // vinyet: laju semu pemain (kokpit = kerangka acuan, tanpa vinyet)
+  K.motion(FLY.on ? (FLY.view === 1 ? 0 : Math.hypot(FLY.vx, FLY.vz) * 0.05) : CINE.on ? 0 : Math.hypot(P.vx, P.vz));
+  // skala target adaptif: rata-rata waktu frame > 1/50 s selama 1 s = turun 0,05; < 1/85 s selama 3 s = naik (paling tinggi 1)
+  XRV.ft = XRV.ft ? XRV.ft * 0.95 + dt * 0.05 : dt;
+  XRV.slow = XRV.ft > 1 / 50 ? XRV.slow + dt : 0; XRV.fast = XRV.ft < 1 / 85 ? XRV.fast + dt : 0;
+  if (XRV.slow > 1) { XRV.rs = Math.max(0.5, +(XRV.rs - 0.05).toFixed(2)); XRV.slow = 0; }
+  if (XRV.fast > 3) { XRV.rs = Math.min(1, +(XRV.rs + 0.05).toFixed(2)); XRV.fast = 0; }
+}
+function vrStart() {
+  XRV.on = true; XRV.yaw = P.yaw; XRV.rs = 0.7; XRV.w = XRV.h = 0; XRV.ft = XRV.slow = XRV.fast = 0;
+  if (PHOTO.on) togglePhoto(false);
+  if (!helpEl.hidden) toggleHelp(false);
+  XRV.prev = { bob: BOB.level, preset: PRESET.idx, auto: PRESET.auto };
+  BOB.level = 0;                                                              // gerak kepala dan getaran tanah mati di headset
+  if (PRESET.idx < 2) applyPreset(2);                                         // mulai di Sedang (Q di menu VR mengganti)
+  toast(t('VR: stik kiri jalan / terbang, stik kanan belok (terbang: naik-turun), genggam kanan lari, picu kanan E (ambil, naik, mendarat), A lompat, B tampilan, tekan stik kiri radar'), 6);
+}
+function vrEnd() {
+  XRV.on = false; XRV.out = null; vrKeys(new Set());
+  renderer.xr.enabled = false;
+  const pv = XRV.prev || {};
+  if (pv.bob !== undefined) BOB.level = pv.bob;
+  if (pv.preset !== undefined && pv.preset !== PRESET.idx) { PRESET.auto = pv.auto; applyPreset(pv.preset); }
+  camera.updateProjectionMatrix(); resize();
+  if (XRV.idle) { XRV.idle = false; last = performance.now(); requestAnimationFrame(frame); }
+}
+VRKIT.init({ backend: 'three', renderer, lang: () => LANG, frame: vrFrame, start: vrStart, end: vrEnd,
+  items: () => [
+    { label: () => {
+      const dist = frontX(P.z) - P.x, got = MIS.sites.filter((x) => x.got).length;
+      return (MIS.on ? `${t('Misi')} ${got}/3 · ` : '') + `${t('Gelombang')} ${dist > 0 ? fmtMS(dist / W.v) : '-'} · ${t('Waktu planet')} ${fmtClock(CLK.planet)}`;
+    }, act: () => {} },
+    { label: () => t('Grafik: {p}', { p: t(PRESETS[PRESET.idx].name) }), act: () => cyclePreset() },
+    { label: () => t('Suasana: {m}', { m: t(MOODS[MOOD.idx].key) }), act: () => cycleMood() },
+    { label: () => t('Suara: {m}', { m: t(AUDIO.on ? 'Nyala' : 'Mati') }), act: () => toggleSound() },
+    { label: () => t(MIS.mode === 'misi' ? 'Ulangi (posisi baru)' : 'Panggil gelombang'), act: () => (MIS.mode === 'misi' ? restartMission() : summonWave()) },
+    { label: () => t('Kembali ke titik awal'), act: () => resetPlayer() },
+  ] });
+Object.assign(window.__millar, { XRV, vrFrame, vrRig });
 PROFKIT.mark('Siap'); PROFKIT.ready();
 requestAnimationFrame(() => requestAnimationFrame(() => { window.__millarReady = true; }));
 </script>

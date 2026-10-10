@@ -17,7 +17,10 @@
      A.root                     elemen tempat tombol "Masuk VR" ditaruh (bawaan document.body, pojok kanan bawah)
      A.lang()                   'id' / 'en'
    Input tiap frame: VRKIT.in = { move [x, y] stik kiri, look [x, y] stik kanan, trig, grip, a, b, x, y, ls, rs (tekan stik),
-     down { nama: true saat baru ditekan }, turn (radian belok patah frame ini), ray (sinar kontroler kanan: o, d ruang acuan) }.
+     down { nama: true saat baru ditekan }, turn (radian belok patah frame ini), ray (sinar kontroler kanan: o, d ruang acuan),
+     hands { left, right: Float32Array 16 pose genggaman ruang acuan } }.
+   VR5: model kontroler sederhana (kotak 4 x 3 x 12 cm) digambar di lapisan atas tiap mata bila VRKIT.showHands (host yang
+     menggerakkan lengan tubuh sendiri, mis. Millar, mematikannya).
    Kenyamanan: VRKIT.motion(v) host melapor kecepatan gerak semu (m/s) -> VRKIT.vig 0..1 (kuat vinyet terowongan);
      belok patah 30 / 45 derajat atau halus; pusatkan ulang (Y) -> VRKIT.recenter = { yaw, p } dikurangkan dari pose kepala.
    Setelan di localStorage 'lazarus.vr': { turn: 30 | 45 | 0 (halus), vig: 0 | 1 | 2, scale: 0,7 | 0,85 | 1 }.
@@ -37,7 +40,7 @@
   };
   const K = window.VRKIT = {
     ok: false, on: false, session: null, A: null, eyes: [], vig: 0, in: null, menu: false, fb: null, layer: null, ref: null,
-    recenter: { yaw: 0, p: [0, 0, 0] }, st: { turn: 30, vig: 1, scale: 1 }, STR,
+    recenter: { yaw: 0, p: [0, 0, 0] }, st: { turn: 30, vig: 1, scale: 1 }, STR, showHands: true,
   };
   try { Object.assign(K.st, JSON.parse(localStorage.getItem('lazarus.vr') || '{}')); } catch (e) { /* abaikan */ }
   const save = () => { try { localStorage.setItem('lazarus.vr', JSON.stringify(K.st)); } catch (e) { /* abaikan */ } };
@@ -173,12 +176,14 @@
 
   // ---------- input: kontroler Touch (gamepad xr-standard) ----------
   let prevBtn = {}, smoothArm = true;
-  function blankIn() { return { move: [0, 0], look: [0, 0], trig: 0, grip: 0, a: 0, b: 0, x: 0, y: 0, ls: 0, rs: 0, gripL: 0, trigL: 0, down: {}, turn: 0, ray: null }; }
+  function blankIn() { return { move: [0, 0], look: [0, 0], trig: 0, grip: 0, a: 0, b: 0, x: 0, y: 0, ls: 0, rs: 0, gripL: 0, trigL: 0, down: {}, turn: 0, ray: null, hands: {} }; }
   function readInput(frame, dt) {
     const I = blankIn(), s = frame.session;
     for (const src of s.inputSources) {
       const g = src.gamepad; if (!g) continue;
       const b = (i) => (g.buttons[i] ? g.buttons[i].value || (g.buttons[i].pressed ? 1 : 0) : 0), ax = (i) => g.axes[i] || 0;
+      const gp = src.gripSpace && frame.getPose(src.gripSpace, K.ref);
+      if (gp && (src.handedness === 'left' || src.handedness === 'right')) I.hands[src.handedness] = recentered(gp.transform.matrix);
       if (src.handedness === 'left') { I.move = [ax(2), ax(3)]; I.trigL = b(0); I.gripL = b(1); I.ls = b(3); I.x = b(4); I.y = b(5); }
       else { I.look = [ax(2), ax(3)]; I.trig = b(0); I.grip = b(1); I.rs = b(3); I.a = b(4); I.b = b(5);
         const p = src.targetRaySpace && frame.getPose(src.targetRaySpace, K.ref);
@@ -196,6 +201,7 @@
 
   // ---------- panel menu VR (kanvas 2D, ditaruh 1,2 m di depan saat dibuka, sinar kontroler kanan) ----------
   const PW = 640, PH = 400, PANEL = { w: 0.96, h: 0.6 };
+  const HAND = [0.04, 0.03, 0.12, -0.03];                       // VR5: kotak kontroler (lebar, tebal, panjang, geser ke depan) m
   K.panel = { canvas: null, dirty: true, m: null, hover: -1, rows: [] };
   function rows() {
     const A = K.A, r = [
@@ -300,7 +306,11 @@
     const noteTex = new THREE.CanvasTexture(K.drawNote()); noteTex.colorSpace = THREE.SRGBColorSpace;
     const note = new THREE.Mesh(new THREE.PlaneGeometry(TOAST.w, TOAST.h), new THREE.MeshBasicMaterial({ map: noteTex, toneMapped: false, depthTest: false, transparent: true }));
     note.renderOrder = 1e6 + 2; note.matrixAutoUpdate = false; note.frustumCulled = false;
-    const ui = new THREE.Scene(); ui.add(panel, ray, note);
+    const handG = new THREE.BoxGeometry(HAND[0], HAND[1], HAND[2]).translate(0, 0, HAND[3]);
+    const handM = new THREE.MeshLambertMaterial({ color: 0x5a606c, depthTest: false });
+    const hands = ['left', 'right'].map(() => { const h = new THREE.Mesh(handG, handM); h.matrixAutoUpdate = false; h.frustumCulled = false; h.renderOrder = 1e6 - 1; return h; });
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x404040, 2.2); hemi.updateMatrixWorld(true);   // adegan lapisan atas tidak memperbarui matriks sendiri
+    const ui = new THREE.Scene(); ui.add(panel, ray, note, ...hands, hemi);
     const vig = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: { uK: { value: 0 }, uDark: { value: 0 } }, transparent: true, depthTest: false, depthWrite: false,
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }', fragmentShader: K.VIG_FS }));
     vig.frustumCulled = false;
@@ -308,19 +318,28 @@
     const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), m4 = new THREE.Matrix4(), cam = new THREE.PerspectiveCamera();
     cam.matrixAutoUpdate = false; cam.matrixWorldAutoUpdate = false; ui.matrixWorldAutoUpdate = false;   // matriks diisi manual tiap mata
     K._three = {
-      panel, ray, note, ui, vig, vigS,
+      panel, ray, note, hands, ui, vig, vigS,
       // gambar panel menu + sinar ke mata i (setelah pass akhir), rig = Matrix4 dunia dari ruang acuan
       overlay(renderer, i, rig, dark = 0) {
         const e = K.eyes[i], t = K.eyeTarget(i); if (!e || !t) return;
         const ac = renderer.autoClear; renderer.autoClear = false;      // lapisan di atas gambar mata (tanpa membersihkan)
         renderer.setRenderTarget(t);
-        const pp = K.panelPose(), nOn = K.noteOn();
+        // target XR ikut renderer.outputColorSpace host: sRGB = tekstur didekode lalu dienkode lagi; linear (Millar, gamma di
+        // pass akhir host) = nilai kanvas diteruskan apa adanya. Keduanya menampilkan warna kanvas persis.
+        const cs = t.texture.colorSpace === THREE.SRGBColorSpace ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+        if (panelTex.colorSpace !== cs) {
+          panelTex.colorSpace = noteTex.colorSpace = cs; panelTex.needsUpdate = noteTex.needsUpdate = true;
+          ray.material.color.setHex(0xe8b765, cs === THREE.SRGBColorSpace ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace);
+        }
+        const pp = K.panelPose(), nOn = K.noteOn(), H = (K.showHands && K.in && K.in.hands) || {};
         panel.visible = false; ray.visible = false; note.visible = false;
+        ['left', 'right'].forEach((h, k) => { const m = H[h]; hands[k].visible = !!m; if (m) { hands[k].matrix.copy(rig).multiply(m4.fromArray(m)); hands[k].matrixWorld.copy(hands[k].matrix); } });
+        const hOn = hands[0].visible || hands[1].visible;
         if (nOn) {
           if (K.note.dirty) { K.drawNote(); noteTex.needsUpdate = true; }
           note.matrix.copy(rig).multiply(m4.fromArray(K.notePose(i))); note.matrixWorld.copy(note.matrix); note.visible = true;
         }
-        if (pp || nOn) {
+        if (pp || nOn || hOn) {
           if (pp && P.dirty) { K.drawPanel(); panelTex.needsUpdate = true; }
           if (pp) { panel.matrix.copy(rig).multiply(m4.fromArray(pp.m)); panel.matrixWorld.copy(panel.matrix); panel.visible = true; }
           const I = K.in;
@@ -341,16 +360,26 @@
   K.raw = function (gl) {
     if (K._raw) return K._raw;
     const VS = `#version 300 es
-      uniform mat4 uM; uniform int uMode; uniform vec2 uSz; out vec2 vUv;
+      uniform mat4 uM; uniform int uMode; uniform vec2 uSz; uniform vec4 uBox; out vec2 vUv; out vec3 vN;
+      const vec2 Q[6] = vec2[6](vec2(0.0), vec2(1.0, 0.0), vec2(1.0), vec2(0.0), vec2(1.0), vec2(0.0, 1.0));
       void main() {
+        vN = vec3(0.0);
+        if (uMode == 3) {                                    // kotak kontroler: 6 sisi x 2 segitiga, berlawanan jarum jam dari luar
+          int f = gl_VertexID / 6, a = f / 2; float sg = (f % 2 == 0) ? 1.0 : -1.0; vec2 q = Q[gl_VertexID % 6] - 0.5;
+          vec3 e0 = vec3(0.0), e1 = vec3(0.0), e2 = vec3(0.0); e0[a] = 1.0; e1[(a + 1) % 3] = 1.0; e2[(a + 2) % 3] = 1.0;
+          if (sg < 0.0) { vec3 t = e1; e1 = e2; e2 = t; }
+          vec3 p = e0 * sg * 0.5 + e1 * q.x + e2 * q.y; vN = e0 * sg; vUv = vec2(0.0);
+          gl_Position = uM * vec4(p * uBox.xyz + vec3(0.0, 0.0, uBox.w), 1.0); return;
+        }
         vec2 q = vec2(float(gl_VertexID & 1), float((gl_VertexID >> 1) & 1));
         if (uMode == 2) { vUv = q; gl_Position = vec4(q * 2.0 - 1.0, 0.0, 1.0); return; }
         if (uMode == 1) { vUv = vec2(0.0); gl_Position = uM * vec4(0.0, 0.0, -uSz.x * float(gl_VertexID), 1.0); return; }
         vUv = vec2(q.x, 1.0 - q.y); gl_Position = uM * vec4((q.x - 0.5) * uSz.x, (q.y - 0.5) * uSz.y, 0.0, 1.0);
       }`;
     const FS = `#version 300 es
-      precision highp float; precision highp int; uniform int uMode; uniform sampler2D uTex; uniform float uK, uDark; in vec2 vUv; out vec4 o;
+      precision highp float; precision highp int; uniform int uMode; uniform sampler2D uTex; uniform float uK, uDark; in vec2 vUv; in vec3 vN; out vec4 o;
       void main() {
+        if (uMode == 3) { o = vec4(vec3(0.35, 0.37, 0.42) * (0.62 + 0.28 * vN.y + 0.1 * vN.z), 1.0); return; }
         if (uMode == 0) { o = texture(uTex, vUv); return; }
         if (uMode == 1) { o = vec4(0.91, 0.72, 0.4, 1.0); return; }
         float r = length((vUv - 0.5) * vec2(1.0, 1.15)) * 2.0;
@@ -360,7 +389,7 @@
     const sh = (t, src) => { const s = gl.createShader(t); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('VRKIT raw: ' + gl.getShaderInfoLog(s)); return s; };
     const p = gl.createProgram(); gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('VRKIT raw: ' + gl.getProgramInfoLog(p));
-    const U = {}; for (const n of ['uM', 'uMode', 'uSz', 'uTex', 'uK', 'uDark']) U[n] = gl.getUniformLocation(p, n);
+    const U = {}; for (const n of ['uM', 'uMode', 'uSz', 'uTex', 'uK', 'uDark', 'uBox']) U[n] = gl.getUniformLocation(p, n);
     const vao = gl.createVertexArray();
     const mkTex = () => { const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); return t; };
@@ -370,11 +399,11 @@
     K._raw = {
       overlay(i, dark = 0) {
         const e = K.eyes[i]; if (!e || !K.fb) return;
-        const pp = K.panelPose(), nOn = K.noteOn(), vg = K.vig > 0.01 || dark > 0.001;
-        if (!pp && !nOn && !vg) return;
+        const pp = K.panelPose(), nOn = K.noteOn(), vg = K.vig > 0.01 || dark > 0.001, H = (K.showHands && K.in && K.in.hands) || {};
+        if (!pp && !nOn && !vg && !H.left && !H.right) return;
         const S = { prog: gl.getParameter(gl.CURRENT_PROGRAM), vao: gl.getParameter(gl.VERTEX_ARRAY_BINDING), at: gl.getParameter(gl.ACTIVE_TEXTURE),
           blend: gl.isEnabled(gl.BLEND), depth: gl.isEnabled(gl.DEPTH_TEST), cull: gl.isEnabled(gl.CULL_FACE), sc: gl.isEnabled(gl.SCISSOR_TEST),
-          bs: gl.getParameter(gl.BLEND_SRC_RGB), bd: gl.getParameter(gl.BLEND_DST_RGB), bsa: gl.getParameter(gl.BLEND_SRC_ALPHA), bda: gl.getParameter(gl.BLEND_DST_ALPHA),
+          cf: gl.getParameter(gl.CULL_FACE_MODE), ff: gl.getParameter(gl.FRONT_FACE), bs: gl.getParameter(gl.BLEND_SRC_RGB), bd: gl.getParameter(gl.BLEND_DST_RGB), bsa: gl.getParameter(gl.BLEND_SRC_ALPHA), bda: gl.getParameter(gl.BLEND_DST_ALPHA),
           fy: gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL), pm: gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL) };
         gl.activeTexture(gl.TEXTURE0); const t0 = gl.getParameter(gl.TEXTURE_BINDING_2D);
         gl.bindFramebuffer(gl.FRAMEBUFFER, K.fb); gl.viewport(e.vp.x, e.vp.y, e.vp.w, e.vp.h);
@@ -382,6 +411,12 @@
         gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.disable(gl.SCISSOR_TEST);
         gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.uniform1i(U.uTex, 0);
+        if (H.left || H.right) {                                 // VR5: kotak kontroler (sisi belakang dibuang, tanpa depth)
+          gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK); gl.frontFace(gl.CCW);
+          gl.uniform1i(U.uMode, 3); gl.uniform4f(U.uBox, HAND[0], HAND[1], HAND[2], HAND[3]);
+          for (const h of ['left', 'right']) if (H[h]) { gl.uniformMatrix4fv(U.uM, false, clip(e, H[h])); gl.drawArrays(gl.TRIANGLES, 0, 36); }
+          gl.disable(gl.CULL_FACE);
+        }
         if (pp) {
           if (K.panel.dirty || !panelUp) { upload(panelTex, K.drawPanel()); panelUp = true; }
           gl.bindTexture(gl.TEXTURE_2D, panelTex); gl.uniform1i(U.uMode, 0); gl.uniform2f(U.uSz, PANEL.w, PANEL.h);
@@ -397,7 +432,7 @@
         if (vg) { gl.uniform1i(U.uMode, 2); gl.uniform1f(U.uK, K.vig); gl.uniform1f(U.uDark, dark); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
         gl.bindTexture(gl.TEXTURE_2D, t0); gl.activeTexture(S.at);
         gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, S.fy); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, S.pm);
-        gl.blendFuncSeparate(S.bs, S.bd, S.bsa, S.bda);
+        gl.blendFuncSeparate(S.bs, S.bd, S.bsa, S.bda); gl.cullFace(S.cf); gl.frontFace(S.ff);
         (S.blend ? gl.enable : gl.disable).call(gl, gl.BLEND); (S.depth ? gl.enable : gl.disable).call(gl, gl.DEPTH_TEST);
         (S.cull ? gl.enable : gl.disable).call(gl, gl.CULL_FACE); (S.sc ? gl.enable : gl.disable).call(gl, gl.SCISSOR_TEST);
         gl.useProgram(S.prog); gl.bindVertexArray(S.vao);

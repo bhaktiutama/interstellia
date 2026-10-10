@@ -84,6 +84,29 @@ Sinematik (Millar M4): Spasi, Enter, Esc, atau klik = lewati. Pandangan orbit ti
 | Millar | tidak ada | Tubuh astronaut (Mati / Bayangan / Tampil) hanya di panel kontrol `, tanpa tombol (M6a) |
 | Millar | tidak ada | Visor helm (Mati / Tipis / Penuh) hanya di panel kontrol `, tanpa tombol (M6d) |
 
+## Kontroler VR (Rencana VR, `shared/vr.js`, Oculus Touch)
+
+Keyboard tetap berlaku di VR. Kontroler Touch dipetakan ke tombol lama (dikirim sebagai tombol papan ketik), jadi tidak ada fungsi baru yang memakai huruf.
+
+| Kontrol Touch | Semua experience (VRKIT) |
+| --- | --- |
+| X | Menu VR (panel di depan mata; pilih dengan sinar kontroler kanan + picu kanan) |
+| Y | Pusatkan ulang pandangan |
+| Stik kanan kiri / kanan | Belok patah 30 derajat (menu: 45 derajat atau halus) |
+
+| Kontrol Touch | Copper Corn Station | Millar's World | Gargantua |
+| --- | --- | --- | --- |
+| Stik kiri | Jalan analog (joystik sentuh); motor / shuttle = W A S D | W A S D (jalan / terbang) | Misi: W A S D dorong; luar misi: mengitari dan zoom |
+| Stik kanan atas / bawah | Shuttle: R / F | Terbang: R / F | Misi: R / F |
+| Genggam kanan | Lari (shuttle: Shift) | Lari / Shift | Shift mesin utama |
+| Picu kanan | E aksi | E ambil (tahan), naik, mendarat | E suar; tesseract: kunci bidikan; akhir misi: terbang lagi |
+| A | Space lompat | Space lompat | V tampilan |
+| B | V kamera luar | V tampilan | O autopilot |
+| Picu kiri | C motor | - | X sikap |
+| Tekan stik kiri | - | M radar | Space jeda |
+
+Di VR mati: gerak kepala (B), guncangan kamera, FOV lari, mode foto dan kamera rangefinder F, tur Y Copper, sinematik kedatangan Millar (dilewati), visor layar Millar, butiran / vinyet / noda lensa. Millar tersapu = layar gelap.
+
 ## Aturan untuk experience baru
 
 - Pakai tabel tombol umum di atas. Fungsi baru yang khusus experience: pilih tombol yang tidak ada di kedua tabel, atau letakkan di panel kontrol.

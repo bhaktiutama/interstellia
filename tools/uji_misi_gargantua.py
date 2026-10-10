@@ -215,12 +215,15 @@ async def kelompok2(p, exe, pg):
         tmp = pathlib.Path(tempfile.mkdtemp()) / 'lama.html'; tmp.write_text(old, encoding='utf-8')
         setup = '() => { const G = window.__gargantua; G.state.paused = true; G.state.simTime = 7.5; G.state.postMode = 2; G.CONFIG.adaptive = false; G.CONFIG.renderScale = 0.8; }'
         await pg.evaluate('() => { window.__gargantua.stopMission(); }')
-        await pg.evaluate(setup); await pg.wait_for_timeout(500); baru = await pixels(pg)
+        # V4 (turbulensi piringan, bintang HDR) sengaja mengubah tampilan: pembanding G1 memakai ?v4=0 (= sebelum V4) di halaman sekarang
+        pg3 = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
+        await pg3.goto(PAGE.as_uri() + '?lang=id&v4=0'); await pg3.wait_for_function('window.__gargantua !== undefined'); await pg3.wait_for_timeout(1000)
+        await pg3.evaluate(setup); await pg3.wait_for_timeout(500); baru = await pixels(pg3); await pg3.close()
         pg2 = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
         await pg2.goto(tmp.as_uri() + '?lang=id'); await pg2.wait_for_function('window.__gargantua !== undefined'); await pg2.wait_for_timeout(1000)
         await pg2.evaluate(setup); await pg2.wait_for_timeout(500); lama = await pixels(pg2)
         d = beda(baru, lama)
-        cek('misi mati: render identik dengan versi sebelum G2 (uFall = 0)', d == 0, f'{d * 100:.3f}% piksel berbeda')
+        cek('misi mati: render identik dengan versi sebelum G2 (uFall = 0, ?v4=0)', d == 0, f'{d * 100:.3f}% piksel berbeda')
 
     # --- alur misi lewat UI ---
     await pg.evaluate("() => { const s = [...document.querySelectorAll('#uiBody select')].find((x) => [...x.options].some((o) => o.value === 'fast')); s.value = 'fast'; s.dispatchEvent(new Event('change')); }")

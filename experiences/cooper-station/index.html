@@ -391,6 +391,7 @@
 <script src="../../shared/kestrel.js"></script>
 <script src="../../shared/post.js"></script>
 <script src="../../shared/camera.js"></script>
+<script src="../../shared/vr.js"></script>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
 </script>
@@ -451,6 +452,10 @@ function setLang(c) {
 
 const I18N = { en: {} };
 Object.assign(I18N.en, {
+  // VR4: menu dan notifikasi headset
+  'VR: stik kiri jalan, stik kanan belok, genggam kanan lari, picu kanan E (aksi), A lompat, B kamera luar, picu kiri motor':
+    'VR: left stick walk, right stick turn, right grip run, right trigger E (action), A jump, B outside camera, left trigger motorbike',
+  'Jam {h} (+1 jam)': 'Time {h} (+1 hour)', 'Pindah: {p}': 'Go to: {p}', 'Di luar distrik': 'Outside the districts',
   // peta A: tab, hologram, tempat fisika
   "Tempat": "Places",
   "Legenda": "Legend",
@@ -975,6 +980,9 @@ renderer.setSize(window.innerWidth, window.innerHeight, false);
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(CONFIG.fogColor, CONFIG.fogDensity);
 const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 0.25, 12000);
+// VR4 (docs/app/rencana-vr.md): keadaan VR. out = target mata XR untuk pass akhir (pengganti kanvas), rig = Matrix4 dunia dari
+// ruang acuan headset, yaw = arah rig (kepala menambah), w / h = ukuran efek layar per mata. on false = jalur layar biasa persis.
+const XRC = { on: false, out: null, rig: null, yaw: 0, rs: 1, w: 0, h: 0, held: new Set(), idle: false, ft: 0, slow: 0, fast: 0, prev: null, spot: 0 };
 
 await bootStep(BOOT_W[0], 'Cahaya dan renderer...');
 /* =====================================================================
@@ -6686,6 +6694,7 @@ labEl.querySelectorAll('[data-ltab]').forEach((b) => b.addEventListener('click',
 const toastEl = document.getElementById('toast');
 function setLabText(msg) {
   const tx = t(msg);                                               // M3: pesan polos diterjemahkan di sini
+  if (XRC.on) VRKIT.toast(tx, 3);                                  // VR4: notifikasi di headset
   document.getElementById('labResult').textContent = tx;
   if (!window.__stationReady) return;
   if (!labEl.classList.contains('collapsed') && LABUI.tab === 'fisika' && labEl.offsetParent) return;   // sudah terlihat di panel
@@ -10145,7 +10154,7 @@ const fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); fsQuad.frustumCull
 const FS_VS = /* glsl */`varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 const FS_MATS = [];                                                // P1: semua material layar penuh, dikompilasi di layar muat (warmShaders)
 const fsMat = (frag, uniforms) => { const m = new THREE.ShaderMaterial({ vertexShader: FS_VS, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false }); FS_MATS.push(m); return m; };
-function fsPass(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target); renderer.render(fsScene, fsCam); }
+function fsPass(mat, target) { fsQuad.material = mat; renderer.setRenderTarget(target === null && XRC.out ? XRC.out : target); renderer.render(fsScene, fsCam); }   // VR4: kanvas = viewport mata
 // --- SSAO: 8 sampel hemisfer, radius 1 m, memudar sampai 150 m ---
 const AO_KERNEL = [];
 { let sd = 4711; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
@@ -10647,6 +10656,7 @@ function postBegin() {                                            // dipanggil s
   LIGHT.uniforms.uL_SsrK.value.x = SSR.on && SSR.ready && POST.mode !== 2 && !ext.active ? 1 : 0;   // 23a: pakai salinan frame lalu
   if (POST.mode === 2) { ATMO.gate = false; SSR.ready = false; return false; }          // V4: tanpa efek layar, kabut pagi kembali rata di material
   renderer.getDrawingBufferSize(_dbs);
+  if (XRC.on) _dbs.set(XRC.w, XRC.h);                              // VR4: efek layar seukuran satu mata
   const w = Math.max(4, Math.floor(_dbs.x)), h = Math.max(4, Math.floor(_dbs.y));
   if (w !== POST_R.w || h !== POST_R.h) {
     POST_R.w = w; POST_R.h = h;
@@ -10742,6 +10752,7 @@ function postEnd() {
   C.tHdr.value = R0.hdr.texture; C.tBloom.value = R0.up[0].texture; C.tAO.value = R0.ao[1].texture; C.uUseAO.value = useAO ? 1 : 0; C.uGtao.value = gtao ? 1 : 0; C.uAoView.value = POST.view ? 1 : 0;
   C.uExp.value = POST.exposure; C.uBloom.value = POST.bloom / 6; C.uAO.value = gtao ? POST.aoG : POST.ao; C.uGrain.value = CAMKIT.U.E[0] > 0.5 ? 0 : POST.grain;   // K: derau sensor menggantikan butiran C.uVig.value = POST.vignette; C.uTime.value = (clock.sim % 100);
   C.tBloomW.value = R0.up[2].texture; C.tBloomA.value = R0.down[5].texture; C.tDirt.value = LENS.tex; C.uDirt.value = LENS.off || PRESET.idx > 0 ? 0 : LENS.k; C.uDirtAsp.value = R0.w / R0.h;   // V5 lens dirt
+  if (XRC.on) { C.uGrain.value = 0; C.uDirt.value = 0; }         // VR4: butiran dan noda lensa beda antar mata = persaingan binokular
   if (CAMX.final) {                                                  // K: foto akumulasi sudah halus (tanpa TAA / FXAA); pass akhir alpha 1
     fsPass(compMat, R0.ldr);                                         // (komposit menulis alpha = luma: langsung ke kanvas = warna dibagi alpha)
     const O = taaOutMat.uniforms, sh = O.uSharp.value; O.tSrc.value = R0.ldr.texture; O.uTexel.value.set(1 / R0.w, 1 / R0.h); O.uGrain.value = 0; O.uSharp.value = 0.1;
@@ -11108,7 +11119,7 @@ function cyclePreset() { PRESET.auto = false; applyPreset((PRESET.idx + 1) % PRE
   applyPreset(idx);
 }
 function autoPreset(dt) {
-  if (!PRESET.auto || !stats.fps || ext.active || CAMKIT.on) return;   // K: mode kamera (tangkap / rekam) tidak menurunkan preset
+  if (!PRESET.auto || !stats.fps || ext.active || CAMKIT.on || XRC.on) return;   // VR4: skala adaptif sendiri   // K: mode kamera (tangkap / rekam) tidak menurunkan preset
   PRESET.low = stats.fps < 30 ? PRESET.low + dt : Math.max(0, PRESET.low - dt);
   if (PRESET.low > 4 && PRESET.idx < PRESETS.length - 1) { applyPreset(PRESET.idx + 1); PRESET.low = -6; setLabText(t('FPS rendah: preset diturunkan ke {p}.', { p: t(PRESETS[PRESET.idx].name) })); }
 }
@@ -15094,6 +15105,7 @@ function worldStep(dt) {                         // K: bagian simulasi frame (ju
   groundMat.uniforms.uTime.value = clock.sim % 3600;
 }
 function frame(now) {
+  if (XRC.on) { XRC.idle = true; return; }                          // VR4: headset menggerakkan loop sendiri (vrFrame)
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (CAMKIT.cap) { camCapture(dt); requestAnimationFrame(frame); return; }   // K: subframe foto (layar dibekukan)
@@ -15189,6 +15201,120 @@ PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { warmLater, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
   jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE };
+/* =====================================================================
+   VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).
+   Rig = pose kamera lama dengan pitch 0 dan tanpa gerak kepala, diputar balik sebesar yaw kepala: di dalam stasiun "atas" =
+   ke sumbu silinder (kerangka berputar, lookBasis), di kamera luar / pesawat = kerangka inersia. Kamera jauh (farScene) per
+   mata = rotasi stasiun x rotasi mata, tanpa translasi. Efek layar lama seukuran mata, pass akhir ke viewport mata; TAA dan
+   pantulan ruang layar (SSR, butuh frame lalu dari mata yang sama) mati selama VR. Stik kiri = joystik sentuh (analog).
+   ===================================================================== */
+const _xrM = new THREE.Matrix4(), _xrE = new THREE.Matrix4(), _xrS = new THREE.Vector3(), _xrQ = new THREE.Quaternion(), _xrY = new THREE.Quaternion(), _xrUp = new THREE.Vector3(0, 1, 0);
+XRC.rig = new THREE.Matrix4();
+function vrKeys(want) {
+  for (const c of want) if (!XRC.held.has(c)) document.body.dispatchEvent(new KeyboardEvent('keydown', { code: c, bubbles: true }));
+  for (const c of XRC.held) if (!want.has(c)) document.body.dispatchEvent(new KeyboardEvent('keyup', { code: c, bubbles: true }));
+  XRC.held = want;
+}
+const vrFree = () => !ext.active && !MOTO.on && !TOUR.on;               // kepala menentukan arah jalan (bukan kendaraan / kamera luar / tur)
+function vrInput() {
+  const I = VRKIT.in, want = new Set(); if (!I) return;
+  input.joyF = input.joyS = 0; input.run = false;
+  if (!VRKIT.menu && startEl.hidden) {
+    const [mx, my] = I.move, keysMode = ext.flight || MOTO.on;
+    if (keysMode) { if (my < -0.5) want.add('KeyW'); if (my > 0.5) want.add('KeyS'); if (mx < -0.5) want.add('KeyA'); if (mx > 0.5) want.add('KeyD'); }
+    else { input.joyF = Math.abs(my) > 0.15 ? -my : 0; input.joyS = Math.abs(mx) > 0.15 ? mx : 0; }
+    if (ext.flight) { if (I.look[1] < -0.5) want.add('KeyR'); if (I.look[1] > 0.5) want.add('KeyF'); if (I.grip > 0.5) want.add('ShiftLeft'); }
+    else input.run = I.grip > 0.5;
+    if (I.trig > 0.5) want.add('KeyE');
+    if (I.a > 0.5) want.add('Space');
+    if (I.b > 0.5) want.add('KeyV');
+    if (I.trigL > 0.5) want.add('KeyC');
+    if (I.turn && vrFree()) XRC.yaw += I.turn;
+  }
+  vrKeys(want);
+}
+function vrEyeCam(e, cam, near, far) {
+  _xrE.fromArray(e.world); _xrM.multiplyMatrices(XRC.rig, _xrE); _xrM.decompose(cam.position, cam.quaternion, _xrS);
+  cam.updateMatrixWorld(true);
+  cam.projectionMatrix.fromArray(VRKIT.m4.projNF(e.proj, near, far)); cam.projectionMatrixInverse.copy(cam.projectionMatrix).invert();
+}
+function vrFrame(t, eyes, xf, dt) {
+  const K = VRKIT, ov = K.three(THREE), e0 = eyes[0], hy = Math.atan2(e0.world[8], e0.world[10]);
+  if (!startEl.hidden) { startEl.hidden = true; startAudio(); }
+  vrInput();
+  if (vrFree()) { player.heading = XRC.yaw + hy; player.pitch = 0; }   // arah jalan = arah kepala
+  if (MOTO.on) MOTO.look = 0;
+  worldStep(dt);
+  // rig: kamera lama tanpa yaw kepala (diputar -hy di sumbu atas kamera)
+  camera.updateMatrixWorld(true);
+  _xrQ.copy(camera.quaternion);
+  if (vrFree()) _xrQ.multiply(_xrY.setFromAxisAngle(_xrUp, -hy));
+  XRC.rig.compose(camera.position, _xrQ, _xrS.set(1, 1, 1));
+  XRC.w = Math.max(16, Math.round(e0.vp.w * XRC.rs)); XRC.h = Math.max(16, Math.round(e0.vp.h * XRC.rs));
+  renderer.info.reset();
+  octStep(); shadowPass(); sunShadowPass();
+  renderer.xr.enabled = false;                                    // kamera mata dipakai apa adanya (bukan ArrayCamera XR)
+  for (const e of eyes) {
+    vrEyeCam(e, camera, camera.near, camera.far);
+    if (ext.active) farCam.quaternion.copy(camera.quaternion);
+    else farCam.quaternion.copy(_qSt.setFromAxisAngle(_zAxis, OMEGA * clock.sim)).multiply(camera.quaternion);
+    farCam.updateMatrixWorld(true);
+    farCam.projectionMatrix.fromArray(K.m4.projNF(e.proj, farCam.near, farCam.far)); farCam.projectionMatrixInverse.copy(farCam.projectionMatrix).invert();
+    XRC.out = K.eyeTarget(e.i);
+    const post = postBegin(); TAA.act = false;
+    if (!post) renderer.setRenderTarget(XRC.out);
+    renderer.clear();
+    renderer.render(farScene, farCam);
+    renderer.clearDepth();
+    renderer.render(scene, camera);
+    if (post) postEnd();
+    XRC.out = null;
+    ov.overlay(renderer, e.i, XRC.rig);
+  }
+  K.eyeTargetDone();
+  renderer.xr.enabled = true;
+  updateAudio(dt); updateTraffic(); updateFurniture();
+  updateStats(dt);
+  K.motion(ext.active || TOUR.on ? 0 : MOTO.on ? MOTO.v * 0.15 : Math.hypot(player.vA, player.vT));
+  // skala efek layar adaptif: rata-rata waktu frame > 1/50 s selama 1 s = turun 0,05; < 1/85 s selama 3 s = naik (paling tinggi 1)
+  XRC.ft = XRC.ft ? XRC.ft * 0.95 + dt * 0.05 : dt;
+  XRC.slow = XRC.ft > 1 / 50 ? XRC.slow + dt : 0; XRC.fast = XRC.ft < 1 / 85 ? XRC.fast + dt : 0;
+  if (XRC.slow > 1) { XRC.rs = Math.max(0.5, +(XRC.rs - 0.05).toFixed(2)); XRC.slow = 0; }
+  if (XRC.fast > 3) { XRC.rs = Math.min(1, +(XRC.rs + 0.05).toFixed(2)); XRC.fast = 0; }
+}
+function vrStart() {
+  XRC.on = true; XRC.yaw = player.heading; XRC.rs = 0.8; XRC.ft = XRC.slow = XRC.fast = 0;
+  if (PHOTO.on) togglePhoto(false);
+  if (!helpEl.hidden) toggleHelp();
+  if (document.pointerLockElement) document.exitPointerLock();
+  if (TOUR.on) stopTour();                                        // tur sinematik Y tidak dipakai di headset
+  XRC.prev = { bob: BOB.level, preset: PRESET.idx, auto: PRESET.auto, ssr: SSR.on };
+  BOB.level = 0; SSR.on = false; SSR.ready = false;               // gerak kepala mati; SSR butuh frame lalu dari mata yang sama
+  if (PRESET.idx < 2) applyPreset(2);                             // mulai di Sedang (menu VR mengganti)
+  setLabText('VR: stik kiri jalan, stik kanan belok, genggam kanan lari, picu kanan E (aksi), A lompat, B kamera luar, picu kiri motor');
+}
+function vrEnd() {
+  XRC.on = false; XRC.out = null; vrKeys(new Set()); input.joyF = input.joyS = 0; input.run = false;
+  renderer.xr.enabled = false;
+  const pv = XRC.prev || {};
+  if (pv.bob !== undefined) { BOB.level = pv.bob; SSR.on = pv.ssr; }
+  if (pv.preset !== undefined && pv.preset !== PRESET.idx) { PRESET.auto = pv.auto; applyPreset(pv.preset); }
+  camera.aspect = farCam.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix(); farCam.updateProjectionMatrix();
+  applyPixelRatio(); renderer.setSize(window.innerWidth, window.innerHeight, false);
+  if (XRC.idle) { XRC.idle = false; last = performance.now(); requestAnimationFrame(frame); }
+}
+VRKIT.init({ backend: 'three', renderer, lang: () => LANG.cur, frame: vrFrame, start: vrStart, end: vrEnd,
+  items: () => [
+    { label: () => { const D = districtAt(player.theta * R, player.za); return `${D ? t(D.name) : t('Di luar distrik')} · ${fmtHour(clock.hour)}`; }, act: () => {} },
+    { label: () => t('Preset: {p}', { p: t(PRESETS[PRESET.idx].name) }) + ' (Q)', act: () => cyclePreset() },
+    { label: () => t('Cuaca: {w} (N)', { w: t(WEATHER.modes.find((x) => x[0] === WEATHER.mode)[1]) }), act: () => cycleWeather() },
+    { label: () => t('Jam {h} (+1 jam)', { h: fmtHour(clock.hour) }), act: () => shiftHour(1) },
+    { label: () => t('Suara: {s} (U)', { s: t(AUDIO.on ? 'nyala' : 'mati') }), act: () => toggleSound() },
+    { label: () => { const k = Object.keys(SPOTS); return t('Pindah: {p}', { p: t(SPOTS[k[XRC.spot % k.length]].name) }); },
+      act: () => { const k = Object.keys(SPOTS); teleport(k[XRC.spot % k.length]); XRC.yaw = player.heading; XRC.spot++; } },
+  ] });
+Object.assign(window.__station, { XRC, vrFrame, THREE });
 requestAnimationFrame(frame);
 </script>
 </body>

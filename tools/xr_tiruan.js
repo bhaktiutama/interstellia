@@ -15,7 +15,7 @@
   'use strict';
   const W = 320, H = 360, IPD = 0.064, NEAR_FALLBACK = 0.05;
   const T = window.__xrTiruan = {
-    head: { p: [0, 1.6, 0], yaw: 0, pitch: 0 }, size: [W, H], frames: 0, lastViews: null, session: null, gl: null, fb: null,
+    head: { p: [0, 1.6, 0], yaw: 0, pitch: 0 }, standH: 1.6, size: [W, H], frames: 0, lastViews: null, session: null, gl: null, fb: null,
     hands: {
       left: { p: [-0.2, 1.2, -0.35], buttons: Array.from({ length: 7 }, () => ({ pressed: false, touched: false, value: 0 })), axes: [0, 0, 0, 0] },
       right: { p: [0.2, 1.2, -0.35], buttons: Array.from({ length: 7 }, () => ({ pressed: false, touched: false, value: 0 })), axes: [0, 0, 0, 0] },
@@ -95,8 +95,11 @@
   class Frame {
     constructor(session) { this.session = session; this.active = true; this.predictedDisplayTime = performance.now(); }
     _head() { const h = T.head; return rigid(h.p, h.yaw, h.pitch); }
-    getViewerPose() {
-      const hm = this._head(), n = this.session.renderState.depthNear || NEAR_FALLBACK, f = this.session.renderState.depthFar || 1000;
+    // ruang acuan 'local' seperti headset sungguhan: titik asal di kepala saat sesi mulai (tinggi bawaan 1,6 m dikurangkan);
+    // 'local-floor' = lantai
+    _ref(m, ref) { if (ref && ref.kind === 'local') m[13] -= T.standH; return m; }
+    getViewerPose(ref) {
+      const hm = this._ref(this._head(), ref), n = this.session.renderState.depthNear || NEAR_FALLBACK, f = this.session.renderState.depthFar || 1000;
       const views = [-1, 1].map((sgn, i) => {
         const em = mul(hm, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, sgn * IPD / 2, 0, 0, 1]);
         const tin = 0.85, tout = 1.15, tv = 1.1;                       // tan setengah sudut: sisi dalam / luar / atas-bawah (frustum tidak simetris)
@@ -106,9 +109,9 @@
       T.lastViews = views.map((v) => ({ eye: v.eye, p: Array.from(v.projectionMatrix), m: Array.from(v.transform.matrix) }));
       return { transform: new RigidT(hm), views, emulatedPosition: false };
     }
-    getPose(space) {
-      if (!space || !space.h) return { transform: new RigidT(this._head()), emulatedPosition: false };
-      const H = T.hands[space.h], m = rigid(H.p, T.head.yaw, space.kind === 'ray' ? -0.6 : 0);
+    getPose(space, ref) {
+      if (!space || !space.h) return { transform: new RigidT(this._ref(this._head(), ref)), emulatedPosition: false };
+      const H = T.hands[space.h], m = this._ref(rigid(H.p, T.head.yaw, space.kind === 'ray' ? -0.6 : 0), ref);
       return { transform: new RigidT(m), emulatedPosition: false, linearVelocity: null, angularVelocity: null };
     }
     getJointPose() { return null; }
