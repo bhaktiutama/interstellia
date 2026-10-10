@@ -597,27 +597,42 @@ const dur = (s) => (s >= 3 * 86400 ? fmt(s / 86400, 1) + (LANG === 'en' ? ' days
 function setP(inp) { const p = ((+inp.value - +inp.min) / (+inp.max - +inp.min)) * 100; inp.style.setProperty('--p', p + '%'); }
 
 /* =====================================================================
-   Kanvas: ukuran ikut CSS + DPR, satu loop animasi; simulasi berjalan walau panelnya tergulir keluar
+   Kanvas: ukuran ikut CSS + DPR (resolusi adaptif Q), satu loop animasi; simulasi berjalan walau panelnya tergulir keluar,
+   tetapi kanvasnya hanya digambar bila terlihat (req(): ditunda lalu digambar sekali saat masuk layar)
    ===================================================================== */
 const PANELS = [], SIMS = [];
-function panel(id, draw, step) {
-  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, vis: false, step };
-  o.draw = (p) => { if (p.w > 20 && p.h > 20) draw(p); };
-  const fit = () => {
-    const r = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+// Q = resolusi adaptif: skala backing kanvas turun bertahap (1 -> 0,8 -> 0,65, DPR efektif >= 1) bila frame > 22 ms selama 1,5 s
+// saat ada animasi, naik lagi bila < 14 ms selama 4 s (ditahan 30 s bila langsung lambat lagi). PC cepat tetap skala 1.
+const Q = { i: 0, steps: [1, 0.8, 0.65], s: 1, ema: 16.7, slow: 0, fast: 0, up: 0, hold: 0 };
+function panel(id, draw, step, opt = {}) {
+  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, d: 1, vis: false, step, dirty: false, n: 0, dprMax: opt.dprMax || 2 };
+  o.draw = (p) => { if (p.w > 20 && p.h > 20) { draw(p); o.n++; o.dirty = false; } };   // belum berukuran: jangan gambar (radius negatif)
+  o.req = () => { if (o.vis) o.draw(o); else o.dirty = true; };                       // di luar layar: tunda, digambar saat masuk layar
+  o.fit = () => {
+    const r = el.getBoundingClientRect(), dpr = devicePixelRatio || 1, d = Math.max(Math.min(dpr, 1), Math.min(dpr, o.dprMax) * Q.s);
     if (r.width < 2) return;
-    o.w = r.width; o.h = r.height; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
+    o.w = r.width; o.h = r.height; o.d = d; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
     ctx.setTransform(d, 0, 0, d, 0, 0); o.draw(o);
   };
-  new ResizeObserver(fit).observe(el);
-  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; }, { rootMargin: '80px' }).observe(el);
+  new ResizeObserver(o.fit).observe(el);
+  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; if (o.vis && o.dirty) o.draw(o); }, { rootMargin: '80px' }).observe(el);
   PANELS.push(o); return o;
 }
+function qTune(ms, busy, now) {
+  if (!busy || document.hidden || ms > 250) return;                                  // frame diam atau jeda tab tidak dihitung
+  Q.ema += (ms - Q.ema) * 0.1;
+  if (Q.ema > 22) { Q.fast = 0; Q.slow += ms; if (Q.slow > 1500 && Q.i < Q.steps.length - 1) { if (now - Q.up < 5000) Q.hold = now + 30000; qSet(Q.i + 1); } }
+  else if (Q.ema < 14) { Q.slow = 0; Q.fast += ms; if (Q.fast > 4000 && Q.i > 0 && now > Q.hold) { Q.up = now; qSet(Q.i - 1); } }
+  else { Q.slow = 0; Q.fast = 0; }
+}
+function qSet(i) { Q.i = i; Q.s = Q.steps[i]; Q.slow = Q.fast = 0; Q.ema = 16.7; for (const p of PANELS) p.fit(); }
 let lastT = performance.now();
 function loop(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
-  for (const s of SIMS) s.tick(dt);
-  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) p.draw(p);
+  const ms = now - lastT, dt = Math.min(0.05, ms / 1000); lastT = now;
+  let busy = false;
+  for (const s of SIMS) { s.tick(dt); busy = busy || s.play; }
+  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) { p.draw(p); busy = true; }
+  qTune(ms, busy, now);
   requestAnimationFrame(loop);
 }
 // pemutar umum: Jalankan / Jeda / Lanjut + slider waktu + label kecepatan (pola bab Coriolis Copper)
@@ -898,7 +913,7 @@ function rayShoot(b, V) {
 }
 const RYS = player('ray', { T: 1, btn: 'rPlay', rate: (t) => { const n = RY.res ? RY.res.P.length / 2 : 1; return clamp(220 / Math.max(1, RY.len), 0.05, 2); },
   reset: () => { RY.res = rayShoot(RY.b, rayView(ray)); RY.len = rayLen(RY.res, rayView(ray)); $('rVerd').textContent = ''; },
-  update: () => { rayRead(); ray.draw(ray); }, end: () => rayVerdict() });
+  update: () => { rayRead(); ray.req(); }, end: () => rayVerdict() });
 function rayLen(res, V) { let L_ = 0; const P = res.P; for (let i = 2; i < P.length; i += 2) L_ += Math.hypot(P[i] - P[i - 2], P[i + 1] - P[i - 1]) * V.s; return L_; }
 const ray = panel('cvRay', (o) => {
   const c = o.ctx, w = o.w, h = o.h, V = rayView(o), X = (x) => V.cx + x * V.s, Y = (y) => V.cy - y * V.s;
@@ -1004,7 +1019,7 @@ function seenR(T) {   // jarak wahana yang terlihat relai pada waktu PG T (T_arr
 }
 const FL = { flags: {} };
 const FS = player('fall', { T: F_TMAX, btn: 'fPlay', slider: 'fTs', rate: fRate, reset: () => { FL.flags = {}; $('fVerd').textContent = T('f_out'); },
-  update: () => { fallRead(); fall.draw(fall); }, during: () => fallEvents(), end: () => fallEvents(),
+  update: () => { fallRead(); fall.req(); }, during: () => fallEvents(), end: () => fallEvents(),
   seek: () => { FL.flags = {}; $('fVerd').textContent = T(FS.t > 0 ? 'f_out' : 'f_start'); fallEvents(); } });
 $('fReplay').addEventListener('click', () => FS.go());
 function fallEvents() {
@@ -1075,7 +1090,7 @@ function pulseMake(te) {
 }
 const SS = player('st', { T: ST_T, btn: 'sPlay', slider: 'sTs', rate: (t) => (t > 60 && t < 70 ? 2.2 : 7),
   reset: () => { ST.pulses = []; ST.idx = 0; ST.gotN = 0; ST.lastArr = null; ST.lastGap = null; ST.lastF = null; $('sVerd').textContent = T('s_start'); },
-  during: () => stEvents(), seek: () => stRebuild(), update: () => { stRead(); stp.draw(stp); } });
+  during: () => stEvents(), seek: () => stRebuild(), update: () => { stRead(); stp.req(); } });
 function stEvents() {
   const t = SS.t;
   while (ST.idx < AUTO_T.length && AUTO_T[ST.idx] <= t) { if (ST.auto) pulseMake(AUTO_T[ST.idx]); ST.idx++; }
@@ -1157,7 +1172,7 @@ function orbPlan() {
   OR.cum = cum; OR.len = s;
 }
 const OS = player('orb', { T: 1, btn: 'oPlay', rate: () => clamp(13 / Math.max(1, OR.len), 0.01, 1),
-  reset: () => { orbPlan(); $('oVerd').textContent = ''; }, update: () => { orbRead(); orbp.draw(orbp); }, end: () => orbVerdict() });
+  reset: () => { orbPlan(); $('oVerd').textContent = ''; }, update: () => { orbRead(); orbp.req(); }, end: () => orbVerdict() });
 function orbIdx() { if (!OR.path) return 0; const target = OS.t * OR.len, cum = OR.cum; let a = 0, b = cum.length - 1; while (b - a > 1) { const m = (a + b) >> 1; if (cum[m] < target) a = m; else b = m; } return b; }
 function orbRead() {
   $('oL').textContent = fmt(OR.L / 2, 6);
@@ -1170,7 +1185,7 @@ function orbVerdict() {
   const g = OR.path, n = Math.abs(g.ph[g.ph.length - 1]) / TAU;
   $('oVerd').textContent = g.end !== 'cap' ? T('o_v_esc') : Math.abs(OR.L - 2) < 0.002 ? T('o_v_whirl', { n: fmt(n, 1) }) : T('o_v_cap', { n: fmt(n, 1) });
 }
-function orbSet(d) { OR.d = d; OR.L = (22 * Math.sin(d * DEG)) / Math.sqrt(21); $('oD').value = d; setP($('oD')); $('oDo').textContent = fmt(d, Math.abs(d - 24.62) < 0.05 ? 4 : 1) + '°'; OR.path = null; OS.t = 0; OS.play = false; OS.done = false; OS.btn(); orbRead(); orbp.draw(orbp); }
+function orbSet(d) { OR.d = d; OR.L = (22 * Math.sin(d * DEG)) / Math.sqrt(21); $('oD').value = d; setP($('oD')); $('oDo').textContent = fmt(d, Math.abs(d - 24.62) < 0.05 ? 4 : 1) + '°'; OR.path = null; OS.t = 0; OS.play = false; OS.done = false; OS.btn(); orbRead(); orbp.req(); }
 $('oD').addEventListener('input', (e) => orbSet(+e.target.value));
 $('oFine').addEventListener('click', () => { orbSet(critD(22) - 1e-4); OS.go(); });
 const OPRE = [12, 23, critD(22) - 0.003, 26, 40];

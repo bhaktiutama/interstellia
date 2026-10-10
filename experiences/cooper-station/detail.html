@@ -556,27 +556,41 @@ const dur = (s) => (s >= 120 ? fmt(s / 60, 1) + (LANG === 'en' ? ' min' : ' meni
 let MASS = 70;
 
 /* =====================================================================
-   Kanvas: ukuran ikut CSS + DPR, satu loop animasi untuk semua panel yang terlihat
+   Kanvas: ukuran ikut CSS + DPR (resolusi adaptif Q), satu loop animasi untuk semua panel yang terlihat; req() = gambar bila terlihat
    ===================================================================== */
 const PANELS = [];
-function panel(id, draw, step) {
-  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, vis: false, step };
-  o.draw = (p) => { if (p.w > 20 && p.h > 20) draw(p); };   // belum berukuran: jangan gambar (radius negatif)
-  const fit = () => {
-    const r = el.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+// Q = resolusi adaptif: skala backing kanvas turun bertahap (1 -> 0,8 -> 0,65, DPR efektif >= 1) bila frame > 22 ms selama 1,5 s
+// saat ada animasi, naik lagi bila < 14 ms selama 4 s (ditahan 30 s bila langsung lambat lagi). PC cepat tetap skala 1.
+const Q = { i: 0, steps: [1, 0.8, 0.65], s: 1, ema: 16.7, slow: 0, fast: 0, up: 0, hold: 0 };
+function panel(id, draw, step, opt = {}) {
+  const el = $(id), ctx = el.getContext('2d'), o = { el, ctx, w: 1, h: 1, d: 1, vis: false, step, dirty: false, n: 0, dprMax: opt.dprMax || 2 };
+  o.draw = (p) => { if (p.w > 20 && p.h > 20) { draw(p); o.n++; o.dirty = false; } };   // belum berukuran: jangan gambar (radius negatif)
+  o.req = () => { if (o.vis) o.draw(o); else o.dirty = true; };                       // di luar layar: tunda, digambar saat masuk layar
+  o.fit = () => {
+    const r = el.getBoundingClientRect(), dpr = devicePixelRatio || 1, d = Math.max(Math.min(dpr, 1), Math.min(dpr, o.dprMax) * Q.s);
     if (r.width < 2) return;
-    o.w = r.width; o.h = r.height; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
+    o.w = r.width; o.h = r.height; o.d = d; el.width = Math.round(r.width * d); el.height = Math.round(r.height * d);
     ctx.setTransform(d, 0, 0, d, 0, 0); o.draw(o);
   };
-  new ResizeObserver(fit).observe(el);
-  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; }, { rootMargin: '80px' }).observe(el);
+  new ResizeObserver(o.fit).observe(el);
+  new IntersectionObserver((es) => { o.vis = es[0].isIntersecting; if (o.vis && o.dirty) o.draw(o); }, { rootMargin: '80px' }).observe(el);
   PANELS.push(o); return o;
 }
+function qTune(ms, busy, now) {
+  if (!busy || document.hidden || ms > 250) return;                                  // frame diam atau jeda tab tidak dihitung
+  Q.ema += (ms - Q.ema) * 0.1;
+  if (Q.ema > 22) { Q.fast = 0; Q.slow += ms; if (Q.slow > 1500 && Q.i < Q.steps.length - 1) { if (now - Q.up < 5000) Q.hold = now + 30000; qSet(Q.i + 1); } }
+  else if (Q.ema < 14) { Q.slow = 0; Q.fast += ms; if (Q.fast > 4000 && Q.i > 0 && now > Q.hold) { Q.up = now; qSet(Q.i - 1); } }
+  else { Q.slow = 0; Q.fast = 0; }
+}
+function qSet(i) { Q.i = i; Q.s = Q.steps[i]; Q.slow = Q.fast = 0; Q.ema = 16.7; for (const p of PANELS) p.fit(); }
 let lastT = performance.now();
 function loop(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  const ms = now - lastT, dt = Math.min(0.05, ms / 1000); lastT = now;
+  let busy = CS.play;
   if (CS.play) cStep(dt, now / 1000);   // simulasi Coriolis tetap jalan walau panelnya tergulir keluar layar (ponsel: tombol di bawah panel)
-  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) p.draw(p);
+  for (const p of PANELS) if (p.vis && p.step && p.step(dt, now / 1000)) { p.draw(p); busy = true; }
+  qTune(ms, busy, now);
   requestAnimationFrame(loop);
 }
 // alat gambar
@@ -675,7 +689,7 @@ const hero = panel('cvHero', (o) => {
   }
 }, (dt) => { HERO.k += clamp(HERO.kt - HERO.k, -dt / 0.6, dt / 0.6); const t = performance.now() / 1000 - HERO.t0, f = ((W * t) / TAU) % 1; $('heroTurn').innerHTML = `${T('h_turn')} · ${T('h_real')}<br><b>${fmt(f * 63.44, 1)} / ${fmt(63.4, 1)} s</b>`; return true; });
 function heroCap() { $('heroCap').textContent = T(HERO.view === 'out' ? 'h_cap_out' : 'h_cap_in'); }
-document.querySelectorAll('[data-hv]').forEach((b) => b.addEventListener('click', () => { HERO.view = b.dataset.hv; HERO.kt = HERO.view === 'in' ? 1 : 0; document.querySelectorAll('[data-hv]').forEach((x) => x.classList.toggle('on', x === b)); heroCap(); hero.draw(hero); }));
+document.querySelectorAll('[data-hv]').forEach((b) => b.addEventListener('click', () => { HERO.view = b.dataset.hv; HERO.kt = HERO.view === 'in' ? 1 : 0; document.querySelectorAll('[data-hv]').forEach((x) => x.classList.toggle('on', x === b)); heroCap(); hero.req(); }));
 
 /* =====================================================================
    02 Gravitasi vs ketinggian
@@ -714,7 +728,7 @@ function updGrav() {
   $('gG').textContent = fmt(g, 3) + ' g'; $('gKg').textContent = fmt(MASS * g, 1) + ' kg';
   $('gJump').textContent = g < 0.01 ? '∞' : dist(0.5 / g); $('gCup').textContent = g < 0.001 ? '∞' : dur(Math.sqrt(2 / (g * G)));
   document.querySelectorAll('[data-gh]').forEach((b) => b.classList.toggle('on', +b.dataset.gh === GR.h));
-  grav.draw(grav);
+  grav.req();
 }
 $('gH').addEventListener('input', (e) => { GR.h = +e.target.value; updGrav(); });
 document.querySelectorAll('[data-gh]').forEach((b) => b.addEventListener('click', () => { GR.h = +b.dataset.gh; updGrav(); }));
@@ -810,7 +824,7 @@ function cStep(dt, now) {
 const cDur = () => clamp(CS.tr.T, 3, 9);
 function cClock() { const ts = $('cTs'); ts.value = CS.tr.T ? CS.t / CS.tr.T : 0; setP(ts); $('cTso').textContent = dur(CS.t); }
 function cBtn() { $('cPlay').textContent = T(CS.play ? 'c3_pause' : CS.done || CS.t === 0 ? 'c3_play' : 'c3_resume'); }
-function cDrawAll() { cvIn.draw(cvIn); cvRot.draw(cvRot); }
+function cDrawAll() { cvIn.req(); cvRot.req(); }
 function cGo() { CS.t = 0; CS.done = false; CS.play = true; $('cVerd').textContent = ''; cBtn(); }
 function cToggle() { if (CS.play) { CS.play = false; cBtn(); return; } if (CS.done || CS.t >= CS.tr.T) { cGo(); return; } CS.play = true; cBtn(); }
 function cResult() {
@@ -865,7 +879,7 @@ const fount = panel('cvFount', (o) => {
 function updFount() {
   FT.tr = traj(0, FT.v); FT.drops = []; setP($('fV'));
   $('fVo').textContent = fmt(FT.v, 1) + ' m/s'; $('fPeak').textContent = dist(FT.tr.hmax); $('fLand').textContent = dist(FT.tr.land);
-  $('fEst').textContent = dist((4 / 3) * W * FT.v ** 3 / G ** 2); fount.draw(fount);
+  $('fEst').textContent = dist((4 / 3) * W * FT.v ** 3 / G ** 2); fount.req();
 }
 $('fV').addEventListener('input', (e) => { FT.v = +e.target.value; updFount(); });
 
@@ -905,7 +919,7 @@ const rain = panel('cvRain', (o) => {
 function updRain() {
   const vl = (2 * W * RN.v * RN.v) / G, deg = Math.atan(vl / RN.v) * 180 / Math.PI; setP($('rV'));
   $('rVo').textContent = fmt(RN.v, 1) + ' m/s'; $('rTilt').textContent = fmt(deg, 1) + '°'; $('rDrift').textContent = fmt(vl, 2) + ' m/s';
-  $('rKind').textContent = S.rain_k[L()][RN.v < 3.5 ? 0 : RN.v < 5.5 ? 1 : RN.v < 7.5 ? 2 : 3]; rain.draw(rain);
+  $('rKind').textContent = S.rain_k[L()][RN.v < 3.5 ? 0 : RN.v < 5.5 ? 1 : RN.v < 7.5 ? 2 : 3]; rain.req();
 }
 $('rV').addEventListener('input', (e) => { RN.v = +e.target.value; updRain(); });
 
@@ -947,7 +961,7 @@ function updW() {
   $('wJump').textContent = g < 0.005 ? '∞' : dist(0.5 / g); $('wAbs').textContent = fmt(Math.abs(W * R * 3.6 + v), 1) + ' km/h';
   const ver = Math.abs(v + W * R * 3.6) < 3 ? T('w_float') : v < -W * R * 3.6 ? T('w_neg') : Math.abs(v) > 150 ? T('w_over') : '';
   $('wVerd').textContent = ver; document.querySelectorAll('[data-wv]').forEach((b) => b.classList.toggle('on', +b.dataset.wv === v));
-  WT.trail = []; ring.draw(ring);
+  WT.trail = []; ring.req();
 }
 $('wV').addEventListener('input', (e) => { WT.v = +e.target.value; updW(); });
 document.querySelectorAll('[data-wv]').forEach((b) => b.addEventListener('click', () => { WT.v = +b.dataset.wv; $('wV').value = WT.v; updW(); }));
@@ -1028,7 +1042,7 @@ function updLift() {
   else if (LF.run && LF.a > 0) v = T('l_acc');
   else if (LF.run) v = T('l_cruise', { dir: T(S_.side > 0 ? 'l_dir_a' : 'l_dir_b'), a: fmt(Math.abs(S_.tilt), 0) + '°' });
   $('lVerd').textContent = v;
-  if (!lift.vis) return; lift.draw(lift);
+  if (!lift.vis) return; lift.req();
 }
 function liftGo(dir) { LF.dir = dir; LF.d = 0; LF.t = 0; LF.done = false; LF.run = true; const q = liftV(0, LF.f); LF.v = q.v; LF.a = q.a; updLift(); }
 $('lUp').addEventListener('click', () => liftGo(1));
@@ -1083,7 +1097,7 @@ function updOrb(draw = true) {
   $('oSun').textContent = e ? '0 %' : '100 %';
   const nxt = e ? (t1 - OB.t + P_ORB) % P_ORB : (t0 - OB.t + P_ORB) % P_ORB;
   $('oNext').textContent = hh(nxt); $('oNextL').textContent = T(e ? 'o_left' : 'o_next');
-  if (draw) orb.draw(orb);
+  if (draw) orb.req();
 }
 $('oT').addEventListener('input', (e) => { OB.t = +e.target.value; updOrb(); });
 $('oPlay').addEventListener('click', () => { OB.play = !OB.play; $('oPlay').textContent = T(OB.play ? 'c7_pause' : 'c7_play'); });
