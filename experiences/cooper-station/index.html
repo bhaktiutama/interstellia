@@ -391,7 +391,10 @@
 <script>
   // Loader watchdog: tampilkan pesan bila three.js gagal dimuat dari CDN.
   window.__showErr = function (msg) { var e = document.getElementById('err'); e.hidden = false; e.textContent = msg; };
-  window.addEventListener('error', function (e) { if (e && e.message) window.__showErr('Error: ' + e.message); });
+  // Laporan galat: tumpukan panggilan bila ada; "Script error." = galat di skrip lain asal (three.js dari CDN), lihat juga laporan frame()
+  window.__errInfo = function (er) { var s = er && er.stack ? String(er.stack).split('\n').slice(0, 8).join('\n') : ''; return s + '\n\n' + navigator.userAgent + (window.__gpuInfo ? '\n' + window.__gpuInfo : ''); };
+  window.addEventListener('error', function (e) { if (e && e.message) window.__showErr('Error: ' + e.message + (e.filename ? '\n' + e.filename.split('/').pop() + ':' + e.lineno : '') + '\n' + window.__errInfo(e.error)); });
+  window.addEventListener('unhandledrejection', function (e) { var r = e && e.reason; window.__showErr('Error (promise): ' + (r && r.message ? r.message : String(r)) + '\n' + window.__errInfo(r)); });
   setTimeout(function () {
     if (!window.__stationBoot) window.__showErr('three.js belum termuat setelah 15 detik.\n\nPeriksa koneksi internet: library dimuat dari cdn.jsdelivr.net.');   // M1: modul sudah jalan = three.js termuat
   }, 15000);
@@ -535,6 +538,7 @@ Object.assign(I18N.en, {
   "Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.": "Saver: for laptops without a dedicated GPU (MacBook M1). Change any time with Q.",
   "Mulai": "Start",
   "Kontrol dan bantuan (?)": "Controls and help (?)",
+  "Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman lalu pilih preset Hemat.": "Graphics stopped: the device ran out of GPU memory (WebGL context lost).\nReload the page and choose the Saver preset.",
   "Kembali ke menu utama": "Back to main menu",
   "← Menu": "← Menu",
   "W A S D berjalan · klik = kunci / lepas kursor · E aksi · ? bantuan": "W A S D walk · click = lock / free the cursor · E action · ? help",
@@ -971,6 +975,11 @@ if (!canvas.getContext('webgl2')) {
   throw new Error('no webgl2');
 }
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+{ // diagnosa galat di perangkat (mis. Safari iOS): GPU, batas tekstur, konteks WebGL hilang (memori habis)
+  const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+  window.__gpuInfo = (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) + ' · maxTex ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + ' · DPR ' + devicePixelRatio;
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); window.__showErr(t('Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman lalu pilih preset Hemat.') + '\n\n' + window.__gpuInfo); });
+}
 renderer.setClearColor(0x000000, 1);
 renderer.autoClear = false;              // render 2 scene: jauh dulu, lalu dekat
 renderer.info.autoReset = false;
@@ -15099,7 +15108,11 @@ function worldStep(dt) {                         // K: bagian simulasi frame (ju
   updateForest(Math.min(0.1, dt));                 // 14a: kabut hutan, semak dan pakis
   groundMat.uniforms.uTime.value = clock.sim % 3600;
 }
+// Bungkus frame: galat di dalam three.js (CDN) di Safari hanya terbaca "Script error.", jadi tangkap di sini dengan tumpukan lengkap
 function frame(now) {
+  try { frameRaw(now); } catch (e) { window.__showErr('Error (frame): ' + (e && e.message) + '\n' + window.__errInfo(e)); }
+}
+function frameRaw(now) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (CAMKIT.cap) { camCapture(dt); requestAnimationFrame(frame); return; }   // K: subframe foto (layar dibekukan)
