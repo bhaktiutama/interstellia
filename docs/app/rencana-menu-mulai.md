@@ -48,7 +48,7 @@ Gargantua tidak punya kartu mulai (langsung jalan); di luar cakupan rencana ini,
 | U4 | Bagian "Opsi experience" berjudul jelas; Millar: Suasana, Mode, Tingkat (disembunyikan saat Jelajah), Sinematik; tautan Bantuan (?) ke `toggleHelp()`; entri `I18N.en` baru | `millar` `#start`, `I18N.en` | Low | Sonnet 5.5 | low |
 | U5 (opsional) | Gargantua kartu mulai susunan sama (bahasa, kualitas, opsi: skenario misi atau jelajah) | `gargantua/index.html` | Medium | Sonnet 5.5 | medium |
 
-Urutan kerja: U1, U2, U4 (satu commit kecil), lalu U3. U5 hanya bila diminta.
+Status: U1-U4 selesai (gaya kaca dengan latar 0,45 dipakai keduanya, sesuai saran yang disetujui Bhakti). U3: modul Millar dimuat sekali jalan tanpa titik jeda, jadi bilahnya tak tentu (bergerak), bukan persen; opsi muncul setelah `__millarReady`. Tingkat misi disembunyikan saat mode Jelajah. U5 hanya bila diminta.
 
 ## Yang dipertahankan
 
@@ -61,6 +61,6 @@ Urutan kerja: U1, U2, U4 (satu commit kecil), lalu U3. U5 hanya bila diminta.
 - Halaman termuat tanpa error (`tools/qc_load.py`), ganti bahasa di kartu mengganti teks kartu dan panel.
 - Lebar ponsel 390 px: kartu tidak bergulir mendatar, tombol tidak terpotong.
 
-## Pertanyaan untuk Bhakti
+## Keputusan
 
-- Gaya mana yang dipakai: kartu padat Copper (lebih terbaca) atau kartu kaca Millar (laut tetap terlihat di belakang)? Usulan: kartu kaca Millar dengan latar sedikit lebih gelap (0,45), dipakai keduanya.
+- Gaya: kartu kaca dengan latar 0,45, dipakai keduanya (disetujui).
