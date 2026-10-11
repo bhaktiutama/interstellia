@@ -979,6 +979,16 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPrefer
 { // diagnosa galat di perangkat (mis. Safari iOS): GPU, batas tekstur, konteks WebGL hilang (memori habis)
   const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
   window.__gpuInfo = (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) + ' · maxTex ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + ' · DPR ' + devicePixelRatio;
+  // Shader gagal dikompilasi / di-link di GPU perangkat (mis. iOS): objeknya tidak tergambar (tanah hitam). Tampilkan log-nya.
+  window.__shaderErr = [];
+  renderer.debug.onShaderError = (g, prog, vs, fs) => {
+    const log = (x) => (g.getShaderInfoLog(x) || '').trim().split('\n').slice(0, 4).join('\n');
+    const pl = (g.getProgramInfoLog(prog) || '').trim().split('\n').slice(0, 4).join('\n');
+    const nm = ((g.getShaderSource(fs) || '').match(/#define SHADER_NAME (.*)/) || [])[1] || '?', sz = (g.getShaderSource(fs) || '').length;
+    const msg = 'Shader ' + nm + ' (' + sz + ' karakter): ' + (pl || '') + '\nVS: ' + log(vs) + '\nFS: ' + log(fs);
+    window.__shaderErr.push(msg);
+    window.__showErr(window.__shaderErr.slice(0, 3).join('\n---\n') + '\n\n' + window.__gpuInfo);
+  };
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); try { localStorage.setItem('cooperStation.gpuLost', '1'); localStorage.setItem('cooperStation.preset', JSON.stringify({ idx: 4, auto: true })); } catch (er) { /* abaikan */ } window.__lostAt = window.__stationReady ? 'main' : 'muat'; window.__showErr(t('Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman: preset Hemat dipakai otomatis.') + '\n\n' + window.__gpuInfo + ' · ' + window.__lostAt); });
   // Konteks pulih: tekstur yang dipanggang sekali saat muat (tanah, awan, impostor) hilang dan tampak hitam, jadi muat ulang sekali
   // dengan Hemat yang sudah tersimpan; bila terjadi lagi di sesi yang sama, tetap jalan dan beri tahu.
@@ -1921,7 +1931,7 @@ const MEADOW_GLSL = /* glsl */`
     return smoothstep(0.42, 0.8, g);
   }
 `;
-const groundMat = new THREE.ShaderMaterial({
+const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
   fog: true,
   side: THREE.BackSide,
   uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
