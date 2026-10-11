@@ -538,7 +538,7 @@ Object.assign(I18N.en, {
   "Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.": "Saver: for laptops without a dedicated GPU (MacBook M1). Change any time with Q.",
   "Mulai": "Start",
   "Kontrol dan bantuan (?)": "Controls and help (?)",
-  "Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman lalu pilih preset Hemat.": "Graphics stopped: the device ran out of GPU memory (WebGL context lost).\nReload the page and choose the Saver preset.",
+  "Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman: preset Hemat dipakai otomatis.": "Graphics stopped: the device ran out of GPU memory (WebGL context lost).\nReload the page: the Saver preset is used automatically.",
   "Kembali ke menu utama": "Back to main menu",
   "← Menu": "← Menu",
   "W A S D berjalan · klik = kunci / lepas kursor · E aksi · ? bantuan": "W A S D walk · click = lock / free the cursor · E action · ? help",
@@ -978,7 +978,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPrefer
 { // diagnosa galat di perangkat (mis. Safari iOS): GPU, batas tekstur, konteks WebGL hilang (memori habis)
   const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
   window.__gpuInfo = (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) + ' · maxTex ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + ' · DPR ' + devicePixelRatio;
-  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); window.__showErr(t('Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman lalu pilih preset Hemat.') + '\n\n' + window.__gpuInfo); });
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); try { localStorage.setItem('cooperStation.gpuLost', '1'); localStorage.setItem('cooperStation.preset', JSON.stringify({ idx: 4, auto: true })); } catch (er) { /* abaikan */ } window.__showErr(t('Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman: preset Hemat dipakai otomatis.') + '\n\n' + window.__gpuInfo); });
 }
 renderer.setClearColor(0x000000, 1);
 renderer.autoClear = false;              // render 2 scene: jauh dulu, lalu dekat
@@ -6483,6 +6483,7 @@ function updateCamera() {
    INPUT: keyboard, mouse (pointer lock atau drag), sentuh
    ===================================================================== */
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const MOBILE = isTouch && Math.min(screen.width, screen.height) < 820;   // ponsel: preset awal Hemat (lihat blok preset awal)
 if (isTouch) document.body.classList.add('touch');
 const startEl = document.getElementById('start');
 
@@ -11118,8 +11119,13 @@ function cyclePreset() { PRESET.auto = false; applyPreset((PRESET.idx + 1) % PRE
   try {
     const q = new URLSearchParams(location.search).get('preset'), qi = q ? PRESETS.findIndex((P) => P.name.toLowerCase() === q.toLowerCase()) : -1;
     if (qi >= 0) { idx = qi; PRESET.auto = false; }
-    else { const sv = JSON.parse(localStorage.getItem('cooperStation.preset') || 'null'); if (sv && PRESETS[sv.idx]) { idx = sv.idx; PRESET.auto = sv.auto !== false; } }
-  } catch (e) { idx = 0; }
+    else {
+      const sv = JSON.parse(localStorage.getItem('cooperStation.preset') || 'null'); if (sv && PRESETS[sv.idx]) { idx = sv.idx; PRESET.auto = sv.auto !== false; }
+      // Ponsel (layar sentuh kecil, mis. iPhone DPR 3): Ultra menghabiskan memori GPU (konteks WebGL hilang setelah muat).
+      // Bawaan Hemat; preset lebih berat hanya bila dipilih sendiri di kartu mulai (cooperStation.mobOk), dan tidak lagi setelah konteks hilang.
+      if (MOBILE && (localStorage.getItem('cooperStation.mobOk') !== '1' || localStorage.getItem('cooperStation.gpuLost') === '1')) idx = Math.max(idx, 4);
+    }
+  } catch (e) { idx = MOBILE ? 4 : 0; }
   applyPreset(idx);
 }
 function autoPreset(dt) {
@@ -15160,7 +15166,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
   const mark = () => { pick.querySelectorAll('button').forEach((b, i) => b.classList.toggle('on', i === PRESET.idx)); auto.checked = PRESET.auto; };
   PRESETS.forEach((P, i) => {
     const b = document.createElement('button'); b.type = 'button'; b.textContent = P.name;
-    b.addEventListener('click', () => { applyPreset(i); mark(); });
+    b.addEventListener('click', () => { applyPreset(i); mark(); try { localStorage.setItem('cooperStation.mobOk', '1'); localStorage.removeItem('cooperStation.gpuLost'); } catch (e) { /* abaikan */ } });
     pick.appendChild(b);
   });
   auto.addEventListener('change', () => { PRESET.auto = auto.checked; applyPreset(PRESET.idx); });
