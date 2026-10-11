@@ -15133,6 +15133,15 @@ function worldStep(dt) {                         // K: bagian simulasi frame (ju
   groundMat.uniforms.uTime.value = clock.sim % 3600;
 }
 // Bungkus frame: galat di dalam three.js (CDN) di Safari hanya terbaca "Script error.", jadi tangkap di sini dengan tumpukan lengkap
+// Diagnosa perangkat (mis. iPhone): ?off=tanah,shader,std,far,scene menyembunyikan kelompok gambar untuk mencari yang membuat GPU berhenti
+const DIAG = new Set((new URLSearchParams(location.search).get('off') || '').split(',').map((x) => x.trim()).filter(Boolean));
+function diagApply() {
+  if (!DIAG.size) return;
+  const isG = (m) => m === groundMat || m === TER.mat || (m && m.name === 'tanah');
+  scene.traverse((o) => { if (!o.material) return; const m = Array.isArray(o.material) ? o.material[0] : o.material;
+    if ((DIAG.has('tanah') && isG(m)) || (DIAG.has('shader') && !isG(m) && m.isShaderMaterial) || (DIAG.has('std') && !m.isShaderMaterial)) o.visible = false; });
+  setLabText('Diagnosa: disembunyikan ' + [...DIAG].join(', '));
+}
 function frame(now) {
   try { frameRaw(now); } catch (e) { window.__showErr('Error (frame): ' + (e && e.message) + '\n' + window.__errInfo(e)); }
 }
@@ -15152,9 +15161,9 @@ function frameRaw(now) {
   const post = postBegin();                        // tahap 9: render ke target HDR bila efek layar aktif
   if (post) taaBegin(); else TAA.act = false;     // V5: geser sub-piksel
   renderer.clear();
-  renderer.render(farScene, farCam);
+  if (!DIAG.has('far')) renderer.render(farScene, farCam);
   renderer.clearDepth();
-  renderer.render(scene, camera);
+  if (!DIAG.has('scene')) renderer.render(scene, camera);
   gpuEnd(); gpuBegin('po');
   if (post) { postEnd(); taaEnd(); }
   gpuEnd(); gpuFrameEnd();
@@ -15195,6 +15204,7 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
   document.getElementById('go').focus();
 }
 window.__stationReady = true;
+diagApply();
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
   jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE };
