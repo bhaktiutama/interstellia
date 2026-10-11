@@ -538,6 +538,7 @@ Object.assign(I18N.en, {
   "Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.": "Saver: for laptops without a dedicated GPU (MacBook M1). Change any time with Q.",
   "Mulai": "Start",
   "Kontrol dan bantuan (?)": "Controls and help (?)",
+  "Grafik pulih setelah memori GPU sempat habis. Bila patah-patah, muat ulang halaman.": "Graphics recovered after the GPU ran out of memory. If it stutters, reload the page.",
   "Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman: preset Hemat dipakai otomatis.": "Graphics stopped: the device ran out of GPU memory (WebGL context lost).\nReload the page: the Saver preset is used automatically.",
   "Kembali ke menu utama": "Back to main menu",
   "← Menu": "← Menu",
@@ -936,7 +937,7 @@ const CONFIG = {
   lookSens: 0.0022,      // rad per piksel mouse
   touchLookSens: 0.0045,
   fov: 70,
-  dprMax: 2,             // batas device pixel ratio (fokus laptop dan PC)
+  dprMax: (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 820) ? 0.85 : 2,   // batas device pixel ratio (fokus laptop dan PC); ponsel mulai rendah agar target render saat muat tidak menghabiskan memori GPU
   wb: { k: 6500, tint: 0 },  // V0: white balance (shared/post.js); 6.500 K tint 0 = netral, identik dengan sebelumnya
   dynRes: { min: 0.5, lowFps: 50, highFps: 57, window: 2.0 },
   fogDensity: 0.00015,   // FogExp2: faktor = 1 - exp(-(d*density)^2); cukup tipis agar end cap seberang (8 km) samar terlihat
@@ -978,7 +979,8 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPrefer
 { // diagnosa galat di perangkat (mis. Safari iOS): GPU, batas tekstur, konteks WebGL hilang (memori habis)
   const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
   window.__gpuInfo = (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) + ' · maxTex ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + ' · DPR ' + devicePixelRatio;
-  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); try { localStorage.setItem('cooperStation.gpuLost', '1'); localStorage.setItem('cooperStation.preset', JSON.stringify({ idx: 4, auto: true })); } catch (er) { /* abaikan */ } window.__showErr(t('Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman: preset Hemat dipakai otomatis.') + '\n\n' + window.__gpuInfo); });
+  canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); try { localStorage.setItem('cooperStation.gpuLost', '1'); localStorage.setItem('cooperStation.preset', JSON.stringify({ idx: 4, auto: true })); } catch (er) { /* abaikan */ } window.__lostAt = window.__stationReady ? 'main' : 'muat'; window.__showErr(t('Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman: preset Hemat dipakai otomatis.') + '\n\n' + window.__gpuInfo + ' · ' + window.__lostAt); });
+  canvas.addEventListener('webglcontextrestored', () => { document.getElementById('err').hidden = true; setLabText(t('Grafik pulih setelah memori GPU sempat habis. Bila patah-patah, muat ulang halaman.')); });
 }
 renderer.setClearColor(0x000000, 1);
 renderer.autoClear = false;              // render 2 scene: jauh dulu, lalu dekat
