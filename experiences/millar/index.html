@@ -27,7 +27,10 @@
   #keys b { color: var(--ink); font-weight: 400; }
   #lang { right: 16px; top: 16px; display: flex; gap: 4px; padding: 4px; z-index: 5; }
   #lang button { font: inherit; color: var(--ink); background: transparent; border: 1px solid transparent; border-radius: 6px; padding: 2px 8px; cursor: pointer; }
-  #lang button.on { border-color: var(--accent); }
+  #lang button.on, #labLang button.on { border-color: var(--accent); }
+  body:not(.pre) #lang { display: none; }
+  #labLang { display: flex; gap: 4px; }
+  #labLang button { flex: 1; font: inherit; font-size: 11px; color: var(--ink); background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; cursor: pointer; }
   #white { position: fixed; inset: 0; background: #eef3f4; opacity: 0; pointer-events: none; }
   #msg { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); padding: 10px 16px; font-size: 14px; text-align: center;
     background: var(--panel); border: 1px solid var(--line); border-radius: 10px; opacity: 0; transition: opacity .4s; pointer-events: none; max-width: calc(100vw - 32px); }
@@ -117,6 +120,7 @@
   <div class="lhead"><span data-t="Panel kontrol">Panel kontrol</span><button type="button" id="labClose" data-t="Tutup (`)">Tutup (`)</button></div>
   <div id="labTabs"></div>
   <div id="labBtns"></div>
+  <div id="labLang" hidden></div>
   <div id="labVol"><label><span id="volT"></span><input type="range" id="volR" min="0" max="100"></label><label><span id="ambT"></span><input type="range" id="ambR" min="0" max="100"></label></div>
   <div id="labMus"><button type="button" id="musTog"></button><button type="button" id="musPick"></button><input id="inMusicFile" type="file" accept="audio/*" hidden><label><span id="musT"></span><input type="range" id="musR" min="0" max="100"></label></div>
 </div>
@@ -332,7 +336,7 @@ const I18N = { en: {
   'Waktu planet': 'Planet time', 'Waktu di luar': 'Time outside', 'Gravitasi': 'Gravity', 'Kedalaman air': 'Water depth',
   'Gelombang': 'Wave', 'Tiba dalam': 'Arrives in', 'sudah lewat': 'passed', 'di luar': 'outside', 'Goyangan planet': 'Planet wobble',
   'Tampilan': 'View', 'Kecepatan waktu': 'Time speed', 'Jalan kaki': 'On foot', 'Drone 60 m': 'Drone 60 m', 'Tinggi 1,5 km': 'High 1.5 km',
-  'Grafik': 'Graphics', 'GPU (langit / laut / scene / post)': 'GPU (sky / sea / scene / post)', 'Ombak angin': 'Wind waves', 'Arus': 'Current', 'ke arah gelombang': 'toward the wave',
+  'Grafik': 'Graphics', 'Lainnya': 'More', 'GPU (langit / laut / scene / post)': 'GPU (sky / sea / scene / post)', 'Ombak angin': 'Wind waves', 'Arus': 'Current', 'ke arah gelombang': 'toward the wave',
   'Gerak kepala: {m}': 'Head bob: {m}', 'Tubuh: {m}': 'Body: {m}', 'Visor: {m}': 'Visor: {m}', 'Tipis': 'Thin', 'Penuh': 'Full', 'Bayangan': 'Shadow only', 'Tampil': 'Visible', 'Mati': 'Off', 'Suara: {m}': 'Sound: {m}', 'Nyala': 'On', 'Suara': 'Sound', 'Waktu': 'Time', 'Gerak': 'Motion', 'Volume': 'Volume', 'Angin dan laut': 'Wind and sea', 'Halus': 'Subtle', 'Normal': 'Normal',
   'tahun': 'y', 'hari': 'd', 'jam': 'h', 'mnt': 'min', 'dtk': 's',
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
@@ -351,7 +355,7 @@ function translateDom() {
   document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = t(el.dataset.t); });
   document.querySelectorAll('[data-t-html]').forEach((el) => { el.innerHTML = t(el.dataset.tHtml === 'keys' ? KEYS_ID : el.dataset.tHtml); });
   for (const id of ['back', 'menuLink']) document.getElementById(id).href = `../../index.html?lang=${LANG}`;
-  document.querySelectorAll('#lang button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
+  document.querySelectorAll('#lang button, #labLang button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
   document.querySelectorAll('#presetPick button').forEach((b, i) => { b.textContent = t(PRESETS[i].name); });
   document.querySelectorAll('#moodPick button').forEach((b, i) => { b.textContent = t(MOODS[i].key); });
   document.querySelectorAll('#modePick button').forEach((b) => { b.textContent = t(b.dataset.mode === 'misi' ? 'Misi' : 'Jelajah'); });
@@ -362,6 +366,8 @@ for (const [c, name] of LANGS) {
   const b = document.createElement('button'); b.type = 'button'; b.dataset.lang = c; b.textContent = name;
   b.addEventListener('click', () => { LANG = c; try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ } translateDom(); });
   document.getElementById('lang').appendChild(b);
+  const b2 = b.cloneNode(true); b2.addEventListener('click', () => { LANG = c; try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ } translateDom(); b2.blur(); });
+  document.getElementById('labLang').appendChild(b2);   // salinan di tab Lainnya panel kontrol (dipakai saat bermain)
 }
 
 /* ---------------- Renderer, kamera ---------------- */
@@ -2605,7 +2611,7 @@ LAB.forEach(([k, , fn, tab]) => {
   b.addEventListener('click', () => { fn(); b.blur(); }); b.dataset.k = k; b.dataset.tab = tab; document.getElementById('labBtns').appendChild(b);
 });
 // tab panel (seperti labTab() Copper): tab aktif diingat di localStorage millar.labTab
-const LAB_TABS = [['misi', 'Misi'], ['waktu', 'Waktu'], ['gerak', 'Gerak'], ['grafik', 'Grafik'], ['suara', 'Suara']];
+const LAB_TABS = [['misi', 'Misi'], ['waktu', 'Waktu'], ['gerak', 'Gerak'], ['grafik', 'Grafik'], ['suara', 'Suara'], ['lain', 'Lainnya']];
 let labTabId = 'misi';
 try { const v = localStorage.getItem('millar.labTab'); if (LAB_TABS.some(([id]) => id === v)) labTabId = v; } catch (e) { /* abaikan */ }
 for (const [id] of LAB_TABS) {
@@ -2617,6 +2623,7 @@ function labTab(id) {
   document.querySelectorAll('#labTabs button').forEach((b) => b.classList.toggle('on', b.dataset.ltab === id));
   document.querySelectorAll('#labBtns button').forEach((b) => { b.hidden = b.dataset.tab !== id; });
   document.getElementById('labVol').hidden = document.getElementById('labMus').hidden = id !== 'suara';
+  document.getElementById('labLang').hidden = id !== 'lain';
 }
 function setVol(k, v) {
   AUDIO[k] = Math.min(1, Math.max(0, v)); try { localStorage.setItem(k === 'vol' ? 'millar.vol' : 'millar.amb', String(AUDIO[k])); } catch (e) { /* abaikan */ }
