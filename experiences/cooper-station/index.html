@@ -980,7 +980,13 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPrefer
   const gl = renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
   window.__gpuInfo = (ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)) + ' · maxTex ' + gl.getParameter(gl.MAX_TEXTURE_SIZE) + ' · DPR ' + devicePixelRatio;
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); try { localStorage.setItem('cooperStation.gpuLost', '1'); localStorage.setItem('cooperStation.preset', JSON.stringify({ idx: 4, auto: true })); } catch (er) { /* abaikan */ } window.__lostAt = window.__stationReady ? 'main' : 'muat'; window.__showErr(t('Grafik berhenti: memori GPU perangkat habis (konteks WebGL hilang).\nMuat ulang halaman: preset Hemat dipakai otomatis.') + '\n\n' + window.__gpuInfo + ' · ' + window.__lostAt); });
-  canvas.addEventListener('webglcontextrestored', () => { document.getElementById('err').hidden = true; setLabText(t('Grafik pulih setelah memori GPU sempat habis. Bila patah-patah, muat ulang halaman.')); });
+  // Konteks pulih: tekstur yang dipanggang sekali saat muat (tanah, awan, impostor) hilang dan tampak hitam, jadi muat ulang sekali
+  // dengan Hemat yang sudah tersimpan; bila terjadi lagi di sesi yang sama, tetap jalan dan beri tahu.
+  canvas.addEventListener('webglcontextrestored', () => {
+    let n = 0; try { n = +(sessionStorage.getItem('cooperStation.reloadLost') || 0); sessionStorage.setItem('cooperStation.reloadLost', String(n + 1)); } catch (e) { n = 1; }
+    if (n < 1) { location.reload(); return; }
+    document.getElementById('err').hidden = true; setLabText(t('Grafik pulih setelah memori GPU sempat habis. Bila patah-patah, muat ulang halaman.'));
+  });
 }
 renderer.setClearColor(0x000000, 1);
 renderer.autoClear = false;              // render 2 scene: jauh dulu, lalu dekat
