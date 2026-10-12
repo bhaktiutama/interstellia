@@ -90,6 +90,8 @@ async def vr2(b, out):
     pg = await buka(b, 'experiences/gargantua/index.html', '?lang=id')
     await pg.wait_for_function('window.__gargantua !== undefined && window.VRKIT && VRKIT.ok', timeout=60000)
     out['vr2: tombol Masuk VR muncul'] = await pg.evaluate('!!document.getElementById("vrBtn")')
+    note = await pg.evaluate('getComputedStyle(document.getElementById("vrNote")).display')
+    out[f"vr2: lapisan 'Sedang di VR' tersembunyi sebelum masuk VR ({note})"] = note == 'none'
     await pg.evaluate('VRKIT.resStep = (S, dt, lo, hi) => hi')  # VR8a: skala tetap (SwiftShader lambat; antar frame harus sebanding)
     await pg.evaluate('VRKIT.enter()')
     await pg.wait_for_function('__gargantua.GV.on && __xrTiruan.frames > 8', timeout=60000)
@@ -162,16 +164,19 @@ async def vr3(b, out):
     out[f"vr3: kedua mata tergambar (rata-rata {m['L']['mean']:.0f} / {m['R']['mean']:.0f}, terang {m['L']['lit']:.2f}), beda antar mata {m['diff']:.1f}"] = m['L']['lit'] > 0.5 and m['R']['lit'] > 0.5 and m['diff'] > 0.3
     nb = await pg.evaluate('(() => {{ const M = __millar, T = __millar.POST.hdr, b = new Uint16Array(T.width * T.height * 4), f = M.THREE.DataUtils.fromHalfFloat; M.renderer.readRenderTargetPixels(T, 0, 0, T.width, T.height, b); let n = 0; for (const x of b) if (!Number.isFinite(f(x))) n++; return [n, T.width * T.height]; }})()')
     out[f"vr3: buffer HDR mata kanan (frustum tidak simetris) tanpa nilai tidak valid ({nb[0]} dari {nb[1]} piksel)"] = nb[0] == 0
-    # jalan ke arah kepala: kepala menoleh 90 derajat ke kiri lalu stik maju
+    # VR8b: mode badan (bawaan) = kepala menoleh tidak mengubah arah jalan; lalu mode kepala: jalan ke arah kepala
     await pg.evaluate('__xrTiruan.head.yaw = Math.PI / 2'); await tunggu_frame(pg, 2)
+    bd = await pg.evaluate('__millar.P.yaw - __millar.XRV.yaw')
+    out[f"vr3: arah jalan = badan (bawaan): kepala menoleh 90 derajat, selisih arah jalan {bd * 57.3:.2f} derajat"] = abs(bd) < 1e-6
+    await pg.evaluate('VRKIT.st.walk = "head"'); await tunggu_frame(pg, 2)
     a = await pg.evaluate('({ x: __millar.P.x, z: __millar.P.z, yaw: __millar.XRV.yaw })')
     await pg.evaluate('__xrTiruan.axes("left", 0, -1)'); await tunggu_frame(pg, 12); await pg.evaluate('__xrTiruan.axes("left", 0, 0)'); await tunggu_frame(pg, 2)
     c = await pg.evaluate('({ x: __millar.P.x, z: __millar.P.z, keyUp: !__millar.keys.KeyW })')
     import math
     yaw = a['yaw'] + math.pi / 2; fx, fz = -math.sin(yaw), -math.cos(yaw); dx, dz = c['x'] - a['x'], c['z'] - a['z']; dl = math.hypot(dx, dz)
     cos = (dx * fx + dz * fz) / dl if dl > 1e-6 else 0
-    out[f"vr3: stik kiri maju = jalan ke arah kepala ({dl:.2f} m, kosinus arah {cos:.2f}), lepas = W naik"] = dl > 0.05 and cos > 0.9 and c['keyUp']
-    await pg.evaluate('__xrTiruan.head.yaw = 0')
+    out[f"vr3: mode kepala: stik kiri maju = jalan ke arah kepala ({dl:.2f} m, kosinus arah {cos:.2f}), lepas = W naik"] = dl > 0.05 and cos > 0.9 and c['keyUp']
+    await pg.evaluate('VRKIT.st.walk = "body"; __xrTiruan.head.yaw = 0')
     await pg.evaluate('__xrTiruan.axes("right", -0.9, 0)'); await tunggu_frame(pg, 3); await pg.evaluate('__xrTiruan.axes("right", 0, 0)'); await tunggu_frame(pg, 2)
     y2 = await pg.evaluate('__millar.XRV.yaw')
     out[f"vr3: belok patah stik kanan ({(y2 - a['yaw']) * 180 / math.pi:.0f} derajat)"] = abs((y2 - a['yaw']) * 180 / math.pi - 30) < 1
@@ -241,7 +246,10 @@ async def vr4(b, out):
     up = await pg.evaluate(f'(() => {{ const r = {S}.XRC.rig.elements, th = {S}.player.theta; return -(r[4] * Math.cos(th) + r[5] * Math.sin(th)); }})()')
     out[f"vr4: rig tegak ke sumbu silinder (atas rig . arah ke sumbu = {up:.4f})"] = up > 0.999
     await pg.evaluate('__xrTiruan.head.yaw = Math.PI / 2'); await tunggu_frame(pg, 2)
-    a = await pg.evaluate(f'({{ th: {S}.player.theta, za: {S}.player.za, h: {S}.player.heading }})')
+    a = await pg.evaluate(f'({{ th: {S}.player.theta, za: {S}.player.za, h: {S}.player.heading, y: {S}.XRC.yaw }})')
+    out[f"vr4: arah jalan = badan (bawaan): kepala menoleh 90 derajat tidak mengubah arah jalan (selisih {(a['h'] - a['y']) * 180 / math.pi:.2f} derajat)"] = abs(a['h'] - a['y']) < 1e-6
+    note = await pg.evaluate('getComputedStyle(document.getElementById("vrNote")).display')
+    out[f"vr4: lapisan monitor tampil selama VR ({note})"] = note == 'grid'
     await pg.evaluate('__xrTiruan.axes("left", 0, -1)'); await tunggu_frame(pg, 8); await pg.evaluate('__xrTiruan.axes("left", 0, 0)'); await tunggu_frame(pg, 2)
     c = await pg.evaluate(f'({{ th: {S}.player.theta, za: {S}.player.za, joy: {S}.input.joyF }})')
     ds = (c['th'] - a['th']) * 1000; dz = c['za'] - a['za']; dl = math.hypot(ds, dz)

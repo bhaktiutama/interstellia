@@ -15246,13 +15246,14 @@ function vrFrame(t, eyes, xf, dt) {
   const K = VRKIT, ov = K.three(THREE), e0 = eyes[0], hy = Math.atan2(e0.world[8], e0.world[10]);
   if (!startEl.hidden) { startEl.hidden = true; startAudio(); }
   vrInput();
-  if (vrFree()) { player.heading = XRC.yaw + hy; player.pitch = 0; }   // arah jalan = arah kepala
+  const wy = K.walkYaw(hy);                                       // VR8b: arah jalan = badan (rig, mouse / stik) atau kepala
+  if (vrFree()) { player.heading = XRC.yaw + wy; player.pitch = 0; }
   if (MOTO.on) MOTO.look = 0;
   worldStep(dt);
   // rig: kamera lama tanpa yaw kepala (diputar -hy di sumbu atas kamera)
   camera.updateMatrixWorld(true);
   _xrQ.copy(camera.quaternion);
-  if (vrFree()) _xrQ.multiply(_xrY.setFromAxisAngle(_xrUp, -hy));
+  if (vrFree()) _xrQ.multiply(_xrY.setFromAxisAngle(_xrUp, -wy));
   XRC.rig.compose(camera.position, _xrQ, _xrS.set(1, 1, 1));
   XRC.w = Math.max(16, Math.round(e0.vp.w * XRC.rs)); XRC.h = Math.max(16, Math.round(e0.vp.h * XRC.rs));
   renderer.info.reset();

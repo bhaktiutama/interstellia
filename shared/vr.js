@@ -28,8 +28,10 @@
      ditambah koreksi manual st.h (m). Mouse menambah belok halus (movementX x st.mouse rad/px; klik layar monitor = kunci
      kursor), papan ketik tetap jalan lewat handler tombol host. Skala render efek layar host: VRKIT.resStep(S, dt, lo, hi)
      (st.res 'auto' = turun hanya bila < 40 fps, di bawah ASW 45; 'full' = selalu hi).
+   VR8b: arah jalan st.walk 'body' (bawaan: badan = rig, diputar mouse / stik kanan; kepala bebas melihat tanpa mengubah arah
+     jalan) atau 'head' (jalan ke arah kepala); host membaca VRKIT.walkYaw(hy) = hy atau 0.
    Setelan di localStorage 'lazarus.vr': { turn: 30 | 45 | 0 (halus), vig: 0 | 1 | 2, scale: 0,7 | 0,85 | 1 | 1,2,
-     res: 'full' | 'auto', h: -0,3..0,3, mouse: rad/px }.
+     res: 'full' | 'auto', h: -0,3..0,3, mouse: rad/px, walk: 'body' | 'head' }.
    Notifikasi: VRKIT.toast(teks, detik) = label kecil 1,5 m di depan mata, sedikit di bawah tengah (pengganti toast HTML yang
      tidak terlihat di headset). Lapisan atas: VRKIT.three(THREE).overlay(...) untuk three.js, VRKIT.raw(gl).overlay(i, gelap)
      untuk WebGL2 mentah (Gargantua): panel menu, sinar, notifikasi, vinyet ke viewport mata di VRKIT.fb.
@@ -45,19 +47,21 @@
     err: ['VR gagal dibuka: ', 'VR failed to start: '],
     res: ['Ketajaman', 'Sharpness'], resL: [{ full: 'penuh', auto: 'otomatis' }, { full: 'full', auto: 'auto' }],
     lowFps: ['FPS rendah: ketajaman diturunkan ke {p}%', 'Low FPS: sharpness lowered to {p}%'],
+    walk: ['Arah jalan', 'Walk direction'], walkL: [{ body: 'badan (mouse / stik kanan)', head: 'kepala' }, { body: 'body (mouse / right stick)', head: 'head' }],
     height: ['Tinggi mata', 'Eye height'], mouse: ['Mouse belok', 'Mouse turn'], off: ['mati', 'off'],
     cal: ['Tinggi mata dikalibrasi (kepala {h} m dari titik asal runtime)', 'Eye height calibrated (head {h} m from runtime origin)'],
     lock: ['Klik di sini agar mouse bisa membelokkan pandangan di headset. Esc melepas kursor.', 'Click here so the mouse can turn your view in the headset. Esc releases the cursor.'],
   };
   const K = window.VRKIT = {
     ok: false, on: false, session: null, A: null, eyes: [], vig: 0, in: null, menu: false, fb: null, layer: null, ref: null,
-    recenter: { yaw: 0, p: [0, 0, 0] }, st: { turn: 30, vig: 1, scale: 1, res: 'full', h: 0, mouse: 0.0022 }, STR, showHands: true, cal: false, mx: 0,
+    recenter: { yaw: 0, p: [0, 0, 0] }, st: { turn: 30, vig: 1, scale: 1, res: 'full', h: 0, mouse: 0.0022, walk: 'body' }, STR, showHands: true, cal: false, mx: 0,
   };
   try { Object.assign(K.st, JSON.parse(localStorage.getItem('lazarus.vr') || '{}')); } catch (e) { /* abaikan */ }
   const save = () => { try { localStorage.setItem('lazarus.vr', JSON.stringify(K.st)); } catch (e) { /* abaikan */ } };
   const L = () => (K.A && K.A.lang && K.A.lang() === 'en' ? 1 : 0);
   const T = (k) => STR[k][L()];
   K.T = T;
+  K.walkYaw = (hy) => (K.st.walk === 'head' ? hy : 0);   // VR8b: sudut kepala yang ikut arah jalan
 
   // ---------- matematika kecil (kolom-mayor) ----------
   const M4 = K.m4 = {
@@ -93,14 +97,16 @@
     btn.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:60;font:600 14px system-ui,sans-serif;padding:10px 14px;border-radius:10px;border:1px solid #e8b765;background:rgba(20,18,12,.78);color:#fff;cursor:pointer';
     btn.addEventListener('click', (e) => { e.stopPropagation(); btn.blur(); K.on ? K.exit() : K.enter(); });
     btn.addEventListener('keydown', (e) => { if (K.on) e.preventDefault(); });   // VR8: Space / Enter untuk game, bukan tombol ini
-    note = document.createElement('div'); note.id = 'vrNote'; note.hidden = true;
-    note.style.cssText = 'position:fixed;inset:0;z-index:59;display:grid;place-items:center;background:rgba(5,6,9,.86);color:#dfe3ea;font:16px system-ui,sans-serif;text-align:center;padding:24px';
+    note = document.createElement('div'); note.id = 'vrNote'; showNote(false);
+    note.style.cssText = 'position:fixed;inset:0;z-index:59;display:none;place-items:center;background:rgba(5,6,9,.86);color:#dfe3ea;font:16px system-ui,sans-serif;text-align:center;padding:24px';
     // VR8: klik layar monitor = kunci kursor, gerak mouse membelokkan pandangan (lihat readInput)
     note.addEventListener('click', (e) => { e.stopPropagation(); if (K.on && note.requestPointerLock) { try { const r = note.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e2) { /* abaikan */ } } });
     window.addEventListener('mousemove', (e) => { if (K.on && Math.abs(e.movementX) < 250) K.mx += e.movementX; });
     root.appendChild(note); root.appendChild(btn);
     label();
   }
+  // display inline (bukan atribut hidden): halaman tanpa CSS [hidden] { display: none !important } tetap tertutup (VR8b)
+  function showNote(on) { if (note) { note.hidden = !on; note.style.display = on ? 'grid' : 'none'; } }
   function label() { if (btn) btn.textContent = K.on ? T('exit') : T('enter'); if (note) note.textContent = T('inVR') + ' ' + T('lock'); }
   K.label = label;
 
@@ -137,7 +143,7 @@
         s.requestAnimationFrame(rawTick);
       }
     } catch (e) { alert(T('err') + (e && e.message)); try { s.end(); } catch (e2) { /* abaikan */ } return; }
-    if (note) note.hidden = false;
+    showNote(true);
     label();
     if (A.start) A.start();
   };
@@ -147,7 +153,7 @@
     K.on = false; K.session = null; K.layer = null; K.fb = null; K.eyes = []; K.menu = false;
     if (document.pointerLockElement === note && document.exitPointerLock) document.exitPointerLock();
     if (A.backend === 'three') { A.renderer.setAnimationLoop(null); }
-    if (note) note.hidden = true;
+    showNote(false);
     label();
     if (A.end) A.end();
   }
@@ -251,6 +257,7 @@
   function rows() {
     const A = K.A, r = [
       { label: () => T('recenter'), act: () => K.recenterNow() },
+      { label: () => `${T('walk')}: ${STR.walkL[L()][K.st.walk === 'head' ? 'head' : 'body']}`, act: () => { K.st.walk = K.st.walk === 'head' ? 'body' : 'head'; save(); } },
       { label: () => `${T('turn')}: ${K.st.turn ? K.st.turn + '°' : T('smooth')}`, act: () => { K.st.turn = { 30: 45, 45: 0, 0: 30 }[K.st.turn] ?? 30; save(); } },
       { label: () => `${T('vig')}: ${STR.vigL[L()][K.st.vig]}`, act: () => { K.st.vig = (K.st.vig + 1) % 3; save(); } },
       { label: () => `${T('res')}: ${STR.resL[L()][K.st.res === 'auto' ? 'auto' : 'full']}${K.A && K.A.rs ? ` (${Math.round(K.A.rs() * 100)}%)` : ''}`, act: () => { K.st.res = K.st.res === 'auto' ? 'full' : 'auto'; save(); } },
