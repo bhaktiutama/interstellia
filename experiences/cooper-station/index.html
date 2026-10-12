@@ -15280,14 +15280,10 @@ function vrFrame(t, eyes, xf, dt) {
   updateAudio(dt); updateTraffic(); updateFurniture();
   updateStats(dt);
   K.motion(ext.active || TOUR.on ? 0 : MOTO.on ? MOTO.v * 0.15 : Math.hypot(player.vA, player.vT));
-  // skala efek layar adaptif: rata-rata waktu frame > 1/50 s selama 1 s = turun 0,05; < 1/85 s selama 3 s = naik (paling tinggi 1)
-  XRC.ft = XRC.ft ? XRC.ft * 0.95 + dt * 0.05 : dt;
-  XRC.slow = XRC.ft > 1 / 50 ? XRC.slow + dt : 0; XRC.fast = XRC.ft < 1 / 85 ? XRC.fast + dt : 0;
-  if (XRC.slow > 1) { XRC.rs = Math.max(0.5, +(XRC.rs - 0.05).toFixed(2)); XRC.slow = 0; }
-  if (XRC.fast > 3) { XRC.rs = Math.min(1, +(XRC.rs + 0.05).toFixed(2)); XRC.fast = 0; }
+  XRC.rs = K.resStep(XRC, dt, 0.5, 1);                             // VR8: skala efek layar (menu VR Ketajaman: penuh / otomatis)
 }
 function vrStart() {
-  XRC.on = true; XRC.yaw = player.heading; XRC.rs = 0.8; XRC.ft = XRC.slow = XRC.fast = 0;
+  XRC.on = true; XRC.yaw = player.heading; XRC.rs = 1; XRC.ft = XRC.slow = XRC.fast = 0;
   if (PHOTO.on) togglePhoto(false);
   if (!helpEl.hidden) toggleHelp();
   if (document.pointerLockElement) document.exitPointerLock();
@@ -15308,7 +15304,7 @@ function vrEnd() {
   applyPixelRatio(); renderer.setSize(window.innerWidth, window.innerHeight, false);
   if (XRC.idle) { XRC.idle = false; last = performance.now(); requestAnimationFrame(frame); }
 }
-VRKIT.init({ backend: 'three', renderer, lang: () => LANG.cur, frame: vrFrame, start: vrStart, end: vrEnd,
+VRKIT.init({ backend: 'three', renderer, lang: () => LANG.cur, frame: vrFrame, start: vrStart, end: vrEnd, rs: () => XRC.rs,
   items: () => [
     { label: () => { const D = districtAt(player.theta * R, player.za); return `${D ? t(D.name) : t('Di luar distrik')} · ${fmtHour(clock.hour)}`; }, act: () => {} },
     { label: () => t('Preset: {p}', { p: t(PRESETS[PRESET.idx].name) }) + ' (Q)', act: () => cyclePreset() },

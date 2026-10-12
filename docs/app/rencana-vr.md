@@ -149,11 +149,19 @@ Ringkasan:
 | VR5 | Sebagian | Pose genggaman `VRKIT.in.hands`, kotak kontroler di lapisan atas (three dan WebGL2), lengan tubuh M6 Millar mengikuti kontroler (`armReach`) | Tongkat kokpit belum digenggam langsung (tetap lewat stik / tombol); ambil barang tetap picu (E tahan) |
 | VR6 | Selesai | Lencana VR di menu (`KEYS`), `docs/app/tombol.md` bagian kontroler VR, baris VR di bantuan ? ketiga experience, `CLAUDE.md` | - |
 | VR7 | Selesai | `tools/uji_vr.py` vr0-vr4: dua mata tergambar, paralaks, tanpa nilai tidak valid di HDR mata, gerak ke arah kepala, belok patah, tombol, menu, kontroler, keluar VR | Pembanding desktop otomatis hanya Gargantua (deterministik); Copper / Millar lewat uji lama |
-| VR8 | Menunggu pemilik | Ukur di GTX 1060, setel `GV.rs` / `XRV.rs` / `XRC.rs`, preset, skala framebuffer | - |
+| VR8 | Berjalan | Uji pertama di Rift CV1 (12 Oktober 2026): sesi terbuka. Perbaikan VR8a: tinggi mata dikalibrasi otomatis, ketajaman, mouse + papan ketik (lihat di bawah) | Menunggu uji ulang pemilik |
+
+### VR8a: perbaikan dari uji pertama Rift CV1
+
+| Laporan pemilik | Penyebab | Perbaikan |
+| --- | --- | --- |
+| Tinggi pemain 0 m, sejajar jalan | Titik asal ruang acuan `local` dari runtime Rift tidak di kepala seperti dianggap kode (XR tiruan meletakkannya di kepala, jadi uji tidak menangkap) | `VRKIT` mengukur tinggi kepala di frame pertama dan tiap Y (pusatkan ulang), lalu mengurangkannya: mata selalu di tinggi mata game, jongkok / berdiri tetap terasa. Notifikasi di headset menyebut angka terukur. Koreksi manual di menu VR: Tinggi mata -30..+30 cm |
+| Gambar tidak setajam monitor | (1) Skala efek layar adaptif turun bila < 50 fps; ASW Rift mengunci 45 fps, jadi skala hampir pasti turun ke batas bawah 0,5 (Copper, Millar) / 0,3 (Gargantua). (2) Skala awal 0,8 / 0,7 / 0,6. (3) Panel Rift CV1 sendiri 1080 x 1200 per mata (pentile, screen door), jadi tidak akan setajam monitor | Menu VR Ketajaman: penuh (bawaan, skala 1 / skala preset Gargantua; turun 0,1 hanya bila < 25 fps selama 2 s, dengan notifikasi) atau otomatis (turun hanya bila < 40 fps). Skala awal = penuh. Resolusi headset (sesi berikut) kini sampai 120% (supersampling) |
+| Ingin tetap pakai papan ketik dan mouse | Papan ketik sudah diteruskan ke game, tetapi arah jalan dikunci ke kepala sehingga gerak mouse diabaikan; tombol Masuk VR tetap fokus (Space bisa menekannya = keluar VR) | Mouse = belok halus (klik layar monitor untuk kunci kursor, Esc lepas; menu VR Mouse belok 50 / 100 / 200% / mati). W A S D jalan ke arah kepala, Shift lari, tombol lain seperti biasa. Tombol Masuk VR melepas fokus setelah diklik |
 
 | Uji | Hasil |
 | --- | --- |
-| `tools/uji_vr.py` (vr0-vr4) | 48 / 48 lulus |
+| `tools/uji_vr.py` (vr0-vr4) | 52 / 52 lulus setelah VR8a: menambah kalibrasi tinggi (titik asal di lantai), jongkok, mouse belok, papan ketik W di Copper |
 | `tools/uji_misi_gargantua.py` | 103 / 103 lulus (pembanding G1 kini memakai `?v4=0`) |
 | `tools/uji_millar.py` | 129 / 130; gagal M5c percikan (-200 mm) juga gagal di versi sebelum VR3 dengan angka sama, jadi bukan dari VR |
 | `tools/uji_bahasa.py` | Lulus |

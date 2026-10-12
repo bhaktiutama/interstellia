@@ -3382,15 +3382,11 @@ function main() {
       ov.overlay(e.i, 0);
     }
     GV.tan = GV.head = null;
-    // skala render adaptif: rata-rata waktu frame > 1/50 s selama 1 s = turun 0,05; < 1/85 s selama 3 s = naik (paling tinggi skala preset)
-    GV.ft = GV.ft ? GV.ft * 0.95 + dt * 0.05 : dt;
-    GV.slow = GV.ft > 1 / 50 ? GV.slow + dt : 0; GV.fast = GV.ft < 1 / 85 ? GV.fast + dt : 0;
-    if (GV.slow > 1) { GV.rs = Math.max(0.3, +(GV.rs - 0.05).toFixed(2)); GV.slow = 0; }
-    if (GV.fast > 3) { GV.rs = Math.min(q.scale, +(GV.rs + 0.05).toFixed(2)); GV.fast = 0; }
+    GV.rs = K.resStep(GV, dt, 0.3, q.scale);                       // VR8: skala render (menu VR Ketajaman: penuh = skala preset / otomatis)
   }
   function vrStart() {
     VRKIT.raw(gl);                                                  // program lapisan atas dikompilasi sekali saat masuk
-    GV.on = true; GV.yaw = 0; GV.rs = Math.min(0.6, Q().scale); GV.ft = GV.slow = GV.fast = 0;
+    GV.on = true; GV.yaw = 0; GV.rs = Q().scale; GV.ft = GV.slow = GV.fast = 0;
     if (state.photo || CAMKIT.on) togglePhoto(false);
     GV.orbit = cam.autoOrbit; cam.autoOrbit = false; state.tween = null;   // tanpa gerak kamera otomatis di headset
     if (!$('#help').hidden) toggleHelp(false);
@@ -3404,7 +3400,7 @@ function main() {
     if (GV.idle) { GV.idle = false; state.last = performance.now(); requestAnimationFrame(frame); }
   }
   const vrView = () => txt(SHIP.view === 'cockpit' ? 'Cockpit' : SHIP.view === 'relay' ? 'Relay' : 'Chase');
-  VRKIT.init({ backend: 'raw', gl, lang: () => LANG, frame: vrFrame, start: vrStart, end: vrEnd,
+  VRKIT.init({ backend: 'raw', gl, lang: () => LANG, frame: vrFrame, start: vrStart, end: vrEnd, rs: () => GV.rs,
     items: () => [
       { label: () => (MIS.on ? `GX-01 · r ${fmtN(Math.hypot(...MIS.x), 3)} rs · ${txt('proper time')} ${fmtTau(MIS.tau)}` : 'Gargantua'), act: () => {} },
       { label: () => txt(MIS.on ? 'End mission (Esc)' : 'Start mission'), act: () => { if (MIS.on) { stopMission(); toast(txt('Mission ended'), 2); } else startMission(MIS.sc); } },

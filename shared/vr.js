@@ -23,7 +23,13 @@
      menggerakkan lengan tubuh sendiri, mis. Millar, mematikannya).
    Kenyamanan: VRKIT.motion(v) host melapor kecepatan gerak semu (m/s) -> VRKIT.vig 0..1 (kuat vinyet terowongan);
      belok patah 30 / 45 derajat atau halus; pusatkan ulang (Y) -> VRKIT.recenter = { yaw, p } dikurangkan dari pose kepala.
-   Setelan di localStorage 'lazarus.vr': { turn: 30 | 45 | 0 (halus), vig: 0 | 1 | 2, scale: 0,7 | 0,85 | 1 }.
+   VR8 (uji Rift CV1): tinggi kepala dikalibrasi otomatis di frame pertama dan tiap pusatkan ulang (p[1] = tinggi kepala di
+     ruang acuan), jadi mata selalu di tinggi mata host berapa pun titik asal 'local' runtime (di Rift ternyata bukan di kepala),
+     ditambah koreksi manual st.h (m). Mouse menambah belok halus (movementX x st.mouse rad/px; klik layar monitor = kunci
+     kursor), papan ketik tetap jalan lewat handler tombol host. Skala render efek layar host: VRKIT.resStep(S, dt, lo, hi)
+     (st.res 'auto' = turun hanya bila < 40 fps, di bawah ASW 45; 'full' = selalu hi).
+   Setelan di localStorage 'lazarus.vr': { turn: 30 | 45 | 0 (halus), vig: 0 | 1 | 2, scale: 0,7 | 0,85 | 1 | 1,2,
+     res: 'full' | 'auto', h: -0,3..0,3, mouse: rad/px }.
    Notifikasi: VRKIT.toast(teks, detik) = label kecil 1,5 m di depan mata, sedikit di bawah tengah (pengganti toast HTML yang
      tidak terlihat di headset). Lapisan atas: VRKIT.three(THREE).overlay(...) untuk three.js, VRKIT.raw(gl).overlay(i, gelap)
      untuk WebGL2 mentah (Gargantua): panel menu, sinar, notifikasi, vinyet ke viewport mata di VRKIT.fb.
@@ -34,13 +40,18 @@
     enter: ['Masuk VR', 'Enter VR'], exit: ['Keluar VR', 'Exit VR'], inVR: ['Sedang di VR. Lepas headset atau tekan Keluar VR.', 'In VR. Take off the headset or press Exit VR.'],
     menu: ['Menu VR', 'VR menu'], recenter: ['Pusatkan ulang (Y)', 'Recenter (Y)'], turn: ['Belok', 'Turn'], smooth: ['halus', 'smooth'],
     vig: ['Vinyet saat bergerak', 'Vignette when moving'], vigL: [['mati', 'tipis', 'kuat'], ['off', 'light', 'strong']],
-    scale: ['Resolusi (sesi berikut)', 'Resolution (next session)'], close: ['Tutup menu (X)', 'Close menu (X)'],
+    scale: ['Resolusi headset (sesi berikut)', 'Headset resolution (next session)'], close: ['Tutup menu (X)', 'Close menu (X)'],
     back: ['Kembali ke menu utama', 'Back to main menu'], hint: ['Picu kanan = pilih', 'Right trigger = select'],
     err: ['VR gagal dibuka: ', 'VR failed to start: '],
+    res: ['Ketajaman', 'Sharpness'], resL: [{ full: 'penuh', auto: 'otomatis' }, { full: 'full', auto: 'auto' }],
+    lowFps: ['FPS rendah: ketajaman diturunkan ke {p}%', 'Low FPS: sharpness lowered to {p}%'],
+    height: ['Tinggi mata', 'Eye height'], mouse: ['Mouse belok', 'Mouse turn'], off: ['mati', 'off'],
+    cal: ['Tinggi mata dikalibrasi (kepala {h} m dari titik asal runtime)', 'Eye height calibrated (head {h} m from runtime origin)'],
+    lock: ['Klik di sini agar mouse bisa membelokkan pandangan di headset. Esc melepas kursor.', 'Click here so the mouse can turn your view in the headset. Esc releases the cursor.'],
   };
   const K = window.VRKIT = {
     ok: false, on: false, session: null, A: null, eyes: [], vig: 0, in: null, menu: false, fb: null, layer: null, ref: null,
-    recenter: { yaw: 0, p: [0, 0, 0] }, st: { turn: 30, vig: 1, scale: 1 }, STR, showHands: true,
+    recenter: { yaw: 0, p: [0, 0, 0] }, st: { turn: 30, vig: 1, scale: 1, res: 'full', h: 0, mouse: 0.0022 }, STR, showHands: true, cal: false, mx: 0,
   };
   try { Object.assign(K.st, JSON.parse(localStorage.getItem('lazarus.vr') || '{}')); } catch (e) { /* abaikan */ }
   const save = () => { try { localStorage.setItem('lazarus.vr', JSON.stringify(K.st)); } catch (e) { /* abaikan */ } };
@@ -67,9 +78,9 @@
       o.set([2 / (r - l), 0, 0, 0, 0, 2 / (t - b), 0, 0, (r + l) / (r - l), (t + b) / (t - b), -(f + n) / (f - n), -1, 0, 0, -2 * f * n / (f - n), 0]); return o;
     },
   };
-  // pose ruang acuan setelah pusatkan ulang: R(-yaw0) * (pose - p0)
+  // pose ruang acuan setelah pusatkan ulang: R(-yaw0) * (pose - p0); p0[1] = tinggi kepala saat kalibrasi (VR8), st.h koreksi manual
   function recentered(m) {
-    const o = new Float32Array(m); o[12] -= K.recenter.p[0]; o[14] -= K.recenter.p[2];
+    const o = new Float32Array(m); o[12] -= K.recenter.p[0]; o[13] -= K.recenter.p[1] - (K.st.h || 0); o[14] -= K.recenter.p[2];
     return M4.mul(M4.yaw(-K.recenter.yaw), o);
   }
 
@@ -80,13 +91,17 @@
     const root = (K.A && K.A.root) || document.body;
     btn = document.createElement('button'); btn.type = 'button'; btn.id = 'vrBtn';
     btn.style.cssText = 'position:fixed;right:16px;bottom:16px;z-index:60;font:600 14px system-ui,sans-serif;padding:10px 14px;border-radius:10px;border:1px solid #e8b765;background:rgba(20,18,12,.78);color:#fff;cursor:pointer';
-    btn.addEventListener('click', (e) => { e.stopPropagation(); K.on ? K.exit() : K.enter(); });
+    btn.addEventListener('click', (e) => { e.stopPropagation(); btn.blur(); K.on ? K.exit() : K.enter(); });
+    btn.addEventListener('keydown', (e) => { if (K.on) e.preventDefault(); });   // VR8: Space / Enter untuk game, bukan tombol ini
     note = document.createElement('div'); note.id = 'vrNote'; note.hidden = true;
     note.style.cssText = 'position:fixed;inset:0;z-index:59;display:grid;place-items:center;background:rgba(5,6,9,.86);color:#dfe3ea;font:16px system-ui,sans-serif;text-align:center;padding:24px';
+    // VR8: klik layar monitor = kunci kursor, gerak mouse membelokkan pandangan (lihat readInput)
+    note.addEventListener('click', (e) => { e.stopPropagation(); if (K.on && note.requestPointerLock) { try { const r = note.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e2) { /* abaikan */ } } });
+    window.addEventListener('mousemove', (e) => { if (K.on && Math.abs(e.movementX) < 250) K.mx += e.movementX; });
     root.appendChild(note); root.appendChild(btn);
     label();
   }
-  function label() { if (btn) btn.textContent = K.on ? T('exit') : T('enter'); if (note) note.textContent = T('inVR'); }
+  function label() { if (btn) btn.textContent = K.on ? T('exit') : T('enter'); if (note) note.textContent = T('inVR') + ' ' + T('lock'); }
   K.label = label;
 
   K.init = async function (A) {
@@ -104,7 +119,7 @@
     let s;
     try { s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor'] }); }
     catch (e) { alert(T('err') + (e && e.message)); return; }
-    K.session = s; K.on = true; K.menu = false; K.vig = 0; prevBtn = {}; K.in = blankIn();
+    K.session = s; K.on = true; K.menu = false; K.vig = 0; prevBtn = {}; K.in = blankIn(); K.cal = true; K.mx = 0;
     s.addEventListener('end', onEnd);
     try {
       if (A.backend === 'three') {
@@ -130,6 +145,7 @@
   function onEnd() {
     const A = K.A;
     K.on = false; K.session = null; K.layer = null; K.fb = null; K.eyes = []; K.menu = false;
+    if (document.pointerLockElement === note && document.exitPointerLock) document.exitPointerLock();
     if (A.backend === 'three') { A.renderer.setAnimationLoop(null); }
     if (note) note.hidden = true;
     label();
@@ -142,15 +158,19 @@
     s.requestAnimationFrame(rawTick);
     const pose = frame.getViewerPose(K.ref); if (!pose) return;
     K.fb = K.layer.framebuffer;
-    K.eyes = pose.views.map((v, i) => { const vp = K.layer.getViewport(v); return { i, eye: v.eye, world: recentered(v.transform.matrix), proj: v.projectionMatrix, vp: { x: vp.x, y: vp.y, w: vp.width, h: vp.height } }; });
+    const mk = () => pose.views.map((v, i) => { const vp = K.layer.getViewport(v); return { i, eye: v.eye, world: recentered(v.transform.matrix), proj: v.projectionMatrix, vp: { x: vp.x, y: vp.y, w: vp.width, h: vp.height } }; });
+    K.eyes = mk();
+    if (K.cal) { calibrate(); K.eyes = mk(); }
     step(t, frame);
   }
   function tick(t, frame) {
     if (!K.on || !frame) return;
     const A = K.A, cams = A.renderer.xr.getCamera().cameras;
     K.xrTarget = A.renderer.getRenderTarget();                       // target XR yang sudah diikat three.js untuk frame ini
-    K.eyes = cams.map((c, i) => ({ i, eye: i ? 'right' : 'left', world: recentered(c.matrix.elements), proj: new Float32Array(c.projectionMatrix.elements),
+    const mk = () => cams.map((c, i) => ({ i, eye: i ? 'right' : 'left', world: recentered(c.matrix.elements), proj: new Float32Array(c.projectionMatrix.elements),
       vp: { x: c.viewport.x, y: c.viewport.y, w: c.viewport.z, h: c.viewport.w } }));
+    K.eyes = mk();
+    if (K.cal && cams.length) { calibrate(); K.eyes = mk(); }
     step(t, frame);
   }
   let lastT = 0;
@@ -168,10 +188,33 @@
   K.motion = function (v) { K.vigTarget = Math.max(K.vigTarget, Math.min(1, Math.max(0, (v - 0.5) / 4))); };
   K.recenterNow = function () {
     const e = K.eyes[0]; if (!e) return;
-    // pose kepala tanpa pusatkan ulang = rata-rata dua mata, dihitung balik dari pose yang sudah dipusatkan
-    const raw = M4.mul(M4.yaw(K.recenter.yaw), e.world); raw[12] += K.recenter.p[0]; raw[14] += K.recenter.p[2];
+    // pose kepala tanpa pusatkan ulang, dihitung balik dari pose mata kiri yang sudah dipusatkan
+    const raw = M4.mul(M4.yaw(K.recenter.yaw), e.world); raw[12] += K.recenter.p[0]; raw[13] += K.recenter.p[1] - (K.st.h || 0); raw[14] += K.recenter.p[2];
     const fwd = M4.dir(raw, [0, 0, -1]);
-    K.recenter = { yaw: Math.atan2(-fwd[0], -fwd[2]), p: [raw[12], 0, raw[14]] };
+    K.recenter = { yaw: Math.atan2(-fwd[0], -fwd[2]), p: [raw[12], raw[13], raw[14]] };   // VR8: tinggi kepala ikut dikurangkan
+    K.cal = false;
+  };
+  function calibrate() {
+    K.recenterNow();
+    K.toast(T('cal').replace('{h}', K.recenter.p[1].toFixed(2)), 4);
+  }
+  // VR8: skala render efek layar host. S = { rs, ft, slow, fast } milik host; lo / hi batas. 'full' = hi;
+  // 'auto' = rata-rata waktu frame > 1/40 s selama 1 s turun 0,05 (ASW Rift mengunci 45 fps, jadi 45 bukan alasan turun),
+  // < 1/80 s selama 3 s naik 0,05
+  // 'full' tetap menjaga dari fps sangat rendah: < 25 fps selama 2 s turun 0,1 (dengan notifikasi), tidak naik lagi sendiri
+  K.resStep = function (S, dt, lo, hi) {
+    const auto = K.st.res === 'auto';
+    S.ft = S.ft ? S.ft * 0.95 + dt * 0.05 : dt;
+    S.slow = S.ft > (auto ? 1 / 40 : 1 / 25) ? (S.slow || 0) + dt : 0; S.fast = auto && S.ft < 1 / 80 ? (S.fast || 0) + dt : 0;
+    let rs = Math.min(hi, S.rs || hi);
+    if (!auto && S.full !== hi) { S.full = hi; rs = hi; }                // baru dipilih penuh / preset berganti: kembali ke hi
+    if (S.slow > (auto ? 1 : 2) && rs > lo) {
+      rs = Math.max(lo, +(rs - (auto ? 0.05 : 0.1)).toFixed(2)); S.slow = 0;
+      if (!auto) K.toast(T('lowFps').replace('{p}', Math.round(rs * 100)), 3);
+    }
+    if (S.fast > 3) { rs = Math.min(hi, +(rs + 0.05).toFixed(2)); S.fast = 0; }
+    if (auto) S.full = 0;
+    return rs;
   };
 
   // ---------- input: kontroler Touch (gamepad xr-standard) ----------
@@ -195,12 +238,14 @@
     if (!K.menu) {
       if (K.st.turn) { if (Math.abs(lx) > 0.7 && smoothArm) { I.turn = -Math.sign(lx) * K.st.turn * Math.PI / 180; smoothArm = false; } if (Math.abs(lx) < 0.3) smoothArm = true; }
       else if (Math.abs(lx) > 0.15) I.turn = -lx * Math.PI / 2 * dt;
+      if (K.st.mouse) I.turn -= K.mx * K.st.mouse;                 // VR8: mouse = belok halus
     }
+    K.mx = 0;
     K.in = I;
   }
 
   // ---------- panel menu VR (kanvas 2D, ditaruh 1,2 m di depan saat dibuka, sinar kontroler kanan) ----------
-  const PW = 640, PH = 400, PANEL = { w: 0.96, h: 0.6 };
+  const PW = 640, PH = 640, PANEL = { w: 0.96, h: 0.96 };
   const HAND = [0.04, 0.03, 0.12, -0.03];                       // VR5: kotak kontroler (lebar, tebal, panjang, geser ke depan) m
   K.panel = { canvas: null, dirty: true, m: null, hover: -1, rows: [] };
   function rows() {
@@ -208,7 +253,10 @@
       { label: () => T('recenter'), act: () => K.recenterNow() },
       { label: () => `${T('turn')}: ${K.st.turn ? K.st.turn + '°' : T('smooth')}`, act: () => { K.st.turn = { 30: 45, 45: 0, 0: 30 }[K.st.turn] ?? 30; save(); } },
       { label: () => `${T('vig')}: ${STR.vigL[L()][K.st.vig]}`, act: () => { K.st.vig = (K.st.vig + 1) % 3; save(); } },
-      { label: () => `${T('scale')}: ${Math.round((K.st.scale || 1) * 100)}%`, act: () => { K.st.scale = { 1: 0.7, 0.7: 0.85, 0.85: 1 }[K.st.scale] || 1; save(); } },
+      { label: () => `${T('res')}: ${STR.resL[L()][K.st.res === 'auto' ? 'auto' : 'full']}${K.A && K.A.rs ? ` (${Math.round(K.A.rs() * 100)}%)` : ''}`, act: () => { K.st.res = K.st.res === 'auto' ? 'full' : 'auto'; save(); } },
+      { label: () => `${T('scale')}: ${Math.round((K.st.scale || 1) * 100)}%`, act: () => { K.st.scale = { 1: 1.2, 1.2: 0.7, 0.7: 0.85, 0.85: 1 }[K.st.scale] || 1; save(); } },
+      { label: () => `${T('height')}: ${(K.st.h || 0) >= 0 ? '+' : ''}${Math.round((K.st.h || 0) * 100)} cm`, act: () => { K.st.h = { 0: 0.1, 0.1: 0.2, 0.2: 0.3, 0.3: -0.3, '-0.3': -0.2, '-0.2': -0.1, '-0.1': 0 }[String(K.st.h || 0)] ?? 0; save(); } },
+      { label: () => `${T('mouse')}: ${K.st.mouse ? Math.round(K.st.mouse / 0.0022 * 100) + '%' : T('off')}`, act: () => { K.st.mouse = { 0.0022: 0.0044, 0.0044: 0, 0: 0.0011, 0.0011: 0.0022 }[K.st.mouse] ?? 0.0022; save(); } },
       ...((A.items && A.items()) || []),
       { label: () => T('close'), act: () => { K.menu = false; } },
       { label: () => T('exit'), act: () => K.exit() },

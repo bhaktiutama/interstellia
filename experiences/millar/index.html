@@ -4213,14 +4213,10 @@ function vrFrame(t, eyes, xf, dt) {
   if (PHOTO.shot) PHOTO.shot = false;
   // vinyet: laju semu pemain (kokpit = kerangka acuan, tanpa vinyet)
   K.motion(FLY.on ? (FLY.view === 1 ? 0 : Math.hypot(FLY.vx, FLY.vz) * 0.05) : CINE.on ? 0 : Math.hypot(P.vx, P.vz));
-  // skala target adaptif: rata-rata waktu frame > 1/50 s selama 1 s = turun 0,05; < 1/85 s selama 3 s = naik (paling tinggi 1)
-  XRV.ft = XRV.ft ? XRV.ft * 0.95 + dt * 0.05 : dt;
-  XRV.slow = XRV.ft > 1 / 50 ? XRV.slow + dt : 0; XRV.fast = XRV.ft < 1 / 85 ? XRV.fast + dt : 0;
-  if (XRV.slow > 1) { XRV.rs = Math.max(0.5, +(XRV.rs - 0.05).toFixed(2)); XRV.slow = 0; }
-  if (XRV.fast > 3) { XRV.rs = Math.min(1, +(XRV.rs + 0.05).toFixed(2)); XRV.fast = 0; }
+  XRV.rs = K.resStep(XRV, dt, 0.5, 1);                                       // VR8: skala target (menu VR Ketajaman: penuh / otomatis)
 }
 function vrStart() {
-  XRV.on = true; XRV.yaw = P.yaw; XRV.rs = 0.7; XRV.w = XRV.h = 0; XRV.ft = XRV.slow = XRV.fast = 0;
+  XRV.on = true; XRV.yaw = P.yaw; XRV.rs = 1; XRV.w = XRV.h = 0; XRV.ft = XRV.slow = XRV.fast = 0;
   if (PHOTO.on) togglePhoto(false);
   if (!helpEl.hidden) toggleHelp(false);
   XRV.prev = { bob: BOB.level, preset: PRESET.idx, auto: PRESET.auto };
@@ -4237,7 +4233,7 @@ function vrEnd() {
   camera.updateProjectionMatrix(); resize();
   if (XRV.idle) { XRV.idle = false; last = performance.now(); requestAnimationFrame(frame); }
 }
-VRKIT.init({ backend: 'three', renderer, lang: () => LANG, frame: vrFrame, start: vrStart, end: vrEnd,
+VRKIT.init({ backend: 'three', renderer, lang: () => LANG, frame: vrFrame, start: vrStart, end: vrEnd, rs: () => XRV.rs,
   items: () => [
     { label: () => {
       const dist = frontX(P.z) - P.x, got = MIS.sites.filter((x) => x.got).length;

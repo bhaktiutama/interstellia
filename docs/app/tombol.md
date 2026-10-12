@@ -86,7 +86,7 @@ Sinematik (Millar M4): Spasi, Enter, Esc, atau klik = lewati. Pandangan orbit ti
 
 ## Kontroler VR (Rencana VR, `shared/vr.js`, Oculus Touch)
 
-Keyboard tetap berlaku di VR. Kontroler Touch dipetakan ke tombol lama (dikirim sebagai tombol papan ketik), jadi tidak ada fungsi baru yang memakai huruf.
+Keyboard tetap berlaku di VR: W A S D jalan ke arah kepala, Shift lari, tombol lain seperti biasa. Mouse = belok halus (klik layar monitor sekali agar kursor terkunci, Esc melepas; kecepatan atau mati di menu VR). Kontroler Touch dipetakan ke tombol lama (dikirim sebagai tombol papan ketik), jadi tidak ada fungsi baru yang memakai huruf.
 
 | Kontrol Touch | Semua experience (VRKIT) |
 | --- | --- |

@@ -90,6 +90,7 @@ async def vr2(b, out):
     pg = await buka(b, 'experiences/gargantua/index.html', '?lang=id')
     await pg.wait_for_function('window.__gargantua !== undefined && window.VRKIT && VRKIT.ok', timeout=60000)
     out['vr2: tombol Masuk VR muncul'] = await pg.evaluate('!!document.getElementById("vrBtn")')
+    await pg.evaluate('VRKIT.resStep = (S, dt, lo, hi) => hi')  # VR8a: skala tetap (SwiftShader lambat; antar frame harus sebanding)
     await pg.evaluate('VRKIT.enter()')
     await pg.wait_for_function('__gargantua.GV.on && __xrTiruan.frames > 8', timeout=60000)
     await tunggu_frame(pg)
@@ -211,9 +212,26 @@ async def vr4(b, out):
     out['vr4: tombol Masuk VR muncul'] = await pg.evaluate('!!document.getElementById("vrBtn")')
     S = '__station'
     pre0, ssr0, bob0 = await pg.evaluate(f'[{S}.PRESET.idx, {S}.SSR.on, {S}.BOB.level]')
+    await pg.evaluate('__xrTiruan.standH = 0')                  # VR8: titik asal 'local' di lantai (kepala 1,6 m di atasnya), seperti di Rift
     await pg.evaluate('VRKIT.enter()')
     await pg.wait_for_function(f'{S}.XRC.on && __xrTiruan.frames > 4', timeout=180000)
     await tunggu_frame(pg, 2)
+    cal = await pg.evaluate(f'(() => {{ const e = VRKIT.eyes[0].world, c = {S}.camera.position, r = {S}.XRC.rig.elements; return {{ y: e[13], p: VRKIT.recenter.p[1], d: Math.hypot(c.x - r[12], c.y - r[13], c.z - r[14]) }}; }})()')
+    out[f"vr4: tinggi kepala dikalibrasi (titik asal runtime {cal['p']:.2f} m di bawah kepala, mata {cal['y']:.3f} m dari tinggi mata game)"] = abs(cal['p'] - 1.6) < 0.01 and abs(cal['y']) < 0.01
+    await pg.evaluate('__xrTiruan.head.p[1] = 1.3'); await tunggu_frame(pg, 2)
+    dy = await pg.evaluate('VRKIT.eyes[0].world[13]')
+    out[f"vr4: jongkok 30 cm tetap terasa setelah kalibrasi ({dy:.2f} m)"] = abs(dy + 0.3) < 0.01
+    await pg.evaluate('__xrTiruan.head.p[1] = 1.6'); await tunggu_frame(pg, 2)
+    y0 = await pg.evaluate(f'{S}.XRC.yaw')
+    await pg.evaluate('window.dispatchEvent(new MouseEvent("mousemove", { movementX: 100 }))'); await tunggu_frame(pg, 2)
+    y1 = await pg.evaluate(f'{S}.XRC.yaw')
+    out[f"vr4: mouse ke kanan 100 px = belok kanan {(y0 - y1) * 180 / math.pi:.1f} derajat"] = abs((y0 - y1) - 100 * 0.0022) < 1e-3
+    a = await pg.evaluate(f'({{ th: {S}.player.theta, za: {S}.player.za }})')
+    await pg.evaluate('window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyW" }))'); await tunggu_frame(pg, 8)
+    await pg.evaluate('window.dispatchEvent(new KeyboardEvent("keyup", { code: "KeyW" }))'); await tunggu_frame(pg, 2)
+    c = await pg.evaluate(f'({{ th: {S}.player.theta, za: {S}.player.za }})')
+    dl = math.hypot((c['th'] - a['th']) * 1000, c['za'] - a['za'])
+    out[f"vr4: papan ketik W tetap berjalan di headset ({dl:.2f} m)"] = dl > 0.05
     st = await pg.evaluate(f'({{ start: document.getElementById("start").hidden, pre: {S}.PRESET.idx, bob: {S}.BOB.level, ssr: {S}.SSR.on, w: {S}.POST_R.w, h: {S}.POST_R.h }})')
     out[f"vr4: layar mulai ditutup, preset Sedang ({pre0} -> {st['pre']}), gerak kepala dan SSR mati, efek layar seukuran mata {st['w']} x {st['h']}"] = st['start'] and st['pre'] == 2 and st['bob'] == 0 and not st['ssr'] and st['w'] <= 320 and st['h'] <= 360
     m = await pg.evaluate(MATA)
