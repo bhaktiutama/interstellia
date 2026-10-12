@@ -194,7 +194,7 @@ async def vr3(b, out):
     await pg.evaluate('__xrTiruan.pad("left", 4, 1)'); await tunggu_frame(pg, 2); await pg.evaluate('__xrTiruan.pad("left", 4, 0)'); await tunggu_frame(pg, 2)
     p1 = await pg.evaluate(f'({PIKS})(0, 160, 180)')
     rows = await pg.evaluate('VRKIT.panel.rows.map((r) => r.label())')
-    out[f"vr3: X membuka menu VR (piksel tengah {p0} -> {p1}, latar panel sRGB 12, 14, 18 x 0,92), baris {rows[4:6]}"] = await pg.evaluate('VRKIT.menu') and 8 <= max(p1) < 50 and sum(p0) > sum(p1) + 60 and any('Waktu planet' in r for r in rows)
+    out[f"vr3: X membuka menu VR (piksel tengah {p0} -> {p1}, panel abu-abu netral: latar 12, 14, 18 / teks dfe3ea), baris {rows[4:6]}"] = await pg.evaluate('VRKIT.menu') and 8 <= max(p1) < 130 and max(p1) - min(p1) < 20 and sum(p0) > sum(p1) + 60 and any('Waktu planet' in r for r in rows)
     await pg.evaluate('__xrTiruan.pad("left", 4, 1)'); await tunggu_frame(pg, 2); await pg.evaluate('__xrTiruan.pad("left", 4, 0)'); await tunggu_frame(pg, 2)
     # kokpit KS-07: rig = sikap wahana, interior dekat = paralaks besar
     await pg.evaluate('__millar.boardShip(); __millar.FLY.view = 1'); await tunggu_frame(pg, 3)
@@ -269,7 +269,7 @@ async def vr4(b, out):
     await pg.evaluate('__xrTiruan.pad("left", 4, 1)'); await tunggu_frame(pg, 2); await pg.evaluate('__xrTiruan.pad("left", 4, 0)'); await tunggu_frame(pg, 2)
     p1 = await pg.evaluate(f'({PIKS})(0, 160, 180)')
     rows = await pg.evaluate('VRKIT.panel.rows.map((r) => r.label())')
-    out[f"vr4: X membuka menu VR (piksel tengah {p0} -> {p1}), baris {rows[4:6]}"] = await pg.evaluate('VRKIT.menu') and 8 <= max(p1) < 50 and any('Preset' in r for r in rows)
+    out[f"vr4: X membuka menu VR (piksel tengah {p0} -> {p1}, panel abu-abu netral), baris {rows[4:6]}"] = await pg.evaluate('VRKIT.menu') and 8 <= max(p1) < 130 and max(p1) - min(p1) < 20 and max(abs(a - b) for a, b in zip(p0, p1)) > 20 and any('Preset' in r for r in rows)
     await pg.evaluate('VRKIT.exit()'); await pg.wait_for_timeout(300)
     c0 = await pg.evaluate(f'{S}.clock.sim')
     try: await pg.wait_for_function(f'{S}.clock.sim > {c0}', timeout=60000)

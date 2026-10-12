@@ -163,7 +163,7 @@ Ringkasan:
 
 | Uji | Hasil |
 | --- | --- |
-| `tools/uji_vr.py` (vr0-vr4) | 52 / 52 lulus setelah VR8a: menambah kalibrasi tinggi (titik asal di lantai), jongkok, mouse belok, papan ketik W di Copper |
+| `tools/uji_vr.py` (vr0-vr4) | 56 / 56 lulus setelah VR8b (arah badan, lapisan monitor tersembunyi sebelum VR); VR8a menambah kalibrasi tinggi (titik asal di lantai), jongkok, mouse belok, papan ketik W di Copper |
 | `tools/uji_misi_gargantua.py` | 103 / 103 lulus (pembanding G1 kini memakai `?v4=0`) |
 | `tools/uji_millar.py` | 129 / 130; gagal M5c percikan (-200 mm) juga gagal di versi sebelum VR3 dengan angka sama, jadi bukan dari VR |
 | `tools/uji_bahasa.py` | Lulus |
