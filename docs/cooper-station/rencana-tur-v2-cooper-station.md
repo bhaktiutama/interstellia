@@ -11,17 +11,17 @@ Aturan: tidak mengubah fungsi apa pun (hujan, shader, genangan, burung, motor, b
 | Kurang setinggi mata | Banyak titik tinggi | 10 titik setinggi mata (1,7 m): gravitasi, air mancur, lempar bola, Skyway, bukit, ladang, hutan, sungai, genangan, danau |
 | Burung di awan | Formasi V di 150-250 m, jauh dari kamera | Kamera mengikuti formasi V 35 m di belakangnya |
 | Gerhana dari dalam | Titik v2 di kamera luar | Titik dekat sumbu menghadap kaca end cap B saat malam; Matahari dan sinarnya padam |
-| Motor dari luar kota | Belum ada | 18 s naik motor (fisika motor apa adanya, gas terus + sport) di arteri dari ladang ke kota |
+| Motor dari luar kota | Belum ada | 27 s naik motor (fisika motor apa adanya, gas terus + sport) di jalan lingkar keliling za 500 (rute bus merah) dari distrik Galileo ke New York, melawan arah putaran. Revisi: dulu arteri searah sumbu, salah menurut Bhakti |
 | Lempar bola | Belum ada | Dua bola 25 m/s 40 derajat: searah putaran dan melawan putaran, angka dari `landingOf()` |
 | Diam terlalu lama | 7-8 s | 4-5 s |
 
 | Hasil uji (sandbox) | Nilai |
 | --- | --- |
-| Titik, durasi | 22, 235 s |
+| Titik, durasi | 22, 243 s |
 | Hujan di sungai | `RAIN.k` 0,97, awan di atas kamera 0,28 (tetes jatuh bila > 0,12) |
 | Genangan | basah minimal 0,59, hujan sudah berhenti (0,03), awan di jalan 0,46 |
 | Burung | formasi V 38 m dari kamera |
-| Motor | 734 m ke arah kota, 115-150 km/h, tanpa tabrakan |
+| Motor | 1.120 m keliling, Galileo ke New York, lajur za 496,5, 144-150 km/h, terasa 0,33 g (melawan putaran), tanpa tabrakan |
 | Bola | searah putaran 48,4 m / 2,35 s; melawan putaran 84,4 m / 4,94 s |
 | Gerhana | `ECL.k` turun ke 0,00, kamera di dalam |
 

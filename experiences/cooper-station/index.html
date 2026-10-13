@@ -851,6 +851,8 @@ Object.assign(I18N.en, {
   "Ladang dan siklus tanam": "Fields and the crop cycle",
   "Dari luar: kerangka inersia": "From outside: the inertial frame",
   "Dermaga despun": "The despun dock",
+  "Naik motor ke New York": "Riding to New York",
+  "Jalan lingkar rute bus merah dari Galileo ke New York, melawan arah putaran. Makin cepat makin ringan: di 150 km/h berat tinggal {gM} g.": "The red bus route ring road from Galileo to New York, against the spin. The faster you go the lighter you feel: at 150 km/h your weight drops to {gM} g.",
   "Dua bola dilempar sama kencang dan sama miring: satu searah putaran, satu melawan putaran.": "Two balls thrown equally hard at the same angle: one spinward, one against the spin.",
   "Searah putaran: jatuh {a} m setelah {ta} s. Melawan putaran: {b} m setelah {tb} s. Bola yang melawan putaran terasa lebih ringan.": "Spinward: lands {a} m away after {ta} s. Against the spin: {b} m after {tb} s. The ball moving against the spin feels lighter.",
   "Lempar bola melawan putaran": "Throwing against the spin",
@@ -858,8 +860,6 @@ Object.assign(I18N.en, {
   "Formasi V terbang di bawah awan. Udara ikut berputar bersama stasiun, jadi burung terbang seperti biasa.": "A V formation flies below the clouds. The air spins with the station, so birds fly as usual.",
   "Angin di bukit": "Wind on the hill",
   "Rumput tinggi di bukit merunduk tertiup angin. Awan mulai menebal.": "Tall grass on the hill bends in the wind. The clouds are thickening.",
-  "Naik motor ke kota": "Riding into the city",
-  "Dari ladang ke kota di jalan basah sisa hujan. Melaju searah sumbu, berat terasa tetap 1 g.": "From the fields into the city on roads still wet from the rain. Riding along the axis, you still feel 1 g.",
   "Genangan di jalan kota": "Puddles in the city streets",
   "Hujan reda. Genangan di jalan memantulkan gedung dan lampu kota.": "The rain has stopped. Puddles on the street reflect the buildings and city lights.",
   "Di sini \"atas\" selalu ke arah sumbu, jadi rumah dan pohon berdiri tegak ke pusat silinder.": "Here \"up\" always points to the axis, so houses and trees stand toward the centre of the cylinder.",
@@ -15118,8 +15118,8 @@ function tourKeys() {
     { at: () => { const c = []; for (let k = -12; k <= 12; k++) { const s = modS(TRAM.s + 70 + k * 50); c.push({ s, za: riverZ(s) - RIVER.width / 2 - 12, hd: 0 }); } return tourCloudPick(c); },
       h: 0, pt: 3, hold: 6, hr: 17.5, wx: 'mendung', title: 'Hujan miring',
       cap: 'Hujan jatuh miring sekitar 8 derajat karena Coriolis, efek yang sama dengan air mancur.' },
-    { moto: { s: modS(3 * ART + 4), za: 3180 }, cut: true, hold: 18, hr: 18.3, wx: 'reda', ri: 3, title: 'Naik motor ke kota',
-      cap: 'Dari ladang ke kota di jalan basah sisa hujan. Melaju searah sumbu, berat terasa tetap 1 g.' },
+    { moto: { s: modS(6.2 * ART), za: BUS.lines[0].za - 3.5, hd: -Math.PI / 2 }, cut: true, hold: 27, hr: 18.3, wx: 'reda', ri: 3, title: 'Naik motor ke New York',
+      cap: 'Jalan lingkar rute bus merah dari Galileo ke New York, melawan arah putaran. Makin cepat makin ringan: di 150 km/h berat tinggal {gM} g.' },
     { at: () => {                                                      // genangan: paving kota di bawah awan, menghadap ke pusat kota
         const c = [], k0 = Math.round(LANDMARK.s / ART);
         for (let k = k0 - 3; k <= k0 + 3; k++) {
@@ -15191,7 +15191,8 @@ function stopTour() {
 LANG.hooks.push(() => { if (TOUR.on) tourCaption(); if (PHOTO.on) syncPhotoUI(); });
 function tourVars() {                                                  // angka di teks tur, dihitung dari konstanta stasiun
   return { s10: fmtN(FOUNT.shift10, 2), hT: fmtInt(LANDMARK.h), gT: fmtN((R - LANDMARK.h) / R, 2), hD: fmtInt(DECK.h),
-    eH: fmtN(2 * ECL.half / TAU * T_ORB / 3600, 1), oH: fmtN(T_ORB / 3600, 1) };
+    eH: fmtN(2 * ECL.half / TAU * T_ORB / 3600, 1), oH: fmtN(T_ORB / 3600, 1),
+    gM: fmtN((OMEGA * R - MOTO.vSport) ** 2 / R / CONFIG.g, 2) };   // berat terasa motor melawan putaran di batas sport (rumus stepMoto)
 }
 function tourCapText(K) { return K.capNow ? t(K.capNow, K.vars) : t(K.cap, tourVars()); }
 function tourCaption() {
@@ -15227,8 +15228,8 @@ function stepTourExt(K) {
   }
 }
 function tourMotoStart(K) {                                           // motor: keadaan sama dengan motoMount(), gas terus + sport
-  const M = MOTO, m = K.moto;
-  Object.assign(M, { on: true, parked: false, s: m.s, za: m.za, hd: Math.PI, v: 32, yaw: 0, steer: 0, lean: 0, look: 0, lookIdle: 0, thr: 1,
+  const M = MOTO, m = K.moto;                                      // jalan lingkar keliling (heading -90 = melawan putaran)
+  Object.assign(M, { on: true, parked: false, s: m.s, za: m.za, hd: m.hd, v: 40, yaw: 0, steer: 0, lean: 0, look: 0, lookIdle: 0, thr: 1,
     rpm: 6000, gear: 5, sy: 0, svy: 0, shake: 0, surfT: 0, pitch: 0 });
   M.h = M.hPrev = groundH(M.s, M.za); M.vh = M.vhS = 0;
   Object.assign(player, { state: 'ground', theta: M.s / R, za: M.za, h: M.h, heading: M.hd, pitch: -12 * DEG, vA: 0, vT: 0, mode: 'naik motor' });
