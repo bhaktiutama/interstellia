@@ -851,10 +851,10 @@ Object.assign(I18N.en, {
   "Ladang dan siklus tanam": "Fields and the crop cycle",
   "Dari luar: kerangka inersia": "From outside: the inertial frame",
   "Dermaga despun": "The despun dock",
+  "Lempar dari sudut pandang pemain: 80 km/h, 10 derajat, melawan putaran.": "Throwing from the player's view: 80 km/h, 10 degrees, against the spin.",
+  "Jatuh {a} m setelah {ta} s. Untuk sampai ke sisi seberang silinder, bola harus dilempar mendekati laju lantai, sekitar {vR} km/h.": "It lands {a} m away after {ta} s. To reach the far side of the cylinder, the ball would have to be thrown at nearly the floor speed, about {vR} km/h.",
   "Naik motor ke New York": "Riding to New York",
   "Jalan lingkar rute bus merah dari Galileo ke New York, melawan arah putaran. Makin cepat makin ringan: di 150 km/h berat tinggal {gM} g.": "The red bus route ring road from Galileo to New York, against the spin. The faster you go the lighter you feel: at 150 km/h your weight drops to {gM} g.",
-  "Dua bola dilempar sama kencang dan sama miring: satu searah putaran, satu melawan putaran.": "Two balls thrown equally hard at the same angle: one spinward, one against the spin.",
-  "Searah putaran: jatuh {a} m setelah {ta} s. Melawan putaran: {b} m setelah {tb} s. Bola yang melawan putaran terasa lebih ringan.": "Spinward: lands {a} m away after {ta} s. Against the spin: {b} m after {tb} s. The ball moving against the spin feels lighter.",
   "Lempar bola melawan putaran": "Throwing against the spin",
   "Burung di bawah awan": "Birds below the clouds",
   "Formasi V terbang di bawah awan. Udara ikut berputar bersama stasiun, jadi burung terbang seperti biasa.": "A V formation flies below the clouds. The air spins with the station, so birds fly as usual.",
@@ -15067,27 +15067,45 @@ function tourCloudPick(cands, look) {                                 // kandida
   for (const c of cands) { const p = look ? look(c) : c, v = cloudCoverAt(modS(p.s), p.za); if (v > bv) { bv = v; best = c; } }
   return best;
 }
-function tourVee() {                                                  // pose kamera 35 m di belakang formasi V (atau kawanan) yang sedang terbang
+function tourFlock() {                                                // pemimpin formasi V (atau pusat kawanan) yang sedang terbang: posisi, tinggi, arah, laju
   const V = BIRDS.vees.find((v) => !v.dead);
-  let s, za, h, hd;
-  if (V) { s = V.s; za = V.za; h = V.h; hd = V.hd; }
-  else {
-    const F = BIRDS.flocks.find((f) => !f.dead && f.members && f.members.some((b) => !b.gone));
-    if (!F) return null;
-    let n = 0, vs = 0, vz = 0; s = 0; za = 0; h = 0;
-    const s0 = F.members.find((b) => !b.gone).p[0];
-    for (const b of F.members) if (!b.gone) { s += s0 + wrapS(b.p[0] - s0); za += b.p[1]; h += b.p[2]; vs += b.v[0]; vz += b.v[1]; n++; }
-    s /= n; za /= n; h /= n; hd = Math.atan2(vs, vz);
+  if (V) return { s: V.s, za: V.za, h: V.h, hd: V.hd, v: 13, vee: true };
+  const F = BIRDS.flocks.find((f) => !f.dead && f.members && f.members.some((q) => !q.gone));
+  if (!F) return null;
+  let n = 0, vs = 0, vz = 0, s = 0, za = 0, h = 0;
+  const s0 = F.members.find((q) => !q.gone).p[0];
+  for (const q of F.members) if (!q.gone) { s += s0 + wrapS(q.p[0] - s0); za += q.p[1]; h += q.p[2]; vs += q.v[0]; vz += q.v[1]; n++; }
+  return { s: s / n, za: za / n, h: h / n, hd: Math.atan2(vs, vz), v: Math.hypot(vs, vz) / n, vee: false };
+}
+function tourAim(cs, cz, hA, L) {                                     // arah dan pitch dari mata kamera ke burung
+  const ds = wrapS(L.s - cs), dz = L.za - cz;
+  return { hd: Math.atan2(ds, dz), pt: Math.max(-1.2, Math.min(1.3, Math.atan2(L.h - hA - CONFIG.eye, Math.hypot(ds, dz)))) };
+}
+function tourVee(K, hold) {                                           // terbang: 35 m di belakang formasi; diam (hold): turun ke tanah sambil tetap mengarah ke burung
+  const L = tourFlock(); if (!L) return null;
+  const fs = Math.sin(L.hd), fz = Math.cos(L.hd), back = L.vee ? 35 : 22, side = L.vee ? 12 : 6;
+  const Td = K.hold - 3;                                              // lama turun; 3 s terakhir berdiri di tanah
+  if (!(hold > 0)) {
+    const cs = L.s - fs * back + fz * side, cz = Math.max(60, Math.min(CONFIG.L - 60, L.za - fz * back - fs * side)), hA = Math.min(R - 60, L.h + 4);
+    return { s: modS(cs), za: cz, hA, hd: Math.atan2(wrapS(L.s - cs), L.za - cz), pt: -4 * DEG };
   }
-  const fs = Math.sin(hd), fz = Math.cos(hd), back = V ? 35 : 22, side = V ? 12 : 6;
-  const cs = s - fs * back + fz * side, cz = za - fz * back - fs * side;
-  return { s: modS(cs), za: Math.max(60, Math.min(CONFIG.L - 60, cz)), hA: Math.min(R - 60, h + 4), hd: Math.atan2(wrapS(s - cs), za - cz), pt: -4 * DEG };
+  if (!K.land) {                                                      // titik mendarat: 50 m di belakang dan 15 m di samping posisi burung di akhir turun, bebas kolider dan air
+    const P = player, d = L.v * Td;
+    let ls = L.s + fs * d - fs * 50 + fz * 15, lz = L.za + fz * d - fz * 50 - fs * 15;
+    for (let k = 0; k < 20 && (colAt(ls, lz, 3) || inWater(modS(ls), lz, 3)); k++) { ls -= fs * 10; lz -= fz * 10; }
+    K.land = { s: modS(ls), za: Math.max(60, Math.min(CONFIG.L - 60, lz)) };
+    K.p0 = { s: P.theta * R, za: P.za, hA: P.h };
+  }
+  const u = sstep(0, 1, hold / Td), A = K.p0, G = K.land;
+  const cs = modS(A.s + wrapS(G.s - A.s) * u), cz = A.za + (G.za - A.za) * u, g = groundH(cs, cz);
+  const hA = Math.max(g, A.hA + (g - A.hA) * u);
+  return Object.assign({ s: cs, za: cz, hA }, tourAim(cs, cz, hA, L));
 }
 function tourKeys() {
   const sk = SPOTS.skyway, w = WHEAT_SPOT;
   const cS = COOPER.s + 34, cZ = COOPER.za - 46;
   const ny = SPOTS.nyc || { s: LANDMARK.s, za: LANDMARK.za - 160, heading: 0 };
-  const dS = DECK.s + (DECK.inner + DECK.half) / 2, Lk = SPOTS.lake, hl = SPOTS.hill, bb = SPOTS.baseball;
+  const dS = DECK.s + (DECK.half - 0.5) / deckK(), Lk = SPOTS.lake, hl = SPOTS.hill;   // dek: 0,5 m (nyata) dari pagar
   return [
     { ext: 'in', hold: 14, hr: 12, wx: 'cerah', title: 'Menuju Copper Corn Station',
       cap: 'Silinder 8 km mengorbit Saturnus dan berputar sekali tiap 63,4 detik. Kita masuk lewat dermaga di end cap A.' },
@@ -15100,20 +15118,24 @@ function tourKeys() {
       cap: 'Menara {hT} m di pusat kota. Di puncaknya gravitasi tinggal {gT} g, karena lebih dekat ke sumbu.' },
     { s: FOUNT.s, za: FOUNT.za + 16, h: 0, hd: 180, pt: 6, hold: 5, hr: 13.3, wx: 'cerah', title: 'Air mancur Coriolis',
       cap: 'Air naik lurus 10 m/s tetapi mendarat {s10} m searah putaran: efek Coriolis. Merpati mencari makan di plaza.' },
-    { s: bb.s, za: bb.za - 60, h: 0, hd: 0, pt: 7, hold: 7, hr: 13.7, wx: 'cerah', ball: { s: bb.s, za: bb.za }, title: 'Lempar bola melawan putaran',
-      cap: 'Dua bola dilempar sama kencang dan sama miring: satu searah putaran, satu melawan putaran.',
-      cap2: 'Searah putaran: jatuh {a} m setelah {ta} s. Melawan putaran: {b} m setelah {tb} s. Bola yang melawan putaran terasa lebih ringan.' },
-    { s: sk.s, za: sk.za, h: 0, hd: sk.heading, pt: sk.pitch, hold: 4, hr: 14, wx: 'berawan', title: 'Skyway: jendela ke angkasa',
+    { s: modS(FIELD.s + 45), za: FIELD.za, h: 0, hd: -90, pt: 4, hold: 6, hr: 13.7, wx: 'cerah', ball: { v: 80 / 3.6, e: 10 }, title: 'Lempar bola melawan putaran',
+      cap: 'Lempar dari sudut pandang pemain: 80 km/h, 10 derajat, melawan putaran.',
+      cap2: 'Jatuh {a} m setelah {ta} s. Untuk sampai ke sisi seberang silinder, bola harus dilempar mendekati laju lantai, sekitar {vR} km/h.' },
+    { s: sk.s, za: sk.za + 25, h: 0, hd: sk.heading, pt: sk.pitch, hold: 4, hr: 14, wx: 'berawan', title: 'Skyway: jendela ke angkasa',   // di antara balok jendela (tiap 50 m)
       cap: 'Di bawah kaca ini ruang hampa. Bintang dan Saturnus lewat tiap 63,4 detik; tepi silinder bergerak 99 m/s.' },
-    { s: ny.s, za: ny.za + 300, h: 190, hd: 0, pt: 0, track: tourVee, hold: 7, hr: 14.5, wx: 'berawan', title: 'Burung di bawah awan',
-      cap: 'Formasi V terbang di bawah awan. Udara ikut berputar bersama stasiun, jadi burung terbang seperti biasa.' },
-    { s: LIFT.theta * R, za: 170, h: 900, hd: 0, pt: 0, hold: 4, hr: 15, wx: 'berawan', title: 'Dekat sumbu: gravitasi mengecil',
+    { s: LIFT.theta * R, za: 170, h: 900, hd: 0, pt: 0, hold: 4, hr: 14.5, wx: 'berawan', title: 'Dekat sumbu: gravitasi mengecil',
       cap: 'Gravitasi sebanding jarak ke sumbu: 100 m dari sumbu hanya 0,1 g. Awan terlihat dari atas.' },
-    { s: hl.s, za: hl.za, h: 0, hd: hl.heading, pt: 2, hold: 5, hr: 15.6, wx: 'berawan', title: 'Angin di bukit',
+    { s: hl.s, za: hl.za, h: 0, hd: hl.heading, pt: 2, hold: 5, hr: 15, wx: 'berawan', title: 'Angin di bukit',
       cap: 'Rumput tinggi di bukit merunduk tertiup angin. Awan mulai menebal.' },
-    { s: w.s, za: w.za, h: 0, hd: w.heading, pt: 2, hold: 4, hr: 16.2, wx: 'mendung', title: 'Ladang dan siklus tanam',
+    { s: hl.s, za: hl.za, h: 190, hd: 0, pt: 0, track: tourVee, hold: 9, hr: 15.5, wx: 'berawan', title: 'Burung di bawah awan',
+      cap: 'Formasi V terbang di bawah awan. Udara ikut berputar bersama stasiun, jadi burung terbang seperti biasa.' },
+    { s: w.s, za: w.za, h: 0, hd: w.heading, pt: 2, hold: 4, hr: 16.1, wx: 'mendung', title: 'Ladang dan siklus tanam',
       cap: 'Satu siklus tanam 96 jam: gandum tumbuh, menguning, lalu dipanen. Langit mulai mendung.' },
-    { s: SPOTS.forest.s, za: SPOTS.forest.za, h: 0, hd: SPOTS.forest.heading, pt: 14, hold: 4, hr: 16.8, wx: 'mendung', title: 'Hutan lebat',
+    { path: (u) => {                                                    // berjalan setinggi mata di jalan setapak, keluar dari tepi hutan za FOREST.z1
+        const za = FOREST.z1 - 26 + 36 * u;
+        return { s: modS(forestTrail(za)), za, hd: Math.atan2(forestTrail(za + 0.5) - forestTrail(za - 0.5), 1) };
+      },
+      h: 0, pt: 4, hold: 12, hr: 16.8, wx: 'mendung', title: 'Hutan lebat',
       cap: 'Pohon 22-35 m. Di pucuk pohon 30 m gravitasi 3% lebih ringan daripada di akarnya.' },
     { at: () => { const c = []; for (let k = -12; k <= 12; k++) { const s = modS(TRAM.s + 70 + k * 50); c.push({ s, za: riverZ(s) - RIVER.width / 2 - 12, hd: 0 }); } return tourCloudPick(c); },
       h: 0, pt: 3, hold: 6, hr: 17.5, wx: 'mendung', title: 'Hujan miring',
@@ -15132,7 +15154,7 @@ function tourKeys() {
       cap: 'Hujan reda. Genangan di jalan memantulkan gedung dan lampu kota.' },
     { s: cS, za: cZ, h: 6, hd: Math.atan2(COOPER.s - cS, COOPER.za - cZ) / DEG, pt: -3, hold: 4, hr: 19.6, wx: 'berawan', ri: 3, title: 'Rumah Cooper',
       cap: 'Di sini "atas" selalu ke arah sumbu, jadi rumah dan pohon berdiri tegak ke pusat silinder.' },
-    { s: dS, za: DECK.za, h: DECK.h + 1.7, hd: 90, pt: -8, hold: 5, hr: 21.5, wx: 'cerah', title: 'Dek pandang malam',
+    { s: dS, za: DECK.za, h: DECK.h, hd: 90, pt: -6, hold: 5, hr: 21.5, wx: 'cerah', title: 'Dek pandang malam',
       cap: 'Dek {hD} m. Lampu kota di seberang silinder tergantung di atas kepala.' },
     { s: 0, za: 6600, h: R - 150, hd: 0, pt: 0, eclipse: true, hold: 9, hr: 23, wx: 'cerah', title: 'Gerhana Saturnus',
       cap: 'Lihat ke end cap B: Saturnus menutup Matahari sekitar {eH} jam tiap orbit {oH} jam. Sinar Matahari di dalam stasiun padam.' },
@@ -15237,19 +15259,21 @@ function tourMotoStart(K) {                                           // motor: 
   motoStartSound();
   K.started = true;
 }
-function tourThrow(K) {                                               // dua lemparan dari titik K.ball, pemain dipindah sementara
-  const P = { theta: player.theta, za: player.za, h: player.h, heading: player.heading }, L = { speed: lab.speed, elev: lab.elev };
-  lab.speed = 25; lab.elev = 40;
-  const out = [];
-  for (const hd of [90, -90]) {
-    Object.assign(player, { theta: modS(K.ball.s) / R, za: K.ball.za, h: groundH(K.ball.s, K.ball.za), heading: hd * DEG });
-    throwBall(); out.push(landingOf(lastBall));
-  }
-  Object.assign(player, P); Object.assign(lab, L);
-  K.landing = out;
+function tourThrow(K) {                                               // satu lemparan dari mata pemain (throwBall apa adanya, lab sementara)
+  const L = { speed: lab.speed, elev: lab.elev };
+  lab.speed = K.ball.v; lab.elev = K.ball.e;
+  throwBall(); K.bb = lastBall; K.landing = landingOf(lastBall);
+  Object.assign(lab, L);
   K.capNow = K.cap2;
-  K.vars = { a: fmtN(Math.abs(out[0].arc), 1), ta: fmtN(out[0].time, 2), b: fmtN(Math.abs(out[1].arc), 1), tb: fmtN(out[1].time, 2) };
+  K.vars = { a: fmtN(Math.abs(K.landing.arc), 1), ta: fmtN(K.landing.time, 2), vR: fmtInt(OMEGA * R * 3.6) };
   phEl('tourCap').querySelector('span').textContent = tourCapText(K);
+}
+function tourChase(K) {                                               // kamera mengejar bola: 2,5 m di belakang searah lemparan, sedikit di atas
+  const b = K.bb.pos, th = Math.atan2(b.y, b.x), bh = R - Math.hypot(b.x, b.y), hd = player.heading;
+  const s = th * R - Math.sin(hd) * 2.5, za = b.z + HALF_L - Math.cos(hd) * 2.5;
+  player.theta = modS(s) / R; player.za = za; player.h = Math.max(groundH(s, za), bh + 0.4 - CONFIG.eye);
+  player.pitch = -8 * DEG;
+  K.chase = { theta: player.theta, za: player.za, h: player.h, pitch: player.pitch };
 }
 function stepTour(dt) {
   if (!TOUR.on) return;
@@ -15266,20 +15290,27 @@ function stepTour(dt) {
     if (ext.active) toggleExterior();
     if (!K.B) {
       if (K.at) Object.assign(K, K.at());
+      if (K.path) { const P = K.path(0); K.s = P.s; K.za = P.za; K.hd = P.hd / DEG; }
       K.B = { s: K.s, za: K.za, hA: groundH(K.s, K.za) + K.h, hd: K.hd * DEG, pt: K.pt * DEG };
-      const P = K.track && K.track(); if (P) K.B = P;
+      const P = K.track && K.track(K, 0); if (P) K.B = P;
       if (K.from) TOUR.from = { s: K.from.s, za: K.from.za, hA: K.from.h, hd: K.from.hd * DEG, pt: K.from.pt * DEG };
       Object.assign(K, tourTravel(TOUR.from, K.B));
-    } else if (K.track) { const P = K.track(); if (P) K.B = P; }   // tujuan bergerak bersama burung
+    } else if (K.track) { const P = K.track(K, Math.max(0, TOUR.t - K.dur)); if (P) K.B = P; }   // tujuan bergerak bersama burung
     const A = TOUR.from, B = K.B, u = sstep(0, 1, TOUR.t / K.dur);
     const s = A.s + wrapS(B.s - A.s) * u, za = A.za + (B.za - A.za) * u;
     let hA = A.hA + (B.hA - A.hA) * u + K.arc * Math.sin(Math.PI * u);
     hA = Math.min(R - 40, Math.max(hA, groundH(s, za) + 0.5 * (1 - u)));   // tidak melewati sumbu, tidak menembus tanah; tiba tepat di h (0 = setinggi mata)
     const hold = Math.max(0, TOUR.t - K.dur);
     player.theta = modS(s) / R; player.za = za; player.h = hA;
-    player.heading = angLerp(A.hd, B.hd, u) + (K.track ? 0 : hold * 0.018);   // saat diam: geser pelan ke samping
+    player.heading = angLerp(A.hd, B.hd, u) + (K.track || K.ball ? 0 : hold * 0.018);   // saat diam: geser pelan ke samping
     player.pitch = A.pt + (B.pt - A.pt) * u;
+    if (K.path && hold > 0) {                                         // berjalan di jalur setinggi mata
+      const P = K.path(Math.min(1, hold / K.hold));
+      player.theta = P.s / R; player.za = P.za; player.h = groundH(P.s, P.za); player.heading = P.hd;
+    }
     if (K.ball && !K.landing && hold > 0.8) tourThrow(K);
+    if (K.bb && !K.bb.done && K.bb.t > 0) tourChase(K);              // posisi bola baru diisi physicsStep setelah lemparan
+    else if (K.chase) Object.assign(player, K.chase);                 // bola sudah jatuh: kamera diam melihat titik jatuh
     if (K.eclipse) {                                                  // gerhana: waktu orbit diatur (seperti tombol I), masuk bayangan 2 s setelah tiba
       if (K.o0 === undefined) { K.o0 = clock.orbit + eclipseIn() - 20; }
       clock.orbit = K.o0 + hold * 10;

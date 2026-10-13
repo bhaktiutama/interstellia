@@ -1,5 +1,20 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.2: masukan uji Bhakti (selesai, menunggu uji visual)
+
+Tetap tanpa mengubah fungsi lain; hanya data dan alur titik tur.
+
+| Titik | Masukan | Penyebab | Perubahan | Hasil uji |
+| --- | --- | --- | --- | --- |
+| Skyway | Saturnus tertutup palang abu-abu | Balok melintang jendela ada tiap 50 m (za kelipatan 50); kamera di za 1.400 tepat di atas balok | Maju ke za 1.425, tengah di antara dua balok | 25 m dari balok terdekat |
+| Dek 175 m | Terlalu tinggi, pandangan tertutup pagar | Mata 3,4 m di atas lantai dek, 2,6 m dari pagar | Mata 1,7 m (tinggi manusia), berdiri 0,5 m dari pagar, menunduk 6 derajat | Mata tepat 1,7 m, 0,50 m dari pagar |
+| Hutan | Jalan setinggi mata keluar hutan | Kamera diam | Berjalan 3 m/s selama 12 s di jalan setapak, dari 26 m di dalam hutan sampai 10 m di luar | 41 m, setinggi mata, dari dalam ke luar hutan |
+| Burung | Ikut burung lalu turun ke tanah, tetap mengarah ke burung | Kamera hanya ikut di ketinggian | 6 s turun dari ketinggian formasi ke tanah sambil mengarah ke pemimpin formasi, 3 s berdiri di tanah menengadah; titik mendarat dicek bebas gedung dan air; titik dipindah ke setelah bukit (area ladang) | Mulai 38 m dari formasi, mendarat di tanah, menengadah 66 derajat, meleset 0,2 derajat |
+| Lempar bola | Dari sudut pandang pemain, 80 km/h, 10 derajat, kamera ikut bola | Dua bola dari titik lain | Satu lemparan dari mata pemain di lapangan baseball, melawan putaran; kamera mengejar bola sampai jatuh | 35,1 m dalam 1,61 s (fisika game, dari tinggi tangan 1,5 m); kamera ikut 32 m |
+
+Catatan bola: dengan 80 km/h dan 10 derajat bola tidak bisa sampai ke sisi seberang silinder. Untuk itu laju lempar harus mendekati laju lantai (sekitar 357 km/h); teks titik menjelaskan ini. Durasi total tur 249 s.
+
+
 ## Revisi v2.1: masukan uji Bhakti (selesai, menunggu uji visual)
 
 Aturan: tidak mengubah fungsi apa pun (hujan, shader, genangan, burung, motor, bola). Tur hanya mengatur jam, laju jam, tutupan awan, waktu orbit, posisi dan arah kamera, motor, dan lemparan, yaitu keadaan yang juga bisa diatur pemain. Dua perubahan v2 di luar tur (pengaman label jam HUD, percepatan awan `WEATHER.fast`) dikembalikan ke kode asli.
