@@ -1,5 +1,31 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.1: masukan uji Bhakti (selesai, menunggu uji visual)
+
+Aturan: tidak mengubah fungsi apa pun (hujan, shader, genangan, burung, motor, bola). Tur hanya mengatur jam, laju jam, tutupan awan, waktu orbit, posisi dan arah kamera, motor, dan lemparan, yaitu keadaan yang juga bisa diatur pemain. Dua perubahan v2 di luar tur (pengaman label jam HUD, percepatan awan `WEATHER.fast`) dikembalikan ke kode asli.
+
+| Masukan | Penyebab | Yang dilakukan tur |
+| --- | --- | --- |
+| Hujan tidak terlihat | Tetes hujan hanya jatuh di bawah awan tebal; kamera sungai v2 tidak di bawah awan | Lokasi titik hujan dipilih saat titik mulai: dari 25 titik tepi sungai, yang awannya paling tebal |
+| Genangan tidak terlihat | Genangan penuh hanya di bawah awan; titik v2 malam cerah dan jam dipercepat (cepat kering) | Titik genangan tepat sesudah hujan reda, awan masih tebal (tutupan 0,75), jam berhenti, jalan kota di bawah awan, setinggi mata menghadap pusat kota |
+| Kurang setinggi mata | Banyak titik tinggi | 10 titik setinggi mata (1,7 m): gravitasi, air mancur, lempar bola, Skyway, bukit, ladang, hutan, sungai, genangan, danau |
+| Burung di awan | Formasi V di 150-250 m, jauh dari kamera | Kamera mengikuti formasi V 35 m di belakangnya |
+| Gerhana dari dalam | Titik v2 di kamera luar | Titik dekat sumbu menghadap kaca end cap B saat malam; Matahari dan sinarnya padam |
+| Motor dari luar kota | Belum ada | 18 s naik motor (fisika motor apa adanya, gas terus + sport) di arteri dari ladang ke kota |
+| Lempar bola | Belum ada | Dua bola 25 m/s 40 derajat: searah putaran dan melawan putaran, angka dari `landingOf()` |
+| Diam terlalu lama | 7-8 s | 4-5 s |
+
+| Hasil uji (sandbox) | Nilai |
+| --- | --- |
+| Titik, durasi | 22, 235 s |
+| Hujan di sungai | `RAIN.k` 0,97, awan di atas kamera 0,28 (tetes jatuh bila > 0,12) |
+| Genangan | basah minimal 0,59, hujan sudah berhenti (0,03), awan di jalan 0,46 |
+| Burung | formasi V 38 m dari kamera |
+| Motor | 734 m ke arah kota, 115-150 km/h, tanpa tabrakan |
+| Bola | searah putaran 48,4 m / 2,35 s; melawan putaran 84,4 m / 4,94 s |
+| Gerhana | `ECL.k` turun ke 0,00, kamera di dalam |
+
+
 ## Status: T1-T10 selesai, menunggu uji visual Bhakti
 
 | Hasil | Nilai |

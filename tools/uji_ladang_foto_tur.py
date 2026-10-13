@@ -1,6 +1,6 @@
 """Uji tahap 12d (Copper Corn Station): siklus tanam gandum dan mesin ladang, mode foto (FOV, blur, simpan PNG,
-semua dikembalikan saat keluar), tur sinematik v2 (18 titik sekitar 4 menit, jam 12:00 sampai 07:00, cuaca cerah -> hujan -> cerah, genangan, gerhana,
-pembuka dan penutup kamera luar, tanpa NaN, tidak melewati sumbu, posisi / jam / cuaca / orbit dikembalikan).
+semua dikembalikan saat keluar), tur sinematik v2.1 (22 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
+lempar bola melawan putaran, gerhana dari dalam, pembuka dan penutup kamera luar, tanpa NaN, semua dikembalikan).
 Pakai: python tools/uji_ladang_foto_tur.py   (butuh: pip install playwright && playwright install chromium; CHROMIUM opsional)"""
 import asyncio, os, pathlib
 from playwright.async_api import async_playwright
@@ -26,36 +26,54 @@ UJI = r"""
   out[`tangkapan PNG ${url.length} karakter`] = url.startsWith('data:image/png') && url.length > 5000;
   st.togglePhoto(false);
   out['keluar mode foto: FOV, blur, waktu kembali'] = st.camera.fov === st.CONFIG.fov && st.compMat.uniforms.uDof.value === 0 && st.clock.hourRate === rate0;
-  // C3: tur sinematik (tur v2: 18 titik, jam 12:00 -> pagi, cuaca, genangan, gerhana, pembuka dan penutup luar)
+  // C3: tur sinematik v2.1 (22 titik; tur hanya mengatur jam, awan, posisi kamera, motor dan lemparan lewat keadaan biasa)
   const p0 = { th: st.player.theta, za: st.player.za };
-  const w0 = { hour: st.clock.hour, rate: st.clock.hourRate, orbit: st.clock.orbit, mode: st.WEATHER.mode };
+  const w0 = { hour: st.clock.hour, rate: st.clock.hourRate, orbit: st.clock.orbit, mode: st.WEATHER.mode, moto: st.MOTO.on };
   st.startTour();
-  const hour0 = st.clock.hour, N = st.TOUR.keys.length;
+  const hour0 = st.clock.hour, N = st.TOUR.keys.length, CIRC = 2 * Math.PI * st.R;
+  const wrap = (x) => x - CIRC * Math.round(x / CIRC);
   let bad = false, maxH = 0, steps = 0, fadeMax = 0;
-  const idx = new Set(), K = {};                                     // per judul titik: jam akhir, hujan maks, basah min, gerhana min, kamera luar
+  const idx = new Set(), K = {}, nSub = Math.round(0.05 / st.STEP);
   for (let k = 0; k < 8000 && st.TOUR.on; k++, steps++) {
-    const i = st.TOUR.i, key = st.TOUR.keys[i];
-    st.stepTour(0.05); st.updateClouds(0.05); st.updateRain(0.05); st.updateFar();
-    if (!st.TOUR.on) break;
+    const key = st.TOUR.keys[st.TOUR.i];
+    for (let q = 0; q < nSub; q++) st.physicsStep(st.STEP);           // urutan seperti worldStep
+    st.stepTour(0.05); if (!st.TOUR.on) break;
+    st.updateCamera(); st.stepBirds(0.05); st.updateRain(0.05); st.updateFar(); st.updateClouds(0.05);
     idx.add(st.TOUR.i);
-    const r = K[key.title] || (K[key.title] = { rain: 0, wet: 1, ecl: 1, ext: false });
-    r.hour = st.clock.hour; r.rain = Math.max(r.rain, st.RAIN.k); r.wet = Math.min(r.wet, st.RAIN.wet); r.ecl = Math.min(r.ecl, st.ECL.k); r.ext = r.ext || st.ext.active;
+    const P = st.player, ps = P.theta * st.R, hold = st.TOUR.t > (key.dur || 0);
+    const r = K[key.title] || (K[key.title] = { rain: 0, wetMin: 1, ecl: 1, ext: false, cloud: 0, bird: 1e9, z0: st.MOTO.za, ground: false });
+    r.hour = st.clock.hour; r.rain = Math.max(r.rain, st.RAIN.k); r.ecl = Math.min(r.ecl, st.ECL.k); r.ext = r.ext || st.ext.active; r.rainEnd = st.RAIN.k;
+    if (hold) {
+      r.wetMin = Math.min(r.wetMin, st.RAIN.wet);
+      const look = key.hd === 180 ? -25 : 25;
+      r.cloud = Math.max(r.cloud, st.cloudCoverAt(((ps % CIRC) + CIRC) % CIRC, P.za + (key.title === 'Genangan di jalan kota' ? look : 0)));
+      for (const V of st.BIRDS.vees) if (!V.dead) r.bird = Math.min(r.bird, Math.hypot(wrap(V.s - ps), V.za - P.za, V.h - P.h));
+    }
+    if (key.moto && st.MOTO.on) { r.z1 = st.MOTO.za; r.v1 = st.MOTO.v; r.vMin = Math.min(r.vMin ?? 1e9, st.MOTO.v); r.ground = r.ground || P.state === 'ground'; }
     fadeMax = Math.max(fadeMax, +document.getElementById('tourFade').style.opacity || 0);
-    const P = st.player; if (!isFinite(P.theta + P.za + P.h + P.heading + P.pitch + st.clock.hour + st.camera.position.length())) bad = true;
+    if (!isFinite(P.theta + P.za + P.h + P.heading + P.pitch + st.clock.hour + st.camera.position.length())) bad = true;
     if (!st.ext.active) maxH = Math.max(maxH, P.h);
   }
-  const T = steps * 0.05, get = (n) => K[n] || {};
-  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 200-270 s), tanpa NaN`] = !bad && idx.size === N && N >= 18 && T > 200 && T < 270;
+  const T = steps * 0.05, get = (n) => K[n] || {}, eye = st.TOUR.keys.filter((q) => q.h === 0).length;
+  const ball = st.TOUR.keys.find((q) => q.ball), L = ball && ball.landing;
+  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 200-260 s), tanpa NaN`] = !bad && idx.size === N && N === 22 && T > 200 && T < 260;
+  out[`tur: ${eye} titik setinggi mata (>= 9)`] = eye >= 9;
   out[`tur: tinggi maksimum ${maxH.toFixed(0)} m (tidak melewati sumbu)`] = maxH < st.R - 30;
   out[`tur: jam mulai ${hour0.toFixed(2)}, akhir ${(get('Meninggalkan stasiun').hour || 0).toFixed(2)}`] = hour0 === 12 && Math.abs(get('Meninggalkan stasiun').hour - 7) < 0.05;
   out['tur: pembuka dan penutup di kamera luar'] = !!get('Menuju Copper Corn Station').ext && !!get('Meninggalkan stasiun').ext;
-  out[`tur: siang cerah tanpa hujan (${get('Ukuran stasiun').rain.toFixed(2)}), hujan di sungai ${get('Hujan miring').rain.toFixed(2)}`] = get('Ukuran stasiun').rain < 0.05 && get('Hujan miring').rain > 0.5;
-  out[`tur: hujan reda di dek malam (${get('Dek pandang malam').rain.toFixed(2)} di akhir)`] = st.RAIN.k < 0.3;
-  out[`tur: genangan di trem malam (basah min ${get('Trem malam').wet.toFixed(2)})`] = get('Trem malam').wet > 0.5;
-  out[`tur: gerhana Saturnus (ECL.k min ${get('Gerhana Saturnus').ecl.toFixed(2)})`] = get('Gerhana Saturnus').ecl < 0.2;
+  const H = get('Hujan miring');
+  out[`tur: hujan di sungai (RAIN.k ${H.rain.toFixed(2)}, awan di atas kamera ${H.cloud.toFixed(2)} > 0,12), siang tanpa hujan (${get('Ukuran stasiun').rain.toFixed(2)})`] = H.rain > 0.5 && H.cloud > 0.12 && get('Ukuran stasiun').rain < 0.05;
+  const G = get('Genangan di jalan kota');
+  out[`tur: genangan (basah min ${G.wetMin.toFixed(2)}, hujan akhir ${G.rainEnd.toFixed(2)}, awan di jalan ${G.cloud.toFixed(2)})`] = G.wetMin > 0.5 && G.rainEnd < 0.1 && G.cloud > 0.12;
+  const B = get('Burung di bawah awan');
+  out[`tur: burung formasi V dekat kamera (${B.bird.toFixed(0)} m < 60)`] = B.bird < 60;
+  const M = get('Naik motor ke kota');
+  out[`tur: motor ${(M.z0 - M.z1).toFixed(0)} m ke arah kota, akhir ${(M.v1 * 3.6).toFixed(0)} km/h, terendah ${(M.vMin * 3.6).toFixed(0)} km/h (tanpa tabrakan), fisika motor`] = M.ground && M.z0 - M.z1 > 500 && M.vMin > 20;
+  out[L ? `tur: bola searah putaran ${Math.abs(L[0].arc).toFixed(1)} m / ${L[0].time.toFixed(2)} s, melawan ${Math.abs(L[1].arc).toFixed(1)} m / ${L[1].time.toFixed(2)} s` : 'tur: bola dilempar'] = !!L && L[0].arc > 0 && L[1].arc < 0 && L[1].time > L[0].time;
+  out[`tur: gerhana dari dalam (ECL.k min ${get('Gerhana Saturnus').ecl.toFixed(2)})`] = get('Gerhana Saturnus').ecl < 0.2 && !get('Gerhana Saturnus').ext;
   out[`tur: layar gelap saat pindah kamera (maks ${fadeMax.toFixed(2)})`] = fadeMax > 0.9;
   out['tur selesai: kembali ke posisi awal, berjalan'] = !st.TOUR.on && st.player.state === 'ground' && Math.abs(st.player.za - p0.za) < 0.01 && Math.abs(st.player.theta - p0.th) < 1e-6 && !st.ext.active;
-  out['tur selesai: jam, laju jam, orbit, cuaca dikembalikan'] = st.clock.hour === w0.hour && st.clock.hourRate === w0.rate && st.clock.orbit === w0.orbit && st.WEATHER.mode === w0.mode && !st.WEATHER.fast && document.getElementById('tourFade').style.opacity === '0';
+  out['tur selesai: jam, laju jam, orbit, cuaca, motor dikembalikan'] = st.clock.hour === w0.hour && st.clock.hourRate === w0.rate && st.clock.orbit === w0.orbit && st.WEATHER.mode === w0.mode && st.MOTO.on === w0.moto && document.getElementById('tourFade').style.opacity === '0';
   return out;
 })()
 """
