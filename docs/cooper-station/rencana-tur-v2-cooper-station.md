@@ -1,0 +1,90 @@
+# Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
+
+## Konteks
+
+Tur Y (`TOUR`, `tourKeys()`, `stepTour()` di `experiences/cooper-station/index.html` sekitar baris 15004-15107) sekarang punya 10 titik dengan teks panjang, jam tetap (malam dipindah ke 09:30), cuaca tidak diatur, dan mulai di dalam stasiun. Bhakti minta:
+
+- 10 titik lama tetap, disisipi tempat ikonik baru
+- teks tiap titik dipersingkat
+- jam 24 jam dipercepat: mulai siang, berakhir pagi berikutnya
+- cuaca berurutan: terang, mendung, hujan, terang lagi
+- detail terlihat: burung, genangan bekas hujan, gerhana Saturnus
+- pembuka: dari jauh mengitari stasiun lalu masuk ke kota; penutup: meninggalkan kota menjauh
+- total sekitar 4 menit (jawaban Bhakti)
+
+## Ringkasan pendekatan
+
+| Bagian | Cara |
+| --- | --- |
+| Urutan | 18 titik: pembuka luar + 10 lama + 6 baru + penutup luar |
+| Waktu | Tiap titik punya `hr` (jam tujuan). Jam diinterpolasi linear selama titik; `clock.hourRate` diisi laju sebenarnya (jam/s) supaya sistem lain (lalu lintas, kering genangan, cuaca) ikut |
+| Cuaca | Tiap titik punya `wx` ('cerah', 'berawan', 'mendung'); tur memaksa `WEATHER.mode`, transisi awan 3x lebih cepat saat tur |
+| Genangan | `TOUR.wetMin` menahan `RAIN.wet` sampai titik genangan selesai (tanpa ini genangan kering sekitar 20 s nyata) |
+| Gerhana | Titik luar khusus: `clock.orbit` digeser agar gerhana mulai 2 s setelah tiba, `orbitScale` 4 sementara, kamera di sisi berlawanan Saturnus |
+| Pembuka / penutup | Kamera luar dengan jalur sendiri (jarak 40 km ke 700 m di dermaga dan sebaliknya), pergantian luar ke dalam lewat layar gelap 0,5 s |
+| Pulihkan | Saat tur selesai: posisi, jam, laju jam, mode cuaca, `clock.orbit`, `orbitScale` dikembalikan |
+
+## Daftar titik (durasi target sekitar 240 s)
+
+Jam dan cuaca adalah tujuan di akhir titik. Teks final ID sekitar 1-2 kalimat, maks sekitar 140 karakter.
+
+| # | Titik | Baru / lama | Jam | Cuaca | Detail yang dipamerkan | Teks singkat (draf) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | Mendekat dari luar | baru (pembuka) | 12:00 | cerah | Stasiun berputar, Saturnus, masuk ke dermaga end cap A | Silinder 8 km mengorbit Saturnus, berputar sekali tiap 63,4 s. |
+| 1 | Gravitasi dari putaran | lama | 12:20 | cerah | Turun dari sumbu ke tanah | Putaran memberi 1 g. Tanah melengkung naik di kiri dan kanan. |
+| 2 | Ukuran stasiun | lama | 12:50 | cerah | Kawanan burung di bawah kamera | Radius 1 km, panjang 8 km. Tanah seberang 2 km di atas kepala. |
+| 3 | Pusat New York, menara ikon 221 m | baru | 13:20 | cerah | Menara ikon, alun-alun (`SPOTS.nyc`) | Menara tertinggi stasiun. Di puncaknya gravitasi 4% lebih ringan. (angka diturunkan dari g = omega^2 r, dicek saat implementasi) |
+| 4 | Air mancur Coriolis | lama | 13:50 | cerah | Merpati di plaza (kamera rendah) | Air naik lurus, mendarat {s10} m searah putaran: efek Coriolis. |
+| 5 | Skyway | lama | 14:30 | berawan | Bintang dan Saturnus di bawah kaca | Di bawah kaca ini ruang hampa. Tepi silinder bergerak 99 m/s. |
+| 6 | Dekat sumbu | lama | 15:10 | berawan | Awan dari atas | Dekat sumbu gravitasi mengecil: 100 m dari sumbu hanya 0,1 g. |
+| 7 | Ladang gandum | lama | 16:00 | mendung | Mesin panen, langit gelap | Satu siklus tanam 96 jam: tumbuh, menguning, dipanen. |
+| 8 | Hutan lebat | lama | 17:00 | mendung | Hujan mulai | Pohon 22-35 m. Di pucuknya gravitasi 3% lebih ringan. |
+| 9 | Hujan miring di sungai | baru | 18:00 | mendung (hujan) | Hujan miring 8 derajat, jembatan `BRIDGES`, alur sungai | Hujan jatuh miring 8 derajat: Coriolis yang sama dengan air mancur. |
+| 10 | Rumah Cooper | lama | 19:00 | berawan | Hujan reda, senja | Rumah tetap tegak ke sumbu dari segala arah. |
+| 11 | Trem malam dan genangan | baru | 21:00 | cerah | Genangan memantulkan lampu (SSR), trem menyala, halo lampu | Genangan sisa hujan memantulkan lampu jalan dan trem. |
+| 12 | Dek pandang malam | baru | 23:00 | cerah | Gedung malam bertingkat, lampu merah atap, kota di seberang | Dek 175 m. Lampu kota di seberang tergantung di atas kepala. |
+| 13 | Dari luar: kerangka inersia | lama | 01:00 | cerah | Stasiun berputar | Dari luar tidak ada tarikan ke bawah; lantai yang membelokkan kita. |
+| 14 | Gerhana Saturnus | baru | 02:00 | cerah | Saturnus menutup Matahari, cahaya tepi atmosfer, sinar padam | Saturnus menutup Matahari 2,8 jam tiap orbit 37,6 jam. |
+| 15 | Dermaga despun | lama | 03:30 | cerah | Shuttle KS-07 | Dermaga tidak ikut berputar; shuttle sandar di sini. |
+| 16 | Kabut pagi di danau | baru | 06:30 | cerah | Kabut pagi 5x, burung kembali (setelah 06:00), danau `SPOTS.lake` | Pagi: kabut tipis menempel tanah, burung kembali terbang. |
+| 17 | Meninggalkan kota | baru (penutup) | 07:00 | cerah | Naik ke sumbu, keluar lewat dermaga, menjauh 40 km | Sampai jumpa di Copper Corn Station. |
+
+Catatan urutan: titik lama tetap berurutan sama (1, 2, 4, 5, 6, 7, 8, 10, 13, 15); titik baru disisipkan. Burung aktif 06:00-18:30 dan tidak terbang saat hujan (`birdDay()`, `stepBirds()`), jadi titik burung ada di siang (2, 4) dan pagi (16).
+
+## Perubahan kode (semua di `experiences/cooper-station/index.html`)
+
+| Langkah | Isi | Fungsi / nama | Effort | Model | Thinking |
+| --- | --- | --- | --- | --- | --- |
+| T1 | Data titik baru: `tourKeys()` diperluas dengan field `hr`, `wx`, `wet`, `ext` jenis baru ('in', 'out', 'eclipse'); teks lama dipersingkat; lokasi baru dari `SPOTS.nyc`, `DECK`, `BRIDGES`, `TRAM.s`, `SPOTS.lake`, `LANDMARK` | `tourKeys()` | Medium | Sonnet 5.5 | medium |
+| T2 | Jam dan cuaca terjadwal: `tourClock(K, u)` dipanggil di `stepTour()`; simpan dan pulihkan `clock.hour`, `hourRate`, `WEATHER.mode`, `clock.orbit`, `orbitScale` di `startTour()` / `stopTour()`; hapus pindah-ke-09:30 lama; jam mulai dipaksa 12:00 | `startTour()`, `stopTour()`, `stepTour()`, `tourNext()` | Medium | Sonnet 5.5 | medium |
+| T3 | Pengaman HUD: `TIME_RATES.find(...)[1]` (baris sekitar 6745 dan 6903) error bila `hourRate` bukan nilai daftar; saat tur tampilkan "tur" | `updateTimeLabels()`, HUD jam | Low | Sonnet 5.5 | low |
+| T4 | Transisi cuaca cepat saat tur (`maxStep` wdt/40 bila `TOUR.on`) di `updateClouds()`; `RAIN.wet = max(RAIN.wet, TOUR.wetMin)` di `updateRain()` | `updateClouds()`, `updateRain()` | Low | Sonnet 5.5 | low |
+| T5 | Gerhana: saat titik 14 mulai, `clock.orbit` diatur agar `eclipseIn()` = 2 s, `orbitScale` 4; kamera luar diarahkan dari `saturnDirInertial()` (kamera di sisi lawan Saturnus, sedikit miring agar Saturnus di belakang stasiun), `ext.auto` mati | `stepTour()` cabang `ext: 'eclipse'` | Medium | Sonnet 5.5 | medium |
+| T6 | Pembuka dan penutup luar: jalur kamera luar sendiri (yaw berputar setengah keliling, jarak 40 km -> 700 m di `EXT_FOCUS[4]` dermaga; penutup kebalikan), `ext.dist` / `ext.distT` / target diisi langsung tiap frame; pergantian luar <-> dalam lewat elemen baru `#tourFade` (opacity 0,5 s); bagian dalam pembuka mulai di sumbu dekat end cap A (h = R - 60) lalu turun ke titik 1; penutup naik ke sumbu dulu | `stepTour()`, `toggleExterior()` (dipakai, tidak diubah), CSS `#tourFade` | Medium | Sonnet 5.5 | medium |
+| T7 | Tempo: `tourTravel()` durasi maks 9 -> 7 s, `hold` 5-7 s; total diukur di uji = 230-260 s | `tourTravel()` | Low | Sonnet 5.5 | low |
+| T8 | Kamus: entri `I18N.en` untuk semua judul dan teks baru, entri teks lama yang diganti dihapus | `I18N.en` | Low | Haiku 4.5 | low |
+| T9 | Uji: perbarui `tools/uji_ladang_foto_tur.py` (>= 18 titik, total 230-260 s, jam awal 12:00 dan akhir sekitar 07:00, `RAIN.k` > 0,5 di titik hujan, `RAIN.wet` > 0,5 di titik genangan, `ECL.k` < 0,5 di titik gerhana, segmen luar pembuka dan penutup, semua dipulihkan setelah tur, tanpa NaN, tidak melewati sumbu); jalankan juga `tools/uji_bahasa.py` dan `tools/qc_load.py` | `tools/uji_ladang_foto_tur.py` | Medium | Sonnet 5.5 | medium |
+| T10 | Dokumen: baris riwayat tahap baru dan baris `TOUR` di peta kode `CLAUDE.md` | dokumen | Low | Haiku 4.5 | low |
+
+Catatan: uji memanggil `stepTour(0.05)` tanpa `frame()`, jadi jam, cuaca terjadwal, dan gerhana harus diatur di dalam `stepTour()`, bukan hanya di loop render. `RAIN.k` dan `ECL.k` diperbarui di `updateRain()` / `updateEclipse()`; uji akan memanggil keduanya (sudah diekspor atau ditambahkan ke `window.__station`).
+
+## Yang tidak berubah
+
+- Fitur lain di luar tur, tombol (Y, Esc, H, U saat tur), panel `labTour` / `btnTour`, dan `#tourCap`.
+- Posisi pemain dikembalikan seperti sekarang; tambahan: jam, cuaca, orbit juga dikembalikan.
+
+## Verifikasi
+
+1. `python tools/uji_ladang_foto_tur.py` (daftar cek T9) lulus.
+2. `python tools/uji_bahasa.py` lulus (kamus English lengkap).
+3. `python tools/qc_load.py` tanpa error.
+4. Bhakti menguji visual dan FPS di GTX 1060 dan M1: urutan cuaca, genangan malam, burung, gerhana, transisi luar-dalam (sandbox SwiftShader tidak menampakkan NaN).
+
+## Risiko dan catatan
+
+| Risiko | Penanganan |
+| --- | --- |
+| Pergantian kamera luar (kerangka inersia) ke dalam (berputar) terlihat melompat | Layar gelap 0,5 s menutupi pergantian |
+| 4 menit untuk 18 titik cukup padat (rata-rata 13 s per titik) | Teks maks sekitar 140 karakter; bila terlalu cepat, hold dinaikkan ke 8 s (total sekitar 5 menit) |
+| Genangan ditahan lebih lama dari fisika kering normal (0,7 jam stasiun) | Hanya saat tur, disebut di dokumen |
+| Angka baru di teks (menara 221 m, gerhana 2,8 jam) | Diturunkan dari `CONFIG` / `ECL` / `LANDMARK.h` saat implementasi, bukan ditulis tetap bila bisa dihitung |
