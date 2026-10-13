@@ -1,5 +1,45 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.4: masukan uji Bhakti (selesai, menunggu uji visual)
+
+Tetap tanpa mengubah fungsi lain; hanya blok tur, uji, dan dokumen (plus `updateReal` diekspor di `window.__station` untuk uji).
+
+| Masukan | Penyebab | Perubahan | Hasil uji |
+| --- | --- | --- | --- |
+| Kamera bola masih terlalu dekat, harus makin jauh | Jarak tertinggal tumbuh linear 5 -> 60 m | Jarak tertinggal 5 + 295 x u^1,6 (u = bagian waktu terbang): 37 m di 1/4, 102 m di 1/2, 187 m di 3/4, 300 m saat bola menyentuh tanah; garis jejak bola yang sudah ada menunjukkan jalurnya | Kamera 4 m lalu 300 m dari bola, meleset 0,0 derajat, tidak di bawah tanah |
+| Setelah bola jatuh, ke Skyway jangan balik ke lapangan | Terbang berikutnya mulai dari tujuan titik (lapangan), bukan pose kamera terakhir | Terbang berikutnya selalu mulai dari pose kamera terakhir (juga akhir jalan kaki hutan dan genangan) | Lompatan awal terbang ke Skyway 0,4 m |
+| Gerhana dari ladang jagung tidak terlihat | Matahari (dan Saturnus saat gerhana) masuk lewat end cap B 25 derajat dari sumbu dan ikut berputar tiap 63,4 s; dari satu titik tetap hanya di atas cakrawala separuh waktu, maksimum 25 derajat; kamera diam menghadap heading 0 | Saat titik dimulai dihitung posisi keliling tempat Matahari paling tinggi di tengah waktu diam (theta = -90 derajat - omega t); dipilih tepi petak jagung terdekat di pertanian end cap B; durasi terbang dikunci 6 s; selama diam kamera mengikuti Matahari (4 derajat di bawahnya, jagung di bawah bingkai); gerhana mulai 3,5 s setelah tiba | Matahari minimal 20,4 derajat di atas cakrawala, meleset dari arah kamera maks 4,0 derajat; tangkapan layar: Saturnus dan Matahari di kaca end cap B, jagung di bawah; cahaya Matahari turun ke 0 |
+| Loncat jauh bolak-balik | Urutan za: 170 -> 7.560 -> 4.949 -> 2.575 -> ... -> 7.254 -> 539 -> 7.265 (4 terbang panjang berbalik arah) | Rute disusun mengikuti sumbu (tabel di bawah) | Terbang dengan beda za > 1 km yang berbalik arah: 0 (pindah end cap B -> kota lewat potongan motor yang memang gelap) |
+
+### Urutan v2.4
+
+| No | Titik | Lokasi | Jam | Cuaca |
+| --- | --- | --- | --- | --- |
+| 1 | Menuju stasiun | kamera luar ke dermaga A | 12,0 | cerah |
+| 2 | Dekat sumbu | za 170, 900 m (masuk dari dermaga menyusuri sumbu) | 12,3 | cerah |
+| 3 | Gravitasi dari putaran | spawn, turun dari sumbu | 12,6 | cerah |
+| 4 | Ukuran stasiun | za 760, 230 m | 12,9 | cerah |
+| 5 | Menara ikon New York | alun-alun | 13,1 | cerah |
+| 6 | Air mancur Coriolis | plaza | 13,3 | cerah |
+| 7 | Lempar bola | lapangan baseball | 13,7 | cerah |
+| 8 | Skyway | za 1.425 (lanjut dari kamera pengejar) | 14,2 | cerah |
+| 9 | Hutan lebat | jalan setapak keluar hutan | 14,8 | berawan |
+| 10 | Angin di bukit | bukit dekat rumah Cooper | 15,3 | berawan |
+| 11 | Burung di bawah awan | ikut kawanan | 15,7 | berawan |
+| 12 | Ladang dan siklus tanam | gandum terdekat bukit (s 768, za 7.374) | 16,2 | mendung |
+| 13 | Rumah Cooper | dari sore (dulu malam) | 16,6 | mendung |
+| 14 | Hujan miring | jalan ladang dekat rumah Cooper di bawah awan tertebal (dulu tepi sungai), diam 10 s | 17,2 | mendung |
+| 15 | Naik motor ke New York | layar gelap, Galileo -> New York | 18,3 | reda |
+| 16 | Genangan di jalan kota | trotoar kota | 19,0 | reda |
+| 17 | Dek pandang malam | 175 m | 21,5 | cerah |
+| 18 | Gerhana Saturnus | tepi ladang jagung end cap B, posisi dari fase putaran | 23,0 | cerah |
+| 19-20 | Dari luar, Dermaga despun | kamera luar | 1,0 / 3,5 | cerah |
+| 21 | Pagi berkabut | turun ke tepi danau dari 120 m (setelah layar gelap) | 6,6 | cerah |
+| 22 | Meninggalkan stasiun | kamera luar | 7,0 | cerah |
+
+Durasi tur 280 s. Uji: `tools/uji_ladang_foto_tur.py` kini memanggil `updateReal()` tiap langkah (posisi mata untuk kawanan burung, seperti `worldStep`) dan menambah cek lompatan setelah bola, Matahari di bingkai saat gerhana, dan rute tanpa bolak-balik. Burung di bawah awan: sudut menengadah akhir bergantung kawanan acak (20-26 derajat di uji), batas uji 15 derajat.
+
+
 ## Revisi v2.3: masukan uji Bhakti (selesai, menunggu uji visual)
 
 Tetap tanpa mengubah fungsi lain.

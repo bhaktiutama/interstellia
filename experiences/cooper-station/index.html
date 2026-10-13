@@ -15059,6 +15059,8 @@ function camRestoreRes() { if (CAMX.prevPR != null) { renderer.setPixelRatio(CAM
    formasi V burung), `ball` (dua lemparan throwBall), `moto` (state 'ground' + MOTO sementara, fisika motor apa adanya),
    gerhana dari dalam (`eclipse`: waktu orbit diatur seperti tombol I). Pembuka dari luar (40 km -> dermaga), penutup
    menjauh; pindah kamera luar <-> dalam dan masuk motor (`cut`) ditutup layar gelap #tourFade. Semua dikembalikan saat selesai.
+   Tur v2.4: rute mengikuti sumbu (siang end cap A -> sore end cap B -> motor ke kota -> malam ke end cap B), terbang
+   berikutnya mulai dari pose kamera terakhir, gerhana di petak jagung tempat Matahari tinggi (`tourSun`, `durF`).
    ===================================================================== */
 const TOUR = { on: false, i: 0, t: 0, from: null, save: null, keys: null, h0: 12 };
 const TOUR_WX = { cerah: [0.14, 'cerah'], berawan: [0.5, 'berawan'], reda: [0.75, 'berawan'], mendung: [0.93, 'mendung'] };   // tutupan, nama mode
@@ -15105,47 +15107,65 @@ function tourVee(K, hold) {                                           // terbang
   const hA = Math.max(g, A.hA + (g - A.hA) * u);
   return Object.assign({ s: cs, za: cz, hA }, tourAim(cs, cz, hA, L));
 }
+function tourSun(th, t) {                                             // arah Matahari di kerangka stasiun (= uL_SunDir di updateLighting) dilihat dari theta: heading, ketinggian (rad)
+  const a = OMEGA * t, sx = SUN_DIR.y * Math.sin(a), sy = SUN_DIR.y * Math.cos(a);
+  const up = -(sx * Math.cos(th) + sy * Math.sin(th)), tg = -sx * Math.sin(th) + sy * Math.cos(th);
+  return { hd: Math.atan2(tg, SUN_DIR.z), el: Math.atan2(up, Math.hypot(tg, SUN_DIR.z)) };
+}
 function tourKeys() {
-  const sk = SPOTS.skyway, w = WHEAT_SPOT;
+  const sk = SPOTS.skyway, H0 = HILLS[0], hl = SPOTS.hill;
   const cS = COOPER.s + 34, cZ = COOPER.za - 46;
   const ny = SPOTS.nyc || { s: LANDMARK.s, za: LANDMARK.za - 160, heading: 0 };
-  const dS = DECK.s + (DECK.half - 0.5) / deckK(), Lk = SPOTS.lake, hl = SPOTS.hill;   // dek: 0,5 m (nyata) dari pagar
-  let cfF = null, cfD = 1e9;                                          // ladang jagung terdekat rumah Cooper (sama dengan CORN_SPOT): berdiri 3 m di luar tepi -za
-  for (const f of fieldList) if (f.corn) { const d = Math.hypot(wrapS((f.s0 + f.s1) / 2 - COOPER.s), (f.z0 + f.z1) / 2 - COOPER.za); if (d < cfD) { cfD = d; cfF = f; } }
-  const cf = cfF ? { s: modS((cfF.s0 + cfF.s1) / 2), za: cfF.z0 - 3 } : { s: CORN_SPOT.s, za: CORN_SPOT.za };
+  const dS = DECK.s + (DECK.half - 0.5) / deckK(), Lk = SPOTS.lake;   // dek: 0,5 m (nyata) dari pagar
+  const band = (f) => f.z0 > FARMS[1][0] - 10;                        // pertanian dekat end cap B
+  let wF = null, wD = 1e9;                                            // v2.4: gandum terdekat bukit (rute maju ke end cap B; SPOTS.wheat tetap)
+  for (const f of fieldList) if (f.crop === 'wheat' && !f.meadow && !f.lake) { const d = Math.hypot(wrapS((f.s0 + f.s1) / 2 - H0.s), (f.z0 + f.z1) / 2 - H0.za); if (d < wD) { wD = d; wF = f; } }
+  const w = wF ? { s: modS((wF.s0 + wF.s1) / 2), za: (wF.z0 + wF.z1) / 2 } : WHEAT_SPOT;
+  if (wF) w.heading = Math.atan2(wrapS(H0.s - w.s), H0.za - w.za) / DEG;
+  const rows = [...new Set(fieldList.filter(band).map((f) => f.z0 - 3))];   // jalan di antara baris petak
   return [
     { ext: 'in', hold: 14, hr: 12, wx: 'cerah', title: 'Menuju Copper Corn Station',
       cap: 'Silinder 8 km mengorbit Saturnus dan berputar sekali tiap 63,4 detik. Kita masuk lewat dermaga di end cap A.' },
-    { s: CONFIG.spawn.theta * R, za: CONFIG.spawn.za, h: 0, hd: 0, pt: 26, hold: 5, hr: 12.3, wx: 'cerah', title: 'Gravitasi dari putaran',
-      from: { s: CONFIG.spawn.theta * R, za: 90, h: R - 60, hd: 0, pt: -24 },
+    { s: LIFT.theta * R, za: 170, h: 900, hd: 0, pt: 0, hold: 4, hr: 12.3, wx: 'cerah', title: 'Dekat sumbu: gravitasi mengecil',
+      from: { s: LIFT.theta * R, za: 15, h: R - 50, hd: 0, pt: -10 },   // masuk dari dermaga, menyusuri sumbu
+      cap: 'Gravitasi sebanding jarak ke sumbu: 100 m dari sumbu hanya 0,1 g. Awan terlihat dari atas.' },
+    { s: CONFIG.spawn.theta * R, za: CONFIG.spawn.za, h: 0, hd: 0, pt: 26, hold: 5, hr: 12.6, wx: 'cerah', title: 'Gravitasi dari putaran',
       cap: 'Putaran memberi 1 g: lantai terus mendorong kita ke arah sumbu. Tanah melengkung naik di kiri dan kanan.' },
-    { s: CONFIG.spawn.theta * R, za: 760, h: 230, hd: 0, pt: -6, hold: 4, hr: 12.6, wx: 'cerah', title: 'Ukuran stasiun',
+    { s: CONFIG.spawn.theta * R, za: 760, h: 230, hd: 0, pt: -6, hold: 4, hr: 12.9, wx: 'cerah', title: 'Ukuran stasiun',
       cap: 'Radius 1 km, panjang 8 km. Tanah di seberang ada 2 km di atas kepala.' },
-    { s: ny.s, za: ny.za, h: 24, hd: Math.atan2(wrapS(LANDMARK.s - ny.s), LANDMARK.za - ny.za) / DEG, pt: 20, hold: 4, hr: 13, wx: 'cerah', title: 'Menara ikon New York',
+    { s: ny.s, za: ny.za, h: 24, hd: Math.atan2(wrapS(LANDMARK.s - ny.s), LANDMARK.za - ny.za) / DEG, pt: 20, hold: 4, hr: 13.1, wx: 'cerah', title: 'Menara ikon New York',
       cap: 'Menara {hT} m di pusat kota. Di puncaknya gravitasi tinggal {gT} g, karena lebih dekat ke sumbu.' },
     { s: FOUNT.s, za: FOUNT.za + 16, h: 0, hd: 180, pt: 6, hold: 5, hr: 13.3, wx: 'cerah', title: 'Air mancur Coriolis',
       cap: 'Air naik lurus 10 m/s tetapi mendarat {s10} m searah putaran: efek Coriolis. Merpati mencari makan di plaza.' },
     { s: modS(FIELD.s + 45), za: FIELD.za, h: 0, hd: -90, pt: 4, hold: 6, hr: 13.7, wx: 'cerah', ball: { v: 80, e: 10 }, title: 'Lempar bola melawan putaran',
       cap: 'Lempar 80 m/s, 10 derajat, melawan putaran: hampir menyamai laju lantai 99 m/s.',
       cap2: 'Bola melayang {ta} s dan jatuh {a} m dari pelempar, sekitar {d} derajat keliling silinder.' },
-    { s: sk.s, za: sk.za + 25, h: 0, hd: sk.heading, pt: sk.pitch, hold: 4, hr: 14, wx: 'berawan', title: 'Skyway: jendela ke angkasa',   // di antara balok jendela (tiap 50 m)
+    { s: sk.s, za: sk.za + 25, h: 0, hd: sk.heading, pt: sk.pitch, hold: 4, hr: 14.2, wx: 'cerah', title: 'Skyway: jendela ke angkasa',   // di antara balok jendela (tiap 50 m)
       cap: 'Di bawah kaca ini ruang hampa. Bintang dan Saturnus lewat tiap 63,4 detik; tepi silinder bergerak 99 m/s.' },
-    { s: LIFT.theta * R, za: 170, h: 900, hd: 0, pt: 0, hold: 4, hr: 14.5, wx: 'berawan', title: 'Dekat sumbu: gravitasi mengecil',
-      cap: 'Gravitasi sebanding jarak ke sumbu: 100 m dari sumbu hanya 0,1 g. Awan terlihat dari atas.' },
-    { s: hl.s, za: hl.za, h: 0, hd: hl.heading, pt: 2, hold: 5, hr: 15, wx: 'berawan', title: 'Angin di bukit',
-      cap: 'Rumput tinggi di bukit merunduk tertiup angin. Awan mulai menebal.' },
-    { s: hl.s, za: hl.za, h: 190, hd: 0, pt: 0, track: tourVee, hold: 9, hr: 15.5, wx: 'berawan', title: 'Burung di bawah awan',
-      cap: 'Sekawanan burung terbang rendah di bawah awan. Udara ikut berputar bersama stasiun, jadi burung terbang seperti biasa.' },
-    { s: w.s, za: w.za, h: 0, hd: w.heading, pt: 2, hold: 4, hr: 16.1, wx: 'mendung', title: 'Ladang dan siklus tanam',
-      cap: 'Satu siklus tanam 96 jam: gandum tumbuh, menguning, lalu dipanen. Langit mulai mendung.' },
     { path: (u) => {                                                    // berjalan setinggi mata di jalan setapak, keluar dari tepi hutan za FOREST.z1
         const za = FOREST.z1 - 26 + 36 * u;
         return { s: modS(forestTrail(za)), za, hd: Math.atan2(forestTrail(za + 0.5) - forestTrail(za - 0.5), 1) };
       },
-      h: 0, pt: 4, hold: 12, hr: 16.8, wx: 'mendung', title: 'Hutan lebat',
+      h: 0, pt: 4, hold: 12, hr: 14.8, wx: 'berawan', title: 'Hutan lebat',
       cap: 'Pohon 22-35 m. Di pucuk pohon 30 m gravitasi 3% lebih ringan daripada di akarnya.' },
-    { at: () => { const c = []; for (let k = -12; k <= 12; k++) { const s = modS(TRAM.s + 70 + k * 50); c.push({ s, za: riverZ(s) - RIVER.width / 2 - 12, hd: 0 }); } return tourCloudPick(c); },
-      h: 0, pt: 3, hold: 6, hr: 17.5, wx: 'mendung', title: 'Hujan miring',
+    { s: hl.s, za: hl.za, h: 0, hd: hl.heading, pt: 2, hold: 5, hr: 15.3, wx: 'berawan', title: 'Angin di bukit',
+      cap: 'Rumput tinggi di bukit merunduk tertiup angin. Awan mulai menebal.' },
+    { s: hl.s, za: hl.za, h: 190, hd: 0, pt: 0, track: tourVee, hold: 9, hr: 15.7, wx: 'berawan', title: 'Burung di bawah awan',
+      cap: 'Sekawanan burung terbang rendah di bawah awan. Udara ikut berputar bersama stasiun, jadi burung terbang seperti biasa.' },
+    { s: w.s, za: w.za, h: 0, hd: w.heading, pt: 2, hold: 4, hr: 16.2, wx: 'mendung', title: 'Ladang dan siklus tanam',
+      cap: 'Satu siklus tanam 96 jam: gandum tumbuh, menguning, lalu dipanen. Langit mulai mendung.' },
+    { s: cS, za: cZ, h: 6, hd: Math.atan2(COOPER.s - cS, COOPER.za - cZ) / DEG, pt: -3, hold: 4, hr: 16.6, wx: 'mendung', title: 'Rumah Cooper',
+      cap: 'Di sini "atas" selalu ke arah sumbu, jadi rumah dan pohon berdiri tegak ke pusat silinder.' },
+    { at: () => {                                                      // hujan: jalan ladang dekat rumah Cooper di bawah awan paling tebal
+        const c = [];
+        for (const za of rows) for (let d = -600; d <= 600; d += 50) {
+          const s = modS(COOPER.s + d);
+          if (Math.hypot(d, za - COOPER.za) < 80 || colAt(s, za, 2) || inWater(s, za, 3)) continue;
+          c.push({ s, za, hd: 0 });
+        }
+        return tourCloudPick(c.length ? c : [{ s: COOPER.s + 120, za: rows[0] || COOPER.za - 150, hd: 0 }]);
+      },
+      h: 0, pt: 3, hold: 10, hr: 17.2, wx: 'mendung', title: 'Hujan miring',
       cap: 'Hujan jatuh miring sekitar 8 derajat karena Coriolis, efek yang sama dengan air mancur.' },
     { moto: { s: modS(6.2 * ART), za: BUS.lines[0].za - 3.5, hd: -Math.PI / 2 }, cut: true, hold: 27, hr: 18.3, wx: 'reda', ri: 3, title: 'Naik motor ke New York',
       cap: 'Jalan lingkar rute bus merah dari Galileo ke New York, melawan arah putaran. Makin cepat makin ringan: di 150 km/h berat tinggal {gM} g.' },
@@ -15163,17 +15183,30 @@ function tourKeys() {
       },
       h: 0, pt: -7, hold: 8, hr: 19, wx: 'reda', ri: 3, title: 'Genangan di jalan kota',
       cap: 'Hujan reda. Genangan di jalan memantulkan gedung dan lampu kota.' },
-    { s: cS, za: cZ, h: 6, hd: Math.atan2(COOPER.s - cS, COOPER.za - cZ) / DEG, pt: -3, hold: 4, hr: 19.6, wx: 'berawan', ri: 3, title: 'Rumah Cooper',
-      cap: 'Di sini "atas" selalu ke arah sumbu, jadi rumah dan pohon berdiri tegak ke pusat silinder.' },
     { s: dS, za: DECK.za, h: DECK.h, hd: 90, pt: -6, hold: 5, hr: 21.5, wx: 'cerah', title: 'Dek pandang malam',
       cap: 'Dek {hD} m. Lampu kota di seberang silinder tergantung di atas kepala.' },
-    { s: cf.s, za: cf.za, h: 0, hd: 0, pt: 18, eclipse: true, hold: 9, hr: 23, wx: 'cerah', title: 'Gerhana Saturnus',   // tepi ladang jagung, menghadap end cap B
+    { at: (K) => {                                                     // gerhana: tepi ladang jagung dekat end cap B tempat Matahari paling tinggi di tengah waktu diam
+        const t0 = clock.sim - TOUR.t + K.durF, tm = t0 + K.hold / 2;   // Matahari tertinggi bila omega t + theta = -90 derajat
+        const sS = modS((-Math.PI / 2 - OMEGA * tm) * R);
+        let best = null, bd = 1e9;
+        for (const f of fieldList) {
+          if (!f.corn || f.lake || !band(f)) continue;
+          const hw = Math.max(0, (f.s1 - f.s0) / 2 - 6), m = (f.s0 + f.s1) / 2, d = wrapS(sS - m), q = Math.max(-hw, Math.min(hw, d));
+          const s = modS(m + q), za = f.z0 - 3;
+          if (Math.abs(d - q) < bd && !colAt(s, za, 1.5) && !inWater(s, za, 3)) { bd = Math.abs(d - q); best = { s, za }; }
+        }
+        best = best || { s: sS, za: CORN_SPOT.za };
+        const S = tourSun(best.s / R, t0);
+        return { s: best.s, za: best.za, hd: S.hd / DEG, pt: S.el / DEG - 4 };
+      },
+      h: 0, hd: 0, pt: 18, eclipse: true, durF: 6, hold: 9, hr: 23, wx: 'cerah', title: 'Gerhana Saturnus',
       cap: 'Lihat ke end cap B: Saturnus menutup Matahari sekitar {eH} jam tiap orbit {oH} jam. Sinar Matahari di dalam stasiun padam.' },
     { ext: 0, hold: 6, hr: 1, wx: 'cerah', title: 'Dari luar: kerangka inersia',
       cap: 'Dari luar kamera tidak ikut berputar. Tidak ada tarikan ke bawah: lantai yang terus membelokkan benda di dalam.' },
     { ext: 4, hold: 6, hr: 3.5, wx: 'cerah', title: 'Dermaga despun',
       cap: 'Dermaga end cap A tidak ikut berputar, jadi shuttle KS-07 bisa sandar di bagian yang diam.' },
     { s: Lk.s, za: Lk.za, h: 0, hd: Lk.heading, pt: 2, hold: 5, hr: 6.6, wx: 'cerah', title: 'Pagi berkabut',
+      from: { s: Lk.s, za: Lk.za - 300, h: groundH(Lk.s, Lk.za - 300) + 120, hd: 0, pt: -12 },   // turun ke tepi danau setelah layar gelap
       cap: 'Pagi: kabut tipis menempel di tanah dan burung kembali terbang.' },
     { ext: 'out', hold: 12, hr: 7, wx: 'cerah', title: 'Meninggalkan stasiun',
       cap: 'Kita keluar dan menjauh dari stasiun. Sampai jumpa di Copper Corn Station.' },
@@ -15286,10 +15319,10 @@ function tourThrow(K) {                                               // satu le
   phEl('tourCap').querySelector('span').textContent = tourCapText(K);
 }
 const _tcB = new THREE.Vector3(), _tcC = new THREE.Vector3(), _tcN = new THREE.Vector3(), _tcU = new THREE.Vector3(), _tcT = new THREE.Vector3(), _tcR = new THREE.Vector3();
-function tourChase(K) {                                               // kamera di jalur bola yang sama, makin tertinggal (5 -> 60 m), 3 m ke kanan dan 1 m ke atas, menghadap bola
+function tourChase(K) {                                               // kamera di jalur bola yang sama, makin tertinggal (5 -> 300 m), 3 m ke kanan dan 1 m ke atas, menghadap bola
   const b = K.bb, tb = Math.min(b.t, b.tEnd);
   bodyPosAt(b, tb, _tcB);
-  const D = 5 + 55 * tb / b.tEnd;                                     // jarak tertinggal tumbuh 5 m -> 60 m saat bola menyentuh tanah
+  const D = 5 + 295 * Math.pow(tb / b.tEnd, 1.6);                     // jarak tertinggal makin cepat tumbuh: 37 m di 1/4, 102 m di 1/2, 300 m saat bola menyentuh tanah
   let lo = 0, hi = tb;                                                // cari waktu jalur tc yang berjarak D di belakang bola
   for (let i = 0; i < 24; i++) { const m = (lo + hi) / 2; bodyPosAt(b, m, _tcC); if (_tcC.distanceTo(_tcB) > D) lo = m; else hi = m; }
   const tc = lo; bodyPosAt(b, tc, _tcC); bodyPosAt(b, Math.min(b.tEnd, tc + 0.05), _tcN);
@@ -15324,12 +15357,13 @@ function stepTour(dt) {
   } else {
     if (ext.active) toggleExterior();
     if (!K.B) {
-      if (K.at) Object.assign(K, K.at());
+      if (K.at) Object.assign(K, K.at(K));
       if (K.path) { K.p0 = K.p0 || { s: K.s, za: K.za, hd: K.hd }; const P = K.path(0, K.p0); K.s = P.s; K.za = P.za; K.hd = P.hd / DEG; }
       K.B = { s: K.s, za: K.za, hA: groundH(K.s, K.za) + K.h, hd: K.hd * DEG, pt: K.pt * DEG };
       const P = K.track && K.track(K, 0); if (P) K.B = P;
       if (K.from) TOUR.from = { s: K.from.s, za: K.from.za, hA: K.from.h, hd: K.from.hd * DEG, pt: K.from.pt * DEG };
       Object.assign(K, tourTravel(TOUR.from, K.B));
+      if (K.durF) K.dur = K.durF;                                      // durasi terbang dikunci (gerhana: lokasi dipilih dari waktu tiba)
     } else if (K.track) { const P = K.track(K, Math.max(0, TOUR.t - K.dur)); if (P) K.B = P; }   // tujuan bergerak bersama burung
     const A = TOUR.from, B = K.B, u = sstep(0, 1, TOUR.t / K.dur);
     const s = A.s + wrapS(B.s - A.s) * u, za = A.za + (B.za - A.za) * u;
@@ -15347,9 +15381,13 @@ function stepTour(dt) {
     if (K.bb && K.bb.t > 0 && !K.bb.done) tourChase(K);              // posisi bola baru diisi physicsStep setelah lemparan
     else if (K.bb && K.bb.done && !K.chased) { tourChase(K); K.chased = true; }   // bola sudah jatuh: satu kali lagi menghadap titik jatuh
     else if (K.chase) Object.assign(player, K.chase);                 // lalu kamera diam
-    if (K.eclipse) {                                                  // gerhana: waktu orbit diatur (seperti tombol I), masuk bayangan 2 s setelah tiba
-      if (K.o0 === undefined) { K.o0 = clock.orbit + eclipseIn() - 20; }
+    if (K.eclipse) {                                                  // gerhana: waktu orbit diatur (seperti tombol I), masuk bayangan 3,5 s setelah tiba
+      if (K.o0 === undefined) { K.o0 = clock.orbit + eclipseIn() - 35; }
       clock.orbit = K.o0 + hold * 10;
+      if (hold > 0) {                                                 // saat diam: kamera mengikuti Matahari (ikut berputar 5,7 derajat/s), jagung di bawah bingkai
+        const S = tourSun(player.theta, clock.sim), k = sstep(0, 1, hold / 1.5);
+        player.heading = angLerp(player.heading, S.hd, k); player.pitch += (S.el - 4 * DEG - player.pitch) * k;
+      }
     }
   }
   const T = isExt || K.moto ? K.hold : K.dur + K.hold;
@@ -15368,7 +15406,7 @@ function stepTour(dt) {
 }
 function tourNext() {
   const K = TOUR.keys[TOUR.i];
-  if (K.B) TOUR.from = { s: K.B.s, za: K.B.za, hA: player.h, hd: player.heading, pt: player.pitch };
+  if (K.B) TOUR.from = tourPose();                                    // terbang berikutnya mulai dari pose kamera terakhir (pengejar bola, akhir jalan kaki)
   if (K.moto) { TOUR.from = { s: MOTO.s, za: MOTO.za, hA: MOTO.h, hd: MOTO.hd, pt: player.pitch }; tourMotoEnd(); }
   TOUR.i++; TOUR.t = 0; TOUR.h0 = clock.hour;
   if (TOUR.i >= TOUR.keys.length) { stopTour(); return; }
@@ -15514,7 +15552,7 @@ setTimeout(warmLater, 1500);                       // P4
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { warmLater, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
 /* =====================================================================
    VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).
    Rig = pose kamera lama dengan pitch 0 dan tanpa gerak kepala, diputar balik sebesar yaw kepala: di dalam stasiun "atas" =

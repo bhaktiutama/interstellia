@@ -1,5 +1,5 @@
 """Uji tahap 12d (Copper Corn Station): siklus tanam gandum dan mesin ladang, mode foto (FOV, blur, simpan PNG,
-semua dikembalikan saat keluar), tur sinematik v2.1 (22 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
+semua dikembalikan saat keluar), tur sinematik v2.4 (22 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
 lempar bola melawan putaran, gerhana dari dalam, pembuka dan penutup kamera luar, tanpa NaN, semua dikembalikan).
 Pakai: python tools/uji_ladang_foto_tur.py   (butuh: pip install playwright && playwright install chromium; CHROMIUM opsional)"""
 import asyncio, os, pathlib
@@ -26,22 +26,25 @@ UJI = r"""
   out[`tangkapan PNG ${url.length} karakter`] = url.startsWith('data:image/png') && url.length > 5000;
   st.togglePhoto(false);
   out['keluar mode foto: FOV, blur, waktu kembali'] = st.camera.fov === st.CONFIG.fov && st.compMat.uniforms.uDof.value === 0 && st.clock.hourRate === rate0;
-  // C3: tur sinematik v2.3 (22 titik; tur hanya mengatur jam, awan, posisi kamera, motor dan lemparan lewat keadaan biasa)
+  // C3: tur sinematik v2.4 (22 titik; tur hanya mengatur jam, awan, posisi kamera, motor dan lemparan lewat keadaan biasa)
   const p0 = { th: st.player.theta, za: st.player.za };
   const w0 = { hour: st.clock.hour, rate: st.clock.hourRate, orbit: st.clock.orbit, mode: st.WEATHER.mode, moto: st.MOTO.on, adapt: st.ADAPT.on, bloom: st.POST.bloom };
   st.startTour();
   const hour0 = st.clock.hour, N = st.TOUR.keys.length, CIRC = 2 * Math.PI * st.R;
   const wrap = (x) => x - CIRC * Math.round(x / CIRC);
   let bad = false, maxH = 0, steps = 0, fadeMax = 0; const ext0 = {};
-  const idx = new Set(), K = {}, nSub = Math.round(0.05 / st.STEP), ball0 = st.TOUR.keys.find((q) => q.ball);
+  const deg0 = 180 / Math.PI, idx = new Set(), K = {}, nSub = Math.round(0.05 / st.STEP), ball0 = st.TOUR.keys.find((q) => q.ball);
   for (let k = 0; k < 8000 && st.TOUR.on; k++, steps++) {
     const key = st.TOUR.keys[st.TOUR.i];
     for (let q = 0; q < nSub; q++) st.physicsStep(st.STEP);           // urutan seperti worldStep
     st.stepTour(0.05); if (!st.TOUR.on) break;
-    st.updateCamera(); st.stepBirds(0.05); st.updateRain(0.05); st.updateFar(); st.updateClouds(0.05);
+    st.updateCamera();
+    st.updateReal();                                                   // posisi mata untuk burung (seperti worldStep)
+    st.stepBirds(0.05); st.updateRain(0.05); st.updateFar(); st.updateClouds(0.05);
     idx.add(st.TOUR.i);
     const P = st.player, ps = P.theta * st.R, hold = st.TOUR.t > (key.dur || 0);
     const r = K[key.title] || (K[key.title] = { rain: 0, wetMin: 1, ecl: 1, ext: false, cloud: 0, bird: 1e9, z0: st.MOTO.za, ground: false });
+    { const q = { s: ((ps % CIRC) + CIRC) % CIRC, za: P.za, h: P.h }; if (!st.ext.active && !(key.moto && !st.MOTO.on)) { if (!r.anyFirst) r.anyFirst = q; r.anyLast = q; } }
     r.hour = st.clock.hour; r.rain = Math.max(r.rain, st.RAIN.k); r.ecl = Math.min(r.ecl, st.ECL.k); r.ext = r.ext || st.ext.active; r.rainEnd = st.RAIN.k;
     if (hold) {
       r.wetMin = Math.min(r.wetMin, st.RAIN.wet);
@@ -62,6 +65,13 @@ UJI = r"""
         if (best) { const ds = wrap(best.s - ps), dz = best.za - P.za, bh = st.groundH(best.s, best.za) + best.h, hd = Math.atan2(ds, dz), pt = Math.atan2(bh - P.h - st.CONFIG.eye, Math.hypot(ds, dz));
           r.flock = Math.hypot(ds, dz, bh - P.h - st.CONFIG.eye); if (r.flock0 === undefined) r.flock0 = r.flock;
           r.aimErr = Math.hypot(wrap((P.heading - hd) * st.R) / st.R * Math.cos(pt), P.pitch - pt) * 180 / Math.PI; r.ptBird = pt; }
+      }
+      if (key.eclipse && st.TOUR.t > key.dur + 1.5) {                 // Matahari (arah SUN_DIR diputar -omega t, seperti updateLighting): tinggi di atas cakrawala dan meleset dari arah kamera
+        const a = st.OMEGA * st.clock.sim, sy0 = Math.sin(25 / deg0), sx = sy0 * Math.sin(a), sy = sy0 * Math.cos(a), sz = Math.cos(25 / deg0), th = P.theta;
+        const up = -(sx * Math.cos(th) + sy * Math.sin(th)), tg = -sx * Math.sin(th) + sy * Math.cos(th);
+        const hd = Math.atan2(tg, sz), el = Math.atan2(up, Math.hypot(tg, sz));
+        r.sunEl = Math.min(r.sunEl ?? 99, el * deg0);
+        r.sunAim = Math.max(r.sunAim || 0, Math.hypot(wrap((P.heading - hd) * st.R) / st.R * Math.cos(el), P.pitch - el) * deg0);
       }
       if (key.ball && ball0 && ball0.bb && ball0.bb.t > 0 && !ball0.bb.done) {   // kamera menghadap bola, jarak ke bola
         const b = ball0.bb.pos, eye = { x: 0, y: 0, z: 0 }, th = P.theta, rr = st.R - P.h - st.CONFIG.eye;
@@ -94,12 +104,12 @@ UJI = r"""
   out[`tur: jam mulai ${hour0.toFixed(2)}, akhir ${(get('Meninggalkan stasiun').hour || 0).toFixed(2)}`] = hour0 === 12 && Math.abs(get('Meninggalkan stasiun').hour - 7) < 0.05;
   out['tur: pembuka dan penutup di kamera luar'] = !!get('Menuju Copper Corn Station').ext && !!get('Meninggalkan stasiun').ext;
   const H = get('Hujan miring');
-  out[`tur: hujan di sungai (RAIN.k ${H.rain.toFixed(2)}, awan di atas kamera ${H.cloud.toFixed(2)} > 0,12), siang tanpa hujan (${get('Ukuran stasiun').rain.toFixed(2)})`] = H.rain > 0.5 && H.cloud > 0.12 && get('Ukuran stasiun').rain < 0.05;
+  out[`tur: hujan dekat rumah Cooper (RAIN.k ${H.rain.toFixed(2)}, awan di atas kamera ${H.cloud.toFixed(2)} > 0,12), siang tanpa hujan (${get('Ukuran stasiun').rain.toFixed(2)})`] = H.rain > 0.5 && H.cloud > 0.12 && get('Ukuran stasiun').rain < 0.05;
   const G = get('Genangan di jalan kota');
   out[`tur: genangan (basah min ${G.wetMin.toFixed(2)}, hujan akhir ${G.rainEnd.toFixed(2)}, awan di jalan ${G.cloud.toFixed(2)})`] = G.wetMin > 0.5 && G.rainEnd < 0.1 && G.cloud > 0.12;
   const B = get('Burung di bawah awan'), Bl = st.TOUR.keys.find((q) => q.track).land || {};
   out[`tur: kawanan burung: awal ${(B.flock0 ?? 1e9).toFixed(0)} m, akhir ${(B.flock ?? 1e9).toFixed(0)} m, kamera di tanah (mata ${B.last.eyeH.toFixed(2)} m + 1,7), menengadah ${(B.ptBird * deg).toFixed(0)} derajat, meleset ${B.aimErr.toFixed(1)} derajat`] =
-    (B.flock0 ?? 1e9) < 40 && Math.abs(B.last.eyeH) < 0.1 && B.ptBird > 20 / deg && B.aimErr < 15 && !st.colAt(Bl.s, Bl.za, 1) && !st.inWater(Bl.s, Bl.za, 1);
+    (B.flock0 ?? 1e9) < 40 && Math.abs(B.last.eyeH) < 0.1 && B.ptBird > 15 / deg && B.aimErr < 15 && !st.colAt(Bl.s, Bl.za, 1) && !st.inWater(Bl.s, Bl.za, 1);
   const Sk = get('Skyway: jendela ke angkasa'), skM = ((Sk.last.za % 50) + 50) % 50;
   out[`tur: Skyway za ${Sk.last.za.toFixed(1)}, ${Math.min(skM, 50 - skM).toFixed(1)} m dari balok jendela (>= 10)`] = Math.min(skM, 50 - skM) >= 10;
   const Dk = get('Dek pandang malam'), dkK = (st.R - st.DECK.h) / st.R, dkFloor = st.groundH(Dk.last.s, Dk.last.za) + st.DECK.h, dkRail = st.DECK.half - Math.abs(wrap(Dk.last.s - st.DECK.s)) * dkK;
@@ -111,9 +121,20 @@ UJI = r"""
     M.ground && M.ds > 800 && M.zaMin > 490 && M.zaMax < 500 && M.d0 === 'Galileo' && M.d1 === 'New York' && M.vMin > 20 && M.g1 < 0.5;
   const Bo = get('Lempar bola melawan putaran');
   out[L ? `tur: bola 80 m/s 10 derajat melawan putaran: jatuh ${Math.abs(L.arc).toFixed(0)} m keliling setelah ${L.time.toFixed(1)} s; kamera menghadap bola (meleset maks ${(Bo.ballAim || 99).toFixed(1)} derajat), jarak ${(Bo.ballD0 || 0).toFixed(0)} -> ${(Bo.ballD1 || 0).toFixed(0)} m, di bawah tanah ${Bo.under || 0} kali` : 'tur: bola dilempar'] =
-    !!L && Math.abs(L.arc) > 2500 && Math.abs(L.arc) < 3200 && L.time > 40 && L.time < 50 && ball.ball.v === 80 && ball.ball.e === 10 && Bo.ballAim < 10 && Bo.ballD0 < 20 && Bo.ballD1 > Bo.ballD0 && Bo.ballD1 < 90 && !Bo.under;
+    !!L && Math.abs(L.arc) > 2500 && Math.abs(L.arc) < 3200 && L.time > 40 && L.time < 50 && ball.ball.v === 80 && ball.ball.e === 10 && Bo.ballAim < 10 && Bo.ballD0 < 20 && Bo.ballD1 > 200 && Bo.ballD1 < 400 && !Bo.under;
+  const Sk0 = get('Skyway: jendela ke angkasa').anyFirst, Bo1 = Bo.anyLast, skJ = Math.hypot(wrap(Sk0.s - Bo1.s), Sk0.za - Bo1.za, Sk0.h - Bo1.h);
+  out[`tur: terbang ke Skyway mulai dari kamera pengejar bola (lompat ${skJ.toFixed(1)} m < 5)`] = skJ < 5;
+  let sg = 0, rev = []; const fl = [];
+  for (let i = 1; i < N; i++) {                                         // terbang panjang (tanpa layar gelap) tidak berbalik arah za
+    const A = st.TOUR.keys[i - 1], Q = st.TOUR.keys[i], ra = get(A.title), rq = get(Q.title);
+    if (A.ext !== undefined || Q.ext !== undefined || Q.cut || Q.from || !ra.anyLast || !rq.anyLast) { sg = 0; continue; }
+    const d = rq.anyLast.za - ra.anyLast.za; fl.push(d.toFixed(0)); if (Math.abs(d) < 1000) continue;
+    if (sg && Math.sign(d) !== sg) rev.push(`${A.title} -> ${Q.title}`); sg = Math.sign(d);
+  }
+  out[`tur: terbang tidak bolak-balik (dza ${fl.join(', ')}; berbalik ${rev.join('; ') || 'tidak ada'})`] = rev.length === 0;
   const Ec = get('Gerhana Saturnus');
   out[`tur: gerhana dari tepi ladang jagung setinggi mata (${Ec.last.eyeH.toFixed(2)})`] = Math.abs(Ec.last.eyeH) < 0.1 && st.fieldList.some((f) => f.corn && Math.abs(Ec.last.za - (f.z0 - 3)) < 0.5);
+  out[`tur: gerhana: Matahari min ${(Ec.sunEl ?? -99).toFixed(1)} derajat di atas cakrawala (> 10), meleset dari arah kamera maks ${(Ec.sunAim ?? 99).toFixed(1)} derajat (< 15)`] = Ec.sunEl > 10 && Ec.sunAim < 15;
   const Gw = get('Genangan di jalan kota'), gwD = Math.hypot(wrap(Gw.last.s - Gw.first.s), Gw.last.za - Gw.first.za);
   out[`tur: genangan sambil berjalan ${gwD.toFixed(0)} m setinggi mata`] = gwD >= 20 && Math.abs(Gw.last.eyeH) < 0.1;
   out[`tur: kamera luar tanpa adaptasi mata (${ext0.adapt}) dan bloom ${ext0.bloom}`] = ext0.adapt === false && Math.abs(ext0.bloom - 0.25) < 1e-9;
