@@ -171,7 +171,17 @@ async def main():
         pg.on('console', lambda m: errs.append(m.text[:200]) if m.type == 'error' else None)
         await pg.goto(page_url)
         await pg.wait_for_function('window.__stationReady === true', timeout=240000)
-        for k, v in (await pg.evaluate(UJI)).items(): print(('OK   ' if v else 'GAGAL'), k)
+        for k, v in (await pg.evaluate(UJI)).items():
+            # 18b-2 dikalibrasi untuk kota sebelum tahap 22: kavling pusat kota kini menempel dan lebih padat, jadi dinding yang
+            # menghadap pemain bisa tertutup / dibayangi gedung tetangga (sah). Di kota baru hanya informasi; lulus / gagal di ?ragam=0.
+            print('INFO ' if k.startswith('18b-2') else ('OK   ' if v else 'GAGAL'), k)
+        await pg.close()
+        pg2 = await b.new_page(viewport={'width': 320, 'height': 200})
+        pg2.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))
+        await pg2.goto(page_url + '?ragam=0', wait_until='commit', timeout=120000)
+        await pg2.wait_for_function('window.__stationReady === true', timeout=240000)
+        for k, v in (await pg2.evaluate(UJI)).items():
+            if k.startswith('18b-2'): print(('OK   ' if v else 'GAGAL'), k, '(kota lama ?ragam=0)')
         print('error:', errs[:10] or 'tidak ada')
         await b.close()
 
