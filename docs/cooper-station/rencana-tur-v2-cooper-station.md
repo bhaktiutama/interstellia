@@ -1,5 +1,20 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.3: masukan uji Bhakti (selesai, menunggu uji visual)
+
+Tetap tanpa mengubah fungsi lain.
+
+| Titik | Masukan | Penyebab | Perubahan | Hasil uji |
+| --- | --- | --- | --- | --- |
+| Pembuka luar | Pucat, terlalu berkabut | Adaptasi mata menaikkan eksposur karena layar luar hampir hitam (sampai 2,2x); bloom 0,5 menambah pendar seperti kabut. Sunrays, AO, kabut sudah mati di kamera luar | Selama titik kamera luar: adaptasi mata mati (seperti tombol panel Grafik) dan bloom 0,25; dikembalikan sesudahnya | Adaptasi mati dan bloom 0,25 di kamera luar, kembali normal setelah tur |
+| Lempar bola | 80 m/s, kamera di kanan belakang bola, ikut lalu makin tertinggal | Dulu 80 km/h | 80 m/s, 10 derajat, melawan putaran; kamera di jalur bola yang sama, 3 m ke kanan dan 1 m ke atas, selalu menghadap bola, jarak tertinggal tumbuh 5 m sampai 60 m saat bola menyentuh tanah | Bola melayang 46,5 s, jatuh 2.885 m keliling (sisi seberang silinder); kamera 4 m lalu 60 m dari bola, meleset 0,0 derajat |
+| Burung | Natural, tidak terlalu tinggi | Formasi V terbang 150-250 m | Ikut kawanan burung biasa (18-45 m di atas tanah di luar kota), lalu turun ke tanah | Mulai 24 m dari kawanan, berakhir 66 m, menengadah 26 derajat |
+| Gerhana | Dari ladang jagung setinggi pemain | Kamera dekat sumbu | Tepi ladang jagung dekat rumah Cooper, mata 1,7 m, menghadap end cap B, menengadah 18 derajat | Setinggi mata, cahaya Matahari turun ke 0 |
+| Genangan | Tertutup pohon | Kamera diam di trotoar | Berjalan 24 m di tepi dalam trotoar ke arah pusat kota, menoleh sedikit ke jalan | 24 m setinggi mata, basah 0,62, awan di jalan 0,27 |
+
+Durasi tur 294 s (titik bola sekitar 50 s karena bola melayang 46,5 s).
+
+
 ## Revisi v2.2: masukan uji Bhakti (selesai, menunggu uji visual)
 
 Tetap tanpa mengubah fungsi lain; hanya data dan alur titik tur.

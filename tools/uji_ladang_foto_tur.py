@@ -26,14 +26,14 @@ UJI = r"""
   out[`tangkapan PNG ${url.length} karakter`] = url.startsWith('data:image/png') && url.length > 5000;
   st.togglePhoto(false);
   out['keluar mode foto: FOV, blur, waktu kembali'] = st.camera.fov === st.CONFIG.fov && st.compMat.uniforms.uDof.value === 0 && st.clock.hourRate === rate0;
-  // C3: tur sinematik v2.2 (22 titik; tur hanya mengatur jam, awan, posisi kamera, motor dan lemparan lewat keadaan biasa)
+  // C3: tur sinematik v2.3 (22 titik; tur hanya mengatur jam, awan, posisi kamera, motor dan lemparan lewat keadaan biasa)
   const p0 = { th: st.player.theta, za: st.player.za };
-  const w0 = { hour: st.clock.hour, rate: st.clock.hourRate, orbit: st.clock.orbit, mode: st.WEATHER.mode, moto: st.MOTO.on };
+  const w0 = { hour: st.clock.hour, rate: st.clock.hourRate, orbit: st.clock.orbit, mode: st.WEATHER.mode, moto: st.MOTO.on, adapt: st.ADAPT.on, bloom: st.POST.bloom };
   st.startTour();
   const hour0 = st.clock.hour, N = st.TOUR.keys.length, CIRC = 2 * Math.PI * st.R;
   const wrap = (x) => x - CIRC * Math.round(x / CIRC);
-  let bad = false, maxH = 0, steps = 0, fadeMax = 0;
-  const idx = new Set(), K = {}, nSub = Math.round(0.05 / st.STEP);
+  let bad = false, maxH = 0, steps = 0, fadeMax = 0; const ext0 = {};
+  const idx = new Set(), K = {}, nSub = Math.round(0.05 / st.STEP), ball0 = st.TOUR.keys.find((q) => q.ball);
   for (let k = 0; k < 8000 && st.TOUR.on; k++, steps++) {
     const key = st.TOUR.keys[st.TOUR.i];
     for (let q = 0; q < nSub; q++) st.physicsStep(st.STEP);           // urutan seperti worldStep
@@ -52,10 +52,26 @@ UJI = r"""
       if (!r.first) r.first = pos;
       r.last = pos; r.hs0 = r.hs0 ?? (r.bird < 1e9 ? r.bird : undefined);
       if (key.ball) r.ballMove = Math.max(r.ballMove || 0, Math.hypot(wrap(pos.s - r.first.s), pos.za - r.first.za));
-      if (key.track) {                                                 // sudut antara arah kamera dan pemimpin formasi
-        const V = st.BIRDS.vees.find((v) => !v.dead);
-        if (V) { const ds = wrap(V.s - ps), dz = V.za - P.za, hd = Math.atan2(ds, dz), pt = Math.atan2(V.h - P.h - st.CONFIG.eye, Math.hypot(ds, dz));
+      if (key.track) {                                                 // kawanan terdekat: jarak dan sudut antara arah kamera dan pusat kawanan
+        let best = null, bd = 1e9;
+        for (const F of st.BIRDS.flocks) {
+          if (F.dead || !F.members) continue; const live = F.members.filter((q) => !q.gone); if (!live.length) continue;
+          const s0 = live[0].p[0]; let a = 0, z = 0, h = 0; for (const q of live) { a += s0 + wrap(q.p[0] - s0); z += q.p[1]; h += q.p[2]; }
+          const c = { s: a / live.length, za: z / live.length, h: h / live.length }, d = Math.hypot(wrap(c.s - ps), c.za - P.za); if (d < bd) { bd = d; best = c; }
+        }
+        if (best) { const ds = wrap(best.s - ps), dz = best.za - P.za, bh = st.groundH(best.s, best.za) + best.h, hd = Math.atan2(ds, dz), pt = Math.atan2(bh - P.h - st.CONFIG.eye, Math.hypot(ds, dz));
+          r.flock = Math.hypot(ds, dz, bh - P.h - st.CONFIG.eye); if (r.flock0 === undefined) r.flock0 = r.flock;
           r.aimErr = Math.hypot(wrap((P.heading - hd) * st.R) / st.R * Math.cos(pt), P.pitch - pt) * 180 / Math.PI; r.ptBird = pt; }
+      }
+      if (key.ball && ball0 && ball0.bb && ball0.bb.t > 0 && !ball0.bb.done) {   // kamera menghadap bola, jarak ke bola
+        const b = ball0.bb.pos, eye = { x: 0, y: 0, z: 0 }, th = P.theta, rr = st.R - P.h - st.CONFIG.eye;
+        const ex = rr * Math.cos(th), ey = rr * Math.sin(th), ez = P.za - st.R * 4;
+        const dx = b.x - ex, dy = b.y - ey, dzz = b.z - (P.za - 4000), up = [-Math.cos(th), -Math.sin(th)], tg = [-Math.sin(th), Math.cos(th)];
+        const dt = dx * tg[0] + dy * tg[1], du = dx * up[0] + dy * up[1], dist = Math.hypot(dx, dy, dzz);
+        const hd = Math.atan2(dt, dzz), pt = Math.atan2(du, Math.hypot(dt, dzz));
+        const err = Math.hypot(wrap((P.heading - hd) * st.R) / st.R * Math.cos(pt), P.pitch - pt) * 180 / Math.PI;
+        r.ballAim = Math.max(r.ballAim || 0, err); if (r.ballD0 === undefined) r.ballD0 = dist; r.ballD1 = dist;
+        r.under = (r.under || 0) + (P.h < st.groundH(ps, P.za) - 0.01 ? 1 : 0);
       }
     }
     if (key.moto && st.MOTO.on) {
@@ -65,13 +81,14 @@ UJI = r"""
       r.d1 = (st.districtAt(st.MOTO.s, st.MOTO.za) || {}).name; r.g1 = st.MOTO.gFelt;
       r.v1 = st.MOTO.v; r.vMin = Math.min(r.vMin ?? 1e9, st.MOTO.v); r.ground = r.ground || P.state === 'ground';
     }
+    if (st.ext.active && !ext0.seen) Object.assign(ext0, { seen: true, adapt: st.ADAPT.on, bloom: st.POST.bloom });
     fadeMax = Math.max(fadeMax, +document.getElementById('tourFade').style.opacity || 0);
     if (!isFinite(P.theta + P.za + P.h + P.heading + P.pitch + st.clock.hour + st.camera.position.length())) bad = true;
     if (!st.ext.active) maxH = Math.max(maxH, P.h);
   }
   const T = steps * 0.05, get = (n) => K[n] || {}, eye = st.TOUR.keys.filter((q) => q.h === 0).length;
   const ball = st.TOUR.keys.find((q) => q.ball), L = ball && ball.landing, deg = 180 / Math.PI;
-  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 200-270 s), tanpa NaN`] = !bad && idx.size === N && N === 22 && T > 200 && T < 270;
+  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 260-320 s), tanpa NaN`] = !bad && idx.size === N && N === 22 && T > 260 && T < 320;
   out[`tur: ${eye} titik setinggi mata (>= 9)`] = eye >= 9;
   out[`tur: tinggi maksimum ${maxH.toFixed(0)} m (tidak melewati sumbu)`] = maxH < st.R - 30;
   out[`tur: jam mulai ${hour0.toFixed(2)}, akhir ${(get('Meninggalkan stasiun').hour || 0).toFixed(2)}`] = hour0 === 12 && Math.abs(get('Meninggalkan stasiun').hour - 7) < 0.05;
@@ -81,8 +98,8 @@ UJI = r"""
   const G = get('Genangan di jalan kota');
   out[`tur: genangan (basah min ${G.wetMin.toFixed(2)}, hujan akhir ${G.rainEnd.toFixed(2)}, awan di jalan ${G.cloud.toFixed(2)})`] = G.wetMin > 0.5 && G.rainEnd < 0.1 && G.cloud > 0.12;
   const B = get('Burung di bawah awan'), Bl = st.TOUR.keys.find((q) => q.track).land || {};
-  out[`tur: burung: awal ${(B.hs0 ?? 1e9).toFixed(0)} m dari formasi, akhir di tanah (mata ${B.last.eyeH.toFixed(2)} m + 1,7), menengadah ${(B.ptBird * deg).toFixed(0)} derajat, meleset ${B.aimErr.toFixed(1)} derajat`] =
-    (B.hs0 ?? 1e9) < 60 && Math.abs(B.last.eyeH) < 0.1 && B.ptBird > 20 / deg && B.aimErr < 15 && !st.colAt(Bl.s, Bl.za, 1) && !st.inWater(Bl.s, Bl.za, 1);
+  out[`tur: kawanan burung: awal ${(B.flock0 ?? 1e9).toFixed(0)} m, akhir ${(B.flock ?? 1e9).toFixed(0)} m, kamera di tanah (mata ${B.last.eyeH.toFixed(2)} m + 1,7), menengadah ${(B.ptBird * deg).toFixed(0)} derajat, meleset ${B.aimErr.toFixed(1)} derajat`] =
+    (B.flock0 ?? 1e9) < 40 && Math.abs(B.last.eyeH) < 0.1 && B.ptBird > 20 / deg && B.aimErr < 15 && !st.colAt(Bl.s, Bl.za, 1) && !st.inWater(Bl.s, Bl.za, 1);
   const Sk = get('Skyway: jendela ke angkasa'), skM = ((Sk.last.za % 50) + 50) % 50;
   out[`tur: Skyway za ${Sk.last.za.toFixed(1)}, ${Math.min(skM, 50 - skM).toFixed(1)} m dari balok jendela (>= 10)`] = Math.min(skM, 50 - skM) >= 10;
   const Dk = get('Dek pandang malam'), dkK = (st.R - st.DECK.h) / st.R, dkFloor = st.groundH(Dk.last.s, Dk.last.za) + st.DECK.h, dkRail = st.DECK.half - Math.abs(wrap(Dk.last.s - st.DECK.s)) * dkK;
@@ -93,12 +110,17 @@ UJI = r"""
   out[`tur: motor jalan lingkar za ${M.zaMin.toFixed(1)}-${M.zaMax.toFixed(1)} (rute bus merah 500), ${M.ds.toFixed(0)} m keliling ${M.d0} -> ${M.d1}, ${(M.vMin * 3.6).toFixed(0)}-${(M.v1 * 3.6).toFixed(0)} km/h, terasa ${M.g1.toFixed(2)} g`] =
     M.ground && M.ds > 800 && M.zaMin > 490 && M.zaMax < 500 && M.d0 === 'Galileo' && M.d1 === 'New York' && M.vMin > 20 && M.g1 < 0.5;
   const Bo = get('Lempar bola melawan putaran');
-  out[L ? `tur: bola 80 km/h 10 derajat melawan putaran: ${Math.abs(L.arc).toFixed(1)} m / ${L.time.toFixed(2)} s, kamera ikut ${(Bo.ballMove || 0).toFixed(0)} m` : 'tur: bola dilempar'] =
-    !!L && L.arc < -25 && L.arc > -45 && L.time > 1.2 && L.time < 1.9 && Bo.ballMove >= 20 && Math.abs(ball.ball.v * 3.6 - 80) < 1e-9 && ball.ball.e === 10;
+  out[L ? `tur: bola 80 m/s 10 derajat melawan putaran: jatuh ${Math.abs(L.arc).toFixed(0)} m keliling setelah ${L.time.toFixed(1)} s; kamera menghadap bola (meleset maks ${(Bo.ballAim || 99).toFixed(1)} derajat), jarak ${(Bo.ballD0 || 0).toFixed(0)} -> ${(Bo.ballD1 || 0).toFixed(0)} m, di bawah tanah ${Bo.under || 0} kali` : 'tur: bola dilempar'] =
+    !!L && Math.abs(L.arc) > 2500 && Math.abs(L.arc) < 3200 && L.time > 40 && L.time < 50 && ball.ball.v === 80 && ball.ball.e === 10 && Bo.ballAim < 10 && Bo.ballD0 < 20 && Bo.ballD1 > Bo.ballD0 && Bo.ballD1 < 90 && !Bo.under;
+  const Ec = get('Gerhana Saturnus');
+  out[`tur: gerhana dari tepi ladang jagung setinggi mata (${Ec.last.eyeH.toFixed(2)})`] = Math.abs(Ec.last.eyeH) < 0.1 && st.fieldList.some((f) => f.corn && Math.abs(Ec.last.za - (f.z0 - 3)) < 0.5);
+  const Gw = get('Genangan di jalan kota'), gwD = Math.hypot(wrap(Gw.last.s - Gw.first.s), Gw.last.za - Gw.first.za);
+  out[`tur: genangan sambil berjalan ${gwD.toFixed(0)} m setinggi mata`] = gwD >= 20 && Math.abs(Gw.last.eyeH) < 0.1;
+  out[`tur: kamera luar tanpa adaptasi mata (${ext0.adapt}) dan bloom ${ext0.bloom}`] = ext0.adapt === false && Math.abs(ext0.bloom - 0.25) < 1e-9;
   out[`tur: gerhana dari dalam (ECL.k min ${get('Gerhana Saturnus').ecl.toFixed(2)})`] = get('Gerhana Saturnus').ecl < 0.2 && !get('Gerhana Saturnus').ext;
   out[`tur: layar gelap saat pindah kamera (maks ${fadeMax.toFixed(2)})`] = fadeMax > 0.9;
   out['tur selesai: kembali ke posisi awal, berjalan'] = !st.TOUR.on && st.player.state === 'ground' && Math.abs(st.player.za - p0.za) < 0.01 && Math.abs(st.player.theta - p0.th) < 1e-6 && !st.ext.active;
-  out['tur selesai: jam, laju jam, orbit, cuaca, motor dikembalikan'] = st.clock.hour === w0.hour && st.clock.hourRate === w0.rate && st.clock.orbit === w0.orbit && st.WEATHER.mode === w0.mode && st.MOTO.on === w0.moto && document.getElementById('tourFade').style.opacity === '0';
+  out['tur selesai: jam, laju jam, orbit, cuaca, motor dikembalikan'] = st.clock.hour === w0.hour && st.clock.hourRate === w0.rate && st.clock.orbit === w0.orbit && st.WEATHER.mode === w0.mode && st.MOTO.on === w0.moto && st.ADAPT.on === w0.adapt && st.POST.bloom === w0.bloom && document.getElementById('tourFade').style.opacity === '0';
   return out;
 })()
 """
