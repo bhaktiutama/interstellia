@@ -1,5 +1,25 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Status: T1-T10 selesai, menunggu uji visual Bhakti
+
+| Hasil | Nilai |
+| --- | --- |
+| Titik | 18 (10 lama + 6 baru + pembuka + penutup) |
+| Durasi di uji | 228 s (sekitar 3 menit 48 detik) |
+| Jam | 12:00 sampai 07:00 |
+| Hujan di titik sungai | `RAIN.k` 0,99 |
+| Genangan di trem malam | `RAIN.wet` minimal 0,83 |
+| Gerhana | `ECL.k` turun ke 0,00 |
+| Uji tur, uji bahasa | Lulus, tanpa error |
+
+Perbedaan dari draf di bawah:
+
+- Teks menara: draf "gravitasi 4% lebih ringan" salah. Gravitasi di puncak = (R - tinggi) / R, untuk menara sekitar 221 m sekitar 0,78 g (sekitar 22% lebih ringan). Teks kini menghitung angka dari `LANDMARK.h`; tinggi dek dari `DECK.h`; lama gerhana dan orbit dari `ECL.half` dan `T_ORB`.
+- Penutup: tidak naik ke sumbu dulu. Dari danau langsung layar gelap, lalu kamera luar menjauh dari stasiun.
+- Titik trem malam: posisi kamera dihitung saat titik dimulai, 140 m di depan trem searah jalannya, supaya trem datang ke arah kamera (bila trem sedang di luar kota, posisi dijepit ke kota dan trem bisa tidak terlihat).
+- Uji `mesin ladang dekat pemain` (bagian 12d) sudah gagal sebelum perubahan ini (dicek di commit sebelumnya), tidak terkait tur.
+- `tools/qc_load.py` tidak dijalankan (tidak bisa memakai Chromium sandbox); error halaman diperiksa lewat uji tur dan uji bahasa, ditambah uji asap semua 18 titik di loop render sungguhan.
+
 ## Konteks
 
 Tur Y (`TOUR`, `tourKeys()`, `stepTour()` di `experiences/cooper-station/index.html` sekitar baris 15004-15107) sekarang punya 10 titik dengan teks panjang, jam tetap (malam dipindah ke 09:30), cuaca tidak diatur, dan mulai di dalam stasiun. Bhakti minta:
