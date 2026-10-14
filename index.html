@@ -94,8 +94,9 @@
   .card.tr { left: auto; right: 18px; top: 18px; bottom: auto; }
   .imgbox { position: relative; }
   /* foto bergeser di dalam bingkai saat digulir; diperbesar agar tepi tidak terlihat (lihat para()) */
-  .layer { position: relative; will-change: translate; }
-  .layer.par { scale: 1.16; }
+  /* jendela foto: tinggi = WIN x tinggi gambar, lebar penuh; gambar bergeser di dalamnya (paralaks, lihat para()) */
+  .win { position: relative; overflow: hidden; aspect-ratio: var(--ar); }
+  .layer { position: absolute; left: 0; top: 0; width: 100%; translate: 0 -10%; will-change: translate; }
   .card.fade { animation: cardIn .45s ease; }
   @keyframes cardIn { from { opacity: 0; transform: translateY(8px); } }
 
@@ -419,7 +420,7 @@
   // Penanda di foto: x, y dalam piksel gambar asli; l = label di kiri penanda. [judul ID, teks ID], en: [judul EN, teks EN]
   const SPOTS = {
     c: { w: 1202, h: 835, list: [
-      { x: 390, y: 120, id: ['Kota di dinding dalam', 'Gedung menempel di sisi dalam silinder. Kepala semua orang menghadap sumbu, jadi kota di seberang tampak menggantung di atasmu.'],
+      { x: 390, y: 145, id: ['Kota di dinding dalam', 'Gedung menempel di sisi dalam silinder. Kepala semua orang menghadap sumbu, jadi kota di seberang tampak menggantung di atasmu.'],
         en: ['City on the inside wall', 'Buildings stand on the inside of the cylinder. Everyone\'s head points at the axis, so the city across hangs above you.'] },
       { x: 610, y: 410, id: ['End cap, 8 km jauhnya', 'Ujung silinder di kejauhan. Sinar Matahari masuk lewat end cap B dengan sudut 25 derajat; tiap orbit ada gerhana Saturnus 2,78 jam.'],
         en: ['End cap, 8 km away', 'The far end of the cylinder. Sunlight enters through end cap B at 25 degrees; every orbit brings a 2.78 h Saturn eclipse.'] },
@@ -431,18 +432,18 @@
         en: ['River and ring roads', 'Arterial roads circle the cylinder every 241.7 m. Trams, cars and bikes run on them, and rain falls slanted from Coriolis.'] },
       { x: 1010, y: 520, l: 1, id: ['Permukiman', '14 distrik kota, dari menara megacity sampai desa, lengkap dengan pejalan kaki, burung, dan kafe trotoar.'],
         en: ['Neighbourhoods', '14 city districts, from megacity towers to villages, with pedestrians, birds and sidewalk cafes.'] },
-      { x: 610, y: 700, id: ['"Bawah" = menjauhi sumbu', 'Putaran 63,4 s menekan semua benda ke dinding dengan 1 g. Panah menunjuk arah "bawah": selalu menjauhi sumbu, ke segala arah.'],
+      { x: 610, y: 680, id: ['"Bawah" = menjauhi sumbu', 'Putaran 63,4 s menekan semua benda ke dinding dengan 1 g. Panah menunjuk arah "bawah": selalu menjauhi sumbu, ke segala arah.'],
         en: ['"Down" = away from the axis', 'The 63.4 s spin presses everything to the wall at 1 g. The arrows show "down": always away from the axis, in every direction.'] } ] },
     g: { w: 1164, h: 893, list: [
       { x: 478, y: 466, id: ['GX-01', 'Wahana yang kamu terbangkan. Kamera luar mengitarinya; tekan V untuk masuk kokpit dengan 3 layar.'],
         en: ['GX-01', 'The craft you fly. The outside camera orbits it; press V for the cockpit with 3 screens.'] },
       { x: 200, y: 250, id: ['Bayangan dan horizon', 'Daerah gelap tempat cahaya tidak bisa keluar. Melewati horizon, sinyal wahana tidak pernah sampai ke relai di 22 rs.'],
         en: ['Shadow and horizon', 'The dark region light cannot leave. Past the horizon, the craft signal never reaches the relay at 22 rs.'] },
-      { x: 330, y: 135, id: ['Cahaya dibelokkan', 'Piringan di belakang lubang hitam tampak melengkung di atas bayangan, karena cahayanya dibelokkan gravitasi.'],
+      { x: 330, y: 155, id: ['Cahaya dibelokkan', 'Piringan di belakang lubang hitam tampak melengkung di atas bayangan, karena cahayanya dibelokkan gravitasi.'],
         en: ['Bent light', 'The disk behind the black hole appears to arch over the shadow, because gravity bends its light.'] },
       { x: 930, y: 300, l: 1, id: ['Piringan akresi', 'Gas panas berputar mengelilingi lubang hitam. Di ISCO, gas melesat 0,8 c relatif terhadap wahana yang menyusur.'],
         en: ['Accretion disk', 'Hot gas orbiting the black hole. At the ISCO it rushes past at 0.8 c relative to a skimming craft.'] },
-      { x: 600, y: 146, id: ['Garis bara', 'Partikel panas melesat melewati wahana dan menabrak kaca kokpit saat menyusur piringan.'],
+      { x: 600, y: 160, id: ['Garis bara', 'Partikel panas melesat melewati wahana dan menabrak kaca kokpit saat menyusur piringan.'],
         en: ['Ember streaks', 'Hot particles streak past the craft and hit the cockpit glass while skimming the disk.'] },
       { x: 210, y: 610, id: ['Citra bawah piringan', 'Sisi bawah piringan ikut terlihat, dibelokkan melingkari bagian bawah bayangan.'],
         en: ['Underside image', 'The underside of the disk shows too, bent around the bottom of the shadow.'] } ] },
@@ -453,7 +454,7 @@
         en: ['Giant wave', 'A 1.2 km wall of water moving at 125 m/s. Backwash drags at your feet as it nears, and the rumble grows.'] },
       { x: 1180, y: 560, l: 1, id: ['KS-07', 'Shuttle satu kursi mendarat di laut dangkal. Naik lewat tangga dengan E, lalu terbang lolos sebelum gelombang tiba.'],
         en: ['KS-07', 'A one-seat shuttle landed in the shallows. Climb the ladder with E, then fly clear before the wave hits.'] },
-      { x: 700, y: 800, id: ['Laut dangkal', 'Ombak FFT dengan buih dan kaustik, tanpa daratan sama sekali. Cari 3 pecahan dengan radar (M).'],
+      { x: 700, y: 770, id: ['Laut dangkal', 'Ombak FFT dengan buih dan kaustik, tanpa daratan sama sekali. Cari 3 pecahan dengan radar (M).'],
         en: ['Shallow ocean', 'FFT waves with foam and caustics, no land anywhere. Find 3 wreck pieces with the radar (M).'] },
       { x: 1340, y: 280, l: 1, id: ['Visor helm', 'Kamu melihat lewat helm astronaut: tetes air, embun napas, dan bingkai visor ikut terlihat.'],
         en: ['Helmet visor', 'You look through an astronaut helmet: water drops, breath fog and the visor frame are all visible.'] } ] },
@@ -526,14 +527,21 @@
   const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---- penanda foto: hover / klik memilih; berganti sendiri tiap 5 s sampai pengguna menyentuh ----
-  const PH = {};
+  // jendela foto = WIN x tinggi gambar (80% desktop; 90% ponsel karena foto pendek dan penanda relatif besar)
+  const PH = {}, WINS = [];
+  let WIN = 0.8;
+  function winSet() {
+    WIN = innerWidth <= 860 ? 0.9 : 0.8;
+    for (const w of WINS) w.el.style.setProperty('--ar', (w.w / (w.h * WIN)).toFixed(4));
+  }
   for (const p of document.querySelectorAll('.photo[data-p]')) {
     const key = p.dataset.p, S = SPOTS[key];
     PH[key] = { el: p, sel: 0, user: false, vis: false };
     const box = p.querySelector('.imgbox');
     // lapisan foto: gambar + garis anotasi + penanda bergerak bersama di dalam bingkai (paralaks)
-    const lay = document.createElement('div'); lay.className = 'layer';
-    box.insertBefore(lay, box.querySelector('img')); lay.append(...box.querySelectorAll(':scope > img, :scope > svg.ov'));
+    const win = document.createElement('div'), lay = document.createElement('div'); win.className = 'win'; lay.className = 'layer';
+    WINS.push({ el: win, w: S.w, h: S.h });
+    box.insertBefore(win, box.querySelector('img')); win.appendChild(lay); lay.append(...box.querySelectorAll(':scope > img, :scope > svg.ov'));
     S.list.forEach((s, i) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'spot' + (s.l ? ' l' : '');
       b.style.left = (s.x / S.w * 100) + '%'; b.style.top = (s.y / S.h * 100) + '%'; b.style.setProperty('--d', (0.5 + i * 0.12) + 's');
@@ -543,6 +551,7 @@
       lay.appendChild(b);
     });
   }
+  winSet(); addEventListener('resize', winSet);
   function selSpot(key, i) {
     const P = PH[key], s = SPOTS[key].list[i], tx = LANG === 'en' ? s.en : s.id;
     P.sel = i;
@@ -732,15 +741,14 @@
       X.bg.style.translate = `0 ${(c * -0.12).toFixed(1)}px`;
       if (X.ghost) X.ghost.style.translate = `${(X.dir * c * 0.35).toFixed(1)}px ${(c * -0.1).toFixed(1)}px`;
       if (X.no) X.no.style.translate = `0 ${(c * -0.06).toFixed(1)}px`;
-      if (X.layer) {                                                  // dihitung dari foto sendiri: k -1..1 selama foto terlihat
+      if (X.layer) {                                                  // k = +1 pusat foto di tepi bawah layar, -1 di tepi atas
         const b = X.layer.parentElement.getBoundingClientRect();
-        const k = Math.max(-1, Math.min(1, (b.top + b.height / 2 - vh / 2) / ((vh + b.height) / 2)));
-        X.layer.style.translate = `0 ${(k * -6).toFixed(2)}%`;        // -6% .. +6% tinggi foto (ruang dari scale 1,16)
+        const k = Math.max(-1, Math.min(1, (b.top + b.height / 2 - vh / 2) / (vh / 2)));
+        X.layer.style.translate = `0 ${(-(1 - WIN) * 50 * (1 + k)).toFixed(2)}%`;   // 0 .. -(1 - WIN) tinggi gambar: gambar turun lebih lambat dari gulir
       }
     }
   }
   {
-    for (const X of XP) if (X.layer) X.layer.classList.add('par');
     const req = () => { if (!pend) { pend = true; requestAnimationFrame(para); } };
     addEventListener('scroll', req, { passive: true }); addEventListener('resize', req); para();
   }
