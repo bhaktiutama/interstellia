@@ -148,6 +148,7 @@
 <script src="assets/gx01.data.js"></script>
 <script src="../../shared/post.js"></script>
 <script src="../../shared/camera.js"></script>
+<script src="../../shared/music.js"></script>
 <script src="../../shared/vr.js"></script>
 
 <script>
@@ -990,6 +991,7 @@ const ID = {
   'Sound (U)': 'Suara (U)',
   'Music': 'Musik',
   'Music: {f}': 'Musik: {f}',
+  'Theme song': 'Lagu tema',
   'Music: none': 'Musik: belum ada',
   'Music: playing': 'Musik: diputar',
   'Music: paused': 'Musik: dijeda',
@@ -2829,6 +2831,7 @@ function main() {
     N.tidal = gain(); N.tidalO = osc('sine', 40); N.tidalO.connect(N.tidal);
     // tesseract (fiksi): akord harmonis berputar pelan
     N.tess = gain(); N.tessO = [110, 165, 220, 275, 330].map((f, i) => { const o = osc('sine', f), g = c.createGain(); g.gain.value = 0.22 / (1 + i * 0.4); o.connect(g); g.connect(N.tess); return o; });
+    themeInit();                                                    // lagu tema bersama (shared/music.js)
   }
   function setSound(on = !AUDIO.on) {
     AUDIO.on = on; try { localStorage.setItem('gargantua.sound', on ? '1' : '0'); } catch (e) { /* abaikan */ }
@@ -2866,13 +2869,26 @@ function main() {
   const sfxFlare = () => { sfxNoise(0.9, 0.3, 'bandpass', 400, 3000, 2); sfxTone(300, 0.6, 0.06, 'sine', 900); };
   const sfxShatter = () => { sfxNoise(1.4, 0.6, 'highpass', 1800, 600); for (let i = 0; i < 6; i++) setTimeout(() => sfxTone(1800 + 2500 * Math.random(), 0.25, 0.05, 'triangle', 600), i * 70); };
   // Musik dari file milik pengguna (seperti loadMusicFile() Copper): <audio> berulang lewat master, J putar / jeda, tidak disimpan antarsesi
-  const MUSIC = { el: null, node: null, gain: null, name: '', on: false, vol: 0.6 };
+  // Lagu tema: dua mp3 bersama (shared/music.js) acak bergiliran, diputar otomatis saat audio dibuat; J putar / jeda
+  // (diingat localStorage gargantua.music), file sendiri menggantikannya sampai halaman dimuat ulang
+  const MUSIC = { el: null, node: null, gain: null, name: '', on: false, vol: 0.6, theme: false };
   try { const v = parseFloat(localStorage.getItem('gargantua.musicVol')); if (isFinite(v)) MUSIC.vol = Math.min(1, Math.max(0, v)); } catch (e) { /* abaikan */ }
+  function themeInit() {
+    if (MUSIC.el || !AUDIO.ctx || !window.SONGKIT) return;
+    const c = AUDIO.ctx;
+    if (!MUSIC.gain) { MUSIC.gain = c.createGain(); MUSIC.gain.gain.value = MUSIC.vol; MUSIC.gain.connect(AUDIO.n.master); }
+    const el = SONGKIT.element('../../shared/musik/');
+    MUSIC.node = c.createMediaElementSource(el); MUSIC.node.connect(MUSIC.gain);
+    MUSIC.el = el; MUSIC.theme = true; MUSIC.name = txt('Theme song');
+    let on = true; try { on = localStorage.getItem('gargantua.music') !== '0'; } catch (e) { /* abaikan */ }
+    MUSIC.on = on; if (on) SONGKIT.play();
+    syncUI();
+  }
   function loadMusicFile(file) {
     if (!AUDIO.on) setSound(true); else audioInit();
     const c = AUDIO.ctx; if (!c) return;
     if (c.state === 'suspended') c.resume();
-    if (MUSIC.el) { MUSIC.el.pause(); MUSIC.node.disconnect(); URL.revokeObjectURL(MUSIC.el.src); }
+    if (MUSIC.el) { if (MUSIC.theme) SONGKIT.pause(); else { MUSIC.el.pause(); URL.revokeObjectURL(MUSIC.el.src); } MUSIC.node.disconnect(); MUSIC.theme = false; }
     if (!MUSIC.gain) { MUSIC.gain = c.createGain(); MUSIC.gain.gain.value = MUSIC.vol; MUSIC.gain.connect(AUDIO.n.master); }
     const el = new Audio(URL.createObjectURL(file)); el.loop = true;
     MUSIC.node = c.createMediaElementSource(el); MUSIC.node.connect(MUSIC.gain);
@@ -2881,7 +2897,9 @@ function main() {
   }
   function setMusic(on = !MUSIC.on) {
     if (!MUSIC.el) { toast(txt('No music file yet: choose one in the panel (`), Sound tab'), 2.5); return; }
-    MUSIC.on = on; if (on) MUSIC.el.play().catch(() => {}); else MUSIC.el.pause();
+    MUSIC.on = on;
+    if (MUSIC.theme) { if (on) SONGKIT.play(); else SONGKIT.pause(); try { localStorage.setItem('gargantua.music', on ? '1' : '0'); } catch (e) { /* abaikan */ } }
+    else if (on) MUSIC.el.play().catch(() => {}); else MUSIC.el.pause();
     syncUI(); toast(txt(on ? 'Music: playing (J)' : 'Music: paused (J)'), 1.5);
   }
   function setMusicVol(v) {
