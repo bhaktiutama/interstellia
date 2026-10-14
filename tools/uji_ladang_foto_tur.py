@@ -26,14 +26,14 @@ UJI = r"""
   out[`tangkapan PNG ${url.length} karakter`] = url.startsWith('data:image/png') && url.length > 5000;
   st.togglePhoto(false);
   out['keluar mode foto: FOV, blur, waktu kembali'] = st.camera.fov === st.CONFIG.fov && st.compMat.uniforms.uDof.value === 0 && st.clock.hourRate === rate0;
-  // C3: tur sinematik v2.4 (22 titik; tur hanya mengatur jam, awan, posisi kamera, motor dan lemparan lewat keadaan biasa)
+  // C3: tur sinematik v2.5 (22 titik; tur hanya mengatur jam, awan, posisi kamera, motor dan lemparan lewat keadaan biasa)
   const p0 = { th: st.player.theta, za: st.player.za };
-  const w0 = { hour: st.clock.hour, rate: st.clock.hourRate, orbit: st.clock.orbit, mode: st.WEATHER.mode, moto: st.MOTO.on, adapt: st.ADAPT.on, bloom: st.POST.bloom };
+  const w0 = { hour: st.clock.hour, rate: st.clock.hourRate, orbit: st.clock.orbit, mode: st.WEATHER.mode, moto: st.MOTO.on, adapt: st.ADAPT.on, bloom: st.POST.bloom, rays: st.RAYS.on };
   st.startTour();
   const hour0 = st.clock.hour, N = st.TOUR.keys.length, CIRC = 2 * Math.PI * st.R;
   const wrap = (x) => x - CIRC * Math.round(x / CIRC);
   let bad = false, maxH = 0, steps = 0, fadeMax = 0; const ext0 = {};
-  const deg0 = 180 / Math.PI, idx = new Set(), K = {}, nSub = Math.round(0.05 / st.STEP), ball0 = st.TOUR.keys.find((q) => q.ball);
+  const deg0 = 180 / Math.PI, glance = { y: 0, p: 0, n: 0 }, idx = new Set(), K = {}, nSub = Math.round(0.05 / st.STEP), ball0 = st.TOUR.keys.find((q) => q.ball);
   for (let k = 0; k < 8000 && st.TOUR.on; k++, steps++) {
     const key = st.TOUR.keys[st.TOUR.i];
     for (let q = 0; q < nSub; q++) st.physicsStep(st.STEP);           // urutan seperti worldStep
@@ -46,6 +46,12 @@ UJI = r"""
     const r = K[key.title] || (K[key.title] = { rain: 0, wetMin: 1, ecl: 1, ext: false, cloud: 0, bird: 1e9, z0: st.MOTO.za, ground: false });
     { const q = { s: ((ps % CIRC) + CIRC) % CIRC, za: P.za, h: P.h }; if (!st.ext.active && !(key.moto && !st.MOTO.on)) { if (!r.anyFirst) r.anyFirst = q; r.anyLast = q; } }
     r.hour = st.clock.hour; r.rain = Math.max(r.rain, st.RAIN.k); r.ecl = Math.min(r.ecl, st.ECL.k); r.ext = r.ext || st.ext.active; r.rainEnd = st.RAIN.k;
+    if (key.ext === 'in') r.camZ = st.camera.position.z;              // pembuka: posisi kamera luar terakhir (sudah menembus kaca end cap A?)
+    r.rays = r.rays || st.RAYS.on;
+    if (hold && key.B && !key.track && !key.ball && !key.eclipse && !key.path && !key.moto) {   // melihat sekitar: simpangan dari arah titik
+      const dy = Math.abs(wrap((P.heading - key.B.hd) * st.R) / st.R) * deg0, dp = Math.abs(P.pitch - key.B.pt) * deg0;
+      glance.y = Math.max(glance.y, dy); glance.p = Math.max(glance.p, dp); glance.n++;
+    }
     if (hold) {
       r.wetMin = Math.min(r.wetMin, st.RAIN.wet);
       const look = key.hd === 180 ? -25 : 25;
@@ -89,7 +95,7 @@ UJI = r"""
       r.ds += wrap(r.sPrev - st.MOTO.s); r.sPrev = st.MOTO.s;          // jarak keliling ke arah s berkurang (melawan putaran)
       r.zaMin = Math.min(r.zaMin, st.MOTO.za); r.zaMax = Math.max(r.zaMax, st.MOTO.za);
       r.d1 = (st.districtAt(st.MOTO.s, st.MOTO.za) || {}).name; r.g1 = st.MOTO.gFelt;
-      r.v1 = st.MOTO.v; r.vMin = Math.min(r.vMin ?? 1e9, st.MOTO.v); r.ground = r.ground || P.state === 'ground';
+      r.v1 = st.MOTO.v; r.vMax = Math.max(r.vMax || 0, st.MOTO.v); r.gMin = Math.min(r.gMin ?? 9, st.MOTO.gFelt); r.ground = r.ground || P.state === 'ground';
     }
     if (st.ext.active && !ext0.seen) Object.assign(ext0, { seen: true, adapt: st.ADAPT.on, bloom: st.POST.bloom });
     fadeMax = Math.max(fadeMax, +document.getElementById('tourFade').style.opacity || 0);
@@ -104,9 +110,9 @@ UJI = r"""
   out[`tur: jam mulai ${hour0.toFixed(2)}, akhir ${(get('Meninggalkan stasiun').hour || 0).toFixed(2)}`] = hour0 === 12 && Math.abs(get('Meninggalkan stasiun').hour - 7) < 0.05;
   out['tur: pembuka dan penutup di kamera luar'] = !!get('Menuju Copper Corn Station').ext && !!get('Meninggalkan stasiun').ext;
   const H = get('Hujan miring');
-  out[`tur: hujan dekat rumah Cooper (RAIN.k ${H.rain.toFixed(2)}, awan di atas kamera ${H.cloud.toFixed(2)} > 0,12), siang tanpa hujan (${get('Ukuran stasiun').rain.toFixed(2)})`] = H.rain > 0.5 && H.cloud > 0.12 && get('Ukuran stasiun').rain < 0.05;
+  out[`tur: hujan di jalan lingkar kota (RAIN.k ${H.rain.toFixed(2)}, awan di atas kamera ${H.cloud.toFixed(2)} > 0,12), siang tanpa hujan (${get('Ukuran stasiun').rain.toFixed(2)})`] = H.rain > 0.5 && H.cloud > 0.12 && get('Ukuran stasiun').rain < 0.05;
   const G = get('Genangan di jalan kota');
-  out[`tur: genangan (basah min ${G.wetMin.toFixed(2)}, hujan akhir ${G.rainEnd.toFixed(2)}, awan di jalan ${G.cloud.toFixed(2)})`] = G.wetMin > 0.5 && G.rainEnd < 0.1 && G.cloud > 0.12;
+  out[`tur: genangan (basah min ${G.wetMin.toFixed(2)}, hujan akhir ${G.rainEnd.toFixed(2)}, awan di jalan ${G.cloud.toFixed(2)})`] = G.wetMin > 0.6 && G.rainEnd < 0.1;   // v2.5: lokasi = tempat turun dari motor (awan tidak dipilih), jadi jalan dibuat lebih basah
   const B = get('Burung di bawah awan'), Bl = st.TOUR.keys.find((q) => q.track).land || {};
   out[`tur: kawanan burung: awal ${(B.flock0 ?? 1e9).toFixed(0)} m, akhir ${(B.flock ?? 1e9).toFixed(0)} m, kamera di tanah (mata ${B.last.eyeH.toFixed(2)} m + 1,7), menengadah ${(B.ptBird * deg).toFixed(0)} derajat, meleset ${B.aimErr.toFixed(1)} derajat`] =
     (B.flock0 ?? 1e9) < 40 && Math.abs(B.last.eyeH) < 0.1 && B.ptBird > 15 / deg && B.aimErr < 15 && !st.colAt(Bl.s, Bl.za, 1) && !st.inWater(Bl.s, Bl.za, 1);
@@ -117,8 +123,18 @@ UJI = r"""
   const Hu = get('Hutan lebat'), huD = Math.hypot(wrap(Hu.last.s - Hu.first.s), Hu.last.za - Hu.first.za);
   out[`tur: hutan berjalan ${huD.toFixed(0)} m setinggi mata (${Hu.last.eyeH.toFixed(2)}), dari dalam hutan ke luar`] = huD >= 25 && Math.abs(Hu.last.eyeH) < 0.1 && st.inForest(Hu.first.s, Hu.first.za) && !st.inForest(Hu.last.s, Hu.last.za);
   const M = get('Naik motor ke New York');
-  out[`tur: motor jalan lingkar za ${M.zaMin.toFixed(1)}-${M.zaMax.toFixed(1)} (rute bus merah 500), ${M.ds.toFixed(0)} m keliling ${M.d0} -> ${M.d1}, ${(M.vMin * 3.6).toFixed(0)}-${(M.v1 * 3.6).toFixed(0)} km/h, terasa ${M.g1.toFixed(2)} g`] =
-    M.ground && M.ds > 800 && M.zaMin > 490 && M.zaMax < 500 && M.d0 === 'Galileo' && M.d1 === 'New York' && M.vMin > 20 && M.g1 < 0.5;
+  out[`tur: motor jalan lingkar za ${M.zaMin.toFixed(1)}-${M.zaMax.toFixed(1)} (rute bus merah 500), ${M.ds.toFixed(0)} m keliling ${M.d0} -> ${M.d1}, maks ${(M.vMax * 3.6).toFixed(0)} km/h, terasa min ${M.gMin.toFixed(2)} g, akhir ${(M.v1 * 3.6).toFixed(1)} km/h`] =
+    M.ground && M.ds > 800 && M.zaMin > 490 && M.zaMax < 500 && M.d0 === 'Galileo' && M.d1 === 'New York' && M.vMax * 3.6 > 140 && M.gMin < 0.5 && M.v1 < 1;
+  const Hj = get('Hujan miring'), Gw0 = get('Genangan di jalan kota');
+  const rmJ = Math.abs(wrap(Hj.anyLast.s - M.s0)), mwJ = Math.hypot(wrap(Gw0.anyFirst.s - M.anyLast.s), Gw0.anyFirst.za - M.anyLast.za);
+  out[`tur: hujan di kota tempat naik motor (${Hj.d || (st.districtAt(Hj.anyLast.s, Hj.anyLast.za) || {}).name}, motor mulai di arteri yang sama, beda keliling ${rmJ.toFixed(1)} m), motor berhenti ${(M.v1 * 3.6).toFixed(1)} km/h lalu jalan kaki dari situ (lompat ${mwJ.toFixed(1)} m)`] =
+    (st.districtAt(Hj.anyLast.s, Hj.anyLast.za) || {}).name === 'Galileo' && rmJ < 3 && mwJ < 3;
+  const Gw1 = Gw0.last; out[`tur: jalan kaki sejajar sumbu (arah akhir ${(Gw1.hd * deg0).toFixed(0)} derajat)`] = Math.abs(Gw1.hd * deg0) < 15;
+  const ord = st.TOUR.keys.slice(0, 5).map((q) => q.title).join(' > ');
+  out[`tur: urutan pembuka ${ord}`] = ord === 'Menuju Copper Corn Station > Ukuran stasiun > Dekat sumbu: gravitasi mengecil > Gravitasi dari putaran > Menara ikon New York';
+  out[`tur: pembuka masuk menembus kaca end cap A (kamera z ${(get('Menuju Copper Corn Station').camZ + 4000).toFixed(0)} m dari kaca)`] = get('Menuju Copper Corn Station').camZ > -4000 && get('Menuju Copper Corn Station').camZ < -3900;
+  out[`tur: melihat sekitar saat diam: menoleh maks ${glance.y.toFixed(1)} derajat, naik-turun maks ${glance.p.toFixed(1)} derajat (<= 60)`] = glance.n > 0 && glance.y > 10 && glance.y <= 60 && glance.p <= 60;
+  out[`tur: sunrays mati di cuaca cerah (Ukuran ${get('Ukuran stasiun').rays}), nyala saat berawan (Hutan ${get('Hutan lebat').rays})`] = get('Ukuran stasiun').rays === false && get('Hutan lebat').rays === w0.rays;
   const Bo = get('Lempar bola melawan putaran');
   out[L ? `tur: bola 80 m/s 10 derajat melawan putaran: jatuh ${Math.abs(L.arc).toFixed(0)} m keliling setelah ${L.time.toFixed(1)} s; kamera menghadap bola (meleset maks ${(Bo.ballAim || 99).toFixed(1)} derajat), jarak ${(Bo.ballD0 || 0).toFixed(0)} -> ${(Bo.ballD1 || 0).toFixed(0)} m, di bawah tanah ${Bo.under || 0} kali` : 'tur: bola dilempar'] =
     !!L && Math.abs(L.arc) > 2500 && Math.abs(L.arc) < 3200 && L.time > 40 && L.time < 50 && ball.ball.v === 80 && ball.ball.e === 10 && Bo.ballAim < 10 && Bo.ballD0 < 20 && Bo.ballD1 > 200 && Bo.ballD1 < 400 && !Bo.under;
@@ -141,7 +157,7 @@ UJI = r"""
   out[`tur: gerhana dari dalam (ECL.k min ${get('Gerhana Saturnus').ecl.toFixed(2)})`] = get('Gerhana Saturnus').ecl < 0.2 && !get('Gerhana Saturnus').ext;
   out[`tur: layar gelap saat pindah kamera (maks ${fadeMax.toFixed(2)})`] = fadeMax > 0.9;
   out['tur selesai: kembali ke posisi awal, berjalan'] = !st.TOUR.on && st.player.state === 'ground' && Math.abs(st.player.za - p0.za) < 0.01 && Math.abs(st.player.theta - p0.th) < 1e-6 && !st.ext.active;
-  out['tur selesai: jam, laju jam, orbit, cuaca, motor dikembalikan'] = st.clock.hour === w0.hour && st.clock.hourRate === w0.rate && st.clock.orbit === w0.orbit && st.WEATHER.mode === w0.mode && st.MOTO.on === w0.moto && st.ADAPT.on === w0.adapt && st.POST.bloom === w0.bloom && document.getElementById('tourFade').style.opacity === '0';
+  out['tur selesai: jam, laju jam, orbit, cuaca, motor dikembalikan'] = st.clock.hour === w0.hour && st.clock.hourRate === w0.rate && st.clock.orbit === w0.orbit && st.WEATHER.mode === w0.mode && st.MOTO.on === w0.moto && st.ADAPT.on === w0.adapt && st.POST.bloom === w0.bloom && st.RAYS.on === w0.rays && document.getElementById('tourFade').style.opacity === '0';
   return out;
 })()
 """

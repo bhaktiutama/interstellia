@@ -1,5 +1,22 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.5: masukan uji Bhakti (selesai, menunggu uji visual)
+
+Tetap tanpa mengubah fungsi lain; tur hanya mengatur keadaan yang juga bisa diatur pemain (tombol Sunrays di panel, rem motor = tombol S).
+
+| Masukan | Penyebab | Perubahan | Hasil uji |
+| --- | --- | --- | --- |
+| Sunrays terlalu padat di cuaca cerah, seperti kabut putih | Kekuatan berkas = sunline x (1 - 0,6 mendung): paling kuat justru saat cerah | Selama titik dalam stasiun bercuaca cerah, Sunrays dimatikan (sama dengan tombol panel); berawan dan mendung tetap nyala; dikembalikan setelah tur | Mati di titik cerah, nyala di hutan (berawan), kembali seperti semula |
+| Dari pembuka langsung ke Ukuran stasiun, masuk perlahan lewat lubang, lalu 2, 3, 5 | Pembuka berhenti 1,4 km di luar dermaga, lalu layar gelap | Pembuka 18 s: mengitari dari 40 km, lalu 7 s terakhir maju lurus 400 m dari sumbu menembus kaca end cap A sampai 20 m di dalam; layar gelap; di dalam melayang pelan 7 s ke Ukuran stasiun; lalu Dekat sumbu (naik lurus di atasnya), Gravitasi (turun), Menara | Urutan pembuka sesuai; kamera akhir pembuka 20 m di balik kaca |
+| Hujan kurang terlihat di ladang, pindah ke kota sebelum naik motor | Ladang gelap, latar tanpa lampu | Hujan di trotoar arteri Galileo (k 6-8) dekat jalan lingkar, dipilih yang awannya paling tebal; laju jam 10 s = 1 jam selama hujan (jalan cepat basah); layar gelap dari rumah Cooper | Hujan 0,95, awan di atas kamera 0,53 |
+| Motor tidak perlu loncat ke genangan, langsung turun jalan kaki, belok sejajar sumbu | Titik genangan dipilih di tempat lain | Motor mulai dari diam di jalan lingkar searah arteri titik hujan, gas sampai 150 km/h, lalu mengerem (tombol S) tepat sebelum arteri k = 1 New York; titik genangan mulai di tempat motor berhenti: berjalan ke trotoar arteri lalu belok sejajar sumbu ke arah pusat kota | Berhenti 3,2 km/h, lompatan 0,0 m, arah akhir -8 derajat (sejajar sumbu, menoleh ke jalan), basah 0,66 |
+| Saat berhenti, kamera melihat sekitar seperti orang, terbatas FOV 120 derajat | Dulu hanya bergeser 1 derajat/s ke satu sisi | Menoleh pelan kiri-kanan maks 42 derajat (jalan kaki 18 derajat) dan naik-turun maks 7 derajat, mulai dan berakhir di arah titik (tersambung mulus); tidak dipakai saat ikut burung, bola, gerhana | Menoleh maks 30 derajat, naik-turun maks 7 derajat (batas 60) |
+
+Urutan v2.5: 1 Menuju stasiun, 2 Ukuran stasiun, 3 Dekat sumbu, 4 Gravitasi, 5 Menara New York, 6 Air mancur, 7 Lempar bola, 8 Skyway, 9 Hutan, 10 Bukit, 11 Burung, 12 Ladang gandum, 13 Rumah Cooper, 14 Hujan miring (kota, Galileo), 15 Naik motor ke New York, 16 Genangan (turun dari motor), 17 Dek malam, 18 Gerhana, 19 Dari luar, 20 Dermaga despun, 21 Pagi berkabut, 22 Meninggalkan stasiun. Durasi 300 s.
+
+Catatan: genangan sekarang di tempat motor berhenti, jadi awan di atasnya tidak dipilih; genangan di luar awan lebih kecil (shader memakai 30% kebasahan di luar awan), karena itu jalan dibuat lebih basah selama hujan.
+
+
 ## Revisi v2.4: masukan uji Bhakti (selesai, menunggu uji visual)
 
 Tetap tanpa mengubah fungsi lain; hanya blok tur, uji, dan dokumen (plus `updateReal` diekspor di `window.__station` untuk uji).
