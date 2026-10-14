@@ -1,5 +1,5 @@
 """Uji tahap 12d (Copper Corn Station): siklus tanam gandum dan mesin ladang, mode foto (FOV, blur, simpan PNG,
-semua dikembalikan saat keluar), tur sinematik v2.8 (20 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
+semua dikembalikan saat keluar), tur sinematik v2.9 (20 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
 lempar bola melawan putaran, gerhana dari dalam, pembuka dan penutup kamera luar, tanpa NaN, semua dikembalikan).
 Pakai: python tools/uji_ladang_foto_tur.py   (butuh: pip install playwright && playwright install chromium; CHROMIUM opsional)"""
 import asyncio, os, pathlib
@@ -46,7 +46,8 @@ UJI = r"""
     const r = K[key.title] || (K[key.title] = { rain: 0, wetMin: 1, ecl: 1, ext: false, cloud: 0, bird: 1e9, z0: st.MOTO.za, ground: false });
     { const q = { s: ((ps % CIRC) + CIRC) % CIRC, za: P.za, h: P.h }; if (!st.ext.active && !(key.moto && !st.MOTO.on)) { if (!r.anyFirst) r.anyFirst = q; r.anyLast = q; } }
     r.hour = st.clock.hour; r.rain = Math.max(r.rain, st.RAIN.k); r.ecl = Math.min(r.ecl, st.ECL.k); r.ext = r.ext || st.ext.active; r.rainEnd = st.RAIN.k;
-    if (key.ext === 'in') r.camZ = st.camera.position.z;              // pembuka: posisi kamera luar terakhir (sudah menembus kaca end cap A?)
+    if (key.ext === 'in') { r.camZ = st.camera.position.z; r.lookEnd = [st.ADAPT.on, st.POST.bloom, st.RAYS.on]; }
+    if (!r.lookStart) r.lookStart = [st.ADAPT.on, st.POST.bloom, st.RAYS.on];              // pembuka: posisi kamera luar terakhir (sudah menembus kaca end cap A?)
     r.rays = r.rays || st.RAYS.on; if (key.fly) r.hMax = Math.max(r.hMax || 0, P.h - st.groundH(ps, P.za));
     if (hold && key.B && !key.track && !key.ball && !key.eclipse && !key.path && !key.moto && !key.fly) {   // melihat sekitar: simpangan dari arah titik
       const dy = Math.abs(wrap((P.heading - key.B.hd) * st.R) / st.R) * deg0, dp = Math.abs(P.pitch - key.B.pt) * deg0;
@@ -144,11 +145,14 @@ UJI = r"""
   out[`tur: melihat sekitar saat diam pelan ke satu arah: menoleh maks ${glance.y.toFixed(1)} derajat, naik-turun maks ${glance.p.toFixed(1)} derajat (<= 10), kembali ${glance.rev || 0} kali`] = glance.n > 0 && glance.y > 0.5 && glance.y <= 10 && glance.p <= 10 && !glance.rev;
   for (const n of ['Air mancur Coriolis', 'Hutan lebat', 'Genangan di jalan kota']) {
     const W = get(n);
-    out[`tur: ${n}: jalan kaki ${W.walkT.toFixed(1)} s, laju maks ${W.wMax.toFixed(2)} m/s (pemain 1,4), mata naik-turun ${((W.bobMax - W.bobMin) * 100).toFixed(1)} cm, ${W.steps} langkah`] =
-      W.wMax > 1.2 && W.wMax < 1.75 && W.bobMax - W.bobMin > 0.02 && W.bobMax - W.bobMin < 0.1 && W.steps > 8;
+    out[`tur: ${n}: lari ${W.walkT.toFixed(1)} s, laju maks ${W.wMax.toFixed(2)} m/s (pemain lari 5), mata naik-turun ${((W.bobMax - W.bobMin) * 100).toFixed(1)} cm, ${W.steps} langkah`] =
+      W.wMax > 4.5 && W.wMax < 5.6 && W.bobMax - W.bobMin > 0.04 && W.bobMax - W.bobMin < 0.15 && W.steps > 12;
   }
   const Fw = get('Air mancur Coriolis');
-  out[`tur: berjalan mengitari air mancur ${Fw.fMin.toFixed(1)}-${Fw.fMax.toFixed(1)} m dari pusat, menabrak ${Fw.fCol} kali`] = Fw.fMin > 11 && Fw.fMax < 13 && !Fw.fCol;
+  const Li = get('Menuju Copper Corn Station').lookEnd, Lu = get('Ukuran stasiun').lookStart;
+  out[`tur: akhir pembuka = awal Ukuran stasiun (adaptasi, bloom, sunrays ${JSON.stringify(Li)} / ${JSON.stringify(Lu)})`] = JSON.stringify(Li) === JSON.stringify(Lu);
+  out[`tur: bunyi kaca pecah saat bola mendarat (${!!ball0.shatter})`] = !!ball0.shatter;
+  out[`tur: berlari mengitari air mancur ${Fw.fMin.toFixed(1)}-${Fw.fMax.toFixed(1)} m dari pusat, menabrak ${Fw.fCol} kali`] = Fw.fMin > 11 && Fw.fMax < 13 && !Fw.fCol;
   out[`tur: sunrays mati di cuaca cerah (Ukuran ${get('Ukuran stasiun').rays}), nyala saat berawan (Hutan ${get('Hutan lebat').rays})`] = get('Ukuran stasiun').rays === false && get('Hutan lebat').rays === w0.rays;
   const Bo = get('Lempar bola melawan putaran');
   const sp = Bo.cSp || [0], q4 = Math.floor(sp.length / 4), avg = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length), v1 = avg(sp.slice(1, q4)), v4 = avg(sp.slice(3 * q4));
@@ -160,10 +164,10 @@ UJI = r"""
   for (let i = 1; i < N; i++) {                                         // terbang panjang (tanpa layar gelap) tidak berbalik arah za
     const A = st.TOUR.keys[i - 1], Q = st.TOUR.keys[i], ra = get(A.title), rq = get(Q.title);
     if (A.ext !== undefined || Q.ext !== undefined || Q.cut || Q.from || !ra.anyLast || !rq.anyLast) { sg = 0; continue; }
-    const d = rq.anyLast.za - ra.anyLast.za; fl.push(d.toFixed(0)); if (Math.abs(d) < 2000) continue;   // v2.7: gerhana -> pagi berkabut (1,5 km mundur) langsung tanpa kamera luar
+    const d = rq.anyLast.za - ra.anyLast.za; fl.push(d.toFixed(0)); if (Math.abs(d) < 1000 || Q.title === 'Pagi berkabut') continue;   // v2.7: gerhana -> pagi berkabut (danau di belakang, 1,5-2,3 km mundur) langsung tanpa kamera luar
     if (sg && Math.sign(d) !== sg) rev.push(`${A.title} -> ${Q.title}`); sg = Math.sign(d);
   }
-  out[`tur: terbang tidak bolak-balik (dza ${fl.join(', ')}; berbalik ${rev.join('; ') || 'tidak ada'})`] = rev.length === 0;
+  out[`tur: terbang tidak bolak-balik (dza ${fl.join(', ')}; berbalik ${rev.join('; ') || 'tidak ada'}; gerhana -> pagi berkabut dikecualikan)`] = rev.length === 0;
   const Ec = get('Gerhana Saturnus');
   out[`tur: gerhana dari tepi ladang jagung setinggi mata (${Ec.last.eyeH.toFixed(2)})`] = Math.abs(Ec.last.eyeH) < 0.1 && st.fieldList.some((f) => f.corn && Math.abs(Ec.last.za - (f.z0 - 3)) < 0.5);
   out[`tur: gerhana dekat rumah Cooper (${Math.abs(wrap(Ec.last.s - st.COOPER.s)).toFixed(0)} m keliling)`] = Math.abs(wrap(Ec.last.s - st.COOPER.s)) <= 1200;

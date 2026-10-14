@@ -15068,6 +15068,8 @@ function camRestoreRes() { if (CAMX.prevPR != null) { renderer.setPixelRatio(CAM
    Tur v2.8: diam = menoleh pelan ke satu arah acak (`tourGlance`), jalan kaki laju pemain 1,4 m/s dengan gerak kepala
    dan bunyi langkah (`tourWalkU`, `tourBob`), berjalan mengitari air mancur, bola 80 m/s dengan bunyi pukulan
    (`tourBatSound`) dan kamera melambat sambil bergeser ke samping sampai seluruh lintasan terlihat (`tourBallPlan`, `tourFit`).
+   Tur v2.9: 7 s terakhir pembuka memakai setelan titik 2 (adaptasi mata, bloom, sunrays), jalan kaki menjadi lari 5 m/s,
+   bunyi kaca pecah saat bola mendarat (`tourGlassSound`).
    ===================================================================== */
 const TOUR = { on: false, i: 0, t: 0, from: null, save: null, keys: null, h0: 12 };
 const TOUR_WX = { cerah: [0.14, 'cerah'], berawan: [0.5, 'berawan'], reda: [0.75, 'berawan'], mendung: [0.93, 'mendung'] };   // tutupan, nama mode
@@ -15145,12 +15147,12 @@ function tourKeys() {
       cap: 'Putaran memberi 1 g: lantai terus mendorong kita ke arah sumbu. Tanah melengkung naik di kiri dan kanan.' },
     { s: ny.s, za: ny.za, h: 24, hd: Math.atan2(wrapS(LANDMARK.s - ny.s), LANDMARK.za - ny.za) / DEG, pt: 20, hold: 4, hr: 13.1, wx: 'cerah', title: 'Menara ikon New York',
       cap: 'Menara {hT} m di pusat kota. Di puncaknya gravitasi tinggal {gT} g, karena lebih dekat ke sumbu.' },
-    { at: () => {                                                      // v2.8: berjalan sebentar mengitari kolam 12 m dari pusat; sudut awal dan arah dipilih bebas kolider
+    { at: () => {                                                      // v2.9: berlari mengitari kolam 12 m dari pusat (setengah lingkaran lebih); sudut awal dan arah dipilih bebas kolider
         let W = null;
         for (const a0 of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.6, -1.6, Math.PI]) for (const dir of [1, -1]) {
           if (W) break;
           let ok = true;
-          for (let k = 0; k <= 12 && ok; k++) { const a = a0 + dir * TOUR_FA * k / 12; ok = !colAt(modS(FOUNT.s + 12 * Math.sin(a)), FOUNT.za + 12 * Math.cos(a), 0.6) && !inWater(modS(FOUNT.s + 12 * Math.sin(a)), FOUNT.za + 12 * Math.cos(a), 1); }
+          for (let k = 0; k <= 30 && ok; k++) { const a = a0 + dir * TOUR_FA * k / 30; ok = !colAt(modS(FOUNT.s + 12 * Math.sin(a)), FOUNT.za + 12 * Math.cos(a), 0.6) && !inWater(modS(FOUNT.s + 12 * Math.sin(a)), FOUNT.za + 12 * Math.cos(a), 1); }
           if (ok) W = { a0, dir };
         }
         TOUR.fW = W || { a0: 0, dir: 1 };
@@ -15167,8 +15169,8 @@ function tourKeys() {
       cap2: 'Bola melayang {ta} s dan jatuh {a} m dari pelempar, sekitar {d} derajat keliling silinder.' },
     { s: sk.s, za: sk.za + 25, h: 0, hd: sk.heading, pt: sk.pitch, hold: 4, hr: 14.2, wx: 'cerah', title: 'Skyway: jendela ke angkasa',   // di antara balok jendela (tiap 50 m)
       cap: 'Di bawah kaca ini ruang hampa. Bintang dan Saturnus lewat tiap 63,4 detik; tepi silinder bergerak 99 m/s.' },
-    { path: (u) => {                                                    // berjalan setinggi mata di jalan setapak, dari 34 m di dalam hutan sampai 2 m di luar tepi za FOREST.z1
-        const za = FOREST.z1 - 34 + 36 * u;
+    { path: (u) => {                                                    // berlari setinggi mata di jalan setapak, dari 60 m di dalam hutan sampai 4 m di luar tepi za FOREST.z1
+        const za = FOREST.z1 - 60 + 64 * u;
         return { s: modS(forestTrail(za)), za, hd: Math.atan2(forestTrail(za + 0.5) - forestTrail(za - 0.5), 1) };
       },
       h: 0, pt: 4, hold: 26, hr: 14.8, wx: 'berawan', title: 'Hutan lebat',
@@ -15201,7 +15203,7 @@ function tourKeys() {
     { at: () => ({ s: TOUR.from.s, za: TOUR.from.za, hd: -90 }),      // genangan: turun dari motor di tempat berhenti
       path: (u, P) => {                                                  // ke trotoar arteri lalu berjalan sejajar sumbu ke arah pusat kota, menoleh sedikit ke badan jalan
         const sW = modS(Math.round(P.s / ART) * ART + 13), z1 = BUS.lines[0].za + 14;
-        const ds = wrapS(sW - P.s), dz = z1 - P.za, L1 = Math.hypot(ds, dz), L2 = 10, d = u * (L1 + L2);
+        const ds = wrapS(sW - P.s), dz = z1 - P.za, L1 = Math.hypot(ds, dz), L2 = 30, d = u * (L1 + L2);
         if (d < L1) { const a = d / L1; return { s: modS(P.s + ds * a), za: P.za + dz * a, hd: angLerp(-Math.PI / 2, -8 * DEG, sstep(0, 1, a * 1.4)) }; }
         return { s: sW, za: z1 + d - L1, hd: -8 * DEG };
       },
@@ -15354,7 +15356,7 @@ function tourGlance(K, hold) {                                        // v2.8: p
   const p = A * Math.sin(a);
   return { y: e * A * Math.cos(a), p: e * (p < 0 ? 0.4 * p : p) };
 }
-const TOUR_FA = 0.9, TOUR_RAMP = 0.6;                                 // v2.8: busur jalan air mancur (rad, 12 m dari pusat), waktu mulai / berhenti melangkah (s)
+const TOUR_FA = 2.2, TOUR_RAMP = 1.0;                                 // v2.9: busur lari air mancur (rad, 12 m dari pusat = 26 m), waktu mulai / berhenti berlari (s)
 function tourWalkU(t, H) {                                            // v2.8: jalan kaki laju tetap dengan mulai dan berhenti halus (profil trapesium): fraksi jarak 0..1
   const r = Math.min(TOUR_RAMP, H / 2), v = 1 / (H - r);
   if (t <= 0) return 0; if (t >= H) return 1;
@@ -15362,18 +15364,18 @@ function tourWalkU(t, H) {                                            // v2.8: j
   if (t > H - r) return 1 - v * (H - t) ** 2 / (2 * r);
   return v * (t - r / 2);
 }
-function tourBob(K, P, dt) {                                          // v2.8: gerak kepala berjalan seperti pemain (rumus headBob langkah jalan, level panel; Mati = Normal), bunyi langkah
+function tourBob(K, P, dt) {                                          // v2.9: gerak kepala berlari seperti pemain (rumus headBob lari: langkah 1,3 m, amplitudo 2x, level panel; Mati = Normal), bunyi langkah
   const B = K.bob || (K.bob = { phase: 0, amp: 0, t: 0, s: P.s, za: P.za, n: 0 }), L = BOB.level || 1;
-  const dd = Math.hypot(wrapS(P.s - B.s), P.za - B.za), v = dt > 0 ? dd / dt : 0, walking = v > 0.05;
+  const dd = Math.hypot(wrapS(P.s - B.s), P.za - B.za), v = dt > 0 ? dd / dt : 0, walking = v > 0.05, run = v > 3 ? 1 : v / 3;
   B.s = P.s; B.za = P.za; B.t += dt;
   if (walking && dd < 5) {
-    const p0 = B.phase; B.phase += dd / 0.72;
-    if (Math.floor(B.phase) !== Math.floor(p0)) { B.n++; if (AUDIO.started && AUDIO.ctx && AUDIO.ctx.state === 'running') playStep(surfaceAt(modS(P.s), P.za), 1); }
+    const p0 = B.phase; B.phase += dd / (v > 3 ? 1.3 : 0.72);
+    if (Math.floor(B.phase) !== Math.floor(p0)) { B.n++; if (AUDIO.started && AUDIO.ctx && AUDIO.ctx.state === 'running') playStep(surfaceAt(modS(P.s), P.za), v > 3 ? 1.3 : 1); }
   }
   B.amp += ((walking ? 1 : 0) - B.amp) * (1 - Math.exp(-dt / (walking ? 0.15 : 0.22)));
-  const a = L * B.amp, ph = TAU * B.phase, sw = Math.sin(Math.PI * B.phase), still = L * (1 - B.amp);
-  return { oy: -a * 0.018 * Math.cos(ph) + still * 0.004 * Math.sin(TAU * 0.23 * B.t), ox: a * 0.012 * sw,
-    pt: -a * 0.12 * DEG * Math.cos(ph) + still * 0.12 * DEG * Math.sin(TAU * 0.23 * B.t - 0.8) };
+  const a = L * B.amp, ph = TAU * (B.phase - 0.12 * run), sw = Math.sin(Math.PI * B.phase), still = L * (1 - B.amp);
+  return { oy: -a * (0.018 + 0.018 * run) * Math.cos(ph) + still * 0.004 * Math.sin(TAU * 0.23 * B.t), ox: a * (0.012 + 0.006 * run) * sw,
+    pt: -a * (0.12 + 0.28 * run) * DEG * Math.cos(ph) + still * 0.12 * DEG * Math.sin(TAU * 0.23 * B.t - 0.8) };
 }
 function tourBatSound() {                                             // v2.8: bunyi lepas bola seperti bola baseball kena tongkat kayu: retak tajam + getar kayu pendek + gema
   if (!AUDIO.started || !AUDIO.ctx || AUDIO.ctx.state !== 'running' || !AUDIO.sfx) return;
@@ -15415,6 +15417,28 @@ function tourThrow(K) {                                               // satu le
   K.capNow = K.cap2;
   K.vars = { a: fmtInt(Math.abs(K.landing.arc)), ta: fmtN(K.landing.time, 1), d: fmtInt(Math.abs(K.landing.arc) / R / DEG) };
   phEl('tourCap').querySelector('span').textContent = tourCapText(K);
+}
+function tourGlassSound() {                                           // v2.9: kaca pecah saat bola mendarat: hantaman, derai pecahan (dentingan acak tak harmonis), desis serpihan
+  if (!AUDIO.started || !AUDIO.ctx || AUDIO.ctx.state !== 'running' || !AUDIO.sfx) return;
+  const ctx = AUDIO.ctx, out = AUDIO.sfx, t0 = ctx.currentTime + 0.01;
+  const noise = (t, type, f, q, a, d) => {
+    const n = ctx.createBufferSource(), nf = ctx.createBiquadFilter(), ng = ctx.createGain(); n.buffer = AUDIO.white;
+    nf.type = type; nf.frequency.value = f; nf.Q.value = q;
+    ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(a, t + 0.003); ng.gain.exponentialRampToValueAtTime(0.0005, t + d);
+    n.connect(nf).connect(ng).connect(out); n.start(t, Math.random(), d + 0.05);
+  };
+  noise(t0, 'bandpass', 2600, 0.7, 0.5, 0.14);                        // hantaman
+  { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(130, t0); o.frequency.exponentialRampToValueAtTime(55, t0 + 0.15);
+    g.gain.setValueAtTime(0.18, t0); g.gain.exponentialRampToValueAtTime(0.0005, t0 + 0.18); o.connect(g).connect(out); o.start(t0); o.stop(t0 + 0.2); }
+  noise(t0 + 0.02, 'highpass', 4200, 0.7, 0.12, 0.7);                 // desis serpihan
+  for (let i = 0; i < 30; i++) {                                      // pecahan berjatuhan, makin jarang dan pelan
+    const t = t0 + 0.02 + Math.pow(Math.random(), 1.7) * 0.95, f = 2100 + Math.random() * 5200, d = 0.04 + Math.random() * 0.16;
+    const a = 0.045 * (1 - 0.7 * (t - t0) / 1.0) * (0.5 + Math.random());
+    for (const [m, k] of [[1, 1], [2.76, 0.4]]) {                     // nada dasar + nada atas tak harmonis (bunyi kaca)
+      const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.setValueAtTime(f * m, t); o.frequency.exponentialRampToValueAtTime(f * m * 0.97, t + d);
+      g.gain.setValueAtTime(a * k, t); g.gain.exponentialRampToValueAtTime(0.0003, t + d); o.connect(g).connect(out); o.start(t); o.stop(t + d + 0.02);
+    }
+  }
 }
 const _tcB = new THREE.Vector3(), _tcC = new THREE.Vector3(), _tcU = new THREE.Vector3(), _tcT = new THREE.Vector3(), _tcF = new THREE.Vector3(), _tcZ = new THREE.Vector3(0, 0, 1);
 function tourFit(E, th, pts) {                                        // arah kamera (heading, pitch) di mata E yang memuat semua titik; k <= 1 = semua masuk bingkai (margin 15%)
@@ -15472,7 +15496,10 @@ function stepTour(dt) {
   const K = TOUR.keys[TOUR.i];
   TOUR.t += dt;
   const isExt = tourIsExt(K);
-  if (isExt) tourLook(false, 0.25, TOUR.saveW.rays);                 // pembuka luar jernih: layar hampir hitam tidak menaikkan eksposur
+  if (isExt) {                                                        // pembuka luar jernih: layar hampir hitam tidak menaikkan eksposur
+    const N = TOUR.keys[TOUR.i + 1], T1 = K.hold - 7, e = K.ext === 'in' ? sstep(T1, T1 + 5, TOUR.t) : 0;   // v2.9: 7 s terakhir pembuka = setelan titik 2 (atmosfer tidak patah)
+    tourLook(e > 0 && TOUR.saveW.adapt, 0.25 + (TOUR.saveW.bloom - 0.25) * e, TOUR.saveW.rays && !(K.ext === 'in' && N && N.wx === 'cerah'));
+  }
   else tourLook(TOUR.saveW.adapt, TOUR.saveW.bloom, TOUR.saveW.rays && K.wx !== 'cerah');   // v2.5: cuaca cerah tanpa sunrays (berkas padat seperti kabut putih)
   if (isExt) {
     if (!ext.active) toggleExterior();
@@ -15493,7 +15520,7 @@ function stepTour(dt) {
       if (K.path) {
         K.p0 = K.p0 || { s: K.s, za: K.za, hd: K.hd }; const P = K.path(0, K.p0); K.s = P.s; K.za = P.za; K.hd = P.hd / DEG;
         let L = 0; for (let j = 1, q = P; j <= 40; j++) { const Q = K.path(j / 40, K.p0); L += Math.hypot(wrapS(Q.s - q.s), Q.za - q.za); q = Q; }
-        K.walkL = L; K.hold = L / CONFIG.walk + TOUR_RAMP;              // v2.8: laju jalan pemain (1,4 m/s), mulai dan berhenti halus
+        K.walkL = L; K.hold = L / CONFIG.run + TOUR_RAMP;               // v2.9: laju lari pemain (Shift, 5 m/s), mulai dan berhenti halus
       }
       K.B = { s: K.s, za: K.za, hA: groundH(K.s, K.za) + K.h, hd: K.hd * DEG, pt: K.pt * DEG + tourFocus(K) };
       const P = K.track && K.track(K, 0); if (P) K.B = P;
@@ -15519,7 +15546,8 @@ function stepTour(dt) {
       const G = tourGlance(K, hold); player.heading += G.y; player.pitch = Math.max(-1.3, Math.min(1.3, player.pitch + G.p));
     }
     if (K.ball && !K.landing && hold > 0.8) tourThrow(K);
-    if (K.bb && K.bb.t > 0) tourChase(K);                            // posisi bola baru diisi physicsStep setelah lemparan; kamera bergerak sampai akhir titik
+    if (K.bb && K.bb.t > 0) tourChase(K);
+    if (K.bb && K.bb.done && !K.shatter) { K.shatter = true; tourGlassSound(); }   // v2.9: bola mendarat = bunyi kaca pecah                            // posisi bola baru diisi physicsStep setelah lemparan; kamera bergerak sampai akhir titik
     if (K.eclipse) {                                                  // gerhana: waktu orbit diatur (seperti tombol I), masuk bayangan 3,5 s setelah tiba
       if (K.o0 === undefined) { K.o0 = clock.orbit + eclipseIn() - 35; }
       clock.orbit = K.o0 + hold * 10;

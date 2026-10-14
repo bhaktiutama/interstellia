@@ -1,5 +1,16 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.9: masukan uji Bhakti (selesai, menunggu uji visual)
+
+| Masukan | Perubahan | Hasil uji |
+| --- | --- | --- |
+| Transisi titik 1 ke 2 patah karena beda sunray; titik 1 disamakan dengan titik 2 | Sunrays memang tidak digambar di kamera luar; yang berbeda adalah setelan kamera luar titik 1 (adaptasi mata mati, bloom 0,25). Selama 7 s terakhir pembuka (masuk lurus ke kaca end cap A): adaptasi mata dinyalakan seperti titik 2, bloom naik halus 0,25 -> nilai titik 2 dalam 5 s, sunrays diatur sama dengan titik 2 (cerah = mati). Bagian 40 km tetap jernih | Akhir pembuka = awal Ukuran stasiun (adaptasi nyala, bloom 0,5, sunrays mati) |
+| Jalan kaki dipercepat jadi lari | Laju lari pemain 5 m/s (`CONFIG.run`, sama dengan Shift), mulai dan berhenti halus 1 s; gerak kepala rumus lari `headBob()` (langkah 1,3 m, naik-turun dan angguk 2x, titik terendah sedikit setelah menapak), bunyi langkah lari. Jarak diperpanjang agar tidak terlalu singkat: hutan 60 m di dalam sampai 4 m di luar, air mancur 2,2 rad (26 m, lebih dari setengah lingkaran), genangan 30 m sejajar sumbu | Laju 5,15-5,19 m/s, mata naik-turun 7,2 cm; air mancur 6,2 s, hutan 16,3 s, genangan 12,5 s |
+| Bunyi kaca pecah saat bola mendarat | `tourGlassSound()`: hantaman (derau 2,6 kHz + dentum 130 -> 55 Hz), 30 pecahan berjatuhan selama 1 s (dentingan 2,1-7,3 kHz dengan nada atas tak harmonis x2,76), desis serpihan; disintesis lewat `AUDIO.sfx` | Terpicu sekali saat bola menyentuh tanah |
+
+Durasi 318 s, 20 titik. Catatan uji rute: terbang gerhana -> pagi berkabut kini mundur 2,27 km (danau di belakang ladang jagung); pasangan ini dikecualikan secara khusus dan batas bolak-balik kembali 1 km.
+
+
 ## Revisi v2.8: masukan uji Bhakti (selesai, menunggu uji visual)
 
 | Masukan | Perubahan | Hasil uji |
