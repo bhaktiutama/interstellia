@@ -46,8 +46,8 @@ UJI = r"""
     const r = K[key.title] || (K[key.title] = { rain: 0, wetMin: 1, ecl: 1, ext: false, cloud: 0, bird: 1e9, z0: st.MOTO.za, ground: false });
     { const q = { s: ((ps % CIRC) + CIRC) % CIRC, za: P.za, h: P.h }; if (!st.ext.active && !(key.moto && !st.MOTO.on)) { if (!r.anyFirst) r.anyFirst = q; r.anyLast = q; } }
     r.hour = st.clock.hour; r.rain = Math.max(r.rain, st.RAIN.k); r.ecl = Math.min(r.ecl, st.ECL.k); r.ext = r.ext || st.ext.active; r.rainEnd = st.RAIN.k;
-    if (key.ext === 'in') { r.camZ = st.camera.position.z; r.lookEnd = [st.ADAPT.on, st.POST.bloom, st.RAYS.on]; }
-    if (!r.lookStart) r.lookStart = [st.ADAPT.on, st.POST.bloom, st.RAYS.on];              // pembuka: posisi kamera luar terakhir (sudah menembus kaca end cap A?)
+    if (key.ext === 'in') { r.camZ = st.camera.position.z; r.lookEnd = [st.ADAPT.on, st.POST.bloom, st.RAYS.on]; r.fogEnd = st.scene.fog.density; }
+    if (!r.lookStart) r.lookStart = [st.ADAPT.on, st.POST.bloom, st.RAYS.on]; if (r.fogStart === undefined) r.fogStart = st.scene.fog.density;              // pembuka: posisi kamera luar terakhir (sudah menembus kaca end cap A?)
     r.rays = r.rays || st.RAYS.on; if (key.fly) r.hMax = Math.max(r.hMax || 0, P.h - st.groundH(ps, P.za));
     if (hold && key.B && !key.track && !key.ball && !key.eclipse && !key.path && !key.moto && !key.fly) {   // melihat sekitar: simpangan dari arah titik
       const dy = Math.abs(wrap((P.heading - key.B.hd) * st.R) / st.R) * deg0, dp = Math.abs(P.pitch - key.B.pt) * deg0;
@@ -151,6 +151,7 @@ UJI = r"""
   const Fw = get('Air mancur Coriolis');
   const Li = get('Menuju Copper Corn Station').lookEnd, Lu = get('Ukuran stasiun').lookStart;
   out[`tur: akhir pembuka = awal Ukuran stasiun (adaptasi, bloom, sunrays ${JSON.stringify(Li)} / ${JSON.stringify(Lu)})`] = JSON.stringify(Li) === JSON.stringify(Lu);
+  { const f1 = get('Menuju Copper Corn Station').fogEnd, f2 = get('Ukuran stasiun').fogStart; out[`tur: kabut akhir pembuka ${f1} = awal Ukuran stasiun ${f2}`] = f1 > 0 && Math.abs(f1 - f2) / f2 < 0.15; }
   out[`tur: bunyi kaca pecah saat bola mendarat (${!!ball0.shatter})`] = !!ball0.shatter;
   out[`tur: berlari mengitari air mancur ${Fw.fMin.toFixed(1)}-${Fw.fMax.toFixed(1)} m dari pusat, menabrak ${Fw.fCol} kali`] = Fw.fMin > 11 && Fw.fMax < 13 && !Fw.fCol;
   out[`tur: sunrays mati di cuaca cerah (Ukuran ${get('Ukuran stasiun').rays}), nyala saat berawan (Hutan ${get('Hutan lebat').rays})`] = get('Ukuran stasiun').rays === false && get('Hutan lebat').rays === w0.rays;

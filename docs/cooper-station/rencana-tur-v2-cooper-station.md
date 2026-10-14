@@ -1,5 +1,10 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.11: transisi 1 ke 2 masih patah (jernih lalu berkabut)
+
+Penyebab: kamera luar mematikan kabut udara stasiun (`toggleExterior()` mengatur kerapatan kabut 0), sedangkan di dalam kabut udara ada (yang terlihat seperti sunray: daratan jauh memudar ke biru muda). Perbaikan: di 7 s terakhir pembuka, kerapatan kabut dinaikkan halus dari 0 ke nilai dalam stasiun (rumus `fogD0` di `updateLighting()`), bersamaan dengan adaptasi mata dan bloom. Uji: kabut akhir pembuka = awal Ukuran stasiun.
+
+
 ## Revisi v2.10: gerak kepala saat lari dikurangi 70%
 
 `tourBob()`: semua amplitudo (naik-turun, ayun samping, angguk) dikali 0,3. Mata naik-turun 7,2 cm -> sekitar 2,2 cm.
