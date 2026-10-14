@@ -95,7 +95,7 @@
   .imgbox { position: relative; }
   /* foto bergeser di dalam bingkai saat digulir; diperbesar agar tepi tidak terlihat (lihat para()) */
   .layer { position: relative; will-change: translate; }
-  .layer.par { scale: 1.1; }
+  .layer.par { scale: 1.16; }
   .card.fade { animation: cardIn .45s ease; }
   @keyframes cardIn { from { opacity: 0; transform: translateY(8px); } }
 
@@ -183,7 +183,7 @@
     .photo { overflow: visible; }
     .photo .imgbox { border-radius: 18px 18px 0 0; overflow: hidden; }
     /* ponsel: tombol jadi strip di atas foto agar tidak menutupi penanda */
-    .acts { position: static; padding: 10px; background: rgba(6,8,12,0.82); border-bottom: 1px solid var(--line); }
+    .acts { position: relative; top: 0; left: 0; padding: 10px; background: #06080c; border-bottom: 1px solid var(--line); }  /* di atas .layer yang bergeser */
   }
   @media (max-width: 520px) { .go { padding: 10px 18px; } .go.ln { padding: 9px 16px; } .feats { grid-template-columns: 1fr; } .head { grid-template-columns: 1fr; } .no b { font-size: 44px; } }
 </style>
@@ -438,7 +438,7 @@
         en: ['GX-01', 'The craft you fly. The outside camera orbits it; press V for the cockpit with 3 screens.'] },
       { x: 200, y: 250, id: ['Bayangan dan horizon', 'Daerah gelap tempat cahaya tidak bisa keluar. Melewati horizon, sinyal wahana tidak pernah sampai ke relai di 22 rs.'],
         en: ['Shadow and horizon', 'The dark region light cannot leave. Past the horizon, the craft signal never reaches the relay at 22 rs.'] },
-      { x: 330, y: 110, id: ['Cahaya dibelokkan', 'Piringan di belakang lubang hitam tampak melengkung di atas bayangan, karena cahayanya dibelokkan gravitasi.'],
+      { x: 330, y: 135, id: ['Cahaya dibelokkan', 'Piringan di belakang lubang hitam tampak melengkung di atas bayangan, karena cahayanya dibelokkan gravitasi.'],
         en: ['Bent light', 'The disk behind the black hole appears to arch over the shadow, because gravity bends its light.'] },
       { x: 930, y: 300, l: 1, id: ['Piringan akresi', 'Gas panas berputar mengelilingi lubang hitam. Di ISCO, gas melesat 0,8 c relatif terhadap wahana yang menyusur.'],
         en: ['Accretion disk', 'Hot gas orbiting the black hole. At the ISCO it rushes past at 0.8 c relative to a skimming craft.'] },
@@ -455,7 +455,7 @@
         en: ['KS-07', 'A one-seat shuttle landed in the shallows. Climb the ladder with E, then fly clear before the wave hits.'] },
       { x: 700, y: 800, id: ['Laut dangkal', 'Ombak FFT dengan buih dan kaustik, tanpa daratan sama sekali. Cari 3 pecahan dengan radar (M).'],
         en: ['Shallow ocean', 'FFT waves with foam and caustics, no land anywhere. Find 3 wreck pieces with the radar (M).'] },
-      { x: 1400, y: 280, l: 1, id: ['Visor helm', 'Kamu melihat lewat helm astronaut: tetes air, embun napas, dan bingkai visor ikut terlihat.'],
+      { x: 1340, y: 280, l: 1, id: ['Visor helm', 'Kamu melihat lewat helm astronaut: tetes air, embun napas, dan bingkai visor ikut terlihat.'],
         en: ['Helmet visor', 'You look through an astronaut helmet: water drops, breath fog and the visor frame are all visible.'] } ] },
   };
   // Angka (sumber: CLAUDE.md, tools/uji_misi_gargantua.py, teks HUD Millar). v = nilai, d = desimal.
@@ -709,7 +709,8 @@
   // ---- paralaks saat digulir ----
   // Hero: foto latar paling lambat dan sedikit membesar, judul / tagline / peta bergeser dengan laju berbeda, lalu memudar.
   // Bagian experience: foto latar kabur, teks besar bergaris (mendatar), nomor besar, dan foto beranotasi bergerak dengan laju
-  // berbeda dari isi. Pakai properti `translate` / `scale` (terpisah dari `transform` milik efek muncul .rv). Mati bila reduce.
+  // berbeda dari isi. Pakai properti `translate` / `scale` (terpisah dari `transform` milik efek muncul .rv).
+  // Tetap jalan walau sistem memakai 'kurangi gerak' (pemilik ingin efek ini, seperti glideTo dan kanvas halaman detail).
   const hero = document.getElementById('top'), hcont = document.getElementById('hcont');
   const hbgs = [...hero.querySelectorAll('.hbg')], hpar = [...hero.querySelectorAll('[data-par]')];
   const XP = [...document.querySelectorAll('section.xp')].map((sec, i) => ({
@@ -731,13 +732,14 @@
       X.bg.style.translate = `0 ${(c * -0.12).toFixed(1)}px`;
       if (X.ghost) X.ghost.style.translate = `${(X.dir * c * 0.35).toFixed(1)}px ${(c * -0.1).toFixed(1)}px`;
       if (X.no) X.no.style.translate = `0 ${(c * -0.06).toFixed(1)}px`;
-      if (X.layer) {                                                  // -4% .. +4% tinggi foto (ruang dari scale 1,1)
-        const k = Math.max(-1, Math.min(1, c / ((vh + r.height) / 2)));
-        X.layer.style.translate = `0 ${(k * -4).toFixed(2)}%`;
+      if (X.layer) {                                                  // dihitung dari foto sendiri: k -1..1 selama foto terlihat
+        const b = X.layer.parentElement.getBoundingClientRect();
+        const k = Math.max(-1, Math.min(1, (b.top + b.height / 2 - vh / 2) / ((vh + b.height) / 2)));
+        X.layer.style.translate = `0 ${(k * -6).toFixed(2)}%`;        // -6% .. +6% tinggi foto (ruang dari scale 1,16)
       }
     }
   }
-  if (!reduce) {
+  {
     for (const X of XP) if (X.layer) X.layer.classList.add('par');
     const req = () => { if (!pend) { pend = true; requestAnimationFrame(para); } };
     addEventListener('scroll', req, { passive: true }); addEventListener('resize', req); para();
