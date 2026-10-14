@@ -855,7 +855,7 @@ Object.assign(I18N.en, {
   "Bola melayang {ta} s dan jatuh {a} m dari pelempar, sekitar {d} derajat keliling silinder.": "The ball floats for {ta} s and lands {a} m from the thrower, about {d} degrees around the cylinder.",
   "Sekawanan burung terbang rendah di bawah awan. Udara ikut berputar bersama stasiun, jadi burung terbang seperti biasa.": "A flock of birds flies low under the clouds. The air spins with the station, so birds fly as usual.",
   "Naik motor ke New York": "Riding to New York",
-  "Jalan lingkar rute bus merah dari Galileo ke New York, melawan arah putaran. Makin cepat makin ringan: di 150 km/h berat tinggal {gM} g.": "The red bus route ring road from Galileo to New York, against the spin. The faster you go the lighter you feel: at 150 km/h your weight drops to {gM} g.",
+  "Jalan lingkar rute bus merah dari {dA} ke New York, melawan arah putaran. Makin cepat makin ringan: di 150 km/h berat tinggal {gM} g.": "The red bus route ring road from {dA} to New York, against the spin. The faster you go the lighter you feel: at 150 km/h your weight drops to {gM} g.",
   "Lempar bola melawan putaran": "Throwing against the spin",
   "Burung di bawah awan": "Birds below the clouds",
   "Angin di bukit": "Wind on the hill",
@@ -878,6 +878,8 @@ Object.assign(I18N.en, {
   "Hujan miring": "Slanted rain",
   "Hujan jatuh miring sekitar 8 derajat karena Coriolis, efek yang sama dengan air mancur.": "Rain falls slanted about 8 degrees because of Coriolis, the same effect as the fountain.",
   "Dek pandang malam": "Observation deck at night",
+  "Lampu kota malam": "City lights at night",
+  "Naik dari jalan: lampu kota di seberang silinder tergantung di atas kepala. Kita menuju rumah Cooper.": "Rising from the street: the city lights across the cylinder hang overhead. We head for the Cooper house.",
   "Dek {hD} m. Lampu kota di seberang silinder tergantung di atas kepala.": "Deck at {hD} m. City lights on the far side of the cylinder hang overhead.",
   "Dari luar kamera tidak ikut berputar. Tidak ada tarikan ke bawah: lantai yang terus membelokkan benda di dalam.": "From outside the camera does not spin. Nothing pulls down: the floor keeps turning everything inside.",
   "Gerhana Saturnus": "Saturn eclipse",
@@ -15118,7 +15120,7 @@ function tourKeys() {
   const sk = SPOTS.skyway, H0 = HILLS[0], hl = SPOTS.hill, sp = CONFIG.spawn.theta * R;
   const cS = COOPER.s + 34, cZ = COOPER.za - 46;
   const ny = SPOTS.nyc || { s: LANDMARK.s, za: LANDMARK.za - 160, heading: 0 };
-  const dS = DECK.s + (DECK.half - 0.5) / deckK(), Lk = SPOTS.lake;   // dek: 0,5 m (nyata) dari pagar
+  const Lk = SPOTS.lake;
   const band = (f) => f.z0 > FARMS[1][0] - 10;                        // pertanian dekat end cap B
   let wF = null, wD = 1e9;                                            // v2.4: gandum terdekat bukit (rute maju ke end cap B; SPOTS.wheat tetap)
   for (const f of fieldList) if (f.crop === 'wheat' && !f.meadow && !f.lake) { const d = Math.hypot(wrapS((f.s0 + f.s1) / 2 - H0.s), (f.z0 + f.z1) / 2 - H0.za); if (d < wD) { wD = d; wF = f; } }
@@ -15158,15 +15160,23 @@ function tourKeys() {
       cap: 'Satu siklus tanam 96 jam: gandum tumbuh, menguning, lalu dipanen. Langit mulai mendung.' },
     { s: cS, za: cZ, h: 6, hd: Math.atan2(COOPER.s - cS, COOPER.za - cZ) / DEG, pt: -3, hold: 4, hr: 16.6, wx: 'mendung', title: 'Rumah Cooper',
       cap: 'Di sini "atas" selalu ke arah sumbu, jadi rumah dan pohon berdiri tegak ke pusat silinder.' },
-    { at: () => {                                                      // hujan: trotoar arteri Galileo dekat jalan lingkar rute bus merah (tempat naik motor), di bawah awan paling tebal
-        const c = [];                                                   // awan berupa gumpalan: kandidat di 3 arteri, za 520-1.200, menghadap jalan lingkar
-        for (let k = 6; k <= 8; k++) for (let za = 520; za <= 1200; za += 30) c.push({ s: modS(k * ART + 13), za, hd: 180 });
-        return tourCloudPick(c);
+    { at: () => {                                                      // hujan: di jalur jalan lingkar rute bus merah tempat naik motor, di ruas yang sedang berawan
+        const za = BUS.lines[0].za - 3.5;                               // awan baru terbentuk di za 300-700 (jarang di jalan ini): ambil ruas berawan paling dekat ke New York
+        let pick = null, bv = -1;
+        for (let s = 700; s <= 3200; s += 20) {
+          const v = cloudCoverAt(s, za);
+          if (v >= 0.15) { pick = { s, za, hd: -90 }; bv = v; break; }
+          if (v > bv) { bv = v; pick = { s, za, hd: -90 }; }
+        }
+        if (bv < 0.02) pick = { s: modS(6.2 * ART), za, hd: -90 };       // tidak ada awan di ruas: mulai di Galileo seperti semula
+        TOUR.rainCov = bv;                                              // awan terbaik di ruas (uji)
+        TOUR.dA = (districtAt(pick.s, za) || {}).name || 'Galileo';
+        return pick;
       },
-      h: 0, pt: 4, cut: true, durF: 0.8, hold: 12, hr: 17.2, wx: 'mendung', ri: 1, title: 'Hujan miring',   // ri 1: jalan cepat basah (genangan di tempat turun dari motor)
+      h: 0, pt: -8, cut: true, lookBack: true, durF: 0.8, hold: 12, hr: 17.2, wx: 'mendung', ri: 1, title: 'Hujan miring',   // ri 1: jalan cepat basah (genangan di tempat turun dari motor)
       cap: 'Hujan jatuh miring sekitar 8 derajat karena Coriolis, efek yang sama dengan air mancur.' },
-    { moto: { za: BUS.lines[0].za - 3.5, hd: -Math.PI / 2, stop: ART + 24 }, cut: true, hold: 70, hr: 18.3, wx: 'reda', ri: 3, title: 'Naik motor ke New York',   // mulai di jalan lingkar searah arteri titik hujan, mengerem dan berhenti sebelum arteri k = 1
-      cap: 'Jalan lingkar rute bus merah dari Galileo ke New York, melawan arah putaran. Makin cepat makin ringan: di 150 km/h berat tinggal {gM} g.' },
+    { moto: { za: BUS.lines[0].za - 3.5, hd: -Math.PI / 2, stop: ART + 24 }, hold: 100, hr: 18.3, wx: 'reda', ri: 3, title: 'Naik motor ke New York',   // naik di titik hujan, mengerem dan berhenti sebelum arteri k = 1
+      cap: 'Jalan lingkar rute bus merah dari {dA} ke New York, melawan arah putaran. Makin cepat makin ringan: di 150 km/h berat tinggal {gM} g.' },
     { at: () => ({ s: TOUR.from.s, za: TOUR.from.za, hd: -90 }),      // genangan: turun dari motor di tempat berhenti
       path: (u, P) => {                                                  // ke trotoar arteri lalu berjalan sejajar sumbu ke arah pusat kota, menoleh sedikit ke badan jalan
         const sW = modS(Math.round(P.s / ART) * ART + 13), z1 = BUS.lines[0].za + 14;
@@ -15176,23 +15186,34 @@ function tourKeys() {
       },
       h: 0, pt: -7, durF: 1, hold: 11, hr: 19, wx: 'reda', ri: 3, title: 'Genangan di jalan kota',
       cap: 'Hujan reda. Genangan di jalan memantulkan gedung dan lampu kota.' },
-    { s: dS, za: DECK.za, h: DECK.h, hd: 90, pt: -6, hold: 5, hr: 21.5, wx: 'cerah', title: 'Dek pandang malam',
-      cap: 'Dek {hD} m. Lampu kota di seberang silinder tergantung di atas kepala.' },
-    { at: (K) => {                                                     // gerhana: tepi ladang jagung dekat end cap B tempat Matahari paling tinggi di tengah waktu diam
-        const t0 = clock.sim - TOUR.t + K.durF, tm = t0 + K.hold / 2;   // Matahari tertinggi bila omega t + theta = -90 derajat
-        const sS = modS((-Math.PI / 2 - OMEGA * tm) * R);
-        let best = null, bd = 1e9;
+    { fly: (K, t) => {                                                  // naik sambil berputar menghadap lampu kota, lalu mundur ke arah rumah Cooper
+        const A = K.p0, u = t / K.hold, up = sstep(0, 0.45, u), mv = sstep(0.2, 1, u);
+        const z1 = COOPER.za - 650;
+        return { s: modS(A.s + wrapS(COOPER.s - A.s) * mv), za: A.za + (z1 - A.za) * mv, hA: A.hA + 420 * up,
+          hd: angLerp(A.hd, Math.PI, sstep(0, 0.4, u)), pt: A.pt + (-14 * DEG - A.pt) * up };
+      },
+      hold: 16, hr: 21, wx: 'cerah', title: 'Lampu kota malam',
+      cap: 'Naik dari jalan: lampu kota di seberang silinder tergantung di atas kepala. Kita menuju rumah Cooper.' },
+    { at: (K) => {                                                     // gerhana: tepi ladang jagung dekat rumah Cooper; posisi dan lama terbang dipilih agar Matahari tinggi di tengah waktu diam
+        const t0 = clock.sim - TOUR.t, Hh = K.hold / 2;                 // Matahari tertinggi bila omega t + theta = -90 derajat
+        let best = null, be = 1e9;
         for (const f of fieldList) {
           if (!f.corn || f.lake || !band(f)) continue;
-          const hw = Math.max(0, (f.s1 - f.s0) / 2 - 6), m = (f.s0 + f.s1) / 2, d = wrapS(sS - m), q = Math.max(-hw, Math.min(hw, d));
-          const s = modS(m + q), za = f.z0 - 3;
-          if (Math.abs(d - q) < bd && !colAt(s, za, 1.5) && !inWater(s, za, 3)) { bd = Math.abs(d - q); best = { s, za }; }
+          for (let s = f.s0 + 6; s <= f.s1 - 6; s += 10) {
+            const dC = Math.abs(wrapS(s - COOPER.s)), za = f.z0 - 3; if (dC > 1200) continue;
+            if (colAt(modS(s), za, 1.5) || inWater(modS(s), za, 3)) continue;
+            for (let T = 6; T <= 30; T += 0.5) {
+              const ph = s / R + OMEGA * (t0 + T + Hh) + Math.PI / 2, e = Math.abs(Math.atan2(Math.sin(ph), Math.cos(ph)));
+              const c = e + 0.004 * T + 0.0002 * dC;
+              if (c < be) { be = c; best = { s: modS(s), za, T }; }
+            }
+          }
         }
-        best = best || { s: sS, za: CORN_SPOT.za };
-        const S = tourSun(best.s / R, t0);
-        return { s: best.s, za: best.za, hd: S.hd / DEG, pt: S.el / DEG - 4 };
+        best = best || { s: CORN_SPOT.s, za: CORN_SPOT.za, T: 8 };
+        const S = tourSun(best.s / R, t0 + best.T);
+        return { s: best.s, za: best.za, durF: best.T, hd: S.hd / DEG, pt: S.el / DEG - 4 };
       },
-      h: 0, hd: 0, pt: 18, eclipse: true, durF: 6, hold: 9, hr: 23, wx: 'cerah', title: 'Gerhana Saturnus',
+      h: 0, hd: 0, pt: 18, eclipse: true, durF: 8, hold: 9, hr: 23, wx: 'cerah', title: 'Gerhana Saturnus',
       cap: 'Lihat ke end cap B: Saturnus menutup Matahari sekitar {eH} jam tiap orbit {oH} jam. Sinar Matahari di dalam stasiun padam.' },
     { ext: 0, hold: 6, hr: 1, wx: 'cerah', title: 'Dari luar: kerangka inersia',
       cap: 'Dari luar kamera tidak ikut berputar. Tidak ada tarikan ke bawah: lantai yang terus membelokkan benda di dalam.' },
@@ -15257,7 +15278,7 @@ LANG.hooks.push(() => { if (TOUR.on) tourCaption(); if (PHOTO.on) syncPhotoUI();
 function tourVars() {                                                  // angka di teks tur, dihitung dari konstanta stasiun
   return { s10: fmtN(FOUNT.shift10, 2), hT: fmtInt(LANDMARK.h), gT: fmtN((R - LANDMARK.h) / R, 2), hD: fmtInt(DECK.h),
     eH: fmtN(2 * ECL.half / TAU * T_ORB / 3600, 1), oH: fmtN(T_ORB / 3600, 1),
-    gM: fmtN((OMEGA * R - MOTO.vSport) ** 2 / R / CONFIG.g, 2) };   // berat terasa motor melawan putaran di batas sport (rumus stepMoto)
+    gM: fmtN((OMEGA * R - MOTO.vSport) ** 2 / R / CONFIG.g, 2), dA: TOUR.dA || 'Galileo' };   // berat terasa motor melawan putaran di batas sport (rumus stepMoto)
 }
 function tourCapText(K) { return K.capNow ? t(K.capNow, K.vars) : t(K.cap, tourVars()); }
 function tourCaption() {
@@ -15309,10 +15330,13 @@ function tourMotoStart(K) {                                           // motor: 
   motoStartSound();
   K.started = true;
 }
-function tourGlance(K, hold) {                                        // menoleh pelan: nol di awal dan akhir diam (tersambung mulus ke terbang), dalam batas FOV 120 derajat
-  const H = Math.max(3, K.hold), u = Math.min(1, hold / H), env = Math.sin(Math.PI * u), sg = TOUR.i % 2 ? 1 : -1;
-  const A = (K.path ? 18 : 42) * DEG, w = 2 * Math.PI * hold / H;
-  return { y: sg * A * env * (0.8 * Math.sin(w) + 0.2 * Math.sin(2.7 * w + 1.3)), p: 7 * DEG * env * Math.sin(1.3 * w + 0.6) };
+function tourGlance(K, hold) {                                        // v2.6: menoleh kiri-kanan pelan maks 8 derajat, lalu menengadah 30 derajat (jalan kaki: hanya menoleh 5 derajat)
+  const H = Math.max(3, K.hold), u = Math.min(1, hold / H), sg = TOUR.i % 2 ? 1 : -1;
+  const yE = Math.sin(Math.PI * Math.min(1, u / 0.6));                 // menoleh di 60% awal, kembali ke tengah
+  const y = sg * (K.path ? 5 : 8) * DEG * yE * Math.sin(2 * Math.PI * Math.min(1, u / 0.6));
+  if (K.path) return { y, p: 0 };
+  const up = sstep(0.4, 0.75, u) * (K.lookBack ? 1 - sstep(0.82, 1, u) : 1);   // lookBack: kembali ke arah titik di akhir (lanjut naik motor)
+  return { y, p: 30 * DEG * up };
 }
 function tourMotoBrake(K) {                                           // rem (tombol S, seperti pemain) bila jarak berhenti >= sisa jarak ke titik berhenti; diam = selesai
   const M = MOTO, rem = wrapS(M.s - K.moto.stop);                     // melawan putaran: s berkurang
@@ -15374,6 +15398,11 @@ function stepTour(dt) {
     if (ext.active) toggleExterior();
     if (!K.started) tourMotoStart(K);
     else if (K.moto.stop !== undefined && MOTO.on) tourMotoBrake(K);
+  } else if (K.fly) {                                                 // v2.6: lintasan kamera sendiri sepanjang titik (mulai dari pose terakhir)
+    if (ext.active) toggleExterior();
+    if (!K.p0) { K.p0 = Object.assign({}, TOUR.from); K.dur = 0; K.B = K.p0; }
+    const P = K.fly(K, Math.min(TOUR.t, K.hold));
+    player.theta = P.s / R; player.za = P.za; player.h = Math.max(P.hA, groundH(P.s, P.za)); player.heading = P.hd; player.pitch = P.pt;
   } else {
     if (ext.active) toggleExterior();
     if (!K.B) {
@@ -15398,7 +15427,7 @@ function stepTour(dt) {
       const P = K.path(Math.min(1, hold / K.hold), K.p0);
       player.theta = P.s / R; player.za = P.za; player.h = groundH(P.s, P.za); player.heading = P.hd;
     }
-    if (hold > 0 && !K.track && !K.ball && !K.eclipse) {             // v2.5: saat diam melihat sekitar seperti orang, terbatas (maks 45 derajat ke samping, 8 derajat naik-turun)
+    if (hold > 0 && !K.track && !K.ball && !K.eclipse) {             // saat diam melihat sekitar seperti orang (tourGlance)
       const G = tourGlance(K, hold); player.heading += G.y; player.pitch = Math.max(-1.3, Math.min(1.3, player.pitch + G.p));
     }
     if (K.ball && !K.landing && hold > 0.8) tourThrow(K);

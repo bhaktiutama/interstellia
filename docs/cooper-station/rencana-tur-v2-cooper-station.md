@@ -1,5 +1,18 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.6: masukan uji Bhakti (selesai, menunggu uji visual)
+
+| Masukan | Perubahan | Hasil uji |
+| --- | --- | --- |
+| Gerakan kepala terlalu goyang; kanan-kiri 5-10 derajat, lalu lihat ke atas 30 derajat | Menoleh kiri-kanan pelan maks 8 derajat di 60% awal diam (jalan kaki 5 derajat, tanpa menengadah), lalu menengadah 30 derajat dan tetap di sana; titik hujan kembali ke arah semula di akhir agar tersambung ke motor | Menoleh maks 6,2 derajat, menengadah 30,0 derajat |
+| Hujan di titik yang sama dengan naik motor | Hujan di lajur jalan lingkar rute bus merah, motor mulai dari diam di titik itu juga (tanpa layar gelap di antaranya). Titik dicari di ruas s 700-3.200 yang berawan paling dekat ke New York; bila tidak ada awan, mulai di Galileo seperti semula | Lompatan hujan ke motor 0,0 m. Catatan: di uji, awan terbaik di ruas itu 0,00 (lihat catatan) |
+| Dek pandang malam diganti: setelah turun dari motor kamera naik berputar menghadap lampu kota, bergerak ke arah rumah Cooper untuk gerhana | Titik baru Lampu kota malam (`fly`, 16 s): dari tempat jalan kaki naik 420 m sambil berputar menghadap kota (arah -za), lalu mundur menjauhi kota ke 650 m sebelum rumah Cooper. Gerhana: tepi ladang jagung dalam 1,2 km dari rumah Cooper; posisi dan lama terbang (6-30 s) dipilih bersama agar Matahari tinggi di tengah waktu diam | Naik 424 m, arah 180 derajat (menghadap kota), gerhana 198 m dari rumah Cooper, Matahari min 22,4 derajat |
+
+Catatan hujan: awan di game baru terbentuk di za 300-700 (dipudarkan di tepi end cap A), jadi di jalan lingkar rute merah (za 500) hampir tidak pernah ada awan; tetes hujan hanya turun di bawah awan. Hujan tetap terdengar, langit mendung, jalan basah, tetapi tetes hujan biasanya tidak terlihat di titik ini. Alternatif: rute bus biru (za 1.250) yang lebih sering berawan.
+
+Urutan v2.6: 1 Menuju stasiun, 2 Ukuran stasiun, 3 Dekat sumbu, 4 Gravitasi, 5 Menara New York, 6 Air mancur, 7 Lempar bola, 8 Skyway, 9 Hutan, 10 Bukit, 11 Burung, 12 Ladang gandum, 13 Rumah Cooper, 14 Hujan miring (titik naik motor), 15 Naik motor ke New York, 16 Genangan (turun dari motor), 17 Lampu kota malam (naik, ke arah rumah Cooper), 18 Gerhana (ladang jagung dekat rumah Cooper), 19 Dari luar, 20 Dermaga despun, 21 Pagi berkabut, 22 Meninggalkan stasiun. Durasi 333 s.
+
+
 ## Revisi v2.5: masukan uji Bhakti (selesai, menunggu uji visual)
 
 Tetap tanpa mengubah fungsi lain; tur hanya mengatur keadaan yang juga bisa diatur pemain (tombol Sunrays di panel, rem motor = tombol S).
