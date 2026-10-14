@@ -93,6 +93,9 @@
   .card.r { left: auto; right: 18px; }
   .card.tr { left: auto; right: 18px; top: 18px; bottom: auto; }
   .imgbox { position: relative; }
+  /* foto bergeser di dalam bingkai saat digulir; diperbesar agar tepi tidak terlihat (lihat para()) */
+  .layer { position: relative; will-change: translate; }
+  .layer.par { scale: 1.1; }
   .card.fade { animation: cardIn .45s ease; }
   @keyframes cardIn { from { opacity: 0; transform: translateY(8px); } }
 
@@ -179,6 +182,8 @@
     .card, .card.r { position: static; width: auto; margin: 0; border-radius: 0 0 14px 14px; border: 0; border-top: 1px solid var(--line); border-left: 3px solid var(--a); }
     .photo { overflow: visible; }
     .photo .imgbox { border-radius: 18px 18px 0 0; overflow: hidden; }
+    /* ponsel: tombol jadi strip di atas foto agar tidak menutupi penanda */
+    .acts { position: static; padding: 10px; background: rgba(6,8,12,0.82); border-bottom: 1px solid var(--line); }
   }
   @media (max-width: 520px) { .go { padding: 10px 18px; } .go.ln { padding: 9px 16px; } .feats { grid-template-columns: 1fr; } .head { grid-template-columns: 1fr; } .no b { font-size: 44px; } }
 </style>
@@ -414,7 +419,7 @@
   // Penanda di foto: x, y dalam piksel gambar asli; l = label di kiri penanda. [judul ID, teks ID], en: [judul EN, teks EN]
   const SPOTS = {
     c: { w: 1202, h: 835, list: [
-      { x: 300, y: 100, id: ['Kota di dinding dalam', 'Gedung menempel di sisi dalam silinder. Kepala semua orang menghadap sumbu, jadi kota di seberang tampak menggantung di atasmu.'],
+      { x: 390, y: 120, id: ['Kota di dinding dalam', 'Gedung menempel di sisi dalam silinder. Kepala semua orang menghadap sumbu, jadi kota di seberang tampak menggantung di atasmu.'],
         en: ['City on the inside wall', 'Buildings stand on the inside of the cylinder. Everyone\'s head points at the axis, so the city across hangs above you.'] },
       { x: 610, y: 410, id: ['End cap, 8 km jauhnya', 'Ujung silinder di kejauhan. Sinar Matahari masuk lewat end cap B dengan sudut 25 derajat; tiap orbit ada gerhana Saturnus 2,78 jam.'],
         en: ['End cap, 8 km away', 'The far end of the cylinder. Sunlight enters through end cap B at 25 degrees; every orbit brings a 2.78 h Saturn eclipse.'] },
@@ -433,7 +438,7 @@
         en: ['GX-01', 'The craft you fly. The outside camera orbits it; press V for the cockpit with 3 screens.'] },
       { x: 200, y: 250, id: ['Bayangan dan horizon', 'Daerah gelap tempat cahaya tidak bisa keluar. Melewati horizon, sinyal wahana tidak pernah sampai ke relai di 22 rs.'],
         en: ['Shadow and horizon', 'The dark region light cannot leave. Past the horizon, the craft signal never reaches the relay at 22 rs.'] },
-      { x: 250, y: 40, id: ['Cahaya dibelokkan', 'Piringan di belakang lubang hitam tampak melengkung di atas bayangan, karena cahayanya dibelokkan gravitasi.'],
+      { x: 330, y: 110, id: ['Cahaya dibelokkan', 'Piringan di belakang lubang hitam tampak melengkung di atas bayangan, karena cahayanya dibelokkan gravitasi.'],
         en: ['Bent light', 'The disk behind the black hole appears to arch over the shadow, because gravity bends its light.'] },
       { x: 930, y: 300, l: 1, id: ['Piringan akresi', 'Gas panas berputar mengelilingi lubang hitam. Di ISCO, gas melesat 0,8 c relatif terhadap wahana yang menyusur.'],
         en: ['Accretion disk', 'Hot gas orbiting the black hole. At the ISCO it rushes past at 0.8 c relative to a skimming craft.'] },
@@ -450,7 +455,7 @@
         en: ['KS-07', 'A one-seat shuttle landed in the shallows. Climb the ladder with E, then fly clear before the wave hits.'] },
       { x: 700, y: 800, id: ['Laut dangkal', 'Ombak FFT dengan buih dan kaustik, tanpa daratan sama sekali. Cari 3 pecahan dengan radar (M).'],
         en: ['Shallow ocean', 'FFT waves with foam and caustics, no land anywhere. Find 3 wreck pieces with the radar (M).'] },
-      { x: 1470, y: 280, l: 1, id: ['Visor helm', 'Kamu melihat lewat helm astronaut: tetes air, embun napas, dan bingkai visor ikut terlihat.'],
+      { x: 1400, y: 280, l: 1, id: ['Visor helm', 'Kamu melihat lewat helm astronaut: tetes air, embun napas, dan bingkai visor ikut terlihat.'],
         en: ['Helmet visor', 'You look through an astronaut helmet: water drops, breath fog and the visor frame are all visible.'] } ] },
   };
   // Angka (sumber: CLAUDE.md, tools/uji_misi_gargantua.py, teks HUD Millar). v = nilai, d = desimal.
@@ -526,13 +531,16 @@
     const key = p.dataset.p, S = SPOTS[key];
     PH[key] = { el: p, sel: 0, user: false, vis: false };
     const box = p.querySelector('.imgbox');
+    // lapisan foto: gambar + garis anotasi + penanda bergerak bersama di dalam bingkai (paralaks)
+    const lay = document.createElement('div'); lay.className = 'layer';
+    box.insertBefore(lay, box.querySelector('img')); lay.append(...box.querySelectorAll(':scope > img, :scope > svg.ov'));
     S.list.forEach((s, i) => {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'spot' + (s.l ? ' l' : '');
       b.style.left = (s.x / S.w * 100) + '%'; b.style.top = (s.y / S.h * 100) + '%'; b.style.setProperty('--d', (0.5 + i * 0.12) + 's');
       b.innerHTML = `${i + 1}<span class="lab"></span>`;
       const pick = (u) => { if (u) PH[key].user = true; selSpot(key, i); };
       b.addEventListener('mouseenter', () => pick(true)); b.addEventListener('click', () => pick(true)); b.addEventListener('focus', () => pick(true));
-      box.appendChild(b);
+      lay.appendChild(b);
     });
   }
   function selSpot(key, i) {
@@ -705,7 +713,7 @@
   const hero = document.getElementById('top'), hcont = document.getElementById('hcont');
   const hbgs = [...hero.querySelectorAll('.hbg')], hpar = [...hero.querySelectorAll('[data-par]')];
   const XP = [...document.querySelectorAll('section.xp')].map((sec, i) => ({
-    sec, bg: sec.querySelector('.bg'), ghost: sec.querySelector('.ghost'), no: sec.querySelector('.no b'), photo: sec.querySelector('.photo'), dir: i % 2 ? -1 : 1 }));
+    sec, bg: sec.querySelector('.bg'), ghost: sec.querySelector('.ghost'), no: sec.querySelector('.no b'), layer: sec.querySelector('.layer'), dir: i % 2 ? -1 : 1 }));
   let pend = false;
   function para() {
     pend = false;
@@ -723,10 +731,14 @@
       X.bg.style.translate = `0 ${(c * -0.12).toFixed(1)}px`;
       if (X.ghost) X.ghost.style.translate = `${(X.dir * c * 0.35).toFixed(1)}px ${(c * -0.1).toFixed(1)}px`;
       if (X.no) X.no.style.translate = `0 ${(c * -0.06).toFixed(1)}px`;
-      if (X.photo) X.photo.style.translate = `0 ${(c * 0.035).toFixed(1)}px`;
+      if (X.layer) {                                                  // -4% .. +4% tinggi foto (ruang dari scale 1,1)
+        const k = Math.max(-1, Math.min(1, c / ((vh + r.height) / 2)));
+        X.layer.style.translate = `0 ${(k * -4).toFixed(2)}%`;
+      }
     }
   }
   if (!reduce) {
+    for (const X of XP) if (X.layer) X.layer.classList.add('par');
     const req = () => { if (!pend) { pend = true; requestAnimationFrame(para); } };
     addEventListener('scroll', req, { passive: true }); addEventListener('resize', req); para();
   }
