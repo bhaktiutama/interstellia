@@ -1,5 +1,5 @@
 """Uji tahap 12d (Copper Corn Station): siklus tanam gandum dan mesin ladang, mode foto (FOV, blur, simpan PNG,
-semua dikembalikan saat keluar), tur sinematik v2.4 (22 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
+semua dikembalikan saat keluar), tur sinematik v2.8 (20 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
 lempar bola melawan putaran, gerhana dari dalam, pembuka dan penutup kamera luar, tanpa NaN, semua dikembalikan).
 Pakai: python tools/uji_ladang_foto_tur.py   (butuh: pip install playwright && playwright install chromium; CHROMIUM opsional)"""
 import asyncio, os, pathlib
@@ -51,6 +51,13 @@ UJI = r"""
     if (hold && key.B && !key.track && !key.ball && !key.eclipse && !key.path && !key.moto && !key.fly) {   // melihat sekitar: simpangan dari arah titik
       const dy = Math.abs(wrap((P.heading - key.B.hd) * st.R) / st.R) * deg0, dp = Math.abs(P.pitch - key.B.pt) * deg0;
       glance.y = Math.max(glance.y, dy); glance.p = Math.max(glance.p, dp); glance.n++;
+      const m = Math.hypot(dy, dp); if (r.glPrev !== undefined && m < r.glPrev - 1e-4) glance.rev = (glance.rev || 0) + 1; r.glPrev = m;   // v2.8: satu arah, tidak kembali
+    }
+    if (hold && key.path) {                                            // v2.8: jalan kaki: laju, gerak kepala (tinggi mata naik-turun), langkah
+      const e = P.h - st.groundH(ps, P.za); r.bobMin = Math.min(r.bobMin ?? 9, e); r.bobMax = Math.max(r.bobMax ?? -9, e);
+      if (r.wPrev) r.wMax = Math.max(r.wMax || 0, Math.hypot(wrap(ps - r.wPrev.s), P.za - r.wPrev.za) / 0.05);
+      r.wPrev = { s: ps, za: P.za }; r.walkT = (r.walkT || 0) + 0.05; r.steps = key.bob ? key.bob.n : 0;
+      if (key.title === 'Air mancur Coriolis') { const dF = Math.hypot(wrap(ps - st.FOUNT.s), P.za - st.FOUNT.za); r.fMin = Math.min(r.fMin ?? 99, dF); r.fMax = Math.max(r.fMax || 0, dF); r.fCol = (r.fCol || 0) + (st.colAt(((ps % CIRC) + CIRC) % CIRC, P.za, 0.3) ? 1 : 0); }
     }
     if (hold) {
       r.wetMin = Math.min(r.wetMin, st.RAIN.wet);
@@ -79,15 +86,15 @@ UJI = r"""
         r.sunEl = Math.min(r.sunEl ?? 99, el * deg0);
         r.sunAim = Math.max(r.sunAim || 0, Math.hypot(wrap((P.heading - hd) * st.R) / st.R * Math.cos(el), P.pitch - el) * deg0);
       }
-      if (key.ball && ball0 && ball0.bb && ball0.bb.t > 0 && !ball0.bb.done) {   // kamera menghadap bola, jarak ke bola
-        const b = ball0.bb.pos, eye = { x: 0, y: 0, z: 0 }, th = P.theta, rr = st.R - P.h - st.CONFIG.eye;
-        const ex = rr * Math.cos(th), ey = rr * Math.sin(th), ez = P.za - st.R * 4;
-        const dx = b.x - ex, dy = b.y - ey, dzz = b.z - (P.za - 4000), up = [-Math.cos(th), -Math.sin(th)], tg = [-Math.sin(th), Math.cos(th)];
-        const dt = dx * tg[0] + dy * tg[1], du = dx * up[0] + dy * up[1], dist = Math.hypot(dx, dy, dzz);
-        const hd = Math.atan2(dt, dzz), pt = Math.atan2(du, Math.hypot(dt, dzz));
-        const err = Math.hypot(wrap((P.heading - hd) * st.R) / st.R * Math.cos(pt), P.pitch - pt) * 180 / Math.PI;
-        r.ballAim = Math.max(r.ballAim || 0, err); if (r.ballD0 === undefined) r.ballD0 = dist; r.ballD1 = dist;
-        r.under = (r.under || 0) + (P.h < st.groundH(ps, P.za) - 0.01 ? 1 : 0);
+      if (key.ball && ball0 && ball0.bb && ball0.bb.t > 0) {            // v2.8: bola di dalam bingkai, laju kamera, geser ke samping; akhir: seluruh lintasan di bingkai
+        const b = ball0.bb, cam = st.camera, v = cam.position.clone(), ndc = (x, y, z) => { v.set(x, y, z).project(cam); return Math.max(Math.abs(v.x), Math.abs(v.y)) + (v.z > 1 ? 9 : 0); };
+        cam.updateMatrixWorld();
+        if (!b.done) r.ballOut = Math.max(r.ballOut || 0, ndc(b.pos.x, b.pos.y, b.pos.z));
+        const cp = cam.position.clone(); if (r.cPrev) (r.cSp || (r.cSp = [])).push(cp.distanceTo(r.cPrev) / 0.05); r.cPrev = cp;
+        const side = Math.abs(P.za - (b.p0.z + 4000)); if (r.side !== undefined && side < r.side - 0.01) r.sideRev = (r.sideRev || 0) + 1; r.side = side;
+        let all = 0; for (let i = 0; i <= 40; i++) { const t = b.tEnd * i / 40, c = Math.cos(st.OMEGA * t), sn = Math.sin(st.OMEGA * t), x = b.p0.x + b.vin.x * t, y = b.p0.y + b.vin.y * t;
+          all = Math.max(all, ndc(x * c + y * sn, -x * sn + y * c, b.p0.z + b.vin.z * t)); }
+        r.pathIn = all; r.under = (r.under || 0) + (P.h < st.groundH(ps, P.za) - 0.01 ? 1 : 0);
       }
     }
     if (key.moto && st.MOTO.on) {
@@ -134,11 +141,19 @@ UJI = r"""
   const ord = st.TOUR.keys.slice(0, 5).map((q) => q.title).join(' > ');
   out[`tur: urutan pembuka ${ord}`] = ord === 'Menuju Copper Corn Station > Ukuran stasiun > Dekat sumbu: gravitasi mengecil > Gravitasi dari putaran > Menara ikon New York';
   out[`tur: pembuka masuk menembus kaca end cap A (kamera z ${(get('Menuju Copper Corn Station').camZ + 4000).toFixed(0)} m dari kaca)`] = get('Menuju Copper Corn Station').camZ > -4000 && get('Menuju Copper Corn Station').camZ < -3900;
-  out[`tur: melihat sekitar saat diam: menoleh maks ${glance.y.toFixed(1)} derajat, naik-turun maks ${glance.p.toFixed(1)} derajat (goyang tangan, <= 10)`] = glance.n > 0 && glance.y > 0.5 && glance.y <= 10 && glance.p <= 10;
+  out[`tur: melihat sekitar saat diam pelan ke satu arah: menoleh maks ${glance.y.toFixed(1)} derajat, naik-turun maks ${glance.p.toFixed(1)} derajat (<= 10), kembali ${glance.rev || 0} kali`] = glance.n > 0 && glance.y > 0.5 && glance.y <= 10 && glance.p <= 10 && !glance.rev;
+  for (const n of ['Air mancur Coriolis', 'Hutan lebat', 'Genangan di jalan kota']) {
+    const W = get(n);
+    out[`tur: ${n}: jalan kaki ${W.walkT.toFixed(1)} s, laju maks ${W.wMax.toFixed(2)} m/s (pemain 1,4), mata naik-turun ${((W.bobMax - W.bobMin) * 100).toFixed(1)} cm, ${W.steps} langkah`] =
+      W.wMax > 1.2 && W.wMax < 1.75 && W.bobMax - W.bobMin > 0.02 && W.bobMax - W.bobMin < 0.1 && W.steps > 8;
+  }
+  const Fw = get('Air mancur Coriolis');
+  out[`tur: berjalan mengitari air mancur ${Fw.fMin.toFixed(1)}-${Fw.fMax.toFixed(1)} m dari pusat, menabrak ${Fw.fCol} kali`] = Fw.fMin > 11 && Fw.fMax < 13 && !Fw.fCol;
   out[`tur: sunrays mati di cuaca cerah (Ukuran ${get('Ukuran stasiun').rays}), nyala saat berawan (Hutan ${get('Hutan lebat').rays})`] = get('Ukuran stasiun').rays === false && get('Hutan lebat').rays === w0.rays;
   const Bo = get('Lempar bola melawan putaran');
-  out[L ? `tur: bola 120 m/s 10 derajat melawan putaran: jatuh ${Math.abs(L.arc).toFixed(0)} m keliling setelah ${L.time.toFixed(1)} s; kamera menghadap bola (meleset maks ${(Bo.ballAim || 99).toFixed(1)} derajat), jarak ${(Bo.ballD0 || 0).toFixed(0)} -> ${(Bo.ballD1 || 0).toFixed(0)} m, di bawah tanah ${Bo.under || 0} kali` : 'tur: bola dilempar'] =
-    !!L && Math.abs(L.arc) > 0 && L.time > 2 && ball.ball.v === 120 && ball.ball.e === 10 && Bo.ballAim < 10 && Bo.ballD0 < 20 && Bo.ballD1 > 200 && Bo.ballD1 < 400 && !Bo.under;
+  const sp = Bo.cSp || [0], q4 = Math.floor(sp.length / 4), avg = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length), v1 = avg(sp.slice(1, q4)), v4 = avg(sp.slice(3 * q4));
+  out[L ? `tur: bola 80 m/s 10 derajat melawan putaran: jatuh ${Math.abs(L.arc).toFixed(0)} m keliling setelah ${L.time.toFixed(1)} s; bola di bingkai (maks ${(Bo.ballOut || 9).toFixed(2)}), kamera ${v1.toFixed(0)} -> ${v4.toFixed(0)} m/s, ke samping ${(Bo.side || 0).toFixed(0)} m (mundur ${Bo.sideRev || 0}), akhir lintasan penuh di bingkai (${(Bo.pathIn || 9).toFixed(2)})` : 'tur: bola dilempar'] =
+    !!L && L.time > 40 && Math.abs(L.arc) > 2500 && ball.ball.v === 80 && ball.ball.e === 10 && Bo.ballOut < 1 && v4 < 0.5 * v1 && Bo.side > 100 && !Bo.sideRev && Bo.pathIn < 1 && !Bo.under;
   const Sk0 = get('Skyway: jendela ke angkasa').anyFirst, Bo1 = Bo.anyLast, skJ = Math.hypot(wrap(Sk0.s - Bo1.s), Sk0.za - Bo1.za, Sk0.h - Bo1.h);
   out[`tur: terbang ke Skyway mulai dari kamera pengejar bola (lompat ${skJ.toFixed(1)} m < 5)`] = skJ < 5;
   let sg = 0, rev = []; const fl = [];

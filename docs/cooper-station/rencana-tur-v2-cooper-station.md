@@ -1,5 +1,20 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.8: masukan uji Bhakti (selesai, menunggu uji visual)
+
+| Masukan | Perubahan | Hasil uji |
+| --- | --- | --- |
+| Gerak kamera di satu titik cukup ke satu arah acak, pelan, halus | `tourGlance()`: satu arah acak per titik (-20 sampai 200 derajat: kiri, kanan, atas, atau serong; ke bawah diperkecil), besar 5-9 derajat, bergerak halus (smoothstep) sepanjang waktu diam, tanpa goyang dan tanpa kembali | Menoleh maks 7,8 derajat, naik-turun maks 7,5 derajat, kembali 0 kali |
+| Bola kembali 80 m/s; kamera makin lambat, terus menyamping, akhirnya melihat lintasan dari awal sampai akhir | `tourBallPlan()` menghitung pose akhir saat lempar: di atas titik tengah busur lintasan, digeser sepanjang sumbu d m dan setinggi H m (dicari d 150-3.000, H 40-320) sampai semua 48 titik lintasan masuk bingkai dengan margin 15% (`tourFit()`). `tourChase()`: maju sepanjang lintasan dengan laju turun lurus sampai berhenti di titik tengah, geser ke samping dan naik terus sampai akhir, bidikan beralih dari bola ke bingkai akhir (30-85% waktu). Titik selesai 3 s setelah bola jatuh | Jatuh 2.885 m keliling setelah 46,5 s, bola selalu di bingkai, kamera 63 -> 13 m/s, ke samping 750 m, akhir seluruh lintasan di bingkai |
+| Suara saat melepas bola seperti bola baseball kena tongkat | `tourBatSound()`: retak tajam (derau highpass 1,4 kHz, 50 ms) + 4 ragam getar kayu (185, 540, 1.270, 2.380 Hz) + gema pelan 0,21 s, disintesis lewat `AUDIO.sfx` | |
+| Hutan: mulai lebih dalam, keluar tidak perlu jauh, jalan seperti pemain | Jalan setapak dari 34 m di dalam hutan sampai 2 m di luar tepi | 42 m, 30,9 s |
+| Semua jalan kaki seperti pemain (gerak kepala) | `tourWalkU()`: laju pemain 1,4 m/s (`CONFIG.walk`), mulai dan berhenti halus 0,6 s, lama titik = panjang jalan / 1,4. `tourBob()`: rumus langkah `headBob()` (naik-turun 1,8 cm, ayun samping 1,2 cm, angguk 0,12 derajat, level dari panel; Mati = Normal), bunyi langkah `playStep()` tiap kaki menapak. Guling kepala tidak bisa ditiru tanpa mengubah `headBob()` | Air mancur, hutan, genangan: laju 1,44-1,46 m/s, mata naik-turun 3,6 cm, 14 / 58 / 51 langkah |
+| Air mancur: jalan kaki sebentar mengitari | Berjalan 0,9 rad (10,8 m) di lingkaran 12 m dari pusat kolam, menghadap air mancur 29 derajat ke arah jalan; sudut awal dan arah dipilih yang bebas kolider dan air | 12,0 m dari pusat, tanpa menabrak |
+| Genangan setelah motor | Jalan ke trotoar lalu 10 m sejajar sumbu (dulu 24 m), laju pemain | 27,1 s |
+
+Durasi 326 s, 20 titik.
+
+
 ## Revisi v2.7: masukan uji Bhakti (selesai, menunggu uji visual)
 
 | Masukan | Perubahan | Hasil uji |
