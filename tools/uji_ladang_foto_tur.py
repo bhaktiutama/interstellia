@@ -146,7 +146,7 @@ UJI = r"""
   for (const n of ['Air mancur Coriolis', 'Hutan lebat', 'Genangan di jalan kota']) {
     const W = get(n);
     out[`tur: ${n}: lari ${W.walkT.toFixed(1)} s, laju maks ${W.wMax.toFixed(2)} m/s (pemain lari 5), mata naik-turun ${((W.bobMax - W.bobMin) * 100).toFixed(1)} cm, ${W.steps} langkah`] =
-      W.wMax > 4.5 && W.wMax < 5.6 && W.bobMax - W.bobMin > 0.04 && W.bobMax - W.bobMin < 0.15 && W.steps > 12;
+      W.wMax > 4.5 && W.wMax < 5.6 && W.bobMax - W.bobMin > 0.01 && W.bobMax - W.bobMin < 0.045 && W.steps > 12;
   }
   const Fw = get('Air mancur Coriolis');
   const Li = get('Menuju Copper Corn Station').lookEnd, Lu = get('Ukuran stasiun').lookStart;

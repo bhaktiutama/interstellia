@@ -1,5 +1,10 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.10: gerak kepala saat lari dikurangi 70%
+
+`tourBob()`: semua amplitudo (naik-turun, ayun samping, angguk) dikali 0,3. Mata naik-turun 7,2 cm -> sekitar 2,2 cm.
+
+
 ## Revisi v2.9: masukan uji Bhakti (selesai, menunggu uji visual)
 
 | Masukan | Perubahan | Hasil uji |
