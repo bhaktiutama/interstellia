@@ -141,3 +141,15 @@ Risiko:
 3. List jendela: campuran krom dan hitam per mobil (usul), atau semua hitam?
 4. Generator di `shared/mobil.js` (dipakai halaman blokout dan Copper, seperti `shared/kestrel.js`) atau tetap di dalam `index.html` Copper sesuai aturan satu file? Usul: `shared/mobil.js`.
 5. Boleh mulai dari 26a langsung (perbaikan cat), lalu 26b berhenti di blokout untuk dilihat dulu?
+
+## Hasil
+
+### Hasil 26a
+
+Perbaikan cepat material mobil, bentuk belum berubah. Semua di belakang `MOBIL.lama` (`?mobil=lama` = persis sebelum 26a).
+
+- `MOBIL` (dekat `CAR_TYPES`): `{ lama }`, tempat field tahap berikutnya (26c: `near` per preset).
+- `specMat(m, r, f0, metal, glass, noDetail)`: argumen baru `noDetail` (`userData.spec.noDetail`). `patchLit()` melewati `matDetail` bila true dan menambah `NoDet` ke `customProgramCacheKey`, jadi material lain tidak berubah.
+- Mobil parkir: cat = clearcoat (kekasaran 0,05, F0 0,04, tanpa `matDetail`). `trimMat` dipecah per bahan: `splitGeos[t]` {glass, tire, lamp}; `glassMat` (0,02; F0 0,04), `tireMat` (0,85; F0 0,02), `lampMat` (0,1; F0 0,04). Kind FURN baru per jenis: `r22carT/W/L` (sedan) dan `r24carT/W/L<t>`. Draw call +2 per jenis yang berada dalam radius.
+- Mobil lalu lintas (`CAR_VS`): cat memantul lebih tajam (farEnv kekasaran 0,25 jadi 0,08, Fresnel 0,04 + 0,6 Fc); roda (aKind 2) tetap tanpa pantulan. Dipilih lewat string bersyarat `${MOBIL.lama ? ...}` saat membangun shader, bukan uniform.
+- Belum diuji visual (hanya `node --check`). H1 (`?detail=0`) belum dikonfirmasi oleh pemilik.

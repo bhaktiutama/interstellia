@@ -1505,11 +1505,11 @@ const SPEC_GLSL = (glass, ssr) => `{
   ${glass === 2 ? 'diffuseColor.a = inS ? max(diffuseColor.a, min(mix(diffuseColor.a, 1.0, Fr), 0.35)) : mix(diffuseColor.a, 1.0, Fr);' : glass ? 'diffuseColor.a = mix(diffuseColor.a, 1.0, Fr);' : ''}
 }
 `;
-function specMat(m, r, f0 = 0.04, metal = 0, glass = false) { m.userData.spec = { r, f0, metal, glass }; return m; }
+function specMat(m, r, f0 = 0.04, metal = 0, glass = false, noDetail = false) { m.userData.spec = { r, f0, metal, glass, noDetail }; return m; }   // 26a: noDetail = tanpa matDetail (cat mobil clearcoat)
 function patchLit(mat) {
   if (mat.userData.lit) return;
   mat.userData.lit = true;
-  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = sp && sp.glass ? (sp.glass === 2 ? 2 : 1) : 0, noTram = !!mat.userData.noTramLight, ssr = !!(sp && sp.ssr);   // 20a: trem tidak disinari cahayanya sendiri
+  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = sp && sp.glass ? (sp.glass === 2 ? 2 : 1) : 0, noTram = !!mat.userData.noTramLight, ssr = !!(sp && sp.ssr), noDet = !!(sp && sp.noDetail);   // 26a: noDet = tanpa matDetail (kunci cache program ikut membedakan); 20a: trem tidak disinari cahayanya sendiri
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, LIGHT.uniforms);
     if (cabin) Object.assign(sh.uniforms, CABIN_LIGHT);
@@ -1525,11 +1525,11 @@ function patchLit(mat) {
         vec3 wn = mat3(modelMatrix) * ln; vLitNormal = wn * inversesqrt(max(dot(wn, wn), 1e-12));   // normal nol tetap nol (tanpa NaN)
       }`);
     sh.fragmentShader = (noTram ? '#define NO_TRAM_LIGHT\n' : '') + 'varying vec3 vLitWorld;\nvarying vec3 vLitNormal;\n' + LIGHT_GLSL +
-      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\n' + (sp ? 'vec2 mdD = vec2(0.0);\n' : '') + (sp && !glass ? 'mdD = matDetail(vLitWorld, litN, smoothstep(0.1, 0.3, uSpec.x), 0.0012 * length(vLitWorld - cameraPosition)); outgoingLight *= 1.0 - 0.12 * mdD.y;   // V1: detail material (kaca, air, krom tanpa detail)\n' : '') + 'outgoingLight *= stationLight(vLitWorld, litN) + nightLight(vLitWorld, litN);\n' + (cabin ? 'outgoingLight += diffuseColor.rgb * uCabin;\n' : '') + (sp ? SPEC_GLSL(glass, ssr) : '') + '#include <opaque_fragment>');
+      sh.fragmentShader.replace('#include <opaque_fragment>', 'float nl2 = dot(vLitNormal, vLitNormal); vec3 litN = nl2 > 1e-8 ? vLitNormal * inversesqrt(nl2) : vec3(-vLitWorld.xy, 0.0) * inversesqrt(max(dot(vLitWorld.xy, vLitWorld.xy), 1e-6));   // tanpa normal: pakai arah atas lokal (ke sumbu)\n' + (sp ? 'vec2 mdD = vec2(0.0);\n' : '') + (sp && !glass && !noDet ? 'mdD = matDetail(vLitWorld, litN, smoothstep(0.1, 0.3, uSpec.x), 0.0012 * length(vLitWorld - cameraPosition)); outgoingLight *= 1.0 - 0.12 * mdD.y;   // V1: detail material (kaca, air, krom tanpa detail)\n' : '') + 'outgoingLight *= stationLight(vLitWorld, litN) + nightLight(vLitWorld, litN);\n' + (cabin ? 'outgoingLight += diffuseColor.rgb * uCabin;\n' : '') + (sp ? SPEC_GLSL(glass, ssr) : '') + '#include <opaque_fragment>');
     if (cabin) sh.fragmentShader = 'uniform vec3 uCabin;\n' + sh.fragmentShader;
     if (sp) sh.fragmentShader = 'uniform vec3 uSpec;\n' + sh.fragmentShader;
   };
-  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass === 2 ? 'Win' : glass ? 'Glass' : 'Spec') : '') + (ssr ? 'Ssr' : '') + (noTram ? 'NoTram' : '');
+  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass === 2 ? 'Win' : glass ? 'Glass' : 'Spec') : '') + (ssr ? 'Ssr' : '') + (noDet ? 'NoDet' : '') + (noTram ? 'NoTram' : '');
   mat.needsUpdate = true;
 }
 
@@ -9788,6 +9788,9 @@ function updateCrossings() {
 // mobil parkir) dan CAR_VS (GLSL, lalu lintas). h setengah panjang, bt atas bodi, c0 / c1 kabin belakang / depan, ct atap,
 // af / ar poros depan / belakang, ws skala roda (juga jarak bodi ke tanah), wx skala lebar, p peluang.
 // Bagian: 0 bodi, 1 kabin, 2 roda depan, 3 roda belakang, 4 lampu depan, 5 lampu belakang, 6 dinding bak pickup, 7 lampu atap taksi
+// 26a: konfigurasi tahap 26 (mobil detail). lama = ?mobil=lama: mobil persis seperti sebelum tahap 26 (geometri, material, shader).
+// Tahap berikutnya menambah field di sini (26c: near = radius mobil detail per preset).
+const MOBIL = { lama: new URLSearchParams(location.search).get('mobil') === 'lama' };
 const CAR_TYPES = [
   { name: 'sedan', h: 2.2, bt: 0.93, c0: -1.4, c1: 0.9, ct: 1.45, af: 1.35, ar: 1.35, ws: 1, wx: 1, p: 0.34 },
   { name: 'hatchback', h: 2.0, bt: 0.93, c0: -1.78, c1: 0.55, ct: 1.48, af: 1.25, ar: 1.3, ws: 1, wx: 0.98, p: 0.22 },
@@ -9955,7 +9958,7 @@ const TRAFFIC = {};
       if (aKind < 1.5) {                                                     // 17b/17d: cat (clearcoat) dan kaca memantulkan daratan seberang
         vec3 Vc = cameraPosition - p3; Vc *= inversesqrt(max(dot(Vc, Vc), 1e-6));
         float oc = 1.0 - clamp(dot(n, Vc), 0.0, 1.0), Fc = oc * oc * oc * oc * oc;
-        vCol += farEnv(p3, reflect(-Vc, n), aKind < 0.5 ? 0.25 : 0.05, 0.6) * (aKind < 0.5 ? 0.04 + 0.5 * Fc : 0.12 + 0.85 * Fc);
+        ${MOBIL.lama ? 'vCol += farEnv(p3, reflect(-Vc, n), aKind < 0.5 ? 0.25 : 0.05, 0.6) * (aKind < 0.5 ? 0.04 + 0.5 * Fc : 0.12 + 0.85 * Fc);' : 'vCol += farEnv(p3, reflect(-Vc, n), aKind < 0.5 ? 0.08 : 0.05, 0.6) * (aKind < 0.5 ? 0.04 + 0.6 * Fc : 0.12 + 0.85 * Fc);   // 26a: cat clearcoat (pantulan tajam, Fresnel F0 0,04); roda (aKind 2) tidak memantul'}
       }
       if (aKind > 2.5 && aKind < 3.5) vCol += vec3(1.0, 0.92, 0.75) * (0.3 + 4.0 * uNight);
       if (aKind > 3.5 && aKind < 4.5) vCol += vec3(1.0, 0.05, 0.03) * (0.2 + 2.0 * uNight + 2.5 * aSim.y);   // lampu rem
@@ -11577,6 +11580,11 @@ if (PARKED.on) {
   const trimGeos = CAR_TYPES.map((T, t) => geoSet(t, [[1, [0.03, 0.04, 0.05], 1.6, 0.5, 2.28, 0, 1.19, -0.25],
     ...[-1.35, 1.35].map((z) => [z < 0 ? 3 : 2, [0.02, 0.02, 0.02], 1.86, 0.6, 0.62, 0, 0.3, z]),
     [4, [0.8, 0.8, 0.75], 1.55, 0.16, 0.05, 0, 0.78, 2.215], [5, [0.35, 0.02, 0.02], 1.5, 0.12, 0.04, 0, 0.8, -2.21], ...extra(7, [0.9, 0.82, 0.5])]));
+  // 26a: trim dipecah per bahan (kaca, roda, lampu) agar kekasaran tiap bahan benar; bagian: 1 kaca, 2 / 3 roda, 4 / 5 / 7 lampu
+  const splitGeos = CAR_TYPES.map((T, t) => ({
+    glass: geoSet(t, [[1, [0.03, 0.04, 0.05], 1.6, 0.5, 2.28, 0, 1.19, -0.25]]),
+    tire: geoSet(t, [-1.35, 1.35].map((z) => [z < 0 ? 3 : 2, [0.02, 0.02, 0.02], 1.86, 0.6, 0.62, 0, 0.3, z])),
+    lamp: geoSet(t, [[4, [0.8, 0.8, 0.75], 1.55, 0.16, 0.05, 0, 0.78, 2.215], [5, [0.35, 0.02, 0.02], 1.5, 0.12, 0.04, 0, 0.8, -2.21], ...extra(7, [0.9, 0.82, 0.5])]) }));
   let sd24 = 22404; const r24 = () => ((sd24 = (sd24 * 16807) % 2147483647) / 2147483647);   // 24d: jenis bodi, generator sendiri
   const bad = (s, za) => inWater(s, za, 3) || inRiver(s, za, 3) || nearRing(za, 14) || inBallpark(s, za, 4)
     || Math.abs(wrapS(s - SKY_S)) < 55 || Math.abs(wrapS(s - TRAM.s)) < ROAD.boulevard / 2 + 4;
@@ -11610,11 +11618,14 @@ if (PARKED.on) {
   // 24d: instance dipisah per jenis (cat: sedan + taksi satu mesh; pelengkap: tiap jenis). Nama lama r22carP / r22carT = sedan
   const pick = (f) => { const ix = items.map((it, i) => i).filter((i) => f(items[i][5])), m = ix.length, o = { n: m, mats: new Float32Array(m * 16), ps: new Float32Array(m), pz: new Float32Array(m), cols: new Float32Array(m * 3) };
     ix.forEach((i, j) => { o.mats.set(mats.subarray(i * 16, i * 16 + 16), j * 16); o.ps[j] = ps[i]; o.pz[j] = pz[i]; o.cols.set(cols.subarray(i * 3, i * 3 + 3), j * 3); }); return o; };
-  const paintMat = specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.3, 0.05), trimMat = specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.08, 0.05);
+  const paintMat = MOBIL.lama ? specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.3, 0.05) : specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.05, 0.04, 0, false, true),   // 26a: cat clearcoat tanpa matDetail
+    trimMat = specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.08, 0.05);
+  const glassMat = specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.02, 0.04, 0, true), tireMat = specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.85, 0.02), lampMat = specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.1, 0.04);   // 26a
   const sets = [];
   CAR_TYPES.forEach((T, t) => {
     if (t !== 5) sets.push([t ? 'r24carP' + t : 'r22carP', paintGeos[t], paintMat, true, pick((u) => u === t || (t === 0 && u === 5))]);
-    sets.push([t ? 'r24carT' + t : 'r22carT', trimGeos[t], trimMat, false, pick((u) => u === t)]);
+    if (MOBIL.lama) sets.push([t ? 'r24carT' + t : 'r22carT', trimGeos[t], trimMat, false, pick((u) => u === t)]);
+    else for (const [nm, key, m] of [['T', 'glass', glassMat], ['W', 'tire', tireMat], ['L', 'lamp', lampMat]]) sets.push([(t ? 'r24car' : 'r22car') + nm + (t || ''), splitGeos[t][key], m, false, pick((u) => u === t)]);   // 26a: 3 mesh per jenis (kaca, roda, lampu)
   });
   for (const [kind, geo, mat, tinted, o] of sets) {
     if (!o.n) continue;
