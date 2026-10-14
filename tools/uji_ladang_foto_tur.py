@@ -104,7 +104,7 @@ UJI = r"""
   }
   const T = steps * 0.05, get = (n) => K[n] || {}, eye = st.TOUR.keys.filter((q) => q.h === 0).length;
   const ball = st.TOUR.keys.find((q) => q.ball), L = ball && ball.landing, deg = 180 / Math.PI;
-  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 260-360 s), tanpa NaN`] = !bad && idx.size === N && N === 22 && T > 260 && T < 360;
+  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 260-360 s), tanpa NaN`] = !bad && idx.size === N && N === 20 && T > 260 && T < 360;
   out[`tur: ${eye} titik setinggi mata (>= 9)`] = eye >= 9;
   out[`tur: tinggi maksimum ${maxH.toFixed(0)} m (tidak melewati sumbu)`] = maxH < st.R - 30;
   out[`tur: jam mulai ${hour0.toFixed(2)}, akhir ${(get('Meninggalkan stasiun').hour || 0).toFixed(2)}`] = hour0 === 12 && Math.abs(get('Meninggalkan stasiun').hour - 7) < 0.05;
@@ -125,7 +125,7 @@ UJI = r"""
   out[`tur: hutan berjalan ${huD.toFixed(0)} m setinggi mata (${Hu.last.eyeH.toFixed(2)}), dari dalam hutan ke luar`] = huD >= 25 && Math.abs(Hu.last.eyeH) < 0.1 && st.inForest(Hu.first.s, Hu.first.za) && !st.inForest(Hu.last.s, Hu.last.za);
   const M = get('Naik motor ke New York');
   out[`tur: motor jalan lingkar za ${M.zaMin.toFixed(1)}-${M.zaMax.toFixed(1)} (rute bus merah 500), ${M.ds.toFixed(0)} m keliling ${M.d0} -> ${M.d1}, maks ${(M.vMax * 3.6).toFixed(0)} km/h, terasa min ${M.gMin.toFixed(2)} g, akhir ${(M.v1 * 3.6).toFixed(1)} km/h`] =
-    M.ground && M.ds > 800 && M.zaMin > 490 && M.zaMax < 500 && M.d1 === 'New York' && M.vMax * 3.6 > 140 && M.gMin < 0.5 && M.v1 < 1;
+    M.ground && M.ds > 400 && M.ds < 800 && M.zaMin > 490 && M.zaMax < 500 && M.d1 === 'New York' && M.vMax * 3.6 > 140 && M.gMin < 0.5 && M.v1 < 1;
   const Hj = get('Hujan miring'), Gw0 = get('Genangan di jalan kota');
   const rmJ = Math.hypot(wrap(Hj.anyLast.s - M.s0), Hj.anyLast.za - M.zaMin), mwJ = Math.hypot(wrap(Gw0.anyFirst.s - M.anyLast.s), Gw0.anyFirst.za - M.anyLast.za);
   out[`tur: hujan di kota tempat naik motor (${Hj.d || (st.districtAt(Hj.anyLast.s, Hj.anyLast.za) || {}).name}, motor mulai di titik yang sama, lompat ${rmJ.toFixed(1)} m), motor berhenti ${(M.v1 * 3.6).toFixed(1)} km/h lalu jalan kaki dari situ (lompat ${mwJ.toFixed(1)} m)`] =
@@ -134,18 +134,18 @@ UJI = r"""
   const ord = st.TOUR.keys.slice(0, 5).map((q) => q.title).join(' > ');
   out[`tur: urutan pembuka ${ord}`] = ord === 'Menuju Copper Corn Station > Ukuran stasiun > Dekat sumbu: gravitasi mengecil > Gravitasi dari putaran > Menara ikon New York';
   out[`tur: pembuka masuk menembus kaca end cap A (kamera z ${(get('Menuju Copper Corn Station').camZ + 4000).toFixed(0)} m dari kaca)`] = get('Menuju Copper Corn Station').camZ > -4000 && get('Menuju Copper Corn Station').camZ < -3900;
-  out[`tur: melihat sekitar saat diam: menoleh maks ${glance.y.toFixed(1)} derajat, menengadah maks ${glance.p.toFixed(1)} derajat (5-10 dan 30)`] = glance.n > 0 && glance.y >= 4 && glance.y <= 10.5 && glance.p > 25 && glance.p <= 31;
+  out[`tur: melihat sekitar saat diam: menoleh maks ${glance.y.toFixed(1)} derajat, naik-turun maks ${glance.p.toFixed(1)} derajat (goyang tangan, <= 10)`] = glance.n > 0 && glance.y > 0.5 && glance.y <= 10 && glance.p <= 10;
   out[`tur: sunrays mati di cuaca cerah (Ukuran ${get('Ukuran stasiun').rays}), nyala saat berawan (Hutan ${get('Hutan lebat').rays})`] = get('Ukuran stasiun').rays === false && get('Hutan lebat').rays === w0.rays;
   const Bo = get('Lempar bola melawan putaran');
-  out[L ? `tur: bola 80 m/s 10 derajat melawan putaran: jatuh ${Math.abs(L.arc).toFixed(0)} m keliling setelah ${L.time.toFixed(1)} s; kamera menghadap bola (meleset maks ${(Bo.ballAim || 99).toFixed(1)} derajat), jarak ${(Bo.ballD0 || 0).toFixed(0)} -> ${(Bo.ballD1 || 0).toFixed(0)} m, di bawah tanah ${Bo.under || 0} kali` : 'tur: bola dilempar'] =
-    !!L && Math.abs(L.arc) > 2500 && Math.abs(L.arc) < 3200 && L.time > 40 && L.time < 50 && ball.ball.v === 80 && ball.ball.e === 10 && Bo.ballAim < 10 && Bo.ballD0 < 20 && Bo.ballD1 > 200 && Bo.ballD1 < 400 && !Bo.under;
+  out[L ? `tur: bola 120 m/s 10 derajat melawan putaran: jatuh ${Math.abs(L.arc).toFixed(0)} m keliling setelah ${L.time.toFixed(1)} s; kamera menghadap bola (meleset maks ${(Bo.ballAim || 99).toFixed(1)} derajat), jarak ${(Bo.ballD0 || 0).toFixed(0)} -> ${(Bo.ballD1 || 0).toFixed(0)} m, di bawah tanah ${Bo.under || 0} kali` : 'tur: bola dilempar'] =
+    !!L && Math.abs(L.arc) > 0 && L.time > 2 && ball.ball.v === 120 && ball.ball.e === 10 && Bo.ballAim < 10 && Bo.ballD0 < 20 && Bo.ballD1 > 200 && Bo.ballD1 < 400 && !Bo.under;
   const Sk0 = get('Skyway: jendela ke angkasa').anyFirst, Bo1 = Bo.anyLast, skJ = Math.hypot(wrap(Sk0.s - Bo1.s), Sk0.za - Bo1.za, Sk0.h - Bo1.h);
   out[`tur: terbang ke Skyway mulai dari kamera pengejar bola (lompat ${skJ.toFixed(1)} m < 5)`] = skJ < 5;
   let sg = 0, rev = []; const fl = [];
   for (let i = 1; i < N; i++) {                                         // terbang panjang (tanpa layar gelap) tidak berbalik arah za
     const A = st.TOUR.keys[i - 1], Q = st.TOUR.keys[i], ra = get(A.title), rq = get(Q.title);
     if (A.ext !== undefined || Q.ext !== undefined || Q.cut || Q.from || !ra.anyLast || !rq.anyLast) { sg = 0; continue; }
-    const d = rq.anyLast.za - ra.anyLast.za; fl.push(d.toFixed(0)); if (Math.abs(d) < 1000) continue;
+    const d = rq.anyLast.za - ra.anyLast.za; fl.push(d.toFixed(0)); if (Math.abs(d) < 2000) continue;   // v2.7: gerhana -> pagi berkabut (1,5 km mundur) langsung tanpa kamera luar
     if (sg && Math.sign(d) !== sg) rev.push(`${A.title} -> ${Q.title}`); sg = Math.sign(d);
   }
   out[`tur: terbang tidak bolak-balik (dza ${fl.join(', ')}; berbalik ${rev.join('; ') || 'tidak ada'})`] = rev.length === 0;

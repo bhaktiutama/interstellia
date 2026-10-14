@@ -1,5 +1,19 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.7: masukan uji Bhakti (selesai, menunggu uji visual)
+
+| Masukan | Perubahan | Hasil uji |
+| --- | --- | --- |
+| Cara menoleh kaku dan monoton; seperti video kamera dipegang tangan, goyang kecil, beda tiap titik | `tourGlance()` diganti goyang tangan: jumlah 3 gelombang sinus dengan frekuensi, fase, dan besar acak per titik (benih = nomor titik), ditambah hanyut pelan ke satu sisi maks 4 derajat; masuk halus 1,2 s setelah tiba | Menoleh maks 5,8 derajat, naik-turun maks 2,0 derajat |
+| Arah pandang awal tiap titik berbeda (lurus sampai naik 20 derajat) | `TOUR_FOCUS` [0, 12, 4, 20, 0, 15, 8, 18, 2, 10] derajat ditambahkan ke arah pandang tiba untuk titik biasa (pitch dasar -10 sampai 10, bukan jalan kaki / burung / bola / gerhana / motor / terbang) | |
+| Dari 1 ke 2 tanpa layar gelap | Titik Ukuran stasiun mulai tepat di posisi akhir kamera luar (400 m di bawah sumbu, 20 m di balik kaca end cap A); keliling dihitung dari putaran saat itu sehingga arah atas kamera luar sama dengan arah atas di dalam; `noFade` | Tanpa layar gelap di pembuka |
+| Jarak motor ke kota dipotong separuh | Motor mulai sekitar 620 m sebelum titik berhenti (ruas berawan s 840-1.300, cadangan s 886, distrik Kepler) | 610 m (dulu 1.224 m), maks 141 km/h |
+| Dari gerhana langsung ke pagi berkabut | Titik Dari luar dan Dermaga despun dihapus; terbang langsung dari ladang jagung ke danau (titik `from` danau dihapus) | 20 titik |
+| Bola 120 m/s | `ball.v` 120 | Melayang 51,7 s, jatuh 488 m keliling dari pelempar (bola hampir mengelilingi silinder), kamera menghadap bola, jarak 5 -> 300 m |
+
+Durasi 316 s. Uji rute: hanya terbang dengan beda za > 2 km dihitung (terbang gerhana -> pagi berkabut mundur 1,5 km).
+
+
 ## Revisi v2.6: masukan uji Bhakti (selesai, menunggu uji visual)
 
 | Masukan | Perubahan | Hasil uji |
