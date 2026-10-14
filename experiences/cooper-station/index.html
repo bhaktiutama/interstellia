@@ -192,13 +192,19 @@
   #photo .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   #photo button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
   #photo .note { color: var(--muted); font-size: 10.5px; margin-top: 6px; }
-  #tourCap { position: fixed; left: 50%; bottom: calc(36px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(680px, calc(100vw - 32px));
-    padding: 12px 16px; background: rgba(10, 12, 16, 0.62); border-left: 3px solid var(--accent); border-radius: 6px; color: #fff; z-index: 4;
-    transition: opacity .6s; line-height: 1.5; }
+  #tourCap { position: fixed; left: 50%; bottom: calc(36px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(420px, calc(100vw - 32px));
+    padding: 8px 12px; font-size: 13px; background: rgba(10, 12, 16, 0.62); border-left: 3px solid var(--accent); border-radius: 6px; color: #fff; z-index: 4;
+    transition: opacity .6s; line-height: 1.4; }
   #tourFade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 3; }   /* tur v2: layar gelap saat pindah kamera luar <-> dalam */
-  #tourCap b { display: block; color: var(--accent); margin-bottom: 4px; }
-  #tourCap .tfoot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; color: var(--muted); font-size: 11px; }
-  #tourCap button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+  #tourCap b { display: block; color: var(--accent); margin-bottom: 2px; }
+  #tourCap .tfoot { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; color: var(--muted); font-size: 11px; }
+  #tourCap button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+  #tourOffer { position: fixed; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(360px, calc(100vw - 32px));
+    padding: 10px 12px; background: rgba(10, 12, 16, 0.7); border-left: 3px solid var(--accent); border-radius: 6px; color: #fff; z-index: 4; font-size: 13px; line-height: 1.4; }
+  #tourOffer b { display: block; color: var(--accent); margin-bottom: 2px; }
+  #tourOffer div { display: flex; gap: 8px; margin-top: 8px; }
+  #tourOffer button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  #tourOffer button.go { border-color: var(--accent); color: #fff; }
 </style>
 </head>
 <body>
@@ -220,7 +226,7 @@
   <div class="btns"><button id="phWeather" type="button">Cuaca (N)</button><button id="phSave" type="button">Simpan PNG (Enter)</button><button id="phCam" type="button">Kamera rangefinder</button></div>
   <div class="note">WASD bergerak, seret mouse untuk melihat. H menyembunyikan panel ini. Gambar disimpan tanpa panel.</div>
 </div>
-<div id="tourFade"></div><div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><button id="tourStop" type="button">Berhenti (Y)</button></div></div>
+<div id="tourOffer" hidden><b>Tur sinematik</b><span>Sekitar 5 menit keliling stasiun dengan penjelasan fisika.</span><div><button id="tourOfferGo" class="go" type="button">Mulai tur (Y)</button><button id="tourOfferNo" type="button">Lewati</button></div></div><div id="tourFade"></div><div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><button id="tourStop" type="button">Berhenti (Y)</button></div></div>
 <div id="plaque" hidden><div class="card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
 <div id="map" hidden><div class="mcard">
   <div class="mhead"><span>Peta silinder (dibuka)</span><span class="mbtns"><button id="mapZoomIn" type="button">+</button><button id="mapZoomOut" type="button">-</button><button id="mapMe" type="button">Posisi saya</button><button id="mapHoloBtn" type="button">Hologram</button><button id="mapCtlBtn" type="button">Kendali 3D</button><button id="mapClose" type="button">Tutup (M)</button></span></div>
@@ -705,6 +711,9 @@ Object.assign(I18N.en, {
   "Cuaca: {w} (N)": "Weather: {w} (N)",
   "WASD bergerak, seret mouse untuk melihat. H menyembunyikan panel ini. Gambar disimpan tanpa panel.": "WASD to move, drag the mouse to look. H hides this panel. Images are saved without the panel.",
   "Berhenti (Y)": "Stop (Y)",
+  "Sekitar 5 menit keliling stasiun dengan penjelasan fisika.": "About 5 minutes around the station with physics notes.",
+  "Mulai tur (Y)": "Start tour (Y)",
+  "Lewati": "Skip",
   "Tutup (E)": "Close (E)",
   "Peta silinder (dibuka)": "Cylinder map (unrolled)",
   "Tutup (M)": "Close (M)",
@@ -6571,7 +6580,17 @@ function showHint() {                                              // petunjuk s
   setTimeout(() => { hintEl.style.opacity = 0; }, 6000);
   setTimeout(() => { hintEl.hidden = true; }, 7000);
 }
-document.getElementById('go').addEventListener('click', () => { startEl.hidden = true; startAudio(); lockPointer(); showHint(); });
+// Tur v2.12: tawaran tur Y sekali sampai tur pernah diputar (localStorage cooperStation.tourSeen, diisi startTour)
+const tourOfferEl = document.getElementById('tourOffer');
+function tourSeen() { try { return localStorage.getItem('cooperStation.tourSeen') === '1'; } catch (e) { return false; } }
+function hideTourOffer() { tourOfferEl.hidden = true; }
+document.getElementById('tourOfferGo').addEventListener('click', () => { hideTourOffer(); startTour(); });
+document.getElementById('tourOfferNo').addEventListener('click', () => { hideTourOffer(); lockPointer(); });
+document.getElementById('go').addEventListener('click', () => {
+  startEl.hidden = true; startAudio();
+  if (!tourSeen()) tourOfferEl.hidden = false;                       // kursor tidak dikunci agar tombol tawaran bisa diklik
+  else { lockPointer(); showHint(); }
+});
 function helpTab(id) {
   try { localStorage.setItem('cooperStation.helpTab', id); } catch (e) { /* abaikan */ }
   helpEl.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
@@ -15249,6 +15268,8 @@ const tourIsExt = (K) => !!K && K.ext !== undefined;
 const tourCut = (A, B) => (tourIsExt(A) !== tourIsExt(B) && !(B && B.noFade)) || !!(B && B.cut);   // layar gelap di antara A dan B (noFade: pembuka tersambung langsung)
 function startTour() {
   if (TOUR.on) return;
+  hideTourOffer();
+  try { localStorage.setItem('cooperStation.tourSeen', '1'); } catch (e) { /* abaikan */ }
   if (ext.flight || !(player.state === 'ground' || player.state === 'air')) { setLabText('Tur bisa dimulai saat berjalan di dalam stasiun.'); return; }
   if (PHOTO.on) togglePhoto(false);
   if (ext.active) toggleExterior();
