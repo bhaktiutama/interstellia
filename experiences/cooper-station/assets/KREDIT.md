@@ -2,6 +2,7 @@
 
 | File | Isi | Sumber dan lisensi |
 | --- | --- | --- |
+| `musik.data.js` | Musik bawaan (mp3 64 kbps, sekitar 9,8 menit, base64) | Karya pemilik proyek (Bhakti), dipakai dengan izin pemilik |
 | `motor.data.js` | Model motor café racer V-twin (tahap 19c) | "moto guzzi v-twin" oleh Alexios Apokaukos (https://sketchfab.com/Alexios_Apokaukos), https://sketchfab.com/3d-models/moto-guzzi-v-twin-923c2932481141c8a1966d427a5d3b30, lisensi CC BY 4.0 (http://creativecommons.org/licenses/by/4.0/) |
 
 Perubahan dari sumber (dibuat ulang dengan `python tools/siapkan_motor.py sumber.glb`):
