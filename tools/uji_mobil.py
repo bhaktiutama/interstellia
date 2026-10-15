@@ -55,7 +55,7 @@ async def main():
             await pg.evaluate("window.__station.teleport('nyc')"); await pg.wait_for_timeout(3000)
             st = []
             for i in (0, 2, 4):
-                await pg.evaluate(f"window.__station.applyPreset({i})"); await pg.wait_for_timeout(2500)
+                await pg.evaluate(f"(() => {{ const S = window.__station; S.applyPreset({i}); S.updateFurniture(); S.updateTrafficNear(); }})()")   # langsung: SwiftShader bisa menit per frame
                 st.append(await pg.evaluate("""() => { const S = window.__station; return { preset: S.PRESET ? S.PRESET.idx : null,
                   near: S.MOBIL.near, parkir: S.CAR_NEAR.total, parkirPerJenis: S.CAR_NEAR.count.slice(), lalin: S.TRAFFIC.near ? S.TRAFFIC.near.total : null,
                   lalinPerJenis: S.TRAFFIC.near ? S.TRAFFIC.near.count.slice() : null }; }"""))
