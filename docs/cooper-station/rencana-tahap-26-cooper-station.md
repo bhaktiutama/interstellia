@@ -153,3 +153,28 @@ Perbaikan cepat material mobil, bentuk belum berubah. Semua di belakang `MOBIL.l
 - Mobil parkir: cat = clearcoat (kekasaran 0,05, F0 0,04, tanpa `matDetail`). `trimMat` dipecah per bahan: `splitGeos[t]` {glass, tire, lamp}; `glassMat` (0,02; F0 0,04), `tireMat` (0,85; F0 0,02), `lampMat` (0,1; F0 0,04). Kind FURN baru per jenis: `r22carT/W/L` (sedan) dan `r24carT/W/L<t>`. Draw call +2 per jenis yang berada dalam radius.
 - Mobil lalu lintas (`CAR_VS`): cat memantul lebih tajam (farEnv kekasaran 0,25 jadi 0,08, Fresnel 0,04 + 0,6 Fc); roda (aKind 2) tetap tanpa pantulan. Dipilih lewat string bersyarat `${MOBIL.lama ? ...}` saat membangun shader, bukan uniform.
 - Belum diuji visual (hanya `node --check`). H1 (`?detail=0`) belum dikonfirmasi oleh pemilik.
+
+### Hasil 26b
+
+Generator bentuk mobil detail di `experiences/cooper-station/index.html` (bukan `shared/`, tanpa halaman blokout, sesuai jawaban pemilik), tepat setelah `carPick()` dan sebelum `TRAFFIC`. Belum dipasang ke mobil mana pun (26c, 26e). `?mobil=lama` = `CARGEO` null, generator tidak dijalankan.
+
+- `CAR_MAT`: id bahan (0 cat, 1 kaca, 2 list, 3 plastik hitam, 4 ban, 5 velg, 6 lampu depan, 7 lampu belakang, 8 plat, 9 lampu atap taksi, 10 papan tujuan bus, 11 putih bus, 12 gelap (dalam lengkung roda, gril), 13 krom).
+- `CAR_SHAPE` (+ `CS_SEDAN`, dipakai ulang hatchback dan taksi): tabel per jenis. Bodi bawah = loft 23-27 irisan (ujung membulat 4, tiap lengkung roda 7, pangkal kaca depan dan belakang; tanpa irisan di bagian lurus) x setengah penampang 9 titik (ambang menyempit, garis bahu tajam, bahu membulat 3 ruas, atas cembung), muka depan dan belakang berkolom (gril, lampu, bumper). Kabin = cincin mendatar dari sabuk ke atas kaca (kolom W, A, S1, B, S2, C, Q, R menentukan kaca / pilar / list per baris), tepi atap membulat, atap cembung. Roda 14 sisi (bus 16): tapak, bahu, dinding ban, velg cekung.
+- `carShape(t)`: BufferGeometry ber-indeks: `position`, `normal` (sudut lipat per kelompok: bodi 28 derajat, kabin dan roda 50, lain 40; garis bahu terpisah sekitar 34 derajat), `aMat`, `aUV2` (cat 0 / 11 = (z, y) lokal; kaca = (u sepanjang kolom jendela, v ke atas) 0..1; ban / velg = (r / jari-jari, jarak ke dalam / lebar ban); lain = (u, v) 0..1 per bagian), `aWheel` (titik roda: x muka luar ban bertanda, y pusat 0,3 ws, z poros af / -ar, jari-jari 0,3 ws; titik lain 0). `userData` = { type, tris, verts, seams }.
+- `CARGEO[t]`: dibangun sekali saat muat (tanpa angka acak; sekitar 55 ms untuk 7 jenis di Node). Diekspor di `window.__station` bersama `CAR_SHAPE`, `CAR_MAT`, `carShape`, `MOBIL`.
+- Arah: +x = kiri pengemudi = sisi trotoar (lalu lintas di lajur kiri, dari `CAR_VS`: `Rt = cross(up, F)` = arah offset lajur). Pintu bus dan pintu geser van di sisi +x.
+- `seams` per jenis (untuk celah panel 26d): `door` z celah pintu tegak (bawah bodi sampai sabuk), `hood` [z belakang kap, setengah lebar], `trunk` [z depan tutup bagasi atau null = pintu belakang tegak, setengah lebar, y bawah di muka belakang], `fuel` [z, y, sisi], `slide` (van) [z0, z1], `busDoor` [[z0, z1], ...].
+
+| Jenis | Titik | Segitiga | Batas (anggaran) |
+| --- | --- | --- | --- |
+| sedan | 1.535 | 1.584 | 2.000 |
+| hatchback | 1.505 | 1.564 | 2.000 |
+| SUV (rel atap) | 1.686 | 1.640 | 2.000 |
+| van | 1.574 | 1.616 | 2.000 |
+| pickup (bak) | 1.566 | 1.584 | 2.000 |
+| taksi (lampu atap) | 1.555 | 1.594 | 2.000 |
+| bus | 1.672 | 1.792 | 2.600 |
+
+Cek geometri (skrip Node sementara, bukan suite uji): tanpa NaN / Infinity, semua normal satuan, lilitan cocok dengan normal, tanpa segitiga tanpa luas, semua di dalam kotak lama (setengah lebar <= 0,93 wx kecuali spion 0,975 wx, |z| <= h - 0,004, tinggi <= ct; taksi 1,60, bus 3,10). Kaca depan sedan sekitar 58 derajat dari tegak, tumblehome 10 cm (van 8, bus 4).
+
+Catatan untuk tahap berikut: bodi terbuka di bawah (tanpa lantai, tidak terlihat dari mata) dan atas bodi di bawah kabin tidak dibuang, jadi material harus `FrontSide`; spion keluar 2,5 cm dari kolider mobil parkir (0,95 wx), sesuai aturan; belum ada material atau shader (26c / 26d), jadi belum perlu masuk `warmShaders()`. Antena dan variasi velg ditunda ke 26f.

@@ -9824,6 +9824,364 @@ function carRemap(t, part, x, y, z) {
 }
 // 24d: jenis dari angka acak u (0..1) menurut peluang p
 function carPick(u) { let a = 0; for (let t = 0; t < CAR_TYPES.length; t++) { a += CAR_TYPES[t].p; if (u < a) return t; } return 0; }
+// 26b: bentuk mobil detail (loft penampang). Belum dipasang ke mobil mana pun: 26c (mobil parkir) dan 26e (lalu lintas dekat)
+// memakai CARGEO[t]. Koordinat lokal sama dengan geometri kotak lama: x lateral (+x = kiri pengemudi = sisi trotoar, lalu lintas
+// di lajur kiri), y atas dari tanah, z ke depan. Bentuk tidak keluar dari kotak lama jenisnya (CAR_TYPES): |z| <= h, setengah
+// lebar <= 0,93 wx (spion <= 0,98 wx), tinggi <= ct (taksi: lampu atap sampai 1,60 seperti CAR_EXTRA; bus: atap putih sampai 3,10).
+// Id bahan per titik (atribut aMat), dibaca shader 26d. List (2) = krom atau hitam dipilih per mobil di shader.
+const CAR_MAT = { cat: 0, kaca: 1, list: 2, plastik: 3, ban: 4, velg: 5, lampuDepan: 6, lampuBelakang: 7, plat: 8, lampuTaksi: 9, papanBus: 10, putihBus: 11, gelap: 12, krom: 13 };
+// 26b: tabel bentuk per jenis (urutan sama dengan CAR_TYPES). Angka dalam meter, z menurun dari depan ke belakang.
+// wf setengah lebar bodi (x wx), xo muka luar ban (x wx), tw lebar ban, yb bawah bodi samping, bump bawah bumper [depan, belakang],
+// rmin tinggi minimum garis bahu di bawah atas bodi, crown cembung kap, rc jari-jari sudut denah [depan, belakang], ag celah
+// lengkung roda (jari-jari lengkung = 0,3 ws + ag), n sisi roda, top profil atas bodi bawah (kap, sabuk, bagasi) [z, y],
+// sh garis bahu (lipatan tajam) [z, y], lampF / lampR [panjang di sisi, ruas penampang] lampu yang membungkus sudut, clad ruas
+// bawah plastik sepanjang sisi, capX batas kolom muka depan / belakang (pecahan lebar), capF / capR id bahan per ruas penampang
+// (baris, dari bawah) x kolom (tengah -> tepi), plate tinggi plat [depan, belakang], bars tinggi bilah krom gril dan barW setengah
+// lebarnya, mold tinggi list samping pintu, hz z gagang pintu, mir spion (y relatif sabuk bt, x maks x wx, z bila bukan di pilar A).
+// gh kabin (rumah kaca) dari cincin mendatar: tum tumblehome, crown cembung atap, rup / rin tepi atap membulat, ry tinggi atap
+// (bawaan ct), zF / zR z tengah kaca depan / belakang [di sabuk, di atas kaca], rcF / rcR jari-jari sudut denah, bF / bR lengkung
+// denah kaca depan / belakang, side titik bagi sisi [z sabuk, z atas, kolom berikutnya], rows cincin antara [y (0 = atas kaca),
+// id bahan per kolom W A S1 B S2 C Q R], roll / roof id bahan tepi atap dan atap.
+// seams (untuk celah panel 26d, sisi +x dan -x kecuali disebut): door z celah pintu tegak (dari bawah bodi sampai sabuk), hood
+// [z belakang kap, setengah lebar], trunk [z depan tutup bagasi (null = pintu belakang tegak), setengah lebar, y bawah di muka
+// belakang], fuel [z, y, sisi], slide [z0, z1] pintu geser van (sisi +x), busDoor [[z0, z1], ...] pintu bus (sisi +x).
+const CS_SEDAN = {
+  wf: 0.912, xo: 0.9, tw: 0.2, yb: 0.3, bump: [0.26, 0.3], rmin: 0.06, crown: 0.02, rc: [0.36, 0.3], ag: 0.065, n: 14,
+  top: [[2.185, 0.7], [2.16, 0.745], [2.1, 0.77], [1.95, 0.79], [1.0, 0.93], [-1.5, 0.93], [-2.0, 0.93], [-2.12, 0.915], [-2.17, 0.88], [-2.185, 0.84]],
+  sh: [[2.185, 0.7], [1.6, 0.76], [0.9, 0.79], [-1.4, 0.82], [-2.185, 0.84]],
+  lampF: [0.26, [3]], lampR: [0.17, [3, 4]], clad: 0, capX: [0.4, 0.64],
+  capF: [[3, 3, 3], [12, 0, 0], [12, 12, 0], [12, 6, 6], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+  capR: [[3, 3, 3], [0, 0, 0], [0, 0, 7], [7, 7, 7], [7, 7, 7], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+  plate: [0.43, 0.52], bars: [0.55, 0.59], barW: 0.33, mold: 0.47, hz: [0.02, -0.9], mir: { y0: 0.03, y1: 0.14, x: 0.975 },
+  gh: { tum: 0.1, crown: 0.02, rup: 0.03, rin: 0.05, zF: [1.0, 0.24], zR: [-1.5, -0.7], rcF: [0.24, 0.12], rcR: [0.24, 0.12], bF: [0.08, 0.05], bR: [0.06, 0.04],
+    side: [[-0.1, -0.16, 'B'], [-0.17, -0.23, 'S2'], [-1.02, -0.46, 'C']],
+    rows: [[0.955, [3, 0, 2, 2, 2, 0, 2, 0]], [1.375, [1, 0, 1, 3, 1, 0, 1, 1]], [0, [1, 0, 2, 2, 2, 0, 2, 1]]], roll: 0, roof: 0 },
+  seams: { door: [0.95, -0.135, -1.05], hood: [1.03, 0.66], trunk: [-1.56, 0.66, 0.62], fuel: [-1.38, 0.79, -1] },
+};
+const CAR_SHAPE = [
+  CS_SEDAN,
+  { // 1 hatchback: kabin panjang, pintu belakang hampir tegak
+    wf: 0.912, xo: 0.9, tw: 0.2, yb: 0.3, bump: [0.26, 0.3], rmin: 0.06, crown: 0.02, rc: [0.34, 0.26], ag: 0.065, n: 14,
+    top: [[1.985, 0.7], [1.96, 0.745], [1.9, 0.77], [1.75, 0.79], [0.62, 0.93], [-1.8, 0.93], [-1.9, 0.925], [-1.95, 0.9], [-1.985, 0.86]],
+    sh: [[1.985, 0.7], [1.4, 0.76], [0.6, 0.79], [-1.985, 0.83]],
+    lampF: [0.24, [3]], lampR: [0.15, [3, 4]], clad: 0, capX: [0.4, 0.64], capF: CS_SEDAN.capF, capR: CS_SEDAN.capR,
+    plate: [0.43, 0.52], bars: [], barW: 0, mold: 0.47, hz: [-0.385, -1.05], mir: CS_SEDAN.mir,
+    gh: { tum: 0.1, crown: 0.02, rup: 0.03, rin: 0.05, zF: [0.62, -0.14], zR: [-1.8, -1.5], rcF: [0.24, 0.12], rcR: [0.2, 0.12], bF: [0.08, 0.05], bR: [0.05, 0.04],
+      side: [[-0.5, -0.55, 'B'], [-0.57, -0.62, 'S2'], [-1.25, -1.1, 'C']],
+      rows: [[0.955, [3, 0, 2, 2, 2, 0, 2, 0]], [1.405, [1, 0, 1, 3, 1, 0, 1, 1]], [0, [1, 0, 2, 2, 2, 0, 2, 1]]], roll: 0, roof: 0 },
+    seams: { door: [0.88, -0.535, -1.2], hood: [0.65, 0.64], trunk: [null, 0.58, 0.62], fuel: [-1.3, 0.79, -1] },
+  },
+  { // 2 SUV: tinggi, plastik bawah sepanjang sisi, kaca belakang tegak, rel atap (plastik)
+    wf: 0.912, xo: 0.9, tw: 0.24, yb: 0.36, bump: [0.33, 0.36], rmin: 0.06, crown: 0.02, rc: [0.34, 0.26], ag: 0.077, n: 14,
+    top: [[2.285, 0.86], [2.25, 0.92], [2.15, 0.95], [1.95, 0.97], [0.95, 1.08], [-2.12, 1.08], [-2.2, 1.07], [-2.285, 1.02]],
+    sh: [[2.285, 0.86], [1.5, 0.93], [0.95, 0.95], [-2.285, 0.98]],
+    lampF: [0.26, [3]], lampR: [0.15, [3, 4]], clad: 1, capX: [0.4, 0.64],
+    capF: [[3, 3, 3], [3, 3, 3], [12, 12, 0], [12, 6, 6], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+    capR: [[3, 3, 3], [3, 0, 0], [0, 0, 7], [7, 7, 7], [7, 7, 7], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+    plate: [0.54, 0.62], bars: [0.69, 0.75], barW: 0.36, mold: 0, hz: [-0.18, -1.07], mir: { y0: 0.03, y1: 0.15, x: 0.975 }, rails: [0.05, -1.84],
+    gh: { tum: 0.1, crown: 0.015, rup: 0.03, rin: 0.05, ry: 1.75, zF: [0.95, 0.2], zR: [-2.12, -1.96], rcF: [0.24, 0.12], rcR: [0.18, 0.12], bF: [0.08, 0.05], bR: [0.05, 0.04],
+      side: [[-0.3, -0.36, 'B'], [-0.38, -0.44, 'S2'], [-1.25, -1.18, 'C'], [-1.33, -1.26, 'Q']],
+      rows: [[1.105, [3, 0, 2, 2, 2, 0, 2, 0]], [1.68, [1, 0, 1, 3, 1, 0, 1, 1]], [0, [1, 0, 2, 2, 2, 0, 2, 1]]], roll: 0, roof: 0 },
+    seams: { door: [1.0, -0.34, -1.22], hood: [0.98, 0.7], trunk: [null, 0.62, 0.74], fuel: [-1.45, 0.92, -1] },
+  },
+  { // 3 van: atap tinggi, kaca depan curam, pintu geser kiri (celah saja)
+    wf: 0.912, xo: 0.9, tw: 0.21, yb: 0.32, bump: [0.28, 0.32], rmin: 0.06, crown: 0.02, rc: [0.3, 0.16], ag: 0.068, n: 14,
+    top: [[2.485, 0.8], [2.45, 0.86], [2.3, 0.92], [1.45, 1.0], [-2.47, 1.0], [-2.485, 0.98]],
+    sh: [[2.485, 0.8], [1.45, 0.88], [-2.485, 0.9]],
+    lampF: [0.24, [3]], lampR: [0.1, [2, 3, 4]], clad: 0, capX: [0.4, 0.64],
+    capF: [[3, 3, 3], [3, 0, 0], [12, 0, 0], [12, 6, 6], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+    capR: [[3, 3, 3], [0, 0, 0], [0, 0, 7], [0, 0, 7], [0, 0, 7], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+    plate: [0.48, 0.58], bars: [], barW: 0, mold: 0.5, hz: [0.42, 0.1], mir: { y0: 0.05, y1: 0.2, x: 0.975 },
+    gh: { tum: 0.08, crown: 0.02, rup: 0.04, rin: 0.06, zF: [1.45, 0.75], zR: [-2.47, -2.42], rcF: [0.28, 0.2], rcR: [0.12, 0.1], bF: [0.1, 0.07], bR: [0.03, 0.03],
+      side: [[0.3, 0.25, 'B'], [0.22, 0.17, 'S2'], [-1.2, -1.2, 'C'], [-1.27, -1.27, 'Q']],
+      rows: [[1.03, [3, 0, 2, 2, 2, 0, 2, 0]], [1.7, [1, 0, 1, 3, 1, 0, 1, 1]], [1.73, [1, 0, 2, 2, 2, 0, 2, 0]], [0, [1, 0, 0, 0, 0, 0, 0, 0]]], roll: 0, roof: 0 },
+    seams: { door: [1.2, 0.26], slide: [0.22, -1.2], hood: [1.48, 0.72], trunk: [null, 0.78, 0.66], fuel: [-1.65, 0.86, -1] },
+  },
+  { // 4 pickup: kabin tunggal + bak terbuka (dinding bak dicat, lantai bak plastik)
+    wf: 0.912, xo: 0.9, tw: 0.24, yb: 0.36, bump: [0.33, 0.36], rmin: 0.035, crown: 0.02, rc: [0.32, 0.12], ag: 0.075, n: 14,
+    top: [[2.635, 0.86], [2.6, 0.92], [2.45, 0.96], [1.05, 1.0], [-2.6, 1.0], [-2.635, 0.97]],
+    sh: [[2.635, 0.86], [1.05, 0.88], [-0.45, 0.89], [-0.62, 0.965], [-2.635, 0.965]],
+    lampF: [0.26, [3]], lampR: [0.1, [2, 3, 4]], clad: 0, capX: [0.4, 0.64],
+    capF: [[3, 3, 3], [12, 0, 0], [12, 12, 0], [12, 6, 6], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+    capR: [[3, 3, 3], [0, 0, 0], [0, 0, 7], [0, 0, 7], [0, 0, 7], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+    plate: [0.55, 0.62], bars: [0.69, 0.74, 0.79], barW: 0.36, mold: 0.52, hz: [-0.05], mir: { y0: 0.04, y1: 0.18, x: 0.975 },
+    bed: { z0: -0.59, z1: -2.625, h: 0.3, t: 0.05 },
+    gh: { tum: 0.08, crown: 0.02, rup: 0.03, rin: 0.05, zF: [1.05, 0.4], zR: [-0.5, -0.42], rcF: [0.24, 0.14], rcR: [0.1, 0.08], bF: [0.08, 0.05], bR: [0.02, 0.02],
+      side: [[-0.2, -0.17, 'C']],
+      rows: [[1.03, [3, 0, 2, 0, 0, 0, 0, 0]], [1.7, [1, 0, 1, 0, 0, 0, 0, 1]], [0, [1, 0, 2, 0, 0, 0, 0, 1]]], roll: 0, roof: 0 },
+    seams: { door: [1.3, -0.22], hood: [1.08, 0.74], trunk: [null, 0.8, 0.7], fuel: [-1.2, 0.85, -1] },
+  },
+  Object.assign({}, CS_SEDAN, { taxi: [0.24, 0.2, 1.43, 1.6, -0.41, -0.19] }),   // 5 taksi = sedan + lampu atap
+  { // 6 bus 12 m: kotak membulat, lantai rendah, pita kaca panjang, bagian atas putih, papan tujuan, dua pintu kiri
+    wf: 0.912, xo: 0.9, tw: 0.3, yb: 0.3, bump: [0.28, 0.3], rmin: 0.02, crown: 0.005, rc: [0.28, 0.24], ag: 0.0975, n: 16,
+    top: [[5.985, 1.11], [5.95, 1.15], [-5.95, 1.15], [-5.985, 1.11]],
+    sh: [[5.985, 1.13], [-5.985, 1.13]],
+    lampF: [0.2, [1]], lampR: [0.12, [1, 2]], clad: 1, capX: [0.55, 0.8],
+    capF: [[3, 3, 3], [0, 0, 6], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+    capR: [[3, 3, 3], [0, 0, 7], [0, 0, 7], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
+    plate: [0.62, 0.62], bars: [], barW: 0, mold: 0, hz: [], mir: { z: 5.5, y0: 0.8, y1: 1.2, x: 0.975 }, doors: [[4.3, 5.4], [-1.5, -0.4]],
+    gh: { tum: 0.04, crown: 0.02, rup: 0.05, rin: 0.06, ry: 3.1, zF: [5.94, 5.84], zR: [-5.94, -5.9], rcF: [0.26, 0.22], rcR: [0.24, 0.2], bF: [0.06, 0.05], bR: [0.04, 0.04],
+      side: [[4.1, 4.1, 'B'], [4.02, 4.02, 'S2'], [1.2, 1.2, 'C'], [1.12, 1.12, 'Q']],
+      rows: [[1.19, [3, 3, 3, 3, 3, 3, 3, 3]], [2.4, [1, 1, 1, 3, 1, 3, 1, 1]], [2.52, [11, 11, 11, 11, 11, 11, 11, 11]], [2.9, [10, 11, 11, 11, 11, 11, 11, 11]], [0, [11, 11, 11, 11, 11, 11, 11, 11]]], roll: 11, roof: 11 },
+    seams: { door: [], busDoor: [[4.3, 5.4], [-1.5, -0.4]], hood: null, trunk: [null, 0.9, 0.4], fuel: null },
+  },
+];
+// 26b: membangun BufferGeometry ber-indeks untuk jenis t: position, normal, aMat (id CAR_MAT), aUV2 (cat 0 / 11: (z, y) lokal;
+// kaca: (u sepanjang kolom jendela, v ke atas) 0..1; ban / velg: (r / jari-jari, jarak ke dalam / lebar ban); bagian lain: (u, v)
+// 0..1 di dalam bagian), aWheel (titik roda: x muka luar ban (bertanda), y, z pusat, jari-jari; titik lain 0). Normal dari sudut
+// lipat per kelompok (bodi 28 derajat: garis bahu tetap tajam, permukaan lengkung halus; kabin 50; roda 50; lain 40).
+function carShape(t) {
+  const T = CAR_TYPES[t], S = CAR_SHAPE[t], G = S.gh, wx = T.wx, ws = T.ws, bt = T.bt;
+  const W = S.wf * wx, rw = 0.3 * ws, yc = 0.3 * ws, ra = rw + S.ag, zE = T.h - 0.015, xo = S.xo * wx, WH = [T.af, -T.ar];
+  const half = [], full = [], O2 = [0, 0];
+  let out = half;
+  const tri = (a, b, c, m, g, ua, ub, uc, w) => { out.push({ p: [a, b, c], m, g, uv: [ua || O2, ub || O2, uc || O2], w: w || null }); };
+  const quad = (a, b, c, d, m, g, u, w) => { u = u || [O2, O2, O2, O2]; tri(a, b, c, m, g, u[0], u[1], u[2], w); tri(a, c, d, m, g, u[0], u[2], u[3], w); };
+  const U4 = [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], crs = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  // segi empat yang menghadap menjauhi titik ctr (bagian cembung kecil: spion, gagang, plat, lampu taksi, ujung dinding bak)
+  const quadOut = (a, b, c, d, ctr, m, g, u) => {
+    const f = [(a[0] + b[0] + c[0] + d[0]) / 4 - ctr[0], (a[1] + b[1] + c[1] + d[1]) / 4 - ctr[1], (a[2] + b[2] + c[2] + d[2]) / 4 - ctr[2]];
+    if (dot(crs(sub(b, a), sub(c, a)), f) >= 0) quad(a, b, c, d, m, g, u || U4); else { const v = u || U4; quad(a, d, c, b, m, g, [v[0], v[3], v[2], v[1]]); }
+  };
+  // balok 8 titik P[bx + 2 by + 4 bz]; mats per muka (x0 x1 y0 y1 z0 z1), null = tidak dibuat
+  const hexa = (P, mats, g) => {
+    const c = [0, 1, 2].map((k) => P.reduce((s, p) => s + p[k], 0) / 8);
+    [[0, 2, 6, 4], [1, 3, 7, 5], [0, 1, 5, 4], [2, 3, 7, 6], [0, 1, 3, 2], [4, 5, 7, 6]].forEach((f, i) => { if (mats[i] != null) quadOut(P[f[0]], P[f[1]], P[f[2]], P[f[3]], c, mats[i], g); });
+  };
+  const box = (x0, x1, y0, y1, z0, z1) => [0, 1, 2, 3, 4, 5, 6, 7].map((i) => [i & 1 ? x1 : x0, i & 2 ? y1 : y0, i & 4 ? z1 : z0]);
+  // sapuan profil sepanjang jalur: prof [o, u] berlawanan jarum jam di bidang (outs, up = out x arah jalur), sc pengali o di sudut
+  const sweep = (path, outs, sc, prof, m, g, ends) => {
+    const N = path.length, rings = [];
+    for (let i = 0; i < N; i++) {
+      const p = path[i], a = i > 0 ? nrm(sub(p, path[i - 1])) : null, b = i < N - 1 ? nrm(sub(path[i + 1], p)) : null;
+      const Tn = nrm(a && b ? [a[0] + b[0], a[1] + b[1], a[2] + b[2]] : a || b), o = outs[i], u = crs(o, Tn);
+      rings.push(prof.map(([po, pu]) => [p[0] + o[0] * po * sc[i] + u[0] * pu, p[1] + o[1] * po * sc[i] + u[1] * pu, p[2] + o[2] * po * sc[i] + u[2] * pu]));
+      if (ends && (i === 0 || i === N - 1)) {
+        const r = rings[i], ctr = [p[0] + Tn[0] * (i ? -0.1 : 0.1), p[1] + Tn[1] * (i ? -0.1 : 0.1), p[2] + Tn[2] * (i ? -0.1 : 0.1)];
+        quadOut(r[0], r[1], r[2], r[3], ctr, m, g);                // profil 4 titik
+      }
+    }
+    for (let i = 0; i < N - 1; i++) for (let j = 0; j < prof.length - 1; j++)
+      quad(rings[i][j], rings[i + 1][j], rings[i + 1][j + 1], rings[i][j + 1], m, g, [[i / (N - 1), j / (prof.length - 1)], [(i + 1) / (N - 1), j / (prof.length - 1)], [(i + 1) / (N - 1), (j + 1) / (prof.length - 1)], [i / (N - 1), (j + 1) / (prof.length - 1)]]);
+  };
+  // tabel [z, y] (z menurun) -> y, linear
+  const tab = (A, z) => {
+    if (z >= A[0][0]) return A[0][1];
+    for (let i = 0; i < A.length - 1; i++) if (z >= A[i + 1][0]) { const [z0, y0] = A[i], [z1, y1] = A[i + 1]; return y1 + (y0 - y1) * (z - z1) / (z0 - z1); }
+    return A[A.length - 1][1];
+  };
+  const ss = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+  const planW = (z) => { const rc = z > 0 ? S.rc[0] : S.rc[1], e = zE - Math.abs(z); return e >= rc ? W : W - rc + Math.sqrt(Math.max(0, rc * rc - (rc - e) * (rc - e))); };
+  const botY = (z) => {                                              // bawah sisi: bumper turun di ujung, lengkung roda naik
+    let y = S.yb + (S.bump[0] - S.yb) * ss((z - T.af - ra) / 0.25) + (S.bump[1] - S.yb) * ss((-z - T.ar - ra) / 0.25);
+    for (const zw of WH) { const d = Math.abs(z - zw); if (d <= ra + 1e-6) y = Math.max(y, yc + Math.sqrt(Math.max(0, ra * ra - d * d))); }
+    return y;
+  };
+  // setengah penampang bodi bawah (9 titik, x >= 0): 0-2 sisi bawah menyempit ke ambang, 3 garis bahu (lipatan), 4-6 bahu
+  // membulat ke atas (30, 55, 80 derajat dari tegak), 7-8 atas cembung sampai tengah
+  const A1 = [30, 55, 80].map((a) => a * Math.PI / 180), L1 = [0.5, 0.3, 0.25], K1 = L1.reduce((s, l, i) => s + l * Math.cos(A1[i]), 0);
+  const sec = (z) => {
+    const w = planW(z), yT = tab(S.top, z), yB = botY(z), ys = Math.max(yB + 0.08, Math.min(tab(S.sh, z), yT - S.rmin));
+    const R = Math.max(0.01, yT - ys), R2 = ys - yB, k = Math.min(1, R2 / 0.45), q = R / K1;
+    const P = [[w - 0.075 * k, yB], [w - 0.035 * k, yB + 0.25 * R2], [w - 0.012 * k, yB + 0.65 * R2], [w, ys]];
+    let x = w, y = ys;
+    for (let i = 0; i < 3; i++) { x -= q * L1[i] * Math.sin(A1[i]); y += q * L1[i] * Math.cos(A1[i]); P.push([x, y]); }
+    P[6][1] = ys + R;
+    P.push([P[6][0] * 0.5, P[6][1] + 0.75 * S.crown], [0, P[6][1] + S.crown]);
+    return P;
+  };
+  const surfX = (z, y) => { const P = sec(z); for (let j = 0; j < 6; j++) if (y <= P[j + 1][1]) { const f = (y - P[j][1]) / Math.max(1e-6, P[j + 1][1] - P[j][1]); return P[j][0] + (P[j + 1][0] - P[j][0]) * Math.min(1, Math.max(0, f)); } return P[6][0]; };
+  // --- bodi bawah: loft irisan (ujung membulat, lengkung roda, pangkal kaca depan / belakang) ---
+  const zs = [];
+  for (const f of [0, 0.12, 0.45, 1]) zs.push(zE - f * S.rc[0], -zE + f * S.rc[1]);
+  for (const zw of WH) {
+    for (const a of [-1, -0.866, -0.5, 0, 0.5, 0.866, 1]) zs.push(zw + a * ra);
+    if (S.yb < yc - 0.01) zs.push(zw - ra - 0.03, zw + ra + 0.03);   // bus: sisi lengkung turun ke ambang rendah
+  }
+  zs.push(G.zF[0], G.zR[0]);
+  if (S.bed) zs.push(S.bed.z0, S.bed.z1);
+  zs.sort((a, b) => a - b);
+  const Z = []; for (const z of zs) if (!Z.length || z - Z[Z.length - 1] > 0.012) Z.push(z);
+  Z[Z.length - 1] = zE;
+  const SEC = Z.map(sec);
+  for (let i = 0; i < Z.length - 1; i++) {
+    const za = Z[i], zb = Z[i + 1], zm = (za + zb) / 2, Pa = SEC[i], Pb = SEC[i + 1];
+    for (let j = 0; j < 8; j++) {
+      let m = 0;
+      if (j === 0 && (S.clad || zm > T.af + ra || zm < -T.ar - ra)) m = 3;   // bumper bawah / plastik sisi
+      if (zm > zE - S.lampF[0] && S.lampF[1].includes(j)) m = 6;
+      if (zm < -zE + S.lampR[0] && S.lampR[1].includes(j)) m = 7;
+      if (S.bed && j >= 6 && zm < S.bed.z0 && zm > S.bed.z1) m = 3;   // lantai bak pickup
+      quad([Pa[j][0], Pa[j][1], za], [Pa[j + 1][0], Pa[j + 1][1], za], [Pb[j + 1][0], Pb[j + 1][1], zb], [Pb[j][0], Pb[j][1], zb], m, 'b',
+        [[za, j / 8], [za, (j + 1) / 8], [zb, (j + 1) / 8], [zb, j / 8]]);
+    }
+  }
+  // muka depan / belakang: baris = ruas penampang ujung, kolom = pecahan lebar (gril, lampu, bumper); kolom sebahan digabung
+  const cap = (P, z, rows, front) => {
+    const fx = [0, S.capX[0], S.capX[1], 1];
+    for (let j = 0; j < 8; j++) for (let c = 0; c < 3;) {
+      let c1 = c + 1; while (c1 < 3 && rows[j][c1] === rows[j][c]) c1++;
+      const a = [fx[c] * P[j][0], P[j][1], z], b = [fx[c1] * P[j][0], P[j][1], z], cc = [fx[c1] * P[j + 1][0], P[j + 1][1], z], d = [fx[c] * P[j + 1][0], P[j + 1][1], z];
+      if (front) quad(a, b, cc, d, rows[j][c], 'b', U4); else quad(a, d, cc, b, rows[j][c], 'b', [U4[0], U4[3], U4[2], U4[1]]);
+      c = c1;
+    }
+  };
+  cap(SEC[SEC.length - 1], zE, S.capF, true); cap(SEC[0], -zE, S.capR, false);
+  // dinding dalam lengkung roda (gelap): dari tepi bawah sisi ke dalam sampai melewati ban
+  const xi = xo - S.tw - 0.04;
+  for (const zw of WH) {
+    const ix = []; Z.forEach((z, i) => { if (Math.abs(z - zw) <= ra + 1e-6) ix.push(i); });
+    for (let k = 0; k < ix.length - 1; k++) {
+      const p0 = SEC[ix[k]][0], p1 = SEC[ix[k + 1]][0], z0 = Z[ix[k]], z1 = Z[ix[k + 1]], u0 = k / (ix.length - 1), u1 = (k + 1) / (ix.length - 1);
+      quad([p0[0], p0[1], z0], [p1[0], p1[1], z1], [xi, p1[1], z1], [xi, p0[1], z0], 12, 'l', [[u0, 0], [u1, 0], [u1, 1], [u0, 1]]);
+    }
+  }
+  // roda: ban (tapak, bahu, dinding) + velg cekung, diputar mengelilingi sumbu x; aWheel untuk semua titik roda
+  const PR = [[S.tw, 1], [0.025, 1], [0, 0.88], [0.006, 0.66], [0.035, 0]];
+  for (const zw of WH) {
+    const wv = [xo, yc, zw, rw], pt = (pr, a) => [xo - pr[0], yc + pr[1] * rw * Math.cos(a), zw + pr[1] * rw * Math.sin(a)];
+    for (let j = 0; j < 4; j++) for (let k = 0; k < S.n; k++) {
+      const a0 = 2 * Math.PI * k / S.n, a1 = 2 * Math.PI * (k + 1) / S.n, u0 = [PR[j][1], PR[j][0] / S.tw], u1 = [PR[j + 1][1], PR[j + 1][0] / S.tw];
+      quad(pt(PR[j], a0), pt(PR[j], a1), pt(PR[j + 1], a1), pt(PR[j + 1], a0), j < 3 ? 4 : 5, j < 3 ? 'w' : 'v', [u0, u0, u1, u1], wv);
+    }
+  }
+  // --- kabin: cincin mendatar dari sabuk ke atas kaca, tepi atap membulat, atap cembung ---
+  const zA0 = G.zF[0] - G.bF[0] - G.rcF[0], zC0 = G.zR[0] + G.bR[0] + G.rcR[0];
+  let xB = W; for (let z = zC0; z <= zA0 + 1e-6; z += 0.05) xB = Math.min(xB, sec(z)[6][0]);
+  xB -= 0.002;
+  const c = S.crown, crownAt = (x) => (x >= xB ? 0 : x >= xB / 2 ? 0.75 * c * (xB - x) / (xB / 2) : 0.75 * c + 0.25 * c * (xB / 2 - x) / (xB / 2));
+  const yT = (G.ry || T.ct) - G.rup - G.crown, s45 = Math.SQRT1_2, COL = { W: 0, A: 1, S1: 2, B: 3, S2: 4, C: 5, Q: 6, R: 7 };
+  const lerp2 = (v, f) => v[0] + (v[1] - v[0]) * f;
+  const loop = (w, zf, zr, rf, rr, bf, br, f) => {                  // setengah lingkar denah [x, z, kolom ruas berikut], depan -> belakang
+    const xf = w - rf, xr = w - rr, L = [[0, zf, 'W'], [xf * 0.5, zf - bf * 0.25, 'W'], [xf, zf - bf, 'A'], [xf + rf * s45, zf - bf - rf * (1 - s45), 'A'], [w, zf - bf - rf, 'S1']];
+    for (const [zb, zt, cn] of G.side) L.push([w, zb + (zt - zb) * f, cn]);
+    L.push([w, zr + br + rr, 'C'], [xr + rr * s45, zr + br + rr * (1 - s45), 'C'], [xr, zr + br, 'R'], [xr * 0.5, zr + br * 0.25, 'R'], [0, zr, null]);
+    return L;
+  };
+  const ringAt = (y, k) => {
+    const f = Math.min(1, Math.max(0, (y - bt) / (yT - bt)));
+    return loop(xB - G.tum * f, lerp2(G.zF, f), lerp2(G.zR, f), lerp2(G.rcF, f), lerp2(G.rcR, f), lerp2(G.bF, f), lerp2(G.bR, f), f)
+      .map(([x, z, cn]) => [x, y + (k <= 1 ? crownAt(x) + 0.004 : 0), z, cn]);
+  };
+  const RY = [bt, ...G.rows.map((r) => r[0] || yT)], RG = RY.map((y, k) => ringAt(y, k));
+  const fr = G.rin * 0.8, rRoll = Math.max(0.04, G.rcF[1] - G.rin * 0.5), rRollR = Math.max(0.04, G.rcR[1] - G.rin * 0.5);
+  RG.push(loop(xB - G.tum - G.rin, G.zF[1] - fr, G.zR[1] + fr, rRoll, rRollR, G.bF[1], G.bR[1], 1).map(([x, z, cn]) => [x, yT + G.rup, z, cn]));
+  const ROLL = RG[RG.length - 1], zm0 = ROLL[0][2], zm1 = ROLL[ROLL.length - 1][2], zmid = (zm0 + zm1) / 2, zhl = (zm0 - zm1) / 2;
+  RG.push(ROLL.map(([x, y, z, cn]) => [0, y + G.crown * Math.sqrt(Math.max(0, 1 - ((z - zmid) / zhl) ** 2)), z, cn]));
+  const colU = (L) => {                                              // u 0..1 sepanjang tiap kolom: [awal ruas i], [akhir ruas i]
+    const s = [], e = []; let i = 0;
+    while (i < L.length - 1) {
+      let j = i, len = 0; const acc = [0];
+      while (j < L.length - 1 && L[j][3] === L[i][3]) { len += Math.hypot(L[j + 1][0] - L[j][0], L[j + 1][2] - L[j][2]); acc.push(len); j++; }
+      for (let q = i; q < j; q++) { s[q] = acc[q - i] / (len || 1); e[q] = acc[q - i + 1] / (len || 1); }
+      i = j;
+    }
+    return [s, e];
+  };
+  for (let k = 0; k < RG.length - 1; k++) {
+    const L0 = RG[k], L1 = RG[k + 1], [s0, e0] = colU(L0), [s1, e1] = colU(L1);
+    const mats = k < G.rows.length ? G.rows[k][1] : null;
+    for (let i = 0; i < L0.length - 1; i++) {
+      const cn = COL[L0[i][3]], m = mats ? mats[cn] : k === G.rows.length ? (Array.isArray(G.roll) ? G.roll[cn] : G.roll) : G.roof;
+      const P = (L, j) => [L[j][0], L[j][1], L[j][2]];
+      quad(P(L0, i), P(L0, i + 1), P(L1, i + 1), P(L1, i), m, 'g', [[s0[i], 0], [e0[i], 0], [e1[i], 1], [s1[i], 1]]);
+    }
+  }
+  // --- pelengkap ---
+  // spion (cat, kaca menghadap belakang), menempel di sisi kaca dekat pangkal pilar A
+  {
+    const M = S.mir, mz = M.z != null ? M.z : zA0 - 0.08, y0 = bt + M.y0, y1 = bt + M.y1, f = (y0 - bt) / (yT - bt), x0 = xB - G.tum * f - 0.01, x1 = M.x * wx;
+    const P = box(x0, x1, y0, y1, mz - 0.05, mz + 0.05);
+    P[5][2] = P[7][2] = mz + 0.015; P[5][1] += 0.01; P[7][1] -= 0.01; P[1][1] += 0.01; P[3][1] -= 0.01;   // ujung luar meruncing ke depan
+    hexa(P, [null, 0, 0, 0, 1, 0], 'm');
+  }
+  // gagang pintu (krom) di bawah garis bahu
+  for (const hz of S.hz) {
+    const y = tab(S.sh, hz) - 0.05, xs = surfX(hz, y);
+    hexa(box(xs - 0.003, xs + 0.013, y - 0.011, y + 0.011, hz - 0.065, hz + 0.065), [null, 13, 13, 13, 13, 13], 'h');
+  }
+  // list samping pintu (plastik tipis) di antara lengkung roda
+  if (S.mold) {
+    const z0 = T.af - ra - 0.06, z1 = -T.ar + ra + 0.06, ym = S.mold;
+    sweep([[surfX(z0, ym) - 0.002, ym, z0], [surfX(z1, ym) - 0.002, ym, z1]], [[1, 0, 0], [1, 0, 0]], [1, 1], [[0, -0.02], [0.009, -0.012], [0.009, 0.012], [0, 0.02]], 3, 'k', false);
+  }
+  // rel atap SUV (plastik): batang + dua kaki
+  if (S.rails) {
+    const wr = xB - G.tum - G.rin, xr = wr - 0.07, yr = yT + G.rup + G.crown * (1 - xr / wr) * 0.5, [za, zb] = S.rails;
+    hexa(box(xr - 0.014, xr + 0.014, yr + 0.03, T.ct - 0.002, zb, za), [3, 3, 3, 3, 3, 3], 'r');
+    for (const z of [za - 0.03, zb + 0.03]) hexa(box(xr - 0.012, xr + 0.012, yr - 0.006, yr + 0.03, z - 0.03, z + 0.03), [3, 3, null, null, 3, 3], 'r');
+  }
+  // --- bagian tidak simetris / di tengah (tidak dicerminkan) ---
+  out = full;
+  // plat depan dan belakang di muka ujung (sedikit menonjol, tetap di dalam +-h)
+  for (const [y, s] of [[S.plate[0], 1], [S.plate[1], -1]]) {
+    const z = s * (zE + 0.011), hw = 0.25, hh = 0.055;
+    quadOut([-hw, y - hh, z], [hw, y - hh, z], [hw, y + hh, z], [-hw, y + hh, z], [0, y, 0], 8, 'p');
+  }
+  // bilah krom gril
+  for (const y of S.bars) sweep([[-S.barW, y, zE], [S.barW, y, zE]], [[0, 0, 1], [0, 0, 1]], [1, 1], [[-0.002, -0.005], [0.007, -0.005], [0.007, 0.005], [-0.002, 0.005]], 13, 'k', false);
+  // lampu atap taksi (menyala malam)
+  if (S.taxi) {
+    const [hx0, hx1, y0, y1, z0, z1] = S.taxi, P = box(-hx0, hx0, y0, y1, z0, z1);
+    for (const i of [2, 3, 6, 7]) { P[i][0] *= hx1 / hx0; P[i][2] = P[i][2] * 0.85 + (z0 + z1) * 0.075; }
+    hexa(P, [9, 9, null, 9, 9, 9], 't');
+  }
+  // dinding bak pickup (cat): sapuan profil U dari depan kiri, pintu belakang, ke depan kanan
+  if (S.bed) {
+    const B = S.bed, xb = sec((B.z0 + B.z1) / 2)[6][0] - 0.003, s2 = Math.SQRT2, q = Math.SQRT1_2;
+    sweep([[xb, bt, B.z0], [xb, bt, B.z1], [-xb, bt, B.z1], [-xb, bt, B.z0]], [[1, 0, 0], [q, 0, -q], [-q, 0, -q], [-1, 0, 0]], [1, s2, s2, 1],
+      [[0, -0.01], [0, B.h], [-B.t, B.h], [-B.t, -0.01]], 0, 'd', true);
+  }
+  // pintu bus (kaca, sisi +x / trotoar): dua daun per pintu
+  if (S.doors) for (const [z0, z1] of S.doors) {
+    const x = W + 0.004, zm = (z0 + z1) / 2, y0 = S.yb + 0.04, y1 = 2.38;
+    for (const [a, b] of [[z0, zm - 0.008], [zm + 0.008, z1]]) quadOut([x, y0, a], [x, y0, b], [x, y1, b], [x, y1, a], [0, (y0 + y1) / 2, (a + b) / 2], 1, 'p');
+  }
+  // --- cermin sisi -x, normal sudut lipat, titik dilas, BufferGeometry ---
+  const F = full.concat(half);
+  for (const f of half) {
+    const mx = (p) => [-p[0], p[1], p[2]];
+    F.push({ p: [mx(f.p[0]), mx(f.p[2]), mx(f.p[1])], m: f.m, g: f.g, uv: [f.uv[0], f.uv[2], f.uv[1]], w: f.w && [-f.w[0], f.w[1], f.w[2], f.w[3]] });
+  }
+  // kunci posisi angka (0,1 mm; x +-4 m, y 0..6,5 m, z +-13 m tepat di bawah 2^53), bukan string: muat lebih cepat
+  const TH = { b: 28, g: 50, w: 50 }, FS = [], at = new Map(), vat = new Map();
+  const pk = (p) => ((Math.round(p[0] * 1e4) + 40000) * 65536 + Math.round(p[1] * 1e4) + 1000) * 262144 + Math.round(p[2] * 1e4) + 131072;
+  for (const f of F) {
+    const n = crs(sub(f.p[1], f.p[0]), sub(f.p[2], f.p[0])), a = Math.hypot(n[0], n[1], n[2]);
+    if (a <= 2e-8) continue;                                         // segitiga tanpa luas dibuang
+    f.n = [n[0] / a, n[1] / a, n[2] / a]; f.a = a; f.ct = Math.cos((TH[f.g] || 40) * Math.PI / 180); f.k = f.p.map(pk);
+    for (const k of f.k) { let l = at.get(k); if (!l) at.set(k, l = []); if (l[l.length - 1] !== FS.length) l.push(FS.length); }
+    FS.push(f);
+  }
+  const pos = [], nor = [], mat = [], uv2 = [], whl = [], idx = [], near = (a, b) => Math.abs(a - b) < 1e-5;
+  for (const f of FS) {
+    for (let v = 0; v < 3; v++) {
+      const p = f.p[v]; let nx = 0, ny = 0, nz = 0;
+      for (const i of at.get(f.k[v])) {                              // rata-rata normal muka sekelompok yang sudutnya di bawah ambang
+        const h = FS[i];
+        if (h.g === f.g && h.n[0] * f.n[0] + h.n[1] * f.n[1] + h.n[2] * f.n[2] >= f.ct) { nx += h.n[0] * h.a; ny += h.n[1] * h.a; nz += h.n[2] * h.a; }
+      }
+      const l = Math.hypot(nx, ny, nz), n = l > 1e-9 ? [nx / l, ny / l, nz / l] : f.n;
+      const uv = f.m === 0 || f.m === 11 ? [p[2], p[1]] : f.uv[v], w = f.w || [0, 0, 0, 0];
+      let L = vat.get(f.k[v]), id = -1;                              // las titik: posisi, normal, bahan, aUV2, roda sama
+      if (!L) vat.set(f.k[v], L = []);
+      for (const j of L) if (mat[j] === f.m && whl[j * 4] === w[0] && whl[j * 4 + 2] === w[2] && near(nor[j * 3], n[0]) && near(nor[j * 3 + 1], n[1]) && near(nor[j * 3 + 2], n[2]) && near(uv2[j * 2], uv[0]) && near(uv2[j * 2 + 1], uv[1])) { id = j; break; }
+      if (id < 0) { id = mat.length; L.push(id); pos.push(p[0], p[1], p[2]); nor.push(n[0], n[1], n[2]); mat.push(f.m); uv2.push(uv[0], uv[1]); whl.push(w[0], w[1], w[2], w[3]); }
+      idx.push(id);
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  g.setAttribute('aMat', new THREE.Float32BufferAttribute(mat, 1)); g.setAttribute('aUV2', new THREE.Float32BufferAttribute(uv2, 2));
+  g.setAttribute('aWheel', new THREE.Float32BufferAttribute(whl, 4)); g.setIndex(idx);
+  g.computeBoundingBox(); g.computeBoundingSphere();
+  g.userData = { type: CAR_TYPES[t].name, tris: idx.length / 3, verts: pos.length / 3, seams: S.seams };
+  return g;
+}
+// 26b: satu geometri per jenis, dibangun sekali saat muat (tanpa angka acak). ?mobil=lama: tidak dibangun
+const CARGEO = MOBIL.lama ? null : CAR_TYPES.map((T, t) => carShape(t));
 const TRAFFIC = {};
 {
   // --- geometri mobil (sedan/hatchback 4,4 m): bodi dicat, kabin kaca gelap, roda, lampu ---
@@ -15776,7 +16134,7 @@ setTimeout(warmLater, 1500);                       // P4
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { warmLater, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
 /* =====================================================================
    VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).
    Rig = pose kamera lama dengan pitch 0 dan tanpa gerak kepala, diputar balik sebesar yaw kepala: di dalam stasiun "atas" =
