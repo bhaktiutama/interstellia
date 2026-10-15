@@ -38,3 +38,13 @@ Semua di bawah R_OUT + 29 m (batas tabrak pesawat). Instans lebih kecil dari sek
 | Muat tanpa error (preset Sedang), X1 dan `?lambung=lama` | tidak ada error |
 | Kamera luar 6,5 km, utilitas 900 m, dekat 160 m, end cap A 2,6 km | tergambar, tanpa error |
 | FPS GTX 1060 / M1, NaN di M1 | menunggu uji Bhakti |
+
+## X2: cahaya bergeser di atap saat kamera luar (revisi Bhakti)
+
+| Item | Isi |
+| --- | --- |
+| Gejala | Dari kamera luar, cahaya berpindah dari atap ke atap dalam barisan rapi, juga di lapangan baseball; dari dalam tidak ada |
+| Penyebab | Kamera luar memutar scene (`scene.rotation.z = omega t`), jadi posisi dunia di shader ikut berputar, tetapi fungsi cahaya menghitung lokasi kerangka stasiun dari posisi itu (s = atan x R): kolam lampu jalan dan trem, peta daratan dan awan untuk pantulan, peta bayangan sunline tetap diam sementara kota berputar di bawahnya |
+| Perbaikan | `uL_Rot` + `stF()` di `LIGHT_GLSL`: `stationLight()`, `nightLight()`, `farEnv()`, `sunShCover()` memutar balik masukan ke kerangka stasiun; `uL_SunDir` selalu kerangka stasiun. Di dalam stasiun `uL_Rot` = (1, 0), hasil identik |
+| Uji (sandbox) | Render dua kali dengan stasiun dan kamera diputar bersama (0,3 dan 1,25 rad, Matahari dimatikan agar hanya efek kerangka yang diukur): siang beda rata-rata per piksel 1,58 -> 0,05; malam 3,15 -> 1,41 (sisa tersebar merata = aliasing titik lampu kecil, gugus kolam lampu hilang); tanpa error |
+| Tetap | Kilau Matahari langsung lewat kaca end cap B tetap ada (efek fisika nyata, arah Matahari inersia) |

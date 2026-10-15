@@ -1079,6 +1079,7 @@ const LIGHT = { uniforms: {
   uL_Sunline: { value: 0.9 }, uL_SunlineCol: { value: new THREE.Vector3(1, 0.97, 0.92) },
   uL_AmbCol: { value: new THREE.Vector3(0.17, 0.2, 0.25) },
   uL_CapI: { value: 0.3 }, uL_CapCol: { value: new THREE.Vector3(1.0, 0.7, 0.36) },
+  uL_Rot: { value: new THREE.Vector2(1, 0) },                     // X2: dunia -> kerangka stasiun (cos, sin dari -scene.rotation.z)
   uL_SunDir: { value: new THREE.Vector3(0, 0, 1) }, uL_SunI: { value: 0.12 }, uL_SunCol: { value: new THREE.Vector3(1.0, 0.96, 0.9) },
   uL_ShadowMap: { value: null }, uL_ShadowMat: { value: new THREE.Matrix4() }, uL_ShadowOn: { value: 0 }, uL_ShadowCap: { value: 0 },
   // 17d: pantulan daratan seberang (peta daratan, cahaya yang sampai ke sana, kabut sepanjang sinar pantul, malam)
@@ -1123,6 +1124,11 @@ const SH_UNROLL_VS = /* glsl */`
 const LIGHT_GLSL = /* glsl */`
   uniform float uL_R, uL_HalfL, uL_CapRingR, uL_Sunline, uL_CapI, uL_SunI, uL_ShadowOn, uL_ShadowCap;
   uniform vec3 uL_SunlineCol, uL_AmbCol, uL_CapCol, uL_SunDir, uL_SunCol;
+  // X2: saat kamera luar scene diputar (scene.rotation.z = omega t), jadi posisi dunia ikut berputar. Fungsi cahaya di bawah
+  // menghitung lokasi kerangka stasiun (s = atan x R untuk lampu jalan, peta daratan, awan, peta bayangan), jadi masukannya
+  // diputar balik dulu. Di dalam stasiun uL_Rot = (1, 0): hasil identik.
+  uniform vec2 uL_Rot;
+  vec3 stF(vec3 v) { return vec3(uL_Rot.x * v.x - uL_Rot.y * v.y, uL_Rot.y * v.x + uL_Rot.x * v.y, v.z); }
   uniform sampler2D uL_ShadowMap, uL_Land, uL_Cloud, uL_SunSh, uL_SunShN;
   uniform mat4 uL_SunShNMat; uniform vec3 uL_SunShNK; uniform float uL_SunShNOn, uL_SunShNTh;   // revisi V1: peta bayangan sunline dekat
   uniform mat4 uL_ShadowMat, uL_SunShMat;
@@ -1144,6 +1150,7 @@ const LIGHT_GLSL = /* glsl */`
   // rough 0..1 mengaburkan (mip peta daratan, garis sunline dan cincin melebar, energi dijaga). lineK = bobot sunline.
   // Aman NaN: P di dalam silinder (c < 0) sehingga diskriminan >= 0; pembagi dijaga; kuadrat ditulis x * x (bukan pow).
   vec3 farEnv(vec3 P, vec3 Rd, float rough, float lineK) {
+    P = stF(P); Rd = stF(Rd);                                          // X2
     float a = dot(Rd.xy, Rd.xy), b = dot(P.xy, Rd.xy), c = dot(P.xy, P.xy) - uL_R * uL_R;
     float tW = a > 1e-6 ? (-b + sqrt(max(b * b - a * c, 0.0))) / a : 1e7;
     float tC = abs(Rd.z) > 1e-5 ? ((Rd.z > 0.0 ? uL_HalfL : -uL_HalfL) - P.z) / Rd.z : 1e7;
@@ -1293,6 +1300,7 @@ const LIGHT_GLSL = /* glsl */`
   // cahaya malam pada objek: lampu 8 m di atas jalan menerangi muka atas penuh, dinding setengah, hilang di atas 18 m
   vec3 nightLight(vec3 p, vec3 n) {
     if (uL_Night < 0.01 && uL_Tram.w < 0.01 && uL_Head.w < 0.01) return vec3(0.0);
+    p = stF(p); n = stF(n);                                            // X2
     float r = length(p.xy);
     if (r < 1.0) return vec3(0.0);
     vec3 up = vec3(-p.xy / r, 0.0);
@@ -1310,6 +1318,7 @@ const LIGHT_GLSL = /* glsl */`
   // kabur memanjang searah sumbu. Setengah lebar penumbra sepanjang sumbu = 0,75 x tinggi penghalang di atas penerima
   // (setengah daya garis ada dalam sekitar 37 derajat). Cari penghalang di beberapa titik, lalu PCF searah sumbu.
   float sunShCover(vec3 p) {
+    p = stF(p);                                                        // X2
     if (uL_SunShOn < 0.5) return 0.0;
     vec2 c = (uL_SunShMat * vec4(shUnrollP(p, uL_SunShTh), 1.0)).xy * 0.5 + 0.5;
     return smoothstep(0.0, 0.08, min(min(c.x, 1.0 - c.x), min(c.y, 1.0 - c.y)));
@@ -1417,6 +1426,7 @@ const LIGHT_GLSL = /* glsl */`
     return mix(1.0, s, edge);
   }
   vec3 stationLight(vec3 p, vec3 n) {
+    p = stF(p); n = stF(n);                                            // X2
     float r = length(p.xy);
     vec3 up = r > 1.0 ? vec3(-p.xy / r, 0.0) : vec3(0.0, 0.0, 1.0);
     float d = dot(n, up);
@@ -7823,9 +7833,11 @@ function updateLighting() {
   U.uL_SunI.value = 0.12 * ECL.k;                                   // 17a: sinar Matahari lewat end cap padam saat gerhana
   RAYS.str = U.uL_Sunline.value * (0.7 + 0.9 * golden) * (1 - 0.6 * ov);   // tahap 11b: berkas paling jelas pagi dan senja
   // sinar Matahari dalam kerangka stasiun (atau inersia saat kamera luar)
-  if (ext.active) U.uL_SunDir.value.copy(SUN_DIR);
-  else { const c = Math.cos(OMEGA * clock.sim), s = Math.sin(OMEGA * clock.sim);
+  // X2: selalu kerangka stasiun; saat kamera luar posisi dunia diputar balik di shader lewat uL_Rot (dulu arah inersia di sini,
+  // tetapi lampu jalan, pantulan daratan, dan bayangan tetap dihitung dari posisi dunia yang berputar: cahaya bergeser di atap)
+  { const c = Math.cos(OMEGA * clock.sim), s = Math.sin(OMEGA * clock.sim);
     U.uL_SunDir.value.set(SUN_DIR.x * c + SUN_DIR.y * s, -SUN_DIR.x * s + SUN_DIR.y * c, SUN_DIR.z); }
+  U.uL_Rot.value.set(Math.cos(scene.rotation.z), -Math.sin(scene.rotation.z));
   // kabut: biru siang, keemasan senja, biru gelap malam
   let fog = mixV(mixV([0.05, 0.06, 0.09], [0.68, 0.76, 0.86], day), [0.86, 0.66, 0.46], Math.min(1, golden * 0.75) * (1 - 0.5 * ov));
   fog = mixV(fog, [0.08 + 0.5 * day, 0.085 + 0.52 * day, 0.1 + 0.53 * day], 0.7 * ov);          // mendung: kabut abu-abu, lebih tebal
