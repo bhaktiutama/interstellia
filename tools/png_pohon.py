@@ -3,6 +3,7 @@ Memuat experiences/cooper-station/index.html, memanggang tiap template (T.bakeS)
 lalu menyusun lembar dengan Pillow. Pakai: python tools/png_pohon.py [keluaran.png]   (butuh playwright, pillow; CHROMIUM opsional)"""
 import asyncio, base64, io, os, pathlib, sys
 from playwright.async_api import async_playwright
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 TW, TH = 480, 600
@@ -25,6 +26,21 @@ async (dim) => {
   return out;
 }
 """
+
+def grade(im):
+    """Shader panggang menulis warna linear (tanpa OETF): ubah ke sRGB, beri sedikit eksposur, kontras, dan kejenuhan agar mirip foto."""
+    a = np.asarray(im).astype(np.float32) / 255.0
+    rgb, al = a[..., :3], a[..., 3:]
+    rgb = rgb / np.maximum(al, 1e-3)                                   # MSAA tepi: warna sudah dikalikan alpha
+    rgb = np.clip(rgb * EXPOSURE, 0, 1)
+    srgb = np.where(rgb <= 0.0031308, 12.92 * rgb, 1.055 * np.power(rgb, 1 / 2.4) - 0.055)
+    srgb = np.clip(srgb, 0, 1)
+    lum = (srgb * np.array([0.2126, 0.7152, 0.0722], np.float32)).sum(-1, keepdims=True)
+    srgb = np.clip(lum + (srgb - lum) * SAT, 0, 1)                     # kejenuhan
+    srgb = np.clip((srgb - 0.5) * CONTRAST + 0.5, 0, 1)
+    return Image.fromarray((np.concatenate([srgb, np.clip(al, 0, 1)], -1) * 255 + 0.5).astype(np.uint8), 'RGBA')
+
+EXPOSURE, SAT, CONTRAST = 0.78, 0.8, 1.14
 
 async def main(out):
     root = pathlib.Path(__file__).resolve().parent.parent
@@ -49,10 +65,10 @@ async def main(out):
     W, H = cols * (TW + G) + G, HEAD + rows * (TH + LH + G) + G
     sheet = Image.new('RGB', (W, H), (18, 24, 33)); d = ImageDraw.Draw(sheet)
     d.text((G + 8, 18), 'Copper Corn Station: semua jenis pohon (21 jenis, 42 template)', font=F3, fill=(235, 240, 245))
-    d.text((G + 8, 62), 'Hasil panggang template game (warna dasar atlas daun, tanpa pencahayaan kota dan tanpa mode Campur / Gugur); skala tiap kotak disesuaikan, tinggi dan lebar dalam meter', font=F2, fill=(150, 165, 180))
+    d.text((G + 8, 62), 'Hasil panggang template game (warna dasar atlas daun, sRGB, tanpa pencahayaan kota dan tanpa mode Campur / Gugur); skala tiap kotak disesuaikan', font=F2, fill=(150, 165, 180))
     seen = {}
     for n, t in enumerate(data):
-        im = Image.frombytes('RGBA', (TW, TH), base64.b64decode(t['px'])).transpose(Image.FLIP_TOP_BOTTOM)
+        im = grade(Image.frombytes('RGBA', (TW, TH), base64.b64decode(t['px'])).transpose(Image.FLIP_TOP_BOTTOM))
         bg = Image.new('RGBA', (TW, TH)); g = ImageDraw.Draw(bg)
         for y in range(TH):
             k = y / TH; g.line([(0, y), (TW, y)], fill=(int(120 + 70 * k), int(165 + 50 * k), int(205 + 30 * k), 255))
