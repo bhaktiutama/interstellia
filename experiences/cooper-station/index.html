@@ -9112,6 +9112,24 @@ const TREE_SPECIES = {
   arborvitae:  { ...TREE_DEF, env: { s: 'kolom', H: 9, cb: 0.04, W: 0.2, d: 4.2, lob: { lr: 0.6, cov: 1.0 } }, flex: [0.3, 0], barkT: 'serat', trunk: [0, 0.22], atlas: 14, bark: [0.45, 0.33, 0.26], hRel: 0.55 },
   redcedar:    { ...TREE_DEF, env: { s: 'kerucut', H: 11, cb: 0.06, W: 0.25, lob: { wh: 8, per: 5, irr: 0.5, asym: 0.3, fy: 0.7 } }, flex: [0.4, 0], barkT: 'serat', trunk: [0, 0.26], atlas: 15, bark: [0.48, 0.32, 0.24], hRel: 0.7 },
 };
+// 27: warna daun natural (rencana docs/cooper-station/rencana-tahap-27-cooper-station.md). Diukur dari foto contoh Bhakti:
+// daun game sekitar 2x lebih jenuh (median saturasi 0,70 vs 0,34), rona sudah cocok, kanal biru terlalu rendah. Penyetelan di
+// shader (atlas dan urutan RNG trr tidak disentuh). ?daun=lama (atau ?pohon=lama) = shader dan warna batang sebelum tahap 27.
+const DAUN = { lama: POHON_LAMA || new URLSearchParams(location.search).get('daun') === 'lama' };
+// uLeafG: x pengali saturasi, y pengali albedo, z kekuatan bayangan sejuk di dalam tajuk, w kekuatan translusensi (dulu 0,9 dan menjenuhkan)
+const LEAFG = { u: { value: new THREE.Vector4(0.5, 0.9, 0.35, 0.45) } };
+// per jenis: [pengali saturasi, pengali albedo, geser hangat (+ kuning) / sejuk (- kebiruan)]; dari palet foto contoh
+const LEAF_SP = {
+  oak: [1.0, 0.9, 0], elm: [1.0, 0.95, 0], poplar: [1.0, 1.0, 0.02], maple: [1.0, 1.0, 0], birch: [1.05, 1.05, 0.03],
+  pine: [0.9, 0.9, -0.04], willow: [1.0, 1.05, 0.04], bunga: [1.0, 1.0, 0], aspen: [1.05, 1.05, 0.04], beech: [1.0, 0.95, 0],
+  basswood: [1.0, 1.0, 0], chestnut: [1.0, 0.95, 0], ash: [1.0, 0.95, -0.01], walnut: [1.05, 1.05, 0.04], hickory: [1.0, 0.92, 0],
+  blacklocust: [1.05, 1.05, 0.03], honeylocust: [1.1, 1.08, 0.06], fir: [0.9, 0.9, -0.05], hemlock: [0.9, 0.9, -0.04],
+  arborvitae: [1.0, 0.95, 0.02], redcedar: [0.9, 0.9, -0.02],
+};
+LEAFG.set = (kind, v) => {                                         // penyetelan dari konsol: __station.LEAFG.set('oak', [1, 0.9, 0])
+  for (const T of TREES.templates) if (T.kind === kind && T.leafSp) T.leafSp.value.set(v[0], v[1], v[2], 0);
+  LEAF_SP[kind] = v;
+};
 // 25k: jari-jari amplop tajuk relatif (0..1) pada tinggi relatif t di tajuk (0 = pangkal, 1 = puncak), per kelompok bentuk.
 const ENV_R = {
   oval:    (t) => Math.sqrt(Math.max(0, 1 - (2 * t - 1) ** 2)),
@@ -9400,6 +9418,19 @@ const LEAF_RECOLOR = /* glsl */`
     float amt = k.a >= 0.99 ? 1.0 : k.a * mix(0.72, 1.0, v2);          // sebagian daun masih kehijauan
     return mix(c, tc * (lum / 0.2), amt * leaf);
   }`;
+const LEAF_GRADE_GLSL = /* glsl */`
+  #ifdef LEAF_GRADE
+  uniform vec4 uLeafG, uLeafSp;
+  // 27c: kurangi saturasi ke luminans (rona tetap, kanal biru naik), albedo sedikit turun, geser hangat / sejuk per jenis.
+  // Daun berwarna musim (autumn = vLeafC.a) tetap lebih hidup (saturasi paling rendah 0,85). Hanya mix / dot / max (aman M1).
+  vec3 leafGrade(vec3 c, float autumn) {
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    float s0 = uLeafG.x * uLeafSp.x, s = mix(s0, max(s0, 0.85), clamp(autumn, 0.0, 1.0));
+    vec3 g = mix(vec3(l), c, s) * (uLeafG.y * uLeafSp.y);
+    g *= vec3(1.0 + uLeafSp.z, 1.0, 1.0 - 2.0 * uLeafSp.z);
+    return max(g, vec3(0.0));
+  }
+  #endif`;
 const LEAF_VS = /* glsl */`
   attribute vec3 aCn;
   attribute float aAo;
@@ -9436,7 +9467,14 @@ const LEAF_VS = /* glsl */`
     }
     #endif
     float hh = hash2(ip.xy * 3.1 + ip.z);
+    #ifdef LEAF_GRADE
+    {                                                               // 27e: per pohon lebih sejuk .. lebih kuning, kecerahan per gugus daun
+      float hv = vnoise(position.xz * 0.55 + position.y * 0.37 + ip.xy * 0.13);
+      vTint = mix(vec3(0.88, 0.98, 0.94), vec3(1.08, 1.04, 0.84), hh) * mix(0.82, 1.12, hv);
+    }
+    #else
     vTint = mix(vec3(0.9, 1.0, 0.85), vec3(1.1, 1.05, 0.8), hh);
+    #endif
     #ifndef DEPTH_ONLY
     #ifdef BAKE
     vLight = vec3(0.78 + 0.35 * max(dot(normalize(aCn), normalize(vec3(0.3, 0.85, 0.45))), 0.0));
@@ -9456,6 +9494,7 @@ const LEAF_FS = /* glsl */`
   uniform sampler2D uLeafTex;
   varying vec4 vLeafC;
   ${LEAF_RECOLOR}
+  ${LEAF_GRADE_GLSL}
   varying vec2 vUv;
   varying float vAo, vDist, vBack;
   varying vec3 vLight, vTint;
@@ -9469,7 +9508,15 @@ const LEAF_FS = /* glsl */`
     // revisi V1: translusensi. Cahaya yang tembus diwarnai daun dua kali (lebih jenuh dan terang: hijau -> hijau kekuningan,
     // jingga -> bara); hanya bagian daun (bukan ranting), dan ikut vLight (bayangan, malam).
     float lfK = smoothstep(0.004, 0.03, tx.g - max(tx.r, tx.b));     // piksel daun di atlas (ranting cokelat: merah >= hijau)
+    #ifdef LEAF_GRADE
+    lc = leafGrade(lc, vLeafC.a);
+    // 27d: translusensi sekali dan lebih lemah, penguat condong kuning pucat (dulu lc / max(...) menjenuhkan jadi hijau lime)
+    lc *= 1.0 + vBack * lfK * uLeafG.w * vec3(1.0, 0.95, 0.72);
+    // 27d: bagian dalam tajuk (vAo rendah) sedikit lebih sejuk, seperti bayangan foto (hijau kebiruan, bukan hijau pekat)
+    lc *= mix(vec3(1.0), vec3(0.9, 0.98, 1.14), uLeafG.z * (1.0 - clamp(vAo, 0.0, 1.0)));
+    #else
     lc *= 1.0 + vBack * lfK * 0.9 * lc / max(max(lc.r, lc.g), 1e-3);
+    #endif
     gl_FragColor = vec4(lc * vAo * vLight, 1.0);
     #ifndef BAKE
     #include <colorspace_fragment>
@@ -9509,12 +9556,17 @@ const IMP_FS = /* glsl */`
   uniform sampler2D uImpTex;
   varying vec4 vLeafC;
   ${LEAF_RECOLOR}
+  ${LEAF_GRADE_GLSL}
   varying vec2 vUv;
   varying vec3 vLight;
   void main() {
     vec4 tx = texture2D(uImpTex, vUv);
     if (tx.a < 0.5) discard;
-    gl_FragColor = vec4(leafRecolor(tx.rgb / max(tx.a, 0.5), vLeafC) * vLight, 1.0);
+    vec3 ic = leafRecolor(tx.rgb / max(tx.a, 0.5), vLeafC);
+    #ifdef LEAF_GRADE
+    ic = leafGrade(ic, vLeafC.a);                                   // 27c: tone sama dengan mesh dekat
+    #endif
+    gl_FragColor = vec4(ic * vLight, 1.0);
     #include <colorspace_fragment>
     #include <fog_fragment>
   }`;
@@ -9712,12 +9764,19 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
     const mine = TREES.list.filter((t) => t.tpl === ti), n = Math.max(1, mine.length);
     const leafU = { uLeafTex: { value: TREE_SPECIES[T.kind].atlas >= 4 ? leafTex2 : leafTex } };   // 25c: jenis 25b memakai atlas kedua
     const bTex = POHON.lama || TREE_SPECIES[T.kind].barkT === 'alur' ? barkTex : BARK_TEX[TREE_SPECIES[T.kind].barkT];   // 25f
+    if (!DAUN.lama) {                                               // 27g: pangkal batang lebih gelap (0,3 m di bawah tanah sampai 1,2 m)
+      const P = T.barkGeo.attributes.position, C = T.barkGeo.attributes.color;
+      for (let k = 0; k < P.count; k++) { const f = 0.6 + 0.4 * Math.min(1, Math.max(0, (P.getY(k) - 0.3) / 0.9)); if (f < 1) C.setXYZ(k, C.getX(k) * f, C.getY(k) * f, C.getZ(k) * f); }
+      C.needsUpdate = true;
+    }
+    T.leafSp = { value: new THREE.Vector4(...(LEAF_SP[T.kind] || [1, 1, 0]), 0) };   // 27c: per jenis, dipakai mesh dekat, impostor, oktahedral
+    const gradeD = DAUN.lama ? {} : { LEAF_GRADE: '' }, gradeU = { uLeafG: LEAFG.u, uLeafSp: T.leafSp };
     T.bark = new THREE.InstancedMesh(T.barkGeo, new THREE.MeshBasicMaterial({ map: bTex, vertexColors: true }), n);
     T.leafGeo.setAttribute('aLeafC', new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4).setUsage(THREE.DynamicDrawUsage));   // 12b-2
     const flexD = POHON.lama ? {} : { LEAF_FLEX: '' };              // 25g: goyang per jenis (aFlex), ?pohon=lama = shader lama
     if (!POHON.lama) { const F = TREE_SPECIES[T.kind].flex, nv = T.leafGeo.attributes.position.count, fa = new Float32Array(nv * 2);
       for (let k = 0; k < nv; k++) { fa[2 * k] = F[0]; fa[2 * k + 1] = F[1]; } T.leafGeo.setAttribute('aFlex', new THREE.Float32BufferAttribute(fa, 2)); }
-    T.leaf = new THREE.InstancedMesh(T.leafGeo, vegMaterial({ vertex: LEAF_VS, fragment: LEAF_FS, uniforms: leafU, defines: flexD }), n);
+    T.leaf = new THREE.InstancedMesh(T.leafGeo, vegMaterial({ vertex: LEAF_VS, fragment: LEAF_FS, uniforms: Object.assign({}, leafU, gradeU), defines: Object.assign({}, flexD, gradeD) }), n);
     castAlpha(T.leaf, vegMaterial({ vertex: LEAF_VS, fragment: LEAF_FS, uniforms: leafU, depth: true, defines: flexD }));
     const size = Math.max(T.height + 0.6, T.halfW * 2 + 0.6);
     const rt = new THREE.WebGLRenderTarget(256, 256, { depthBuffer: true });
@@ -9733,8 +9792,8 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
     renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 1);
     const impGeo = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
     impGeo.setAttribute('aLeafC', new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4));
-    T.imp = new THREE.InstancedMesh(impGeo, vegMaterial({ vertex: IMP_VS, fragment: IMP_FS,
-      uniforms: { uImpTex: { value: rt.texture }, uSize: { value: new THREE.Vector2(size, size) } } }), n);
+    T.imp = new THREE.InstancedMesh(impGeo, vegMaterial({ vertex: IMP_VS, fragment: IMP_FS, defines: gradeD,
+      uniforms: Object.assign({ uImpTex: { value: rt.texture }, uSize: { value: new THREE.Vector2(size, size) } }, gradeU) }), n);
     const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), sv = new THREE.Vector3();
     mine.forEach((t, k) => {
       t.imp = k;
@@ -9804,6 +9863,7 @@ const OCT_FS = /* glsl */`
   varying vec4 vLeafC, vF0, vF1, vF2;
   varying vec3 vWt, vLight;
   ${LEAF_RECOLOR}
+  ${LEAF_GRADE_GLSL}
   vec4 octSamp(vec4 f) {
     if (f.x < 0.0 || f.y < 0.0 || f.x > 1.0 || f.y > 1.0) return vec4(0.0);
     float e = 0.5 / ${OCT.cell}.0;
@@ -9812,7 +9872,11 @@ const OCT_FS = /* glsl */`
   void main() {
     vec4 tx = octSamp(vF0) * vWt.x + octSamp(vF1) * vWt.y + octSamp(vF2) * vWt.z;
     if (tx.a < 0.5) discard;
-    gl_FragColor = vec4(leafRecolor(tx.rgb / max(tx.a, 0.5), vLeafC) * vLight, 1.0);
+    vec3 ic = leafRecolor(tx.rgb / max(tx.a, 0.5), vLeafC);
+    #ifdef LEAF_GRADE
+    ic = leafGrade(ic, vLeafC.a);                                   // 27c: tone sama dengan mesh dekat
+    #endif
+    gl_FragColor = vec4(ic * vLight, 1.0);
     #include <colorspace_fragment>
     #include <fog_fragment>
   }`;
@@ -9852,8 +9916,8 @@ function octBake(T, ti) {                                          // panggang 8
   const geo = new THREE.PlaneGeometry(1, 1);
   geo.setAttribute('aLeafC', T.imp.geometry.attributes.aLeafC);    // warna daun per pohon sama dengan impostor lama (applyLeafMode)
   const n = T.imp.count;
-  T.oct = new THREE.InstancedMesh(geo, vegMaterial({ vertex: OCT_VS, fragment: OCT_FS,
-    uniforms: { uImpTex: { value: rt.texture }, uOct: { value: new THREE.Vector3(N, cy, S) } } }), Math.max(1, n));
+  T.oct = new THREE.InstancedMesh(geo, vegMaterial({ vertex: OCT_VS, fragment: OCT_FS, defines: DAUN.lama ? {} : { LEAF_GRADE: '' },
+    uniforms: { uImpTex: { value: rt.texture }, uOct: { value: new THREE.Vector3(N, cy, S) }, uLeafG: LEAFG.u, uLeafSp: T.leafSp } }), Math.max(1, n));
   const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), sv = new THREE.Vector3();
   for (const t of TREES.list) if (t.tpl === ti) {
     surfaceMatrix(m4, t.s / R, t.za, t.h); m4.multiply(rot.makeRotationY(t.rot)).scale(sv.set(t.sc, t.sc, t.sc));
@@ -17186,7 +17250,7 @@ diagApply();
 setTimeout(warmLater, 1500);                       // P4
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
-window.__station = { warmLater, HX, EXT_LIGHT, extLightUpdate, toggleExterior, ext, exteriorGroup, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
+window.__station = { warmLater, LEAFG, LEAF_SP, DAUN, HX, EXT_LIGHT, extLightUpdate, toggleExterior, ext, exteriorGroup, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
   jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
 /* =====================================================================
    VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).

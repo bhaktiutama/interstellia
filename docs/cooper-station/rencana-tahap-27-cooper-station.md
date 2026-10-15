@@ -1,6 +1,6 @@
 # Rencana Tahap 27 Copper Corn Station: pohon jarak dekat dengan warna daun natural
 
-Per 15 Oktober 2026 · disusun atas permintaan Bhakti · status: rencana saja, belum ada kode game yang diubah
+Per 15 Oktober 2026 · disusun atas permintaan Bhakti · status: 27b, 27c, 27d, 27e, 27g diterapkan tanpa uji (diuji Bhakti); 27a, 27f, 27h belum
 
 ## Ringkasan
 
@@ -41,6 +41,19 @@ Yang pasti dari kode, yang lain adalah dugaan yang harus dibuktikan di 27a.
 | Impostor memakai `leafRecolor` + `vLight` lain | `IMP_FS` baris 9080, bake `BAKE` di `LEAF_VS` | Penyetelan warna harus ikut ke sini, kalau tidak pohon jauh dan dekat beda tone. |
 | Tepi daun kasar | alpha test `tx.a < mix(0.5, 0.3, ...)` di `LEAF_FS` | Dugaan: tanpa TAA (hanya Ultra) tepi tampak bergerigi. Belum diperiksa preset yang dipakai. |
 | Pangkal batang menempel ke rumput | `makeTree()` dan `T.bark` MeshBasicMaterial | Tidak ada bayangan kontak atau pelebaran akar: terlihat dari tangkapan layar, belum dilacak ke kode. |
+
+## Status penerapan (15 Oktober 2026)
+
+| Tahap | Status | Catatan |
+| --- | --- | --- |
+| 27a | Belum | Alat ukur dilewati atas permintaan (uji oleh Bhakti) |
+| 27b | Diterapkan | Saklar `?daun=lama` (juga aktif bila `?pohon=lama`), define `LEAF_GRADE`, uniform `uLeafG` = `LEAFG.u` (awal saturasi 0,5, albedo 0,9, bayangan sejuk 0,35, translusensi 0,45), konsol `__station.LEAFG.u.value` |
+| 27c | Diterapkan | `leafGrade()` di `LEAF_GRADE_GLSL`, dipakai `LEAF_FS`, `IMP_FS`, `OCT_FS`; tabel per jenis `LEAF_SP` (bukan atribut `aGrade`: tiap template sudah punya material sendiri, jadi cukup uniform `uLeafSp` = `T.leafSp`), ubah dari konsol `__station.LEAFG.set('oak', [1, 0.9, 0])`. Pertanyaan 1 belum dijawab: dipakai bawaan, daun warna musim tetap lebih hidup (saturasi paling rendah 0,85) |
+| 27d | Diterapkan | Translusensi = penguat skalar condong kuning pucat x 0,45 (dulu `lc / max(...)` x 0,9), bagian dalam tajuk (vAo rendah) didinginkan |
+| 27e | Diterapkan (sebagian) | `vTint` per pohon lebih lebar + kecerahan per gugus daun dari `vnoise`; skala per pohon tidak diubah (sudah bervariasi, mengubahnya menggeser impostor dan uji tinggi) |
+| 27f | Belum | Renderer `antialias: false` tanpa target MSAA, jadi alpha-to-coverage tidak bisa; tepi daun halus hanya lewat TAA (Ultra). Menunggu jawaban preset |
+| 27g | Diterapkan (sebagian) | Pangkal batang digelapkan (0,6x di tanah, normal di 1,2 m) lewat warna titik `barkGeo`; cakram bayangan kontak dan pelebaran akar belum |
+| 27h | Belum | Uji oleh Bhakti |
 
 ## Prinsip
 
