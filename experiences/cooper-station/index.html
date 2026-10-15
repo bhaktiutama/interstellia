@@ -10177,6 +10177,7 @@ function carShape(t) {
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
   g.setAttribute('aMat', new THREE.Float32BufferAttribute(mat, 1)); g.setAttribute('aUV2', new THREE.Float32BufferAttribute(uv2, 2));
   g.setAttribute('aWheel', new THREE.Float32BufferAttribute(whl, 4)); g.setIndex(idx);
+  g.setAttribute('aCarType', new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3).fill(t), 1));   // 26d: jenis (konstanta per jenis di shader: carT(), carSeams())
   g.computeBoundingBox(); g.computeBoundingSphere();
   g.userData = { type: CAR_TYPES[t].name, tris: idx.length / 3, verts: pos.length / 3, seams: S.seams };
   return g;
@@ -10186,23 +10187,106 @@ const CARGEO = MOBIL.lama ? null : CAR_TYPES.map((T, t) => carShape(t));
 // 26c: material mobil detail dekat, dihitung per piksel (bukan per titik seperti CAR_VS). Satu program bersama untuk semua jenis:
 //   carNearMat({})                  mobil parkir (define CAR_PARKED): posisi dari instanceMatrix, warna cat aCarCol dan benih aCarSeed per instance
 //   carNearMat({ traffic: true })   mobil lalu lintas (define CAR_TRAFFIC): 26e, posisi dari aLane / aMove / aSim seperti CAR_VS (TODO),
-//                                   lampu depan dan belakang menyala malam
+//                                   lampu depan dan belakang menyala (malam, DRL siang, rem)
 //   carNearMat({ depth: true })     material kedalaman peta bayangan (define DEPTH_ONLY, lewat shUnroll); belum dipakai (mobil parkir
 //                                   membuat bayangan lewat layer 1 + depthMat, 26e memakainya untuk castAlpha)
 // Pencahayaan: stationLight + nightLight (termasuk bayangan sunline / cincin cap) dikali warna dasar, pantulan farEnv dengan Fresnel
-// Schlick (rumus sama dengan SPEC_GLSL: logam mewarnai pantulan). Semua sifat bahan dari satu fungsi GLSL carSurf(): 26d mengganti
-// isinya (clearcoat berlapis, metalik, celah panel, velg, kotor) tanpa menyentuh main(). Aturan NaN: normal dijaga, tanpa pow(),
-// pembagi dijaga, warna dijepit. Bahan = id CAR_MAT (atribut aMat), aUV2 dan aWheel sudah diteruskan ke carSurf untuk 26d.
+// Schlick. Semua sifat bahan dari satu fungsi GLSL carSurf(); main() hanya tahu model lapisan (dasar + lapisan bening).
+// 26d: material seperti mobil sungguhan, tanpa derau per piksel (semua detail dari posisi lokal, aUV2, aWheel, benih per mobil):
+//   model: dasar (difus warna x (1 - logam), pantulan Fresnel dengan F0 = mix(f0, warna, logam), farEnv kabur sesuai kekasaran) ditutup
+//   lapisan bening opsional (cc, F0 0,04, kekasaran ccR, farEnv tajam); energi dasar dikurangi Fresnel lapisan bening. Logam memantulkan
+//   sebesar warnanya (bukan dinormalkan), jadi bahan gelap tidak menjadi cermin terang. farEnv dihitung hanya untuk lapisan yang ada
+//   (cat solid 1x, cat metalik 2x, kaca / krom / plastik / karet 1x).
+//   cat: solid (difus + clearcoat 0,04) atau metalik (dari benih dan warna: perak / abu-abu 80%, putih 20%, lain 45%; taksi dan bus
+//   solid): flop (lebih terang menghadap, gelap di sudut miring) + pantulan dasar berwarna (logam 0,55, kekasaran 0,35).
+//   celah panel 4,4 mm (carSeams dari CAR_SHAPE[t].seams), garis disaring kotak terhadap lebar piksel (dFdx / dFdy posisi lokal dihitung
+//   di alur seragam awal main()), pudar 20-30 m. Kotor teratur cnDirt(): bawah 0,4 m + lingkar lengkung roda (belakang roda lebih
+//   kotor), banyaknya per mobil dari benih. Kaca: kehijauan / keabuan per mobil, kabin gelap dengan siluet kursi berparalaks cnSeat(),
+//   bingkai tegak list (krom / hitam per mobil) di tepi u, frit hitam kaca depan / belakang, pilar kaca bus, kaca spion = cermin,
+//   kaca gelap belakang sebagian SUV / van. Velg perak / hitam, 5 atau 6 jari-jari dari sudut (atan dijaga di pusat) diputar spin,
+//   cakram rem di celah; ban kusam, alur tapak, dinding ban lebih terang; lampu depan = lensa bening di atas reflektor krom, garis DRL
+//   di tengah, sekat sel; lampu belakang merah dengan garis LED; plat putih / kuning dengan bingkai dan tanda 7 ruas samar (pudar
+//   dengan jarak); gril berbilah; papan tujuan bus bertanda LED.
+//   Kualitas uCarQ (CN_Q, diatur applyCarNearPreset): 2 penuh (Ultra, Tinggi), 1 tanpa celah panel, kotor, kursi (Sedang),
+//   0 sederhana (Rendah: clearcoat, tanpa logam cat kedua, tanpa bingkai / velg berjari-jari / tanda plat). Uniform, bukan define:
+//   ganti preset tidak membuat program baru.
+//   Masukan 26e (CAR_TRAFFIC): brake 0..1 (lampu rem) dan spin (sudut putar roda, rad) di CN_VS; CAR_PARKED = 0.
+// Aturan NaN (M1): normal dan arah dijaga (inversesqrt dari max), tanpa pow(), atan hanya bila titik bukan pusat roda, sqrt dari
+// bilangan >= 0, pembagi dijaga, warna dijepit 0..64.
+// 26d: kursi per jenis [z kursi depan, z kursi belakang (99 = tidak ada), tinggi tengah sandaran kepala di atas sabuk bt]; bus: baris
+// berulang tiap 0,85 m (tanpa sandaran kepala)
+const CN_SEATS = [[-0.3, -1.15, 0.26], [-0.62, -1.42, 0.26], [-0.42, -1.3, 0.3], [0.12, -1.0, 0.34], [-0.2, 99, 0.3], [-0.3, -1.15, 0.26], [0, 99, 0.13]];
+// 26d: konstanta per jenis untuk shader mobil dekat, dibangkitkan dari CAR_TYPES / CAR_SHAPE (jadi selalu cocok dengan carShape):
+// struct CarT + carT(ty) dan carSeams(ty, lp, ln, fw) = cakupan celah panel 0..1 (lp titik lokal, ln normal lokal, fw lebar piksel
+// per sumbu lokal dalam meter). Garis: pintu tegak (bawah sampai sabuk, muka samping), kap (melintang + dua membujur di muka atas),
+// bagasi (melintang di atas, membujur di atas / belakang, bawah di muka belakang) atau pintu belakang tegak (tepi + bawah), tutup
+// tangki (persegi bulat 17 x 14 cm di satu sisi), pintu geser van (dua garis + rel di bawah sabuk, sisi +x), pintu bus (sisi +x).
+function carTypeGLSL() {
+  const f = (x) => (+x).toFixed(4);
+  let ct = '', sm = '';
+  CAR_TYPES.forEach((T, t) => {
+    const S = CAR_SHAPE[t], G = S.gh, M = S.seams || {}, bt = T.bt, ws = T.ws, zE = T.h - 0.015, bus = t === 6, last = t === CAR_TYPES.length - 1;
+    const yT = (G.ry || T.ct) - G.rup - G.crown, RY = [bt, ...G.rows.map((r) => r[0] || yT)];
+    const top = (c) => { let y = RY[1]; G.rows.forEach((r, k) => { if (r[1][c] === 1) y = RY[k + 1]; }); return y; };   // tinggi atas kaca kolom c (W 0, R 7)
+    const [zs1, zs2, ys] = CN_SEATS[t];
+    // W setengah lebar bodi, yG0 bawah kaca, wTop / rTop atas kaca depan / belakang, yc / af / ar poros, ra jari-jari lengkung roda,
+    // tw lebar ban, zs1 / zs2 / ySeat / xSeat kursi, rowSp jarak baris kursi bus, mul jarak pilar kaca samping bus
+    const v = [S.wf * T.wx, G.rows[0][0], top(0), top(7), 0.3 * ws, T.af, T.ar, 0.3 * ws + S.ag, S.tw, zs1, zs2, bt + ys, (bus ? 0.62 : 0.37) * T.wx, bus ? 0.85 : 0, bus ? 1.45 : 0];
+    ct += `    ${last ? '' : `if (ty == ${t}) `}return CarT(${v.map(f).join(', ')});   // ${T.name}\n`;
+    const L = [], ln = (d, fwc, mask) => L.push(`g = max(g, cnLine(${d}, HW, fw.${fwc}) * ${mask});`);
+    for (const z of M.door || []) ln(`abs(lp.z - ${f(z)})`, 'z', `sM * cnIn(lp.y, 0.0, ${f(bt - 0.012)}, fw.y)`);
+    if (M.hood) {
+      const [zh, hw] = M.hood;
+      ln(`abs(lp.z - ${f(zh)})`, 'z', `tM * cnIn(abs(lp.x), -1.0, ${f(hw)}, fw.x)`);
+      ln(`abs(abs(lp.x) - ${f(hw)})`, 'x', `tM * cnIn(lp.z, ${f(zh)}, 99.0, fw.z)`);
+    }
+    if (M.trunk) {
+      const [zt, hw, yl] = M.trunk;
+      if (zt != null) {
+        ln(`abs(lp.z - ${f(zt)})`, 'z', `tM * cnIn(abs(lp.x), -1.0, ${f(hw)}, fw.x)`);
+        ln(`abs(abs(lp.x) - ${f(hw)})`, 'x', `max(tM, bM) * cnIn(lp.z, -99.0, ${f(zt)}, fw.z) * cnIn(lp.y, ${f(yl)}, 99.0, fw.y)`);
+      } else {
+        const yTop = S.bed ? bt + S.bed.h : bus ? bt - 0.08 : yT;
+        ln(`abs(abs(lp.x) - ${f(hw)})`, 'x', `bM * cnIn(lp.y, ${f(yl)}, ${f(yTop)}, fw.y)`);
+        if (bus) ln(`abs(lp.y - ${f(yTop)})`, 'y', `bM * cnIn(abs(lp.x), -1.0, ${f(hw)}, fw.x)`);
+      }
+      ln(`abs(lp.y - ${f(yl)})`, 'y', `bM * cnIn(abs(lp.x), -1.0, ${f(hw)}, fw.x)`);
+    }
+    if (M.fuel) {
+      const [z, y, sd] = M.fuel;
+      L.push(`{ vec2 q = abs(vec2(lp.z - ${f(z)}, lp.y - ${f(y)})) - vec2(0.06, 0.045); float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.025; g = max(g, cnLine(abs(d), HW, max(fw.y, fw.z)) * sM * clamp(${f(sd)} * lp.x * 40.0, 0.0, 1.0)); }`);
+    }
+    if (M.slide) {
+      const [z0, z1] = M.slide;
+      for (const z of [z0, z1]) ln(`abs(lp.z - ${f(z)})`, 'z', `sM * xP * cnIn(lp.y, 0.0, ${f(bt - 0.012)}, fw.y)`);
+      L.push(`g = max(g, cnLine(abs(lp.y - ${f(bt - 0.045)}), 0.004, fw.y) * sM * xP * cnIn(lp.z, ${f(-zE + 0.25)}, ${f(z1)}, fw.z));   // rel pintu geser`);
+    }
+    for (const [z0, z1] of M.busDoor || []) for (const z of [z0 - 0.012, z1 + 0.012]) ln(`abs(lp.z - ${f(z)})`, 'z', `sM * xP * cnIn(lp.y, 0.0, 2.42, fw.y)`);
+    sm += `    if (ty == ${t}) {   // ${T.name}\n      ${L.join('\n      ')}\n      return g;\n    }\n`;
+  });
+  return `
+  struct CarT { float W, yG0, wTop, rTop, yc, af, ar, ra, tw, zs1, zs2, ySeat, xSeat, rowSp, mul; };
+  CarT carT(int ty) {
+${ct}  }
+  float cnLine(float d, float hw, float fw);
+  float cnIn(float x, float a, float b, float fw);
+  float carSeams(int ty, vec3 lp, vec3 ln, vec3 fw) {
+    const float HW = 0.0022;                                              // setengah lebar celah (4,4 mm)
+    float g = 0.0, sM = smoothstep(0.35, 0.6, abs(ln.x)), tM = smoothstep(0.3, 0.55, ln.y), bM = smoothstep(0.35, 0.6, -ln.z), xP = clamp(lp.x * 40.0, 0.0, 1.0);
+${sm}    return g;
+  }
+`;
+}
 const CN_VS = /* glsl */`
-  attribute float aMat;
+  attribute float aMat, aCarType;
   attribute vec2 aUV2;
   attribute vec4 aWheel;
   attribute vec3 aCarCol;                                               // cat per mobil (linear)
-  attribute float aCarSeed;                                             // benih 0..1 per mobil (list krom / hitam, 26f variasi)
+  attribute float aCarSeed;                                             // benih 0..1 per mobil (pilihan bahan per mobil di carSurf)
   #ifndef DEPTH_ONLY
-  varying vec3 vWP, vWN, vLP;                                           // titik dunia, normal dunia, titik lokal mobil
+  varying vec3 vWP, vWN, vLP, vLN;                                      // titik dunia, normal dunia, titik lokal mobil, normal lokal (26d)
   varying vec2 vUV;
-  flat varying float vM, vSeed;
+  flat varying vec4 vI0, vI1;                                           // 26d: (bahan, benih, jenis, rem), (mata di koordinat lokal mobil, putar roda)
   flat varying vec3 vCol;
   flat varying vec4 vWh;
   #endif
@@ -10212,84 +10296,287 @@ const CN_VS = /* glsl */`
     #else
     mat4 IM = mat4(1.0);
     #endif
-    // CAR_TRAFFIC (26e, TODO): posisi dari aLane / aMove / aSim dan groundFrame() seperti CAR_VS; sementara sama dengan CAR_PARKED
-    vec4 wp = modelMatrix * (IM * vec4(position, 1.0));
+    // 26d: masukan per mobil untuk carSurf. CAR_PARKED: mobil diam (0). CAR_TRAFFIC (26e, TODO): IM dari aLane / aMove / aSim dan
+    // groundFrame() seperti CAR_VS (rangka kaku), brake = aSim.y (0..1), spin = jarak tempuh / jari-jari roda (0,3 ws), rad
+    float brake = 0.0, spin = 0.0;
+    mat4 M = modelMatrix * IM;
+    vec4 wp = M * vec4(position, 1.0);
     vec4 mvPosition = viewMatrix * wp;
     gl_Position = projectionMatrix * mvPosition;
     #ifndef DEPTH_ONLY
-    mat3 im = mat3(IM);
-    vec3 nI = im * (normal / max(vec3(dot(im[0], im[0]), dot(im[1], im[1]), dot(im[2], im[2])), vec3(1e-12)));   // sama dengan patchLit (rotasi x skala seragam)
-    vec3 wn = mat3(modelMatrix) * nI;
-    vWP = wp.xyz; vWN = wn * inversesqrt(max(dot(wn, wn), 1e-12)); vLP = position;
-    vUV = aUV2; vM = aMat; vSeed = aCarSeed; vCol = aCarCol; vWh = aWheel;
+    mat3 R3 = mat3(M);
+    vec3 s2 = max(vec3(dot(R3[0], R3[0]), dot(R3[1], R3[1]), dot(R3[2], R3[2])), vec3(1e-12));
+    vec3 wn = R3 * (normal / s2);                                       // sama dengan patchLit (rotasi x skala, tanpa inverse())
+    vWP = wp.xyz; vWN = wn * inversesqrt(max(dot(wn, wn), 1e-12)); vLP = position; vLN = normal;
+    vUV = aUV2; vCol = aCarCol; vWh = aWheel;
+    vI0 = vec4(aMat, aCarSeed, aCarType, brake);
+    vI1 = vec4((transpose(R3) * (cameraPosition - M[3].xyz)) / s2, spin);   // invers rotasi x skala: mata dalam koordinat lokal mobil
     #include <fog_vertex>
     #endif
   }`;
 const CN_FS = /* glsl */`
-  uniform float uNight;
-  varying vec3 vWP, vWN, vLP;
+  uniform float uNight, uCarQ;
+  varying vec3 vWP, vWN, vLP, vLN;
   varying vec2 vUV;
-  flat varying float vM, vSeed;
+  flat varying vec4 vI0, vI1;
   flat varying vec3 vCol;
   flat varying vec4 vWh;
-  struct CarS { vec3 base; float rough, f0, metal; vec3 emis; };       // warna dasar (linear), kekasaran, F0 dielektrik, logam 0..1, pancaran
-  // 26c: tabel bahan sederhana per id CAR_MAT (0 cat, 1 kaca, 2 list, 3 plastik hitam, 4 ban, 5 velg, 6 lampu depan, 7 lampu belakang,
-  // 8 plat, 9 lampu atap taksi, 10 papan bus, 11 putih bus, 12 gelap, 13 krom). paint = cat per mobil, seed = benih per mobil,
-  // uv / lp / wh = koordinat bantu bentuk (aUV2, titik lokal, aWheel) untuk detail 26d. Hanya fungsi ini yang tahu soal bahan.
-  CarS carSurf(int m, vec3 paint, float seed, vec2 uv, vec3 lp, vec4 wh) {
-    CarS s; s.base = vec3(0.02); s.rough = 0.5; s.f0 = 0.04; s.metal = 0.0; s.emis = vec3(0.0);
-    if (m == 0) { s.base = paint; s.rough = 0.08; }                                              // cat clearcoat (seperti 26a)
-    else if (m == 1) { s.base = vec3(0.03, 0.04, 0.05); s.rough = 0.02; }                        // kaca gelap
-    else if (m == 2) {                                                                          // list jendela: krom atau hitam per mobil
-      if (fract(seed * 13.7) > 0.5) { s.base = vec3(0.9); s.rough = 0.08; s.metal = 1.0; } else { s.base = vec3(0.03); s.rough = 0.5; }
+  ${carTypeGLSL()}
+  // 26d: masukan carSurf (m bahan CAR_MAT, ty jenis, q kualitas; lp / ln / vl titik, normal, arah ke mata di koordinat lokal mobil;
+  // fw lebar piksel per sumbu lokal (m), dpx / dpy / dux / duy turunan layar posisi lokal dan aUV2, dari alur seragam main())
+  struct CarIn { int m, ty, q; vec3 paint; float seed, brake, spin, cosV, dist; vec2 uv, dux, duy; vec3 lp, ln, vl, fw, dpx, dpy; vec4 wh; };
+  // warna dasar (linear), kekasaran, F0 dielektrik, logam 0..1, pancaran, lapisan bening (bobot, kekasaran)
+  struct CarS { vec3 base; float rough, f0, metal; vec3 emis; float cc, ccR; };
+  const vec3 CN_DUST = vec3(0.30, 0.26, 0.20);                          // debu jalan (linear)
+  const int SEG7[10] = int[10](63, 6, 91, 79, 102, 109, 125, 7, 127, 111);   // tanda 7 ruas (bit a b c d e f g)
+  CarS cnS0() { CarS s; s.base = vec3(0.02); s.rough = 0.5; s.f0 = 0.04; s.metal = 0.0; s.emis = vec3(0.0); s.cc = 0.0; s.ccR = 0.04; return s; }
+  CarS cnMix(CarS a, CarS b, float k) {
+    a.base = mix(a.base, b.base, k); a.rough = mix(a.rough, b.rough, k); a.f0 = mix(a.f0, b.f0, k); a.metal = mix(a.metal, b.metal, k);
+    a.emis = mix(a.emis, b.emis, k); a.cc = mix(a.cc, b.cc, k); a.ccR = mix(a.ccR, b.ccR, k); return a;
+  }
+  float cnH(float s, float k) { return fract(sin(s * 91.3458 + k * 47.8531) * 43758.5453); }   // pilihan per mobil (benih 0..1), bukan per piksel
+  // garis setengah lebar hw pada jarak d >= 0, disaring kotak selebar piksel fw (m): rata-rata = 2 hw / fw saat garis lebih tipis dari piksel
+  float cnLine(float d, float hw, float fw) { fw = max(fw, 1e-5); return clamp((min(d + 0.5 * fw, hw) - max(d - 0.5 * fw, -hw)) / fw, 0.0, 1.0); }
+  float cnIn(float x, float a, float b, float fw) { fw = max(fw, 1e-5); return clamp((x - a) / fw + 0.5, 0.0, 1.0) * clamp((b - x) / fw + 0.5, 0.0, 1.0); }   // a <= x <= b, tepi halus
+  float cnBox(vec2 p, vec2 b, float r) { vec2 q = abs(p) - b + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }   // jarak bertanda kotak sudut bulat
+  // tanda 7 ruas di kotak lebar 1 x tinggi 1,7 (p dari kiri bawah), fwN = lebar piksel dalam satuan yang sama
+  float cnSeg(vec2 p, int bits, float fwN) {
+    float d = 1e3;
+    for (int i = 0; i < 7; i++) {
+      if (((bits >> i) & 1) == 0) continue;
+      vec4 S = i == 0 ? vec4(0.5, 1.6, 0.38, 0.1) : i == 1 ? vec4(0.9, 1.25, 0.1, 0.38) : i == 2 ? vec4(0.9, 0.45, 0.1, 0.38) : i == 3 ? vec4(0.5, 0.1, 0.38, 0.1)
+        : i == 4 ? vec4(0.1, 0.45, 0.1, 0.38) : i == 5 ? vec4(0.1, 1.25, 0.1, 0.38) : vec4(0.5, 0.85, 0.38, 0.09);
+      d = min(d, cnBox(p - S.xy, S.zw, 0.05));
     }
-    else if (m == 3) { s.base = vec3(0.03); s.rough = 0.6; }                                     // plastik hitam
-    else if (m == 4) { s.base = vec3(0.025); s.rough = 0.85; s.f0 = 0.02; }                      // ban
-    else if (m == 5) { s.base = vec3(0.55); s.rough = 0.3; s.metal = 1.0; }                      // velg perak
-    else if (m == 6) {                                                                          // lampu depan
-      s.base = vec3(0.8, 0.8, 0.75); s.rough = 0.1;
+    return clamp(0.5 - d / max(fwN, 1e-4), 0.0, 1.0);
+  }
+  // list jendela per mobil: krom atau hitam satin (bus selalu hitam); dipakai bahan 2 dan bingkai kaca
+  CarS cnList(float seed, int ty) {
+    CarS s = cnS0();
+    if (ty != 6 && fract(seed * 13.7) > 0.5) { s.base = vec3(0.86, 0.87, 0.88); s.rough = 0.06; s.metal = 1.0; } else { s.base = vec3(0.02); s.rough = 0.32; }
+    return s;
+  }
+  // kotor teratur 0..1: bawah bodi (di bawah 0,4 m) dan lingkar di atas lengkung roda (belakang roda lebih kotor), x banyaknya per mobil
+  float cnDirt(CarT T, CarIn I) {
+    float low = 1.0 - smoothstep(0.08, 0.4, I.lp.y), arch = 0.0;
+    for (int k = 0; k < 2; k++) {
+      float za = k == 0 ? T.af : -T.ar, dw = length(vec2(I.lp.z - za, I.lp.y - T.yc));
+      arch = max(arch, (1.0 - smoothstep(T.ra, T.ra + 0.25, dw)) * mix(0.5, 1.0, smoothstep(-0.25, 0.3, za - I.lp.z)));
+    }
+    float h = cnH(I.seed, 4.0);
+    return 0.65 * h * h * clamp(0.85 * low + 0.6 * arch * smoothstep(0.3, 0.6, abs(I.ln.x)), 0.0, 1.0);
+  }
+  // siluet kursi di balik kaca 0..1, dengan paralaks: sinar pandang dari kaca masuk ke kabin dipotong bidang kursi (kaca samping:
+  // bidang x = +-xSeat, kursi dilihat dari samping; kaca depan / belakang: bidang di depan kursi depan / di belakang kursi belakang)
+  float cnSeat(CarT T, CarIn I, bool side) {
+    vec3 dir = -I.vl;
+    float k = 0.0;
+    if (side) {
+      float sx = I.lp.x >= 0.0 ? 1.0 : -1.0;
+      vec2 h = (I.lp + dir * (max(abs(I.lp.x) - T.xSeat, 0.0) / max(-dir.x * sx, 0.15))).zy;
+      for (int i = 0; i < 2; i++) {
+        float zs = i == 0 ? T.zs1 : T.zs2;
+        if (T.rowSp > 0.0) zs = (floor(h.x / T.rowSp) + 0.5) * T.rowSp;   // bus: baris berulang
+        k = max(k, 1.0 - smoothstep(-0.012, 0.012, cnBox(h - vec2(zs, T.ySeat - 0.2), vec2(0.07, 0.2), 0.05)));
+        if (T.rowSp <= 0.0) k = max(k, 1.0 - smoothstep(-0.012, 0.012, cnBox(h - vec2(zs + 0.01, T.ySeat + 0.09), vec2(0.055, 0.065), 0.03)));
+      }
+    } else if (T.rowSp <= 0.0) {
+      bool fr = I.ln.z > 0.0;
+      float zp = fr ? T.zs1 + 0.12 : (T.zs2 < 50.0 ? T.zs2 : T.zs1) - 0.1;
+      vec2 h = (I.lp + dir * (max(fr ? I.lp.z - zp : zp - I.lp.z, 0.0) / max(fr ? -dir.z : dir.z, 0.15))).xy;
+      h.x = abs(h.x);
+      k = max(1.0 - smoothstep(-0.012, 0.012, cnBox(h - vec2(T.xSeat, T.ySeat - 0.2), vec2(0.24, 0.2), 0.06)),
+              1.0 - smoothstep(-0.012, 0.012, cnBox(h - vec2(T.xSeat, T.ySeat + 0.09), vec2(0.12, 0.065), 0.04)));
+    }
+    return k;
+  }
+  // 26d: sifat bahan per id CAR_MAT (0 cat, 1 kaca, 2 list, 3 plastik hitam, 4 ban, 5 velg, 6 lampu depan, 7 lampu belakang, 8 plat,
+  // 9 lampu atap taksi, 10 papan bus, 11 putih bus, 12 gelap / gril, 13 krom). Percabangan per bahan seragam di tiap segitiga (bahan
+  // flat), turunan layar tidak dihitung di sini (sudah di main()).
+  CarS carSurf(CarIn I) {
+    CarS s = cnS0();
+    CarT T = carT(I.ty);
+    int m = I.m;
+    if (m == 0 || m == 11) {                                                                    // cat: dasar + lapisan bening
+      vec3 c = m == 11 ? vec3(0.86, 0.87, 0.85) : I.paint;
+      s.base = c; s.rough = 0.45; s.f0 = 0.0; s.cc = 1.0; s.ccR = 0.04;
+      if (m == 0 && I.ty != 5 && I.ty != 6) {
+        float mx = max(c.r, max(c.g, c.b)), lum = dot(c, vec3(0.2126, 0.7152, 0.0722)), rs = (mx - min(c.r, min(c.g, c.b))) / max(mx, 1e-3);
+        float pM = rs < 0.4 && lum > 0.05 && lum < 0.5 ? 0.8 : lum >= 0.5 ? 0.2 : 0.45;           // perak / abu-abu hampir selalu metalik, putih jarang
+        if (cnH(I.seed, 1.0) < pM) {
+          s.base = c * (0.35 + 0.75 * I.cosV * (2.0 - I.cosV));                                  // flop: 0,35 di sudut miring, 1,1 menghadap
+          if (I.q >= 1) { s.metal = 0.55; s.rough = 0.35; }                                      // serpih logam: pantulan dasar berwarna
+        }
+      }
+      if (I.q >= 2) {
+        float d = cnDirt(T, I), g = carSeams(I.ty, I.lp, I.ln, I.fw) * (1.0 - smoothstep(20.0, 30.0, I.dist));
+        s.base = mix(s.base, CN_DUST, 0.6 * d); s.rough = mix(s.rough, 0.75, d); s.cc *= 1.0 - 0.7 * d; s.metal *= 1.0 - 0.5 * d;
+        s.base *= 1.0 - 0.9 * g; s.cc *= 1.0 - g; s.metal *= 1.0 - g;                            // celah: alur gelap tanpa pantulan
+      }
+    }
+    else if (m == 1) {                                                                          // kaca
+      if (I.ln.z < -0.5 && I.lp.z > 0.0) { s.base = vec3(0.72); s.rough = 0.03; s.metal = 1.0; return s; }   // kaca spion menghadap belakang = cermin
+      float side = smoothstep(0.45, 0.65, abs(I.ln.x)), inner = 0.05, fr = 0.0, frit = 0.0;
+      vec3 tint = mix(vec3(0.42, 0.55, 0.5), vec3(0.47, 0.5, 0.52), step(0.5, cnH(I.seed, 7.0)));   // kehijauan atau keabuan per mobil
+      if ((I.ty == 2 || I.ty == 3) && cnH(I.seed, 9.0) < 0.6 && I.lp.z < T.zs1 + 0.2) { inner *= 0.4; tint *= 0.6; }   // kaca gelap belakang
+      bool door = I.ty == 6 && I.lp.x > T.W - 0.002;                                           // daun pintu bus (kaca di luar bodi)
+      if (I.q >= 1) {
+        // meter per satuan u / v dari Jacobian layar (turunan aUV2 dan posisi lokal), untuk lebar bingkai dalam meter
+        float det = I.dux.x * I.duy.y - I.duy.x * I.dux.y, ad = max(abs(det), 1e-14);
+        float mpu = min(length(I.duy.y * I.dpx - I.dux.y * I.dpy) / ad, 6.0), mpv = min(length(I.dux.x * I.dpy - I.duy.x * I.dpx) / ad, 6.0);
+        float fu = max(mpu * (abs(I.dux.x) + abs(I.duy.x)), 1e-4), fv = max(mpv * (abs(I.dux.y) + abs(I.duy.y)), 1e-4);
+        float eu = min(I.uv.x, 1.0 - I.uv.x) * mpu, ev = min(I.uv.y, 1.0 - I.uv.y) * mpv;
+        if (door) fr = max(clamp((0.03 - eu) / fu + 0.5, 0.0, 1.0), clamp((0.03 - ev) / fv + 0.5, 0.0, 1.0));   // bingkai keliling tiap daun
+        else if (side > 0.5) {                                                                  // kaca samping: bingkai tegak (atas / bawah = list geometri)
+          fr = clamp((0.02 - eu) / fu + 0.5, 0.0, 1.0);
+          if (T.mul > 0.0) fr = max(fr, cnLine(abs(fract(I.lp.z / T.mul + 0.5) - 0.5) * T.mul, 0.025, I.fw.z));   // pilar kaca bus
+        } else {                                                                                // kaca depan / belakang: frit hitam di tepi (pudar seperti titik raster)
+          bool fw0 = I.ln.z > 0.0;
+          float ee = (fw0 ? 1.0 - I.uv.x : I.uv.x) * mpu, tp = fw0 ? T.wTop : T.rTop;
+          frit = max(clamp((0.045 - ee) / max(fu, 0.015) + 0.5, 0.0, 1.0), max(clamp((0.06 - (I.lp.y - T.yG0)) / max(I.fw.y, 0.015) + 0.5, 0.0, 1.0),
+                                                                               clamp((0.035 - (tp - I.lp.y)) / max(I.fw.y, 0.015) + 0.5, 0.0, 1.0)));
+        }
+        if (I.q >= 2 && !door && I.dist < 40.0) inner = mix(inner, 2.4 * inner, cnSeat(T, I, side > 0.5) * (1.0 - smoothstep(25.0, 40.0, I.dist)));
+      }
+      s.base = mix(tint * inner, vec3(0.01), frit); s.rough = 0.02; s.f0 = 0.04;               // kabin gelap di balik kaca (dikali cahaya di main)
       #ifdef CAR_TRAFFIC
-      s.emis = vec3(1.0, 0.92, 0.75) * (0.3 + 4.0 * uNight);
+      if (I.ty == 6) s.emis = vec3(1.0, 0.8, 0.55) * 0.9 * uNight * (1.0 - frit);              // kabin bus menyala hangat saat malam (seperti CAR_VS)
       #endif
+      s = cnMix(s, cnList(I.seed, I.ty), fr);
     }
-    else if (m == 7) {                                                                          // lampu belakang
-      s.base = vec3(0.35, 0.02, 0.02); s.rough = 0.1;
-      #ifdef CAR_TRAFFIC
-      s.emis = vec3(1.0, 0.05, 0.03) * (0.2 + 2.0 * uNight);                                    // 26e: + rem (aSim.y)
-      #endif
+    else if (m == 2) s = cnList(I.seed, I.ty);                                                  // list: krom atau hitam per mobil
+    else if (m == 3) {                                                                          // plastik hitam kusam
+      s.base = vec3(0.03); s.rough = 0.6;
+      if (I.q >= 2) { float d = cnDirt(T, I); s.base = mix(s.base, CN_DUST, 0.5 * d); s.rough = mix(0.6, 0.85, d); }
     }
-    else if (m == 8) { s.base = vec3(0.75, 0.75, 0.7); s.rough = 0.4; }                          // plat
+    else if (m == 4) {                                                                          // ban: karet kusam, tapak gelap beralur, dinding sedikit terang
+      vec2 q = vec2(I.lp.z - I.wh.z, I.lp.y - I.wh.y);
+      float rm = length(q), sd = smoothstep(0.45, 0.7, abs(I.ln.x)), ins = abs(I.lp.x - I.wh.x), fwr = max(I.fw.y, I.fw.z);
+      vec3 tread = vec3(0.014), wall = vec3(0.03);
+      if (I.q >= 1) {
+        tread *= 1.0 - 0.6 * max(cnLine(abs(ins - 0.36 * T.tw), 0.005, I.fw.x), cnLine(abs(ins - 0.66 * T.tw), 0.005, I.fw.x));   // alur keliling (tidak terpengaruh putaran)
+        wall *= 1.0 + 0.35 * cnLine(abs(rm - 0.78 * I.wh.w), 0.008, fwr);                       // pita tulisan dinding ban (rata keliling)
+      }
+      s.base = mix(tread, wall, sd); s.rough = mix(0.88, 0.78, sd); s.f0 = 0.02;
+      if (I.q >= 2) s.base = mix(s.base, CN_DUST * 0.35, 0.5 * sd * cnH(I.seed, 4.0) * cnH(I.seed, 4.0));
+    }
+    else if (m == 5) {                                                                          // velg: perak atau hitam, jari-jari diputar spin
+      vec2 q = vec2(I.lp.z - I.wh.z, I.lp.y - I.wh.y);
+      float q2 = dot(q, q), rw = max(I.wh.w, 0.05), rm = sqrt(q2), rr = rm / rw, fwr = max(max(I.fw.y, I.fw.z), 1e-5);
+      CarS Mt = cnS0();
+      if (cnH(I.seed, 3.0) < 0.35) { Mt.base = vec3(0.03); Mt.rough = 0.28; Mt.cc = 0.7; }      // hitam mengilap
+      else { Mt.base = vec3(0.62, 0.63, 0.65); Mt.rough = 0.22; Mt.metal = 1.0; }               // perak
+      if (I.q >= 2) Mt.base *= 1.0 - 0.3 * cnH(I.seed, 4.0) * cnH(I.seed, 4.0);               // debu rem
+      if (I.q >= 1) {
+        CarS D = cnS0(); D.base = vec3(0.012); D.rough = 0.7;                                   // celah di balik jari-jari
+        float disc = cnIn(rm, 0.27 * rw, 0.5 * rw, fwr);
+        D.base = mix(D.base, vec3(0.08), disc); D.metal = 0.5 * disc; D.rough = mix(0.7, 0.45, disc);   // cakram rem (diam)
+        float th = atan(q.y, q2 > 1e-10 ? q.x : 1.0), n = cnH(I.seed, 8.0) < 0.5 ? 5.0 : 6.0;
+        float a = (th + mod(I.spin, 6.2831853)) * n / 6.2831853;                                // sudut bahan = sudut layar + putaran
+        float arc = rm * sin(min(abs(fract(a + 0.5) - 0.5) * 6.2831853 / n, 1.5));              // jarak tegak lurus ke garis tengah jari-jari (m)
+        float hwS = rw * mix(0.13, 0.075, smoothstep(0.17, 0.56, rr));                          // jari-jari meruncing ke luar
+        float spoke = mix(1.0, clamp((hwS - arc) / fwr + 0.5, 0.0, 1.0), cnIn(rm, 0.17 * rw, 0.555 * rw, fwr));
+        Mt.base *= max(1.0 - 0.55 * cnIn(rm, 0.555 * rw, 0.6 * rw, fwr) - 0.5 * cnLine(abs(rm - 0.075 * rw), 0.004, fwr), 0.0);   // alur bibir velg, tutup tengah
+        s = cnMix(D, Mt, spoke);
+      } else s = Mt;
+    }
+    else if (m == 6 || m == 7) {                                                                // lampu: lensa bening (lapisan bening) di atas reflektor
+      bool capF = abs(I.uv.x) < 1.2;                                                            // muka ujung (uv 0..1) atau bungkus sisi (uv = (z, ruas / 8))
+      float tv = capF ? I.uv.y : fract(I.uv.y * 8.0), fv = max((abs(I.dux.y) + abs(I.duy.y)) * (capF ? 1.0 : 8.0), 1e-4);
+      float hous = clamp((0.13 - min(tv, 1.0 - tv)) / fv + 0.5, 0.0, 1.0);                     // rumah lampu gelap di tepi atas / bawah
+      float line = clamp((0.11 - abs(tv - 0.5)) / fv + 0.5, 0.0, 1.0);                          // garis DRL / LED di tengah (simetris: aman di batas fract)
+      float sep = I.q >= 1 ? cnLine(abs(fract((capF ? abs(I.lp.x) : abs(I.lp.z)) / 0.075 + 0.5) - 0.5) * 0.075, 0.003, capF ? I.fw.x : I.fw.z) : 0.0;   // sekat sel tiap 7,5 cm
+      s.cc = 1.0; s.ccR = 0.03;
+      if (m == 6) {
+        s.base = vec3(0.7, 0.71, 0.73); s.metal = 1.0; s.rough = 0.16;
+        CarS D = cnS0(); D.base = vec3(0.78, 0.79, 0.8); D.rough = 0.35; D.cc = 1.0;           // pemandu cahaya DRL (putih susu)
+        s = cnMix(s, D, line * (1.0 - hous));
+        s.base *= 1.0 - 0.9 * max(hous, 0.8 * sep * (1.0 - line)); s.metal *= 1.0 - hous;
+        #ifdef CAR_TRAFFIC
+        s.emis = (vec3(1.0, 0.94, 0.82) * 4.4 * uNight * (1.0 - line) + vec3(0.88, 0.94, 1.0) * (1.4 + 2.0 * uNight) * line) * (1.0 - hous);   // malam + DRL siang
+        #endif
+      } else {
+        s.base = mix(vec3(0.3, 0.012, 0.012), vec3(0.55, 0.03, 0.03), line); s.metal = 0.6; s.rough = 0.3;
+        s.base *= 1.0 - 0.85 * max(0.7 * hous, 0.6 * sep);
+        #ifdef CAR_TRAFFIC
+        s.emis = vec3(1.0, 0.04, 0.02) * ((0.2 + 2.0 * uNight) * (0.5 + 2.0 * line) + 2.5 * I.brake * (0.6 + 1.6 * line)) * (1.0 - 0.7 * hous);   // lampu malam + rem
+        #endif
+      }
+    }
+    else if (m == 8) {                                                                          // plat 0,5 x 0,11 m: putih / kuning, bingkai, tanda samar
+      vec3 pc = I.ty != 6 && cnH(I.seed, 6.0) < 0.3 ? vec3(0.8, 0.57, 0.05) : vec3(0.8, 0.8, 0.77);
+      s.base = pc; s.rough = 0.35;
+      if (I.q >= 1) {
+        vec2 pm = vec2(I.lp.x + 0.25, I.uv.y * 0.11);
+        float fwm = max(I.fw.x, I.fw.y), k = 1.0 - smoothstep(0.003, 0.008, fwm), ink = 0.0;
+        float fr = clamp((0.006 - min(min(pm.x, 0.5 - pm.x), min(pm.y, 0.11 - pm.y))) / max(fwm, 1e-4) + 0.5, 0.0, 1.0);
+        float gx = (pm.x - 0.05) / 0.057, ci = floor(gx);
+        if (k > 0.0 && ci >= 0.0 && ci < 7.0) ink = cnSeg(vec2(fract(gx) * 0.057 - 0.0095, pm.y - 0.022) / 0.038, SEG7[int(cnH(I.seed, 10.0 + ci) * 9.99)], fwm / 0.038);
+        s.base = mix(mix(pc, pc * 0.2, 0.15 * (1.0 - k) + 0.75 * ink * k), vec3(0.03), fr);    // jauh: tanda menjadi rata-ratanya
+      }
+    }
     else if (m == 9) { s.base = vec3(0.85, 0.8, 0.55); s.rough = 0.15; s.emis = vec3(1.0, 0.8, 0.35) * (0.05 + 1.6 * uNight); }   // lampu atap taksi menyala malam
-    else if (m == 10) { s.base = vec3(0.04); s.rough = 0.3; s.emis = vec3(1.0, 0.55, 0.08) * (0.8 + 1.8 * uNight); }                // papan tujuan bus
-    else if (m == 11) { s.base = vec3(0.86, 0.87, 0.85); s.rough = 0.35; }                       // atap putih bus
-    else if (m == 13) { s.base = vec3(0.9); s.rough = 0.08; s.metal = 1.0; }                     // krom tetap
+    else if (m == 10) {                                                                         // papan tujuan bus: tanda LED kuning
+      s.base = vec3(0.03); s.rough = 0.3; s.cc = 1.0;
+      float on = 0.3;
+      if (I.q >= 1) {
+        float fwm = max(I.fw.x, I.fw.y), k = 1.0 - smoothstep(0.006, 0.016, fwm), gx = (I.lp.x + 0.9) / 0.11, ci = floor(gx), ink = 0.0;
+        if (k > 0.0 && ci >= 0.0 && ci < 16.0 && ci != 3.0) ink = cnSeg(vec2(fract(gx) * 0.11 - 0.0125, I.lp.y - 2.64) / 0.085, SEG7[int(cnH(I.seed, 20.0 + ci) * 9.99)], fwm / 0.085);
+        on = mix(0.3, ink, k);
+      }
+      s.emis = vec3(1.0, 0.55, 0.08) * (0.8 + 1.8 * uNight) * (0.15 + 0.85 * on) * 2.5;
+    }
+    else if (m == 12) {                                                                         // gelap: dalam lengkung roda; gril depan berbilah 2,5 cm
+      s.base = vec3(0.012); s.rough = 0.75;
+      if (I.q >= 1 && I.ln.z > 0.6) {
+        float gp = cnLine(abs(fract(I.lp.y / 0.025 + 0.5) - 0.5) * 0.025, 0.005, I.fw.y);
+        s.base = mix(vec3(0.04), vec3(0.006), gp); s.rough = mix(0.3, 0.9, gp);
+      }
+    }
+    else if (m == 13) { s.base = vec3(0.88); s.rough = 0.07; s.metal = 1.0; }                  // krom tetap
     return s;
   }
   void main() {
     float nl = dot(vWN, vWN);
     vec3 N = nl > 1e-8 ? vWN * inversesqrt(nl) : vec3(-vWP.xy, 0.0) * inversesqrt(max(dot(vWP.xy, vWP.xy), 1e-6));
-    vec3 V = cameraPosition - vWP; V *= inversesqrt(max(dot(V, V), 1e-8));
-    CarS s = carSurf(int(vM + 0.5), vCol, vSeed, vUV, vLP, vWh);
+    vec3 V = cameraPosition - vWP; float vd2 = dot(V, V); V *= inversesqrt(max(vd2, 1e-8));
+    vec3 dpx = dFdx(vLP), dpy = dFdy(vLP);                                // 26d: turunan layar di alur seragam (sebelum percabangan)
+    vec2 dux = dFdx(vUV), duy = dFdy(vUV);
+    CarIn I;
+    I.m = int(vI0.x + 0.5); I.ty = int(vI0.z + 0.5); I.q = int(uCarQ + 0.5);
+    I.paint = vCol; I.seed = vI0.y; I.brake = vI0.w; I.spin = vI1.w; I.uv = vUV; I.dux = dux; I.duy = duy;
+    float ll = dot(vLN, vLN);
+    I.lp = vLP; I.ln = ll > 1e-8 ? vLN * inversesqrt(ll) : vec3(0.0, 1.0, 0.0);
+    vec3 vl = vI1.xyz - vLP; I.vl = vl * inversesqrt(max(dot(vl, vl), 1e-8));
+    I.fw = abs(dpx) + abs(dpy); I.dpx = dpx; I.dpy = dpy; I.wh = vWh;
+    I.cosV = clamp(dot(N, V), 0.0, 1.0); I.dist = sqrt(vd2);
+    CarS s = carSurf(I);
     float ao = 0.7 + 0.3 * smoothstep(0.12, 0.6, vLP.y);                                         // dekat tanah / dalam lengkung roda sedikit lebih gelap
     vec3 Lt = (stationLight(vWP, N) + nightLight(vWP, N)) * ao;
-    float cosV = clamp(dot(N, V), 0.0, 1.0), om = 1.0 - cosV, om2 = om * om;
+    vec3 R = reflect(-V, N);
+    float om = 1.0 - I.cosV, om2 = om * om, om5 = om2 * om2 * om;                                // Schlick tanpa pow()
     float rS = clamp(s.rough, 0.02, 1.0);
-    float Fr = s.f0 + (1.0 - s.f0) * om2 * om2 * om * (1.0 - 0.7 * rS);                          // Schlick (tanpa pow)
-    vec3 env = farEnv(vWP, reflect(-V, N), rS, 1.0 - rS) * ao;
-    float mx = max(s.base.r, max(s.base.g, s.base.b));
-    vec3 tint = mix(vec3(1.0), s.base / max(mx, 1e-3), s.metal);
-    float kS = mix(Fr, 0.5 + 0.5 * Fr, s.metal);
-    vec3 col = s.base * Lt * (1.0 - kS * mix(1.0, 0.7, s.metal)) + env * tint * kS + s.emis;
+    vec3 col = s.base * (1.0 - s.metal) * Lt;
+    if (s.f0 > 1e-3 || s.metal > 1e-3) {                                                       // lapisan dasar memantul (logam: F0 = warnanya)
+      vec3 F0 = mix(vec3(s.f0), s.base, s.metal), F = F0 + (1.0 - F0) * om5 * (1.0 - 0.7 * rS);
+      col = col * (1.0 - max(F.r, max(F.g, F.b))) + farEnv(vWP, R, rS, 1.0 - rS) * ao * F;
+    }
+    if (s.cc > 1e-3) {                                                                         // lapisan bening (cat, lensa lampu, velg hitam)
+      float cR = clamp(s.ccR, 0.02, 1.0), Fc = s.cc * (0.04 + 0.96 * om5 * (1.0 - 0.7 * cR));
+      col = col * (1.0 - Fc) + farEnv(vWP, R, cR, 1.0 - cR) * ao * Fc;
+    }
+    col += s.emis;
     gl_FragColor = vec4(clamp(col, 0.0, 64.0), 1.0);
     #include <colorspace_fragment>
     #include <fog_fragment>
   }`;
 const CN_CACHE = {};
+const CN_Q = { value: 2 };                                              // 26d: kualitas material mobil dekat (uCarQ), diatur applyCarNearPreset
 function carNearMat(opt = {}) {
   const traffic = !!opt.traffic, depth = !!opt.depth, key = (traffic ? 'T' : 'P') + (depth ? 'D' : '');
   if (CN_CACHE[key]) return CN_CACHE[key];
   const defines = {}; defines[traffic ? 'CAR_TRAFFIC' : 'CAR_PARKED'] = ''; if (depth) defines.DEPTH_ONLY = '';
-  const uniforms = depth ? Object.assign({}, SHU) : Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), LIGHT.uniforms, { uNight: BUILD_U.uNight });
+  const uniforms = depth ? Object.assign({}, SHU) : Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), LIGHT.uniforms, { uNight: BUILD_U.uNight, uCarQ: CN_Q });
   const vs = depth ? SH_UNROLL_VS + CN_VS.replace(/gl_Position = projectionMatrix \* mvPosition;/g, 'gl_Position = projectionMatrix * shUnroll(mvPosition);') : '#include <fog_pars_vertex>\n' + CN_VS;
   const fs = depth ? 'void main() { gl_FragColor = vec4(1.0); }' : '#include <fog_pars_fragment>\n' + LIGHT_GLSL + CN_FS;
   const m = new THREE.ShaderMaterial({ fog: !depth, side: THREE.FrontSide, uniforms, defines, vertexShader: vs, fragmentShader: fs });   // FrontSide: bawah bodi terbuka (26b)
@@ -12157,8 +12444,9 @@ if (PARKED.on && !MOBIL.lama) {
     }
   };
 }
-// 26c: radius mobil detail per preset; dihitung ulang dengan memaksa updateFurniture() mengirim ulang di frame berikutnya
-function applyCarNearPreset(i) { MOBIL.near = MOBIL.lama || !CAR_NEAR.mat ? 0 : MOBIL.nearR[i]; FURN.lastS = 1e9; }
+// 26c: radius mobil detail per preset; dihitung ulang dengan memaksa updateFurniture() mengirim ulang di frame berikutnya.
+// 26d: CN_Q = kualitas material mobil dekat (2 Ultra / Tinggi penuh, 1 Sedang tanpa celah panel dan kotor, 0 Rendah sederhana)
+function applyCarNearPreset(i) { MOBIL.near = MOBIL.lama || !CAR_NEAR.mat ? 0 : MOBIL.nearR[i]; FURN.lastS = 1e9; CN_Q.value = [2, 2, 1, 0, 0][i]; }   // 26d: kualitas material
 PRESET_HOOKS.push(applyCarNearPreset); applyCarNearPreset(PRESET.idx);
 // 24d: halte bus di trotoar (titik dipilih di blok TRAFFIC): atap, kaca belakang dan samping, bangku, tiang dengan papan warna
 // jalur, lis atap warna jalur. Kolider hanya dinding belakang + bangku, kaca samping, dan tiang; jalur jalan kaki depan dan belakang
