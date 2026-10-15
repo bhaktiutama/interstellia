@@ -250,3 +250,14 @@ Variasi tambahan mobil dekat (parkir dan lalu lintas), hampir semua di shader da
 - Gril: bilah krom gril (bahan 13 dengan normal ke depan) kini mengikuti `cnList()` mobil (krom atau hitam satin); gagang pintu tetap krom.
 - Rendah (`uCarQ` 0) tanpa atap dua warna, sunroof, dan spion/sirip hitam. Segitiga: sedan 1.594, hatchback 1.574, SUV 1.650, van 1.616, pickup 1.584, taksi 1.594, bus 1.792 (anggaran 2.000 / 2.600).
 - Cek: `node --check`; satu muat headless (SwiftShader) Ultra tanpa galat konsol/kompilasi GLSL; geometri tanpa NaN. Belum dilihat di layar (atap dua warna, sunroof, sirip belum ditangkap), belum diuji di M1 / GTX 1060.
+
+### Hasil 26g (uji akhir, sandbox SwiftShader)
+
+| Uji | Hasil | Catatan |
+| --- | --- | --- |
+| `tools/uji_mobil.py` (baru) | LOLOS | 7 jenis tanpa nilai tidak valid, normal satuan, di dalam kotak lama; segitiga 1.574-1.650 (bus 1.792). Pusat kota: mobil parkir detail Ultra 243 / Sedang 75 / Hemat 0, lalu lintas detail 24 / 3 / 0; `?mobil=lama` tanpa objek tahap 26; tanpa error |
+| `tools/ukur_muat.py cooper-station --cek` | lulus | 0 program baru di frame pertama dan saat tombol (P, 8, 1, C, 7, N, Q) |
+| `tools/uji_lalu_lintas.py` | GAGAL (sudah ada sebelum 26) | tabrakan trem 0, tumpang tindih 0; konflik dalam simpang 943, angka identik di commit 272f29c (sebelum tahap 26) |
+| `tools/uji_boulevard.py` | GAGAL (sudah ada sebelum 26) | konflik simpang boulevard 197, identik di commit 272f29c; butir lain OK |
+
+Belum diuji: FPS dan NaN di GPU asli (GTX 1060, M1), tampilan atap dua warna, sunroof, dan sirip antena (26f belum dilihat di tangkapan layar).
