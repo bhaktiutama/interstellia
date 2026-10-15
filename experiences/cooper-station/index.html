@@ -371,7 +371,7 @@
         <tr class="desk-only"><td>Spaceport</td><td>Terminal (7): E di gerbang B1 (dinding utara, ikuti papan jingga) = lift, hub, terowongan, kokpit otomatis (E lagi = langsung ke kokpit). Atau manual: lift (L) ke hub nol-g, E di pintu ujung hub = kapsul terowongan ke dermaga</td></tr>
     </table>
     <table data-pane="kamera">
-        <tr class="desk-only"><td>V</td><td>Kamera luar: seret / WASD putar, scroll / + - zoom, C orbit otomatis, 1-4 fokus</td></tr>
+        <tr class="desk-only"><td>V</td><td>Kamera luar: seret / WASD putar, Ctrl + seret / seret kanan geser pusat, klik ganda kembali, scroll / + - zoom, C orbit otomatis, 1-4 fokus</td></tr>
         <tr class="desk-only"><td>F · Y</td><td>Kamera rangefinder (F; tombolnya di bawah) atau Foto bebas dari panel kamera (jam, sudut pandang, fokus dan blur, eksposur, simpan PNG dengan Enter) · tur sinematik dengan penjelasan fisika (Y atau Esc = berhenti)</td></tr>
       <tbody id="camHelpRows" class="desk-only"></tbody>
     </table>
@@ -595,7 +595,7 @@ Object.assign(I18N.en, {
   "Lift ke sumbu (0 g) / turun lagi; Shift = 5x cepat. Di lift dan hub: B lempar bola, G lepas bola": "Lift to the axis (0 g) / back down; Shift = 5x faster. In the lift and hub: B throws a ball, G releases a ball",
   "Pindah ke rumah Cooper · puncak bukit · ladang jagung · ladang gandum · Skyway · lapangan baseball · terminal spaceport · kokpit shuttle · air mancur Coriolis (E di plakat) · 0 hutan lebat": "Go to Cooper's house · hilltop · corn field · wheat field · Skyway · baseball field · spaceport terminal · shuttle cockpit · Coriolis fountain (E at the plaque) · 0 dense forest",
   "Terminal (7): E di gerbang B1 (dinding utara, ikuti papan jingga) = lift, hub, terowongan, kokpit otomatis (E lagi = langsung ke kokpit). Atau manual: lift (L) ke hub nol-g, E di pintu ujung hub = kapsul terowongan ke dermaga": "Terminal (7): E at gate B1 (north wall, follow the orange signs) = lift, hub, tunnel, cockpit automatically (E again = straight to the cockpit). Or manually: lift (L) to the zero-g hub, E at the door at the end of the hub = tunnel capsule to the dock",
-  "Kamera luar: seret / WASD putar, scroll / + - zoom, C orbit otomatis, 1-4 fokus": "Outside camera: drag / WASD to orbit, scroll / + - to zoom, C auto orbit, 1-4 focus",
+  "Kamera luar: seret / WASD putar, Ctrl + seret / seret kanan geser pusat, klik ganda kembali, scroll / + - zoom, C orbit otomatis, 1-4 fokus": "Outside camera: drag / WASD to orbit, Ctrl + drag / right drag to pan the centre, double-click to reset, scroll / + - to zoom, C auto orbit, 1-4 focus",
   "Mode foto (jam, sudut pandang, fokus dan blur, eksposur, simpan PNG dengan Enter) · tur sinematik dengan penjelasan fisika (Y atau Esc = berhenti)": "Photo mode (time, field of view, focus and blur, exposure, save PNG with Enter) · cinematic tour with physics explanations (Y or Esc = stop)",
   "Jam stasiun mundur / maju 1 jam · kecepatan waktu (1 menit = 1 jam, 10 s, 1 s, berhenti)": "Station clock back / forward 1 hour · time speed (1 minute = 1 hour, 10 s, 1 s, stopped)",
   "Cuaca: otomatis (berganti cerah, berawan, mendung), atau tetap cerah / berawan / mendung. Mendung tebal = hujan (miring sekitar 8 derajat karena Coriolis), tanah basah dan genangan": "Weather: automatic (cycles clear, cloudy, overcast), or fixed clear / cloudy / overcast. Heavy overcast = rain (tilted about 8 degrees by Coriolis), wet ground and puddles",
@@ -7019,11 +7019,27 @@ helpEl.addEventListener('click', (e) => { if (e.target === helpEl) toggleHelp();
 let freedAt = 0;
 canvas.addEventListener('click', () => { if (performance.now() - freedAt > 400) lockPointer(); });
 
-let dragging = false, lastX = 0, lastY = 0;
+let dragging = false, dragPan = false, lastX = 0, lastY = 0;
 canvas.addEventListener('mousedown', (e) => {
   if (e.button === 0 && document.pointerLockElement === canvas) { freedAt = performance.now(); document.exitPointerLock(); return; }
-  dragging = true; lastX = e.clientX; lastY = e.clientY;
+  dragging = true; dragPan = e.ctrlKey || e.button === 2; lastX = e.clientX; lastY = e.clientY;   // X3: Ctrl + seret / seret kanan = geser pusat kamera luar
 });
+canvas.addEventListener('contextmenu', (e) => { if (ext.active && !ext.flight) e.preventDefault(); });
+canvas.addEventListener('dblclick', () => {                         // X3: klik ganda = kembali ke fokus awal kamera luar
+  if (!ext.active || ext.flight) return;
+  ext.targetT.copy(EXT_FOCUS[0][0]); ext.distT = EXT_FOCUS[0][1];
+});
+// X3: geser pusat orbit sejajar layar (seperti Gargantua); meter per piksel dari jarak dan FOV, dijepit di sekitar stasiun
+const _panR = new THREE.Vector3(), _panU = new THREE.Vector3();
+function extPan(dx, dy) {
+  const k = ext.dist * 2 * Math.tan(camera.fov * Math.PI / 360) / Math.max(1, canvas.clientHeight);
+  const cp = Math.cos(ext.pitch), sp = Math.sin(ext.pitch), sy = Math.sin(ext.yaw), cy = Math.cos(ext.yaw);   // sumbu layar dari yaw / pitch (sama dengan updateExteriorCamera)
+  _panR.set(cy, 0, -sy); _panU.set(-sp * sy, cp, -sp * cy);
+  for (const v of [ext.target, ext.targetT]) {
+    v.addScaledVector(_panR, -dx * k).addScaledVector(_panU, dy * k);
+    v.x = Math.max(-3000, Math.min(3000, v.x)); v.y = Math.max(-3000, Math.min(3000, v.y)); v.z = Math.max(-5500, Math.min(5500, v.z));
+  }
+}
 window.addEventListener('mouseup', () => { dragging = false; });
 window.addEventListener('mousemove', (e) => {
   if (ext.flight) {                                                  // pesawat: mouse = arah hidung (atau melihat saat sandar)
@@ -7035,6 +7051,10 @@ window.addEventListener('mousemove', (e) => {
     // Chrome kadang mengirim lonjakan movementX/Y besar tepat setelah pointer lock; abaikan
     if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
     look(e.movementX, e.movementY, CONFIG.lookSens);
+  } else if (dragging && ext.active && (dragPan || e.ctrlKey)) {
+    ext.auto = false;
+    extPan(e.clientX - lastX, e.clientY - lastY);
+    lastX = e.clientX; lastY = e.clientY;
   } else if (dragging && ext.active) {
     ext.auto = false;
     ext.yaw -= (e.clientX - lastX) * 0.005;
@@ -7314,7 +7334,7 @@ function updatePrompt() {
   }
   if (MOTO.on && player.state === 'ground') t = motoPrompt(a);      // 19b
   if (ext.flight || player.state === 'pod') t = portPrompt();
-  else if (ext.active) t = `Kamera luar · seret / WASD putar · scroll / + - zoom · C orbit otomatis (${ext.auto ? 'nyala' : 'mati'}) · 1 2 3 4 5 fokus (5 = dermaga) · V kembali`;
+  else if (ext.active) t = `Kamera luar · seret / WASD putar · Ctrl + seret / seret kanan geser · klik ganda kembali · scroll / + - zoom · C orbit otomatis (${ext.auto ? 'nyala' : 'mati'}) · 1 2 3 4 5 fokus (5 = dermaga) · V kembali`;
   if (t !== lastPrompt) { promptEl.textContent = t; promptEl.hidden = !t; lastPrompt = t; }
 }
 // 19b: baris status motor. Arah dibanding putaran stasiun menjelaskan berat terasa (g' = (omega r + v_t)^2 / r)
