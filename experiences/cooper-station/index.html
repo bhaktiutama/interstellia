@@ -9834,7 +9834,7 @@ function carPick(u) { let a = 0; for (let t = 0; t < CAR_TYPES.length; t++) { a 
 // di lajur kiri), y atas dari tanah, z ke depan. Bentuk tidak keluar dari kotak lama jenisnya (CAR_TYPES): |z| <= h, setengah
 // lebar <= 0,93 wx (spion <= 0,98 wx), tinggi <= ct (taksi: lampu atap sampai 1,60 seperti CAR_EXTRA; bus: atap putih sampai 3,10).
 // Id bahan per titik (atribut aMat), dibaca shader 26d. List (2) = krom atau hitam dipilih per mobil di shader.
-const CAR_MAT = { cat: 0, kaca: 1, list: 2, plastik: 3, ban: 4, velg: 5, lampuDepan: 6, lampuBelakang: 7, plat: 8, lampuTaksi: 9, papanBus: 10, putihBus: 11, gelap: 12, krom: 13 };
+const CAR_MAT = { cat: 0, kaca: 1, list: 2, plastik: 3, ban: 4, velg: 5, lampuDepan: 6, lampuBelakang: 7, plat: 8, lampuTaksi: 9, papanBus: 10, putihBus: 11, gelap: 12, krom: 13, spion: 14, sirip: 15 };   // 26f: spion (cat atau hitam per mobil), sirip antena (bisa dihilangkan dari benih di CN_VS)
 // 26b: tabel bentuk per jenis (urutan sama dengan CAR_TYPES). Angka dalam meter, z menurun dari depan ke belakang.
 // wf setengah lebar bodi (x wx), xo muka luar ban (x wx), tw lebar ban, yb bawah bodi samping, bump bawah bumper [depan, belakang],
 // rmin tinggi minimum garis bahu di bawah atas bodi, crown cembung kap, rc jari-jari sudut denah [depan, belakang], ag celah
@@ -9858,9 +9858,10 @@ const CS_SEDAN = {
   capF: [[3, 3, 3], [12, 0, 0], [12, 12, 0], [12, 6, 6], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
   capR: [[3, 3, 3], [0, 0, 0], [0, 0, 7], [7, 7, 7], [7, 7, 7], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
   plate: [0.43, 0.52], bars: [0.55, 0.59], barW: 0.33, mold: 0.47, hz: [0.02, -0.9], mir: { y0: 0.03, y1: 0.14, x: 0.975 },
+  fin: true,   // 26f: sirip antena; atap diturunkan 4,5 cm (ry) agar muat di bawah ct
   gh: { tum: 0.1, crown: 0.02, rup: 0.03, rin: 0.05, zF: [1.0, 0.24], zR: [-1.5, -0.7], rcF: [0.24, 0.12], rcR: [0.24, 0.12], bF: [0.08, 0.05], bR: [0.06, 0.04],
     side: [[-0.1, -0.16, 'B'], [-0.17, -0.23, 'S2'], [-1.02, -0.46, 'C']],
-    rows: [[0.955, [3, 0, 2, 2, 2, 0, 2, 0]], [1.375, [1, 0, 1, 3, 1, 0, 1, 1]], [0, [1, 0, 2, 2, 2, 0, 2, 1]]], roll: 0, roof: 0 },
+    ry: 1.405, rows: [[0.955, [3, 0, 2, 2, 2, 0, 2, 0]], [1.33, [1, 0, 1, 3, 1, 0, 1, 1]], [0, [1, 0, 2, 2, 2, 0, 2, 1]]], roll: 0, roof: 0 },
   seams: { door: [0.95, -0.135, -1.05], hood: [1.03, 0.66], trunk: [-1.56, 0.66, 0.62], fuel: [-1.38, 0.79, -1] },
 };
 const CAR_SHAPE = [
@@ -9871,9 +9872,10 @@ const CAR_SHAPE = [
     sh: [[1.985, 0.7], [1.4, 0.76], [0.6, 0.79], [-1.985, 0.83]],
     lampF: [0.24, [3]], lampR: [0.15, [3, 4]], clad: 0, capX: [0.4, 0.64], capF: CS_SEDAN.capF, capR: CS_SEDAN.capR,
     plate: [0.43, 0.52], bars: [], barW: 0, mold: 0.47, hz: [-0.385, -1.05], mir: CS_SEDAN.mir,
+    fin: true,
     gh: { tum: 0.1, crown: 0.02, rup: 0.03, rin: 0.05, zF: [0.62, -0.14], zR: [-1.8, -1.5], rcF: [0.24, 0.12], rcR: [0.2, 0.12], bF: [0.08, 0.05], bR: [0.05, 0.04],
       side: [[-0.5, -0.55, 'B'], [-0.57, -0.62, 'S2'], [-1.25, -1.1, 'C']],
-      rows: [[0.955, [3, 0, 2, 2, 2, 0, 2, 0]], [1.405, [1, 0, 1, 3, 1, 0, 1, 1]], [0, [1, 0, 2, 2, 2, 0, 2, 1]]], roll: 0, roof: 0 },
+      ry: 1.435, rows: [[0.955, [3, 0, 2, 2, 2, 0, 2, 0]], [1.36, [1, 0, 1, 3, 1, 0, 1, 1]], [0, [1, 0, 2, 2, 2, 0, 2, 1]]], roll: 0, roof: 0 },
     seams: { door: [0.88, -0.535, -1.2], hood: [0.65, 0.64], trunk: [null, 0.58, 0.62], fuel: [-1.3, 0.79, -1] },
   },
   { // 2 SUV: tinggi, plastik bawah sepanjang sisi, kaca belakang tegak, rel atap (plastik)
@@ -9884,6 +9886,7 @@ const CAR_SHAPE = [
     capF: [[3, 3, 3], [3, 3, 3], [12, 12, 0], [12, 6, 6], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
     capR: [[3, 3, 3], [3, 0, 0], [0, 0, 7], [7, 7, 7], [7, 7, 7], [0, 0, 0], [0, 0, 0], [0, 0, 0]],
     plate: [0.54, 0.62], bars: [0.69, 0.75], barW: 0.36, mold: 0, hz: [-0.18, -1.07], mir: { y0: 0.03, y1: 0.15, x: 0.975 }, rails: [0.05, -1.84],
+    fin: true,
     gh: { tum: 0.1, crown: 0.015, rup: 0.03, rin: 0.05, ry: 1.75, zF: [0.95, 0.2], zR: [-2.12, -1.96], rcF: [0.24, 0.12], rcR: [0.18, 0.12], bF: [0.08, 0.05], bR: [0.05, 0.04],
       side: [[-0.3, -0.36, 'B'], [-0.38, -0.44, 'S2'], [-1.25, -1.18, 'C'], [-1.33, -1.26, 'Q']],
       rows: [[1.105, [3, 0, 2, 2, 2, 0, 2, 0]], [1.68, [1, 0, 1, 3, 1, 0, 1, 1]], [0, [1, 0, 2, 2, 2, 0, 2, 1]]], roll: 0, roof: 0 },
@@ -9916,7 +9919,7 @@ const CAR_SHAPE = [
       rows: [[1.03, [3, 0, 2, 0, 0, 0, 0, 0]], [1.7, [1, 0, 1, 0, 0, 0, 0, 1]], [0, [1, 0, 2, 0, 0, 0, 0, 1]]], roll: 0, roof: 0 },
     seams: { door: [1.3, -0.22], hood: [1.08, 0.74], trunk: [null, 0.8, 0.7], fuel: [-1.2, 0.85, -1] },
   },
-  Object.assign({}, CS_SEDAN, { taxi: [0.24, 0.2, 1.43, 1.6, -0.41, -0.19] }),   // 5 taksi = sedan + lampu atap
+  Object.assign({}, CS_SEDAN, { fin: false, taxi: [0.24, 0.2, 1.39, 1.6, -0.41, -0.19] }),   // 5 taksi = sedan + lampu atap
   { // 6 bus 12 m: kotak membulat, lantai rendah, pita kaca panjang, bagian atas putih, papan tujuan, dua pintu kiri
     wf: 0.912, xo: 0.9, tw: 0.3, yb: 0.3, bump: [0.28, 0.3], rmin: 0.02, crown: 0.005, rc: [0.28, 0.24], ag: 0.0975, n: 16,
     top: [[5.985, 1.11], [5.95, 1.15], [-5.95, 1.15], [-5.985, 1.11]],
@@ -10100,7 +10103,7 @@ function carShape(t) {
     const M = S.mir, mz = M.z != null ? M.z : zA0 - 0.08, y0 = bt + M.y0, y1 = bt + M.y1, f = (y0 - bt) / (yT - bt), x0 = xB - G.tum * f - 0.01, x1 = M.x * wx;
     const P = box(x0, x1, y0, y1, mz - 0.05, mz + 0.05);
     P[5][2] = P[7][2] = mz + 0.015; P[5][1] += 0.01; P[7][1] -= 0.01; P[1][1] += 0.01; P[3][1] -= 0.01;   // ujung luar meruncing ke depan
-    hexa(P, [null, 0, 0, 0, 1, 0], 'm');
+    hexa(P, [null, 14, 14, 14, 1, 14], 'm');   // 26f: spion = bahan 14 (cat atau hitam per mobil)
   }
   // gagang pintu (krom) di bawah garis bahu
   for (const hz of S.hz) {
@@ -10132,6 +10135,15 @@ function carShape(t) {
     const [hx0, hx1, y0, y1, z0, z1] = S.taxi, P = box(-hx0, hx0, y0, y1, z0, z1);
     for (const i of [2, 3, 6, 7]) { P[i][0] *= hx1 / hx0; P[i][2] = P[i][2] * 0.85 + (z0 + z1) * 0.075; }
     hexa(P, [9, 9, null, 9, 9, 9], 't');
+  }
+  // 26f: sirip antena hiu (plastik, bahan 15) di atap belakang, dasar terbenam 1 cm di atap, tinggi 5 cm (puncak <= ry + 4 cm < ct).
+  // Ada / tidak diputuskan di CN_VS dari benih (titik diciutkan). Depan di zm1 + 0,27, panjang 15 cm, sapuan ke belakang
+  if (S.fin) {
+    const zf = zm1 + 0.27, roofY = yT + G.rup + G.crown * Math.sqrt(Math.max(0, 1 - ((zf - 0.07 - zmid) / zhl) ** 2)) - 0.01;
+    const P = box(-0.011, 0.011, roofY, roofY + 0.05, zf - 0.15, zf);
+    for (const i of [2, 3, 6, 7]) P[i][0] *= 0.45;                   // puncak lebih tipis
+    P[2][2] = P[3][2] = zf - 0.1; P[6][2] = P[7][2] = zf - 0.055;   // puncak menyapu ke belakang
+    hexa(P, [15, 15, null, 15, 15, 15], 'f');
   }
   // dinding bak pickup (cat): sapuan profil U dari depan kiri, pintu belakang, ke depan kanan
   if (S.bed) {
@@ -10235,8 +10247,9 @@ function carTypeGLSL() {
     const top = (c) => { let y = RY[1]; G.rows.forEach((r, k) => { if (r[1][c] === 1) y = RY[k + 1]; }); return y; };   // tinggi atas kaca kolom c (W 0, R 7)
     const [zs1, zs2, ys] = CN_SEATS[t];
     // W setengah lebar bodi, yG0 bawah kaca, wTop / rTop atas kaca depan / belakang, yc / af / ar poros, ra jari-jari lengkung roda,
-    // tw lebar ban, zs1 / zs2 / ySeat / xSeat kursi, rowSp jarak baris kursi bus, mul jarak pilar kaca samping bus
-    const v = [S.wf * T.wx, G.rows[0][0], top(0), top(7), 0.3 * ws, T.af, T.ar, 0.3 * ws + S.ag, S.tw, zs1, zs2, bt + ys, (bus ? 0.62 : 0.37) * T.wx, bus ? 0.85 : 0, bus ? 1.45 : 0];
+    // tw lebar ban, zs1 / zs2 / ySeat / xSeat kursi, rowSp jarak baris kursi bus, mul jarak pilar kaca samping bus, yT tinggi atas kaca (atap mulai di atasnya),
+    // zRf / zRr ujung depan / belakang bidang atap (26f: atap dua warna, sunroof)
+    const v = [S.wf * T.wx, G.rows[0][0], top(0), top(7), 0.3 * ws, T.af, T.ar, 0.3 * ws + S.ag, S.tw, zs1, zs2, bt + ys, (bus ? 0.62 : 0.37) * T.wx, bus ? 0.85 : 0, bus ? 1.45 : 0, yT, G.zF[1] - G.rin * 0.8, G.zR[1] + G.rin * 0.8];
     ct += `    ${last ? '' : `if (ty == ${t}) `}return CarT(${v.map(f).join(', ')});   // ${T.name}\n`;
     const L = [], ln = (d, fwc, mask) => L.push(`g = max(g, cnLine(${d}, HW, fw.${fwc}) * ${mask});`);
     for (const z of M.door || []) ln(`abs(lp.z - ${f(z)})`, 'z', `sM * cnIn(lp.y, 0.0, ${f(bt - 0.012)}, fw.y)`);
@@ -10270,7 +10283,7 @@ function carTypeGLSL() {
     sm += `    if (ty == ${t}) {   // ${T.name}\n      ${L.join('\n      ')}\n      return g;\n    }\n`;
   });
   return `
-  struct CarT { float W, yG0, wTop, rTop, yc, af, ar, ra, tw, zs1, zs2, ySeat, xSeat, rowSp, mul; };
+  struct CarT { float W, yG0, wTop, rTop, yc, af, ar, ra, tw, zs1, zs2, ySeat, xSeat, rowSp, mul, yT, zRf, zRr; };
   CarT carT(int ty) {
 ${ct}  }
   float cnLine(float d, float hw, float fw);
@@ -10326,14 +10339,17 @@ ${TERRAIN_GLSL}${GROUND_FRAME_GLSL}  #endif
     mat4 IM = mat4(1.0);
     #endif
     mat4 M = modelMatrix * IM;
-    vec4 wp = M * vec4(position, 1.0);
+    // 26f: sirip antena (bahan 15) ada pada 70% mobil: sisanya diciutkan ke satu titik (segitiga merosot, tidak digambar). Hash sama dengan cnH(benih, 45)
+    vec3 pos = position;
+    if (aMat > 14.5 && fract(sin(aCarSeed * 91.3458 + 45.0 * 47.8531) * 43758.5453) > 0.7) pos = vec3(0.0);
+    vec4 wp = M * vec4(pos, 1.0);
     vec4 mvPosition = viewMatrix * wp;
     gl_Position = projectionMatrix * mvPosition;
     #ifndef DEPTH_ONLY
     mat3 R3 = mat3(M);
     vec3 s2 = max(vec3(dot(R3[0], R3[0]), dot(R3[1], R3[1]), dot(R3[2], R3[2])), vec3(1e-12));
     vec3 wn = R3 * (normal / s2);                                       // sama dengan patchLit (rotasi x skala, tanpa inverse())
-    vWP = wp.xyz; vWN = wn * inversesqrt(max(dot(wn, wn), 1e-12)); vLP = position; vLN = normal;
+    vWP = wp.xyz; vWN = wn * inversesqrt(max(dot(wn, wn), 1e-12)); vLP = pos; vLN = normal;
     vUV = aUV2; vCol = aCarCol; vWh = aWheel;
     vI0 = vec4(aMat, aCarSeed, aCarType, brake);
     vI1 = vec4((transpose(R3) * (cameraPosition - M[3].xyz)) / s2, spin);   // invers rotasi x skala: mata dalam koordinat lokal mobil
@@ -10388,6 +10404,8 @@ const CN_FS = /* glsl */`
     if (ty != 6 && fract(seed * 13.7) > 0.5) { s.base = vec3(0.86, 0.87, 0.88); s.rough = 0.06; s.metal = 1.0; } else { s.base = vec3(0.02); s.rough = 0.32; }
     return s;
   }
+  // 26f: atap dua warna per mobil (hanya sedan, hatchback, SUV): 0 tidak, 1 atap hitam saja, 2 seluruh kabin di atas kaca bawah hitam (pilar ikut)
+  int cnTone(float seed, int ty) { float h = cnH(seed, 41.0); return ty <= 2 ? (h < 0.1 ? 1 : h < 0.2 ? 2 : 0) : 0; }
   // kotor teratur 0..1: bawah bodi (di bawah 0,4 m) dan lingkar di atas lengkung roda (belakang roda lebih kotor), x banyaknya per mobil
   float cnDirt(CarT T, CarIn I) {
     float low = 1.0 - smoothstep(0.08, 0.4, I.lp.y), arch = 0.0;
@@ -10429,7 +10447,7 @@ const CN_FS = /* glsl */`
     CarS s = cnS0();
     CarT T = carT(I.ty);
     int m = I.m;
-    if (m == 0 || m == 11) {                                                                    // cat: dasar + lapisan bening
+    if (m == 0 || m == 11 || m >= 14) {                                                         // cat (juga spion 14 dan sirip antena 15): dasar + lapisan bening
       vec3 c = m == 11 ? vec3(0.86, 0.87, 0.85) : I.paint;
       s.base = c; s.rough = 0.45; s.f0 = 0.0; s.cc = 1.0; s.ccR = 0.04;
       if (m == 0 && I.ty != 5 && I.ty != 6) {
@@ -10441,9 +10459,28 @@ const CN_FS = /* glsl */`
         }
       }
       if (I.q >= 2) {
-        float d = cnDirt(T, I), g = carSeams(I.ty, I.lp, I.ln, I.fw) * (1.0 - smoothstep(20.0, 30.0, I.dist));
+        float d = cnDirt(T, I), g = m < 14 ? carSeams(I.ty, I.lp, I.ln, I.fw) * (1.0 - smoothstep(20.0, 30.0, I.dist)) : 0.0;
         s.base = mix(s.base, CN_DUST, 0.6 * d); s.rough = mix(s.rough, 0.75, d); s.cc *= 1.0 - 0.7 * d; s.metal *= 1.0 - 0.5 * d;
         s.base *= 1.0 - 0.9 * g; s.cc *= 1.0 - g; s.metal *= 1.0 - g;                            // celah: alur gelap tanpa pantulan
+      }
+      // 26f: hitam mengilap (piano) menimpa cat: atap dua warna (tepi disaring selebar piksel vertikal), spion hitam 40% atau ikut atap dua warna,
+      // sirip antena hitam 50% atau ikut atap dua warna. Semua dari benih dan posisi lokal, tanpa derau; Rendah (q 0) tanpa atap dua warna
+      if (I.q >= 1) {
+        int tn = cnTone(I.seed, I.ty);
+        float bk = 0.0;
+        if (m == 0 && tn > 0) bk = clamp((I.lp.y - (tn == 2 ? T.yG0 + 0.003 : T.yT + 0.004)) / max(I.fw.y, 1e-3) + 0.5, 0.0, 1.0);
+        else if (m == 14 && (tn > 0 || cnH(I.seed, 43.0) < 0.4)) bk = 1.0;
+        else if (m == 15 && (tn > 0 || cnH(I.seed, 44.0) < 0.5)) bk = 1.0;
+        s.base = mix(s.base, vec3(0.012), bk); s.metal *= 1.0 - bk; s.rough = mix(s.rough, 0.07, bk); s.ccR = mix(s.ccR, 0.03, bk); s.cc = mix(s.cc, 1.0, bk);
+        // 26f: sunroof kaca gelap (15% sedan dan SUV): persegi panjang sudut bulat di atap, bingkai hitam 1,4 cm, tepi disaring, pudar 80-140 m
+        if (m == 0 && (I.ty == 0 || I.ty == 2) && I.ln.y > 0.5 && I.lp.y > T.yT && cnH(I.seed, 42.0) < 0.15) {
+          float rl = T.zRf - T.zRr, sd = cnBox(vec2(I.lp.x, I.lp.z - (T.zRf - 0.33 * rl)), vec2(0.36 * T.W, 0.27 * rl), 0.07);
+          float fwm = max(max(I.fw.x, I.fw.z), 1e-4), ft = 1.0 - smoothstep(80.0, 140.0, I.dist);
+          CarS Fr = cnS0(); Fr.base = vec3(0.01); Fr.rough = 0.35; Fr.cc = 1.0; Fr.ccR = 0.05;
+          CarS Gl = cnS0(); Gl.base = vec3(0.004, 0.006, 0.007); Gl.rough = 0.03; Gl.f0 = 0.05;
+          s = cnMix(s, Fr, clamp(0.5 - sd / fwm, 0.0, 1.0) * ft);
+          s = cnMix(s, Gl, clamp(0.5 - (sd + 0.014) / fwm, 0.0, 1.0) * ft);
+        }
       }
     }
     else if (m == 1) {                                                                          // kaca
@@ -10503,10 +10540,12 @@ const CN_FS = /* glsl */`
         CarS D = cnS0(); D.base = vec3(0.012); D.rough = 0.7;                                   // celah di balik jari-jari
         float disc = cnIn(rm, 0.27 * rw, 0.5 * rw, fwr);
         D.base = mix(D.base, vec3(0.08), disc); D.metal = 0.5 * disc; D.rough = mix(0.7, 0.45, disc);   // cakram rem (diam)
-        float th = atan(q.y, q2 > 1e-10 ? q.x : 1.0), n = cnH(I.seed, 8.0) < 0.5 ? 5.0 : 6.0;
-        float a = (th + mod(I.spin, 6.2831853)) * n / 6.2831853;                                // sudut bahan = sudut layar + putaran
+        float th = atan(q.y, q2 > 1e-10 ? q.x : 1.0), hm = cnH(I.seed, 8.0);
+        int wm = hm < 0.35 ? 0 : hm < 0.7 ? 1 : 2;                                              // 26f: model velg 0 lima jari-jari, 1 enam, 2 turbin (10 bilah tipis melengkung)
+        float n = wm == 0 ? 5.0 : wm == 1 ? 6.0 : 10.0;
+        float a = (th + mod(I.spin, 6.2831853)) * n / 6.2831853 + (wm == 2 ? 1.1 * rr : 0.0);  // sudut bahan = sudut layar + putaran (+ puntiran turbin)
         float arc = rm * sin(min(abs(fract(a + 0.5) - 0.5) * 6.2831853 / n, 1.5));              // jarak tegak lurus ke garis tengah jari-jari (m)
-        float hwS = rw * mix(0.13, 0.075, smoothstep(0.17, 0.56, rr));                          // jari-jari meruncing ke luar
+        float hwS = rw * (wm == 2 ? mix(0.055, 0.035, smoothstep(0.17, 0.56, rr)) : mix(0.13, 0.075, smoothstep(0.17, 0.56, rr)));   // jari-jari meruncing ke luar
         float spoke = mix(1.0, clamp((hwS - arc) / fwr + 0.5, 0.0, 1.0), cnIn(rm, 0.17 * rw, 0.555 * rw, fwr));
         Mt.base *= max(1.0 - 0.55 * cnIn(rm, 0.555 * rw, 0.6 * rw, fwr) - 0.5 * cnLine(abs(rm - 0.075 * rw), 0.004, fwr), 0.0);   // alur bibir velg, tutup tengah
         s = cnMix(D, Mt, spoke);
@@ -10565,7 +10604,10 @@ const CN_FS = /* glsl */`
         s.base = mix(vec3(0.04), vec3(0.006), gp); s.rough = mix(0.3, 0.9, gp);
       }
     }
-    else if (m == 13) { s.base = vec3(0.88); s.rough = 0.07; s.metal = 1.0; }                  // krom tetap
+    else if (m == 13) {                                                                         // krom tetap (gagang); bilah gril depan (normal ke depan) mengikuti list mobil
+      s.base = vec3(0.88); s.rough = 0.07; s.metal = 1.0;
+      if (I.ln.z > 0.5 && I.ty != 6) s = cnList(I.seed, I.ty);
+    }
     return s;
   }
   void main() {
