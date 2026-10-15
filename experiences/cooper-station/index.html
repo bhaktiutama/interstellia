@@ -8148,6 +8148,27 @@ const VU = {
 };
 groundMat.uniforms.uSwimP = { value: new THREE.Vector4(0, 0, 0, 0) };   // 23e
 groundMat.uniforms.uWind = VU.uWind; groundMat.uniforms.uGustOff = VU.uGustOff; groundMat.uniforms.uMeadowOn = VU.uMeadowOn; groundMat.uniforms.uMeadowR = { value: 70 };   // 14b
+// 26e: tinggi tanah (terrainH) dan rangka lokal di permukaan (groundFrame), dipakai VEG_COMMON dan mobil lalu lintas dekat (CN_VS
+// CAR_TRAFFIC). Butuh uniform uHeightTex, uHM, uR, uHalfL (dideklarasikan pemakai). Dua bagian agar teks VEG_COMMON tetap sama urutannya.
+const TERRAIN_GLSL = /* glsl */`  // tinggi tanah: interpolasi segitiga dari titik mesh 8 m (sama dengan mesh dan fisika)
+  float hAt(float i, float j) { return texelFetch(uHeightTex, ivec2(int(i), int(j)), 0).r; }
+  float terrainH(vec2 P) {
+    float nc = uHM.z * 0.5;
+    float x = P.x * uHM.x, y = clamp(P.y * uHM.y, 0.0, (uHM.w - 1.0) * 0.5 - 1e-4);
+    float cx = floor(x), cy = floor(y), fx = x - cx, fy = y - cy;
+    float i0 = mod(cx, nc) * 2.0, i1 = mod(cx + 1.0, nc) * 2.0, j0 = cy * 2.0, j1 = min(uHM.w - 1.0, j0 + 2.0);
+    float a = hAt(i0, j0), b = hAt(i1, j0), c = hAt(i0, j1), d = hAt(i1, j1);
+    return fx + fy <= 1.0 ? a + fx * (b - a) + fy * (c - a) : d + (1.0 - fx) * (c - d) + (1.0 - fy) * (b - d);
+  }
+`;
+const GROUND_FRAME_GLSL = /* glsl */`  // titik tanah dan basis lokal (atas menuju sumbu, tangen keliling)
+  vec3 groundFrame(vec2 P, float lift, out vec3 up, out vec3 tS) {
+    float th = P.x / uR, c = cos(th), s = sin(th);
+    up = vec3(-c, -s, 0.0); tS = vec3(-s, c, 0.0);
+    float r = uR - terrainH(P) - lift;
+    return vec3(r * c, r * s, P.y - uHalfL);
+  }
+`;
 const VEG_COMMON = /* glsl */`
   #ifndef texture2D
   #define texture2D texture
@@ -8179,26 +8200,9 @@ const VEG_COMMON = /* glsl */`
     vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
     return mix(mix(hash2(i), hash2(i + vec2(1, 0)), u.x), mix(hash2(i + vec2(0, 1)), hash2(i + vec2(1, 1)), u.x), u.y);
   }
-  // tinggi tanah: interpolasi segitiga dari titik mesh 8 m (sama dengan mesh dan fisika)
-  float hAt(float i, float j) { return texelFetch(uHeightTex, ivec2(int(i), int(j)), 0).r; }
-  float terrainH(vec2 P) {
-    float nc = uHM.z * 0.5;
-    float x = P.x * uHM.x, y = clamp(P.y * uHM.y, 0.0, (uHM.w - 1.0) * 0.5 - 1e-4);
-    float cx = floor(x), cy = floor(y), fx = x - cx, fy = y - cy;
-    float i0 = mod(cx, nc) * 2.0, i1 = mod(cx + 1.0, nc) * 2.0, j0 = cy * 2.0, j1 = min(uHM.w - 1.0, j0 + 2.0);
-    float a = hAt(i0, j0), b = hAt(i1, j0), c = hAt(i0, j1), d = hAt(i1, j1);
-    return fx + fy <= 1.0 ? a + fx * (b - a) + fy * (c - a) : d + (1.0 - fx) * (c - d) + (1.0 - fy) * (b - d);
-  }
-  bool inRect(vec2 P, vec4 r) { return P.x > r.x && P.x < r.z && P.y > r.y && P.y < r.w; }
+${TERRAIN_GLSL}  bool inRect(vec2 P, vec4 r) { return P.x > r.x && P.x < r.z && P.y > r.y && P.y < r.w; }
   float skywayDist(vec2 P) { float C = 2.0 * PI * uR, m = mod(P.x - 0.5 * C, C); return min(m, C - m); }
-  // titik tanah dan basis lokal (atas menuju sumbu, tangen keliling)
-  vec3 groundFrame(vec2 P, float lift, out vec3 up, out vec3 tS) {
-    float th = P.x / uR, c = cos(th), s = sin(th);
-    up = vec3(-c, -s, 0.0); tS = vec3(-s, c, 0.0);
-    float r = uR - terrainH(P) - lift;
-    return vec3(r * c, r * s, P.y - uHalfL);
-  }
-  vec2 landUV(vec2 P) { return vec2(fract(P.x / (2.0 * PI * uR)), P.y / uL); }
+${GROUND_FRAME_GLSL}  vec2 landUV(vec2 P) { return vec2(fract(P.x / (2.0 * PI * uR)), P.y / uL); }
   vec4 fieldData(vec2 P) {
     if (P.y < uFieldZ.x || P.y > uFieldZ.y) return vec4(0.0);
     return textureLod(uFieldTex, vec2(landUV(P).x, (P.y - uFieldZ.x) / (uFieldZ.y - uFieldZ.x)), 0.0);
@@ -10186,10 +10190,11 @@ function carShape(t) {
 const CARGEO = MOBIL.lama ? null : CAR_TYPES.map((T, t) => carShape(t));
 // 26c: material mobil detail dekat, dihitung per piksel (bukan per titik seperti CAR_VS). Satu program bersama untuk semua jenis:
 //   carNearMat({})                  mobil parkir (define CAR_PARKED): posisi dari instanceMatrix, warna cat aCarCol dan benih aCarSeed per instance
-//   carNearMat({ traffic: true })   mobil lalu lintas (define CAR_TRAFFIC): 26e, posisi dari aLane / aMove / aSim seperti CAR_VS (TODO),
-//                                   lampu depan dan belakang menyala (malam, DRL siang, rem)
-//   carNearMat({ depth: true })     material kedalaman peta bayangan (define DEPTH_ONLY, lewat shUnroll); belum dipakai (mobil parkir
-//                                   membuat bayangan lewat layer 1 + depthMat, 26e memakainya untuk castAlpha)
+//   carNearMat({ traffic: true })   mobil lalu lintas (define CAR_TRAFFIC): 26e, rangka dari atribut aCnP (titik s, za dan arah depan,
+//                                   dihitung CPU dari simulasi seperti CAR_VS) + groundFrame(); aCnT = (putar roda, pudar, rem);
+//                                   lampu depan dan belakang menyala (malam, DRL siang, rem); dither pudar di pita tepi radius
+//   carNearMat({ depth: true })     material kedalaman peta bayangan (define DEPTH_ONLY, lewat shUnroll). Mobil parkir membuat bayangan
+//                                   lewat layer 1 + depthMat; 26e: { traffic: true, depth: true } untuk castAlpha mobil lalu lintas
 // Pencahayaan: stationLight + nightLight (termasuk bayangan sunline / cincin cap) dikali warna dasar, pantulan farEnv dengan Fresnel
 // Schlick. Semua sifat bahan dari satu fungsi GLSL carSurf(); main() hanya tahu model lapisan (dasar + lapisan bening).
 // 26d: material seperti mobil sungguhan, tanpa derau per piksel (semua detail dari posisi lokal, aUV2, aWheel, benih per mobil):
@@ -10283,22 +10288,43 @@ const CN_VS = /* glsl */`
   attribute vec4 aWheel;
   attribute vec3 aCarCol;                                               // cat per mobil (linear)
   attribute float aCarSeed;                                             // benih 0..1 per mobil (pilihan bahan per mobil di carSurf)
+  #ifdef CAR_TRAFFIC
+  // 26e: mobil lalu lintas dekat. aCnP = (s, za titik mobil di tanah, arah depan di bidang s-za), dihitung CPU dari simulasi dengan
+  // rumus CAR_VS; aCnT = (putar roda rad, pudar 0..1 di pita tepi radius, rem 0..1)
+  attribute vec4 aCnP;
+  attribute vec3 aCnT;
+  uniform sampler2D uHeightTex;
+  uniform float uR, uHalfL;
+  uniform vec4 uHM;
+${TERRAIN_GLSL}${GROUND_FRAME_GLSL}  #endif
   #ifndef DEPTH_ONLY
   varying vec3 vWP, vWN, vLP, vLN;                                      // titik dunia, normal dunia, titik lokal mobil, normal lokal (26d)
   varying vec2 vUV;
   flat varying vec4 vI0, vI1;                                           // 26d: (bahan, benih, jenis, rem), (mata di koordinat lokal mobil, putar roda)
   flat varying vec3 vCol;
   flat varying vec4 vWh;
+  #ifdef CAR_TRAFFIC
+  flat varying float vFade;                                             // 26e: pudar (dither di CN_FS, komplementer dengan CAR_FS kotak lama)
+  #endif
   #endif
   void main() {
-    #ifdef USE_INSTANCING
+    // 26d: masukan per mobil untuk carSurf. CAR_PARKED: mobil diam (0). CAR_TRAFFIC (26e): rangka kaku dari groundFrame() persis
+    // seperti CAR_VS (kolom x = Rt = cross(up, F), y = up, z = F depan, titik = base), brake = rem, spin = jarak tempuh / (0,3 ws)
+    float brake = 0.0, spin = 0.0;
+    #ifdef CAR_TRAFFIC
+    #ifdef DEPTH_ONLY
+    if (aCnT.y < 0.5) { gl_Position = vec4(0.0, 0.0, 2.0, 1.0); return; }   // bayangan tanpa dither: separuh dalam pita = bentuk baru
+    #endif
+    vec3 up, tS;
+    vec3 base = groundFrame(aCnP.xy, 0.0, up, tS);
+    vec3 F = tS * aCnP.z + vec3(0.0, 0.0, aCnP.w);
+    mat4 IM = mat4(vec4(cross(up, F), 0.0), vec4(up, 0.0), vec4(F, 0.0), vec4(base, 1.0));
+    spin = aCnT.x; brake = aCnT.z;
+    #elif defined(USE_INSTANCING)
     mat4 IM = instanceMatrix;
     #else
     mat4 IM = mat4(1.0);
     #endif
-    // 26d: masukan per mobil untuk carSurf. CAR_PARKED: mobil diam (0). CAR_TRAFFIC (26e, TODO): IM dari aLane / aMove / aSim dan
-    // groundFrame() seperti CAR_VS (rangka kaku), brake = aSim.y (0..1), spin = jarak tempuh / jari-jari roda (0,3 ws), rad
-    float brake = 0.0, spin = 0.0;
     mat4 M = modelMatrix * IM;
     vec4 wp = M * vec4(position, 1.0);
     vec4 mvPosition = viewMatrix * wp;
@@ -10311,6 +10337,9 @@ const CN_VS = /* glsl */`
     vUV = aUV2; vCol = aCarCol; vWh = aWheel;
     vI0 = vec4(aMat, aCarSeed, aCarType, brake);
     vI1 = vec4((transpose(R3) * (cameraPosition - M[3].xyz)) / s2, spin);   // invers rotasi x skala: mata dalam koordinat lokal mobil
+    #ifdef CAR_TRAFFIC
+    vFade = aCnT.y;
+    #endif
     #include <fog_vertex>
     #endif
   }`;
@@ -10321,6 +10350,9 @@ const CN_FS = /* glsl */`
   flat varying vec4 vI0, vI1;
   flat varying vec3 vCol;
   flat varying vec4 vWh;
+  #ifdef CAR_TRAFFIC
+  flat varying float vFade;
+  #endif
   ${carTypeGLSL()}
   // 26d: masukan carSurf (m bahan CAR_MAT, ty jenis, q kualitas; lp / ln / vl titik, normal, arah ke mata di koordinat lokal mobil;
   // fw lebar piksel per sumbu lokal (m), dpx / dpy / dux / duy turunan layar posisi lokal dan aUV2, dari alur seragam main())
@@ -10542,6 +10574,11 @@ const CN_FS = /* glsl */`
     vec3 V = cameraPosition - vWP; float vd2 = dot(V, V); V *= inversesqrt(max(vd2, 1e-8));
     vec3 dpx = dFdx(vLP), dpy = dFdy(vLP);                                // 26d: turunan layar di alur seragam (sebelum percabangan)
     vec2 dux = dFdx(vUV), duy = dFdy(vUV);
+    #ifdef CAR_TRAFFIC
+    // 26e: peralihan dekat / jauh. Di pita tepi radius (vFade < 1) piksel dibagi dengan kotak lama: di sini digambar bila
+    // ign < vFade, CAR_FS membuang piksel yang sama (ign < vNear), jadi tidak ada tumpang tindih. Di dalam radius penuh vFade = 1: tanpa dither
+    if (vFade < 0.999 && ign(gl_FragCoord.xy) >= vFade) discard;
+    #endif
     CarIn I;
     I.m = int(vI0.x + 0.5); I.ty = int(vI0.z + 0.5); I.q = int(uCarQ + 0.5);
     I.paint = vCol; I.seed = vI0.y; I.brake = vI0.w; I.spin = vI1.w; I.uv = vUV; I.dux = dux; I.duy = duy;
@@ -10577,8 +10614,9 @@ function carNearMat(opt = {}) {
   if (CN_CACHE[key]) return CN_CACHE[key];
   const defines = {}; defines[traffic ? 'CAR_TRAFFIC' : 'CAR_PARKED'] = ''; if (depth) defines.DEPTH_ONLY = '';
   const uniforms = depth ? Object.assign({}, SHU) : Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), LIGHT.uniforms, { uNight: BUILD_U.uNight, uCarQ: CN_Q });
+  if (traffic) Object.assign(uniforms, { uHeightTex: VU.uHeightTex, uHM: VU.uHM, uR: VU.uR, uHalfL: VU.uHalfL });   // 26e: groundFrame() di CN_VS
   const vs = depth ? SH_UNROLL_VS + CN_VS.replace(/gl_Position = projectionMatrix \* mvPosition;/g, 'gl_Position = projectionMatrix * shUnroll(mvPosition);') : '#include <fog_pars_vertex>\n' + CN_VS;
-  const fs = depth ? 'void main() { gl_FragColor = vec4(1.0); }' : '#include <fog_pars_fragment>\n' + LIGHT_GLSL + CN_FS;
+  const fs = depth ? 'void main() { gl_FragColor = vec4(1.0); }' : '#include <fog_pars_fragment>\n' + (traffic ? DITHER_GLSL : '') + LIGHT_GLSL + CN_FS;   // 26e: ign() untuk dither
   const m = new THREE.ShaderMaterial({ fog: !depth, side: THREE.FrontSide, uniforms, defines, vertexShader: vs, fragmentShader: fs });   // FrontSide: bawah bodi terbuka (26b)
   return (CN_CACHE[key] = m);
 }
@@ -10665,13 +10703,31 @@ const TRAFFIC = {};
   const CT_GLSL = `const vec4 CT_A[${CT.length}] = vec4[${CT.length}](${CT.map((T) => `vec4(${[T.h, T.bt, T.c0, T.c1].map(f3)})`)});
     const vec4 CT_B[${CT.length}] = vec4[${CT.length}](${CT.map((T) => `vec4(${[T.ct, T.af, T.ar, T.ws].map(f3)})`)});
     const float CT_W[${CT.length}] = float[${CT.length}](${CT.map((T) => f3(T.wx))});`;
+  // 26e: mobil yang digambar bentuk detail dekat (TRAFFIC.near) disembunyikan di sini lewat atribut instance aNear (0 = kotak lama,
+  // 1 = hanya bentuk detail, di antaranya = pita peralihan: dither komplementer dengan CN_FS). Bukan aSim.z: sorot lampu (beams)
+  // berbagi aSim dan harus tetap tampil (beams mengabaikan aNear, aKind 7). Bayangan: aNear >= 0,5 tidak membuat bayangan kotak
+  // (bentuk detail yang membuatnya). ?mobil=lama: string kosong, program persis seperti sebelum 26e
+  const NEAR_VS_A = MOBIL.lama ? '' : 'attribute float aNear; varying float vNear;\n    ';
+  const NEAR_VS_B = MOBIL.lama ? '' : `
+      vNear = aKind < 5.5 ? aNear : 0.0;
+      #ifdef DEPTH_ONLY
+      if (vNear >= 0.5) { ${CLIP_AWAY} }
+      #else
+      if (vNear > 0.999) { ${CLIP_AWAY} }
+      #endif`;
+  const NEAR_FS = MOBIL.lama ? '' : '\n    varying float vNear;';
+  const NEAR_FS_B = MOBIL.lama ? '' : `
+      #ifndef DEPTH_ONLY
+      if (vNear > 0.0 && ign(gl_FragCoord.xy) < vNear) discard;
+      #endif
+      `;
   const CAR_VS = /* glsl */`
     attribute vec4 aLane, aMove;
     attribute vec3 aSim;                                                  // 12b: posisi sepanjang lajur, rem, tampil (dari simulasi CPU)
     attribute vec3 aPaint;
     attribute float aKind;
     attribute float aPart, aBody;                                         // 24d: bagian (per titik), jenis bodi (per mobil)
-    uniform float uNight, uTraffic;
+    ${NEAR_VS_A}uniform float uNight, uTraffic;
     varying vec3 vCol;
     varying vec2 vBm;                                                     // sorot lampu: (lateral, jarak dari bumper) m
     ${CT_GLSL}
@@ -10693,7 +10749,7 @@ const TRAFFIC = {};
         else if (aPart < 4.5) q = vec3(q.x, yb, q.z + A.x - 2.2);
         else q = vec3(q.x, yb, q.z - A.x + 2.2);
       }
-      if (aSim.z < 0.5) { ${CLIP_AWAY} }
+      if (aSim.z < 0.5) { ${CLIP_AWAY} }${NEAR_VS_B}
       float dir = aLane.w, lat = aLane.z * dir;
       float p = aSim.x;
       float along = aMove.z + (dir > 0.0 ? p : aMove.w - p);
@@ -10732,8 +10788,8 @@ const TRAFFIC = {};
       #endif
     }`;
   const CAR_FS = /* glsl */`
-    varying vec3 vCol;
-    void main() { gl_FragColor = vec4(vCol, 1.0);
+    varying vec3 vCol;${NEAR_FS}
+    void main() { ${NEAR_FS_B}gl_FragColor = vec4(vCol, 1.0);
       #include <colorspace_fragment>
       #include <fog_fragment>
     }`;
@@ -10777,12 +10833,18 @@ const TRAFFIC = {};
   // mobil lain, berhenti di perlintasan trem. Posisi dikirim ke GPU tiap frame (atribut aSim), bentuk dan gambar tetap di GPU.
   const aSim = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3); aSim.setUsage(THREE.DynamicDrawUsage);
   ig.setAttribute('aSim', aSim); TRAFFIC.beamGeo.setAttribute('aSim', aSim);
+  if (!MOBIL.lama) {                                                   // 26e: sembunyikan mobil dekat di kotak lama (lihat NEAR_VS_A); beams ikut membawa (diabaikan)
+    const aNear = new THREE.InstancedBufferAttribute(new Float32Array(n), 1); aNear.setUsage(THREE.DynamicDrawUsage);
+    ig.setAttribute('aNear', aNear); TRAFFIC.beamGeo.setAttribute('aNear', aNear); TRAFFIC.aNear = aNear;
+  }
   const LN = new Map(), cars = [];
   for (let i = 0; i < n; i++) {
     const [type, line, lat, dir] = lanes.slice(i * 4, i * 4 + 4), [p0, v0, seg0, L] = moves.slice(i * 4, i * 4 + 4);
     const key = `${type}|${line}|${lat}|${dir}`; let ln = LN.get(key);
     if (!ln) { ln = { type, line, lat, dir, seg0, L, cars: [], stops: [] }; LN.set(key, ln); }
     const c = { i, u: p0, v: v0, v0, brake: 0, on: true, ln, body: bodies[i], len: 2 * CAR_TYPES[bodies[i]].h + 0.6 }; ln.cars.push(c); cars.push(c);   // 24d: len = panjang + 0,6 m (sedan 5,0 = IDM.len)
+    c.sp = 0; c.iw = 1 / (0.3 * CAR_TYPES[bodies[i]].ws);              // 26e: sudut putar roda (rad) dan 1 / jari-jari roda
+    { const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453; c.sd = x - Math.floor(x); }   // 26e: benih per mobil dari indeks (bukan generator acak)
     if (i >= nCar) { const B = BUS.buses[i - nCar]; c.bus = B; B.car = c; }   // 24d: bus (len 12,6 m)
   }
   for (const ln of LN.values()) {
@@ -10888,6 +10950,66 @@ const TRAFFIC = {};
   TRAFFIC.heads = heads; TRAFFIC.lamps = lamps.length;
   function propRingLampCount() { return RINGS_Z.length * RING_LAMP_S.length; }
 }
+// 26e: mobil lalu lintas detail dekat. Satu Mesh per jenis (InstancedBufferGeometry membungkus atribut CARGEO[t], material bersama
+// carNearMat({ traffic: true })) diisi tiap frame oleh updateTrafficNear() dari simulasi (setelah stepTraffic dan kamera): mobil
+// dalam MOBIL.near m dari mata (K10: pusat dan radius ikut lensa lewat lodShift) masuk ke sini, rangka dihitung di CN_VS dengan
+// groundFrame() seperti CAR_VS. Mobil yang sama ditandai aNear di kotak lama (TRAFFIC.cars): 1 = tidak digambar, pita 10 m di tepi
+// radius = dither komplementer (pudar f = (r - d) / 10 di kedua mesh). Bayangan: castAlpha dengan varian kedalaman bentuk baru
+// (layer 2, tanpa SHP; mobil dekat sedikit), kotak lama untuk mobil yang sama dibuang di shpCars dan CAR_VS (aNear >= 0,5).
+// ?mobil=lama: tidak dibuat. Radius 0 (Hemat): kosong, aNear semua 0 = persis seperti sebelum 26e.
+if (!MOBIL.lama && CARGEO) {
+  const N = TRAFFIC.near = { meshes: [], cap: [], count: [], total: 0, band: 10, idx: new Int32Array(TRAFFIC.count), nIdx: 0,
+    paint: TRAFFIC.cars.geometry.attributes.aPaint.array, mat: carNearMat({ traffic: true }), depth: carNearMat({ traffic: true, depth: true }) };
+  CAR_TYPES.forEach((T, t) => {
+    const cap = TRAFFIC.carList.reduce((k, c) => k + (c.body === t ? 1 : 0), 0); N.cap[t] = cap; N.count[t] = 0;
+    if (!cap) { N.meshes[t] = null; return; }
+    const src = CARGEO[t], g = new THREE.InstancedBufferGeometry();
+    for (const k of Object.keys(src.attributes)) g.setAttribute(k, src.attributes[k]);          // atribut bentuk dipakai bersama CARGEO[t]
+    g.setIndex(src.index); g.userData = src.userData;
+    for (const [k, sz] of [['aCnP', 4], ['aCnT', 3], ['aCarCol', 3], ['aCarSeed', 1]])
+      g.setAttribute(k, new THREE.InstancedBufferAttribute(new Float32Array(cap * sz), sz).setUsage(THREE.DynamicDrawUsage));
+    g.instanceCount = 0;
+    const m = new THREE.Mesh(g, N.mat); m.frustumCulled = false; m.userData.noLight = true;
+    castAlpha(m, N.depth);                                         // bayangan bentuk baru (layer 2, material kedalaman sendiri)
+    realGroup.add(m); N.meshes[t] = m;                              // ada sejak muat (0 instance) agar warmShaders / warmFrame mengompilasi
+  });
+}
+// 26e: pilih mobil lalu lintas dekat dan tulis atribut instance (dipanggil worldStep setelah stepTraffic, updateCamera, updateReal).
+// Biaya: satu putaran atas lajur (lajur di luar radius dilewati utuh) + mobil di lajur yang lolos; unggah hanya rentang terpakai
+// dan aNear (4 byte x jumlah mobil) bila ada yang berubah.
+function updateTrafficNear() {
+  const N = TRAFFIC.near; if (!N) return;
+  const an = TRAFFIC.aNear.array, idx = N.idx, had = N.nIdx;
+  for (let q = 0; q < had; q++) an[idx[q]] = 0;
+  N.nIdx = 0; N.total = 0; N.count.fill(0);
+  if (MOBIL.near > 0 && realGroup.visible) {
+    const L0 = lodShift(MOBIL.near), e = VU.uEyeSZ.value, cs = e.x + L0.ds, cz = e.y + L0.dz, Rn = L0.r, R2 = Rn * Rn, bI = 1 / N.band, P = N.paint;
+    for (const ln of TRAFFIC.lanes) {
+      const lat = ln.lat * ln.dir, z0 = ln.type === 0;                   // z0: lajur searah sumbu (s tetap), lain: keliling (za tetap)
+      if (z0 ? Math.abs(wrapS(ln.line + lat - cs)) >= Rn : Math.abs(ln.line - lat - cz) >= Rn) continue;
+      for (const c of ln.cars) {
+        if (!c.on) continue;                                             // sama dengan CAR_VS: aSim.z < 0,5 tidak digambar
+        const along = ln.seg0 + (ln.dir > 0 ? c.u : ln.L - c.u), ps = z0 ? ln.line + lat : along, pz = z0 ? along : ln.line - lat;
+        const ds = wrapS(ps - cs), dz = pz - cz, d2 = ds * ds + dz * dz;
+        if (d2 >= R2) continue;
+        const f = Math.min(1, (Rn - Math.sqrt(d2)) * bI), t = c.body, k = N.count[t]++, A = N.meshes[t].geometry.attributes, i = c.i;
+        const cp = A.aCnP.array, ct = A.aCnT.array, cc = A.aCarCol.array;
+        cp[k * 4] = ps; cp[k * 4 + 1] = pz; cp[k * 4 + 2] = z0 ? 0 : ln.dir; cp[k * 4 + 3] = z0 ? ln.dir : 0;
+        ct[k * 3] = c.sp; ct[k * 3 + 1] = f; ct[k * 3 + 2] = c.brake;
+        cc[k * 3] = P[i * 3]; cc[k * 3 + 1] = P[i * 3 + 1]; cc[k * 3 + 2] = P[i * 3 + 2]; A.aCarSeed.array[k] = c.sd;
+        an[i] = f; idx[N.nIdx++] = i;
+      }
+    }
+  }
+  for (let t = 0; t < N.meshes.length; t++) {
+    const m = N.meshes[t]; if (!m) continue;
+    const k = N.count[t], g = m.geometry; N.total += k;
+    g.instanceCount = k; m.visible = k > 0;
+    if (!k) continue;
+    for (const a of ['aCnP', 'aCnT', 'aCarCol', 'aCarSeed']) { const A = g.attributes[a]; A.clearUpdateRanges(); A.addUpdateRange(0, k * A.itemSize); A.needsUpdate = true; }
+  }
+  if (had || N.nIdx) TRAFFIC.aNear.needsUpdate = true;
+}
 // 12b-1: langkah simulasi mobil (IDM). Penghalang: mobil di depan pada lajur yang sama, dan garis henti bila lampu
 // merah/kuning (kuning: tetap jalan bila tidak bisa berhenti nyaman) atau perlintasan trem tertutup.
 const IDM = { a: 1.4, b: 2.2, s0: 2.0, T: 1.3, len: 5.0, look: 160 };   // 24d: len = bawaan; jarak pakai c.len mobil depan dan mobil sendiri (dari pusat ke pusat)
@@ -10932,11 +11054,12 @@ function stepTraffic(dt, t = clock.sim) {
       acc += add;
       c.v = Math.max(0, c.v + Math.max(-9, acc) * h);
       c.u = (c.u + c.v * h) % L;
+      c.sp += c.v * h * c.iw;                                          // 26e: roda berputar sejauh jarak tempuh / jari-jari
       c.brake = acc < -0.6 || c.v < 0.3 ? 1 : 0;
     }
   }
   const a = TRAFFIC.aSim.array;
-  for (const c of TRAFFIC.carList) { a[c.i * 3] = c.u; a[c.i * 3 + 1] = c.brake; a[c.i * 3 + 2] = c.on ? 1 : 0; }
+  for (const c of TRAFFIC.carList) { a[c.i * 3] = c.u; a[c.i * 3 + 1] = c.brake; a[c.i * 3 + 2] = c.on ? 1 : 0; if (c.sp > TAU) c.sp %= TAU; }   // 26e: putar roda dibungkus 2 pi
   TRAFFIC.aSim.needsUpdate = true;
 }
 // awal muat: jalankan 30 s simulasi supaya mobil sudah berbaris wajar (bukan tersebar acak di dalam simpang)
@@ -12446,7 +12569,7 @@ if (PARKED.on && !MOBIL.lama) {
 }
 // 26c: radius mobil detail per preset; dihitung ulang dengan memaksa updateFurniture() mengirim ulang di frame berikutnya.
 // 26d: CN_Q = kualitas material mobil dekat (2 Ultra / Tinggi penuh, 1 Sedang tanpa celah panel dan kotor, 0 Rendah sederhana)
-function applyCarNearPreset(i) { MOBIL.near = MOBIL.lama || !CAR_NEAR.mat ? 0 : MOBIL.nearR[i]; FURN.lastS = 1e9; CN_Q.value = [2, 2, 1, 0, 0][i]; }   // 26d: kualitas material
+function applyCarNearPreset(i) { MOBIL.near = MOBIL.lama || !CARGEO ? 0 : MOBIL.nearR[i]; FURN.lastS = 1e9; CN_Q.value = [2, 2, 1, 0, 0][i]; }   // 26d: kualitas material
 PRESET_HOOKS.push(applyCarNearPreset); applyCarNearPreset(PRESET.idx);
 // 24d: halte bus di trotoar (titik dipilih di blok TRAFFIC): atap, kaca belakang dan samping, bangku, tiang dengan papan warna
 // jalur, lis atap warna jalur. Kolider hanya dinding belakang + bangku, kaca samping, dan tiang; jalur jalan kaki depan dan belakang
@@ -15550,7 +15673,7 @@ const SHP = { on: true, margin: 16, redo: 12, stat: [], cars: null, ref: [[0, 1e
     const mk = () => new THREE.InstancedBufferAttribute(new Float32Array(mesh.instanceMatrix.array.length), 16);
     SHP.stat.push({ mesh, C, n, src: mesh.instanceMatrix, cnt: mesh.count, attr: [mk(), mk()], k: [0, 0], vis: true });
   }
-  const ig = TRAFFIC.cars.geometry, dyn = ['aLane', 'aMove', 'aPaint', 'aBody', 'aSim'];   // 24d: aBody
+  const ig = TRAFFIC.cars.geometry, dyn = ['aLane', 'aMove', 'aPaint', 'aBody', 'aSim', ...(ig.attributes.aNear ? ['aNear'] : [])];   // 24d: aBody; 26e: aNear (atribut instance wajib disalin, bukan dipakai bersama)
   const mkG = () => {
     const g = new THREE.InstancedBufferGeometry(); g.index = ig.index;
     for (const k of Object.keys(ig.attributes)) if (!dyn.includes(k)) g.setAttribute(k, ig.attributes[k]);
@@ -15587,11 +15710,12 @@ function shpStatic(pass, cam, th0, za, phi) {
 }
 function shpCars(pass, cam, th0) {
   const S = SHP.cars, g = S.geo[pass], src = S.ig.attributes, n = S.ig.instanceCount;
-  const Ln = src.aLane.array, Sm = src.aSim.array, eye = VU.uEyeSZ.value;
+  const Ln = src.aLane.array, Sm = src.aSim.array, eye = VU.uEyeSZ.value, An = src.aNear ? src.aNear.array : null;
   const e = cam.matrixWorldInverse.elements, c0 = Math.cos(th0), s0 = Math.sin(th0), s0R = th0 * R;
   let k = 0;
   for (let i = 0; i < n; i++) {
     if (Sm[i * 3 + 2] < 0.5) continue;                            // sama dengan CAR_VS: aSim.z < 0.5 tidak digambar
+    if (An && An[i] >= 0.5) continue;                              // 26e: bayangan mobil dekat dari bentuk detail (TRAFFIC.near)
     const dir = Ln[i * 4 + 3], lat = Ln[i * 4 + 2] * dir, mv = src.aMove.array, p = Sm[i * 3];
     const along = mv[i * 4 + 2] + (dir > 0 ? p : mv[i * 4 + 3] - p);
     const ps = Ln[i * 4] < 0.5 ? Ln[i * 4 + 1] + lat : along, pz = Ln[i * 4] < 0.5 ? along : Ln[i * 4 + 1] - lat;
@@ -16468,6 +16592,7 @@ function worldStep(dt) {                         // K: bagian simulasi frame (ju
   updateReal();
   stepBaseball(Math.min(0.1, dt));                 // pertandingan baseball siang
   updatePeds();                                    // 12b-3
+  updateTrafficNear();                             // 26e: mobil lalu lintas detail dekat (setelah simulasi dan kamera)
   stepBirds(Math.min(0.1, dt)); updateBirds();     // 12b-4
   updateVibe();                                    // 12b-5
   updateRain(Math.min(0.1, dt));                   // 12c
@@ -16590,7 +16715,7 @@ setTimeout(warmLater, 1500);                       // P4
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { warmLater, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
 /* =====================================================================
    VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).
    Rig = pose kamera lama dengan pitch 0 dan tanpa gerak kepala, diputar balik sebesar yaw kepala: di dalam stasiun "atas" =
