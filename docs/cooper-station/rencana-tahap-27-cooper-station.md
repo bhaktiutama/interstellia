@@ -6,7 +6,7 @@ Per 16 Oktober 2026 · disusun atas permintaan Bhakti
 
 - Kota dan suburban terasa monoton karena tidak ada iklan, reklame, logo merek, atau papan nama perusahaan. Papan toko yang ada (deret bata gaya 12) hanya berisi "huruf" kotak acak, toko di gedung lain hanya pita abu-abu, dan suburban tidak punya toko sama sekali.
 - Rencana: satu atlas merek fiktif bersama, lalu semua toko tanpa kecuali diberi plang merek. Kota mendapat reklame atap, logo puncak menara, dan panel iklan halte. Suburban mendapat minimarket berplang, billboard tiang, dan iklan dinding. Ditambah satu sudut LCD besar bergaya cyberpunk di alun-alun New York.
-- Status: rencana saja, belum ada kode yang diubah. Saklar `?iklan=0` (dan `?neon=0` untuk LCD) akan memberi kota sebelum tahap 27 persis.
+- Status: 27a-27f dikerjakan 16 Oktober 2026 tanpa uji visual (atas permintaan Bhakti: diuji sendiri di akhir). Saklar `?iklan=0` memberi kota sebelum tahap 27 persis, `?neon=0` tanpa sudut LCD.
 
 ## Kondisi sekarang (dari kode `experiences/cooper-station/index.html`)
 
@@ -110,7 +110,11 @@ Angka sebenarnya diukur di 27f dengan `GPUT` dan `tools/ukur_muat.py`; FPS di GT
 | Tahap | Status |
 | --- | --- |
 | 27a | dikerjakan (revisi bahasa distrik): modul bersama `shared/brand.js` (`window.BRANDKIT`: 48 merek `BRANDS` dengan `lang` dan `local`, `DISTRICT_LANG`, `pick(u, use, district)`, `draw(canvas)` atlas 2048 x 4096, `cell(i, kind)`, warna rata-rata per sel) + pratinjau `docs/cooper-station/iklan/pratinjau-merek.html` (kelompok per bahasa, contoh deret toko per distrik); belum dipasang di game, menunggu persetujuan merek. Gambar: `iklan/pratinjau-merek.png`, `iklan/malam-tokyo.png`, `malam-kairo.png`, `malam-delhi.png`, `malam-galileo.png` |
-| 27b-27f | belum |
+| 27b | dikerjakan: `BUILD_FS` define `IKLAN`, atribut per gedung `aLang` (baris bahasa dari distrik), tekstur `uBrand` (atlas), `uBrandPool` (64 kolom per bahasa, baris toko lalu kantor), `uBrandInfo` (latar, rata-rata plang, rata-rata neon); gaya 12 plang per modul, gaya 2 / 11 / lain per toko 1-3 etalase dengan fasia warna merek, gaya 13 papan perusahaan; setengah plang menyala neon malam; lod eksplisit + pudar ke warna rata-rata dari jauh |
+| 27c | dikerjakan: material papan `signMat` (atlas per instance lewat instanceColor = merek, jenis sel, nyala), reklame atap 8 x 4 m (`ikRoof` / `ikRoofS`), logo puncak menara > 60 m (`ikLogo`), plang tegak di papan menonjol 22c (`ikBlade`), panel iklan halte bus (`ikHalte`), papan lapak pasar (`ikPasar`), papan A kafe (`ikKafe` / `ikKafeS`). Halte trem dan nama di payung kafe belum |
+| 27d | dikerjakan: billboard tiang 9 m dua muka 6 x 3 m di tepi arteri permukiman (jarak >= 300 m, `ikTiang` / `ikTiangS`), minimarket 7 x 5 m di sudut simpang permukiman dengan plang fasia dan pilon logo (`ikKios`, `ikPilon`, jarak >= 400 m). Iklan dinding pudar dan papan koperasi tani belum |
+| 27e | dikerjakan: `IKLAN.lcd`, layar melengkung di sudut gedung dekat alun-alun (dua muka 10 m + busur jari-jari 8 m, 2,5 m di depan dinding, y 7-30 m; cadangan satu muka datar), isi 3D anamorfik per piksel dari titik pandang tengah alun-alun (4 klip 9 s: kubus, bola memantul, Saturnus bercincin, papan merek berayun; ruang maya berkisi neon di balik layar, pita glitch saat ganti), kisi subpiksel RGB dari dekat, ticker LED English di bawah layar, 10 papan neon tegak di gedung sekitar, cahaya layar `uL_Neon` / `uL_NeonCol` di `nightLight()` dan shader tanah. Tanpa render target (isi dihitung langsung di shader layar). Suara belum |
+| 27f | dikerjakan: radius papan per preset (Ultra / Tinggi 1, Sedang 0,8, Rendah 0,6, Hemat 0,45; `PRESET_HOOKS`), Hemat layar diam tanpa cahaya layar, uji `tools/uji_iklan.py` (ditulis, belum dijalankan), CLAUDE.md |
 
 ## Bahasa plang per distrik
 

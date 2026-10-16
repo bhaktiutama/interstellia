@@ -1101,6 +1101,8 @@ const LIGHT = { uniforms: {
   uL_Detail: { value: 0 },
   // 23a: pantulan ruang layar (salinan frame sebelumnya: rgb HDR, a = kedalaman pandang; VP frame itu; K.x aktif)
   uL_Ssr: { value: null }, uL_SsrVP: { value: new THREE.Matrix4() }, uL_SsrK: { value: new THREE.Vector4(0, 0, 0, 0) },
+  // 27e: cahaya layar LCD sudut New York ke sekitarnya (posisi dunia sumber di depan layar, kekuatan; warna rata-rata klip)
+  uL_Neon: { value: new THREE.Vector4(0, 0, -1e5, 0) }, uL_NeonCol: { value: new THREE.Vector3(1, 1, 1) },
 } };
 // 18b-3: peta bayangan dirender dalam koordinat silinder terbuka: tiap titik dipindah ke bidang singgung di sudut th0 dengan
 // busur (di jari-jari R) dan jarak dari sumbu tetap. Kolom peta = arah atas lokal di mana pun, arah cahaya cincin cap sama
@@ -1291,9 +1293,19 @@ const LIGHT_GLSL = /* glsl */`
     float face = 0.3 + 0.7 * max(-dot(n, L), 0.0);
     return vec3(1.0, 0.94, 0.84) * (uL_Head.w * cone * face * 70.0 / (d2 + 6.0));
   }
+  // 27e: cahaya layar LCD sudut New York: sumber titik di depan layar, warna rata-rata klip, pudar 1/d^2 dan habis di 200 m
+  uniform vec4 uL_Neon;
+  uniform vec3 uL_NeonCol;
+  vec3 neonL(vec3 p, vec3 n) {
+    vec3 d = uL_Neon.xyz - p;
+    float d2 = dot(d, d);
+    if (d2 > 40000.0) return vec3(0.0);
+    float face = 0.25 + 0.75 * max(dot(n, d) * inversesqrt(max(d2, 1e-4)), 0.0);
+    return uL_NeonCol * (uL_Neon.w * face * 600.0 / (d2 + 150.0)) * (1.0 - smoothstep(120.0, 200.0, sqrt(d2)));
+  }
   // cahaya malam pada objek: lampu 8 m di atas jalan menerangi muka atas penuh, dinding setengah, hilang di atas 18 m
   vec3 nightLight(vec3 p, vec3 n) {
-    if (uL_Night < 0.01 && uL_Tram.w < 0.01 && uL_Head.w < 0.01) return vec3(0.0);
+    if (uL_Night < 0.01 && uL_Tram.w < 0.01 && uL_Head.w < 0.01 && uL_Neon.w < 0.01) return vec3(0.0);
     float r = length(p.xy);
     if (r < 1.0) return vec3(0.0);
     vec3 up = vec3(-p.xy / r, 0.0);
@@ -1305,6 +1317,7 @@ const LIGHT_GLSL = /* glsl */`
     if (uL_Tram.w > 0.01) c += vec3(1.0, 0.9, 0.75) * uL_Tram.w * tramPoolL(s, za) * face * (1.0 - smoothstep(2.0, 6.0, h));
     #endif
     if (uL_Head.w > 0.01) c += headSpotL(p, n);                         // 19b
+    if (uL_Neon.w > 0.01) c += neonL(p, n);                             // 27e
     return c;
   }
   // 17f: bayangan sunline. Sumber berupa garis di sumbu: tajam ke arah keliling (lebar sunline 12 m dari jarak 1 km),
@@ -2279,6 +2292,7 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
       if (uNight > 0.01) light += vec3(1.0, 0.72, 0.42) * 1.5 * uNight * lampPoolL(s, za);   // lampu jalan malam
       if (uL_Tram.w > 0.01) light += vec3(1.0, 0.9, 0.75) * uL_Tram.w * tramPoolL(s, za);   // 15a: trem malam
       if (uL_Head.w > 0.01) light += vec3(1.0, 0.94, 0.84) * uL_Head.w * headPoolL(s, za);   // 19b: sorot lampu depan motor
+      if (uL_Neon.w > 0.01) light += neonL(vWorld, nrm);                // 27e: layar LCD menerangi aspal dan trotoar
       {                                                           // bayangan tajuk pohon dari sunline (tepat di atas)
         float tsh = textureGrad(uShadeTex, uv, gx, gy).r * (1.0 - sunShCover(vWorld));   // 17f: dekat pemain bayangan real-time
         light -= (uL_SunlineCol * uL_Sunline * 0.7 + uL_AmbCol * 0.35) * tsh;
@@ -4092,7 +4106,7 @@ const BUILD_U = { uNight: { value: 0 }, uInterior: { value: 1 }, uLodK: { value:
 // Bahasa plang ikut distrik gedung (DISTRICT_LANG), bukan bahasa UI. Tiga tekstur: atlas 2048 x 4096 (sRGB, mipmap), tabel merek
 // per baris bahasa (64 kolom = pick(u) untuk u bertingkat, baris nL + i = papan kantor), info per merek (latar, rata-rata plang, rata-rata neon).
 // ?iklan=0 = kota sebelum tahap 27 persis: define IKLAN tidak dipasang, atribut aLang tidak dibuat.
-const IKLAN = { on: !!window.BRANDKIT && new URLSearchParams(location.search).get('iklan') !== '0', langs: [], row: {} };
+const IKLAN = { on: !!window.BRANDKIT && new URLSearchParams(location.search).get('iklan') !== '0', langs: [], row: {}, blades: [], cafes: [], count: {} };
 if (IKLAN.on) {
   const K = window.BRANDKIT, NB = K.BRANDS.length;
   IKLAN.langs = ['en', ...new Set(Object.values(K.DISTRICT_LANG).filter((l) => l !== 'en'))];
@@ -12542,7 +12556,7 @@ const RAGAM_DET = { count: {} };
     const nS = Math.max(1, Math.floor(W / (3.2 + 1.8 * ((F.p1 * 7.31) % 1)) + 0.5));
     if (r() < 0.65) { const c = AWN[Math.floor(r() * AWN.length)];   // kanopi: satu warna per gedung, sebagian modul tanpa kanopi
       for (let i = 0; i < nS; i++) if (r() < 0.85) put('awning', ((i + 0.5) / nS - 0.5) * W, gH - 1.2, W / nS * 0.86, c); }
-    if (r() < 0.3 && W > 5) put('blade', (r() < 0.5 ? -1 : 1) * (W / 2 - 0.55), gH + 0.25, 1, SIGN[Math.floor(r() * SIGN.length)]);
+    if (r() < 0.3 && W > 5) { put('blade', (r() < 0.5 ? -1 : 1) * (W / 2 - 0.55), gH + 0.25, 1, SIGN[Math.floor(r() * SIGN.length)]); if (IKLAN.on) IKLAN.blades.push(list.blade[list.blade.length - 1]); }   // 27c: papan menonjol diberi plang tegak
     let f0 = -9;
     if (nF >= 2 && nB >= 2 && r() < 0.55) {                         // tangga darurat di depan dua jendela bersebelahan
       f0 = Math.floor(r() * (nB - 1)); const t = (cx(f0) + cx(f0 + 1)) / 2, sx = (2 * bayE - 0.4) / FW;
@@ -12842,6 +12856,7 @@ function updateFurniture() {
     st.needsUpdate = true;
   }
   updateCrossingVisual();
+  if (IKLAN.update) IKLAN.update();                                     // 27e: layar LCD, ticker, cahaya layar
 }
 
 await bootStep(BOOT_W[20], 'Spaceport dan shuttle...');
@@ -13548,6 +13563,7 @@ const VIBE = { cafeSeats: [], bulbMat: null, cafeBulbMat: null, kites: [] };
       pts.push([s, za]);
     }
     const col = Math.floor(r() * UMB.length);
+    if (IKLAN.on) IKLAN.cafes.push([pts[0][0], pts[0][1], alongZ, a0]);   // 27c: papan A nama kafe di awal deret (tanpa angka acak)
     for (const [s, za] of pts) {
       list.cafeTable.push([s, za, 0]); list.cafePole.push([s, za, 0]); list['umb' + col].push([s, za, r() * TAU]); list.cafeBulb.push([s, za, 0]);
       for (const sg of [-1, 1]) {                                     // kursi di kedua sisi meja, menghadap meja (tegak lurus jalan)
@@ -13599,6 +13615,448 @@ const VIBE = { cafeSeats: [], bulbMat: null, cafeBulbMat: null, kites: [] };
     FURN.total += n;
   }
   VIBE.counts = Object.fromEntries(Object.entries(list).map(([k, v]) => [k, v.length]));
+  FURN.lastS = 1e9;
+}
+// =====================================================================
+// TAHAP 27c-27e: papan merek 3D dari atlas BRANDKIT (shared/brand.js), rencana docs/cooper-station/rencana-tahap-27-cooper-station.md
+// 27c kota: reklame atap, logo puncak menara, plang tegak di papan menonjol 22c, panel iklan halte bus, papan lapak pasar, papan A kafe.
+// 27d suburban (jarang): billboard tiang di tepi arteri permukiman (jarak >= 300 m), minimarket kecil berplang + pilon logo di sudut simpang.
+// 27e sudut LCD cyberpunk alun-alun New York: layar melengkung membungkus sudut gedung, isi 3D anamorfik (dihitung per piksel dari titik
+// pandang tengah alun-alun, jadi benda tampak menonjol keluar layar dari sana), ticker LED, papan neon tegak di sekitar, cahaya layar ke
+// tanah dan gedung (uL_Neon di LIGHT_GLSL). Semua papan lewat FURN.kinds (radius per preset, 27f). Generator acak sendiri (angka acak lama
+// tidak bergeser). ?iklan=0 = tanpa semua ini, ?neon=0 = tanpa sudut LCD.
+// =====================================================================
+if (IKLAN.on) {
+  const K = window.BRANDKIT;
+  let sd = 27027; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
+  const g = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
+  const IRON = [0.07, 0.075, 0.08], DARK = [0.13, 0.13, 0.14], GREY = [0.42, 0.44, 0.46];
+  const dname = (s, za) => { const D = districtAt(s, za); return D ? D.name : null; };
+  const brand = (use, s, za) => K.pick(r(), use, dname(s, za));
+  const KIND = { plang: 0, neon: 1, tegak: 2, logo: 3 };
+  // papan: bidang 1 x 1 (menghadap +z) diskalakan per instance; instanceColor = (merek, jenis sel, nyala 0 / 1 kotak lampu / 2 berkedip)
+  const SIGN_VS = /* glsl */`
+    #include <fog_pars_vertex>
+    flat varying vec3 vB;
+    varying vec3 vW, vN;
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      #ifdef USE_INSTANCING_COLOR
+      vB = instanceColor;
+      #else
+      vB = vec3(0.0);
+      #endif
+      vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0); vW = wp.xyz;
+      vN = mat3(modelMatrix) * (mat3(instanceMatrix) * normal);
+      vec4 mvPosition = viewMatrix * wp;
+      gl_Position = projectionMatrix * mvPosition;
+      #include <fog_vertex>
+    }`;
+  const SIGN_FS = /* glsl */`
+    #include <fog_pars_fragment>
+    uniform sampler2D uBrand;
+    uniform float uNight, uTime;
+    flat varying vec3 vB;
+    varying vec3 vW, vN;
+    varying vec2 vUv;
+    ${LIGHT_GLSL}
+    void main() {
+      int b = int(vB.x + 0.5); float kind = floor(vB.y + 0.5), lit = floor(vB.z + 0.5);
+      // tata letak atlas = BRANDKIT.KINDS: plang / neon 256 x 128 (8 kolom, y0 0 / 768), tegak 128 x 256 (16, 1536), logo 128 x 128 (16, 2304)
+      vec4 C = kind < 1.5 ? vec4(256.0, 128.0, 8.0, kind * 768.0) : kind < 2.5 ? vec4(128.0, 256.0, 16.0, 1536.0) : vec4(128.0, 128.0, 16.0, 2304.0);
+      int nc = int(C.z);
+      float bx = float(b - (b / nc) * nc) * C.x, by = C.w + float(b / nc) * C.y;
+      vec2 px = vec2(bx + clamp(vUv.x, 0.0, 1.0) * C.x, by + (1.0 - clamp(vUv.y, 0.0, 1.0)) * C.y);
+      px = clamp(px, vec2(bx, by) + 2.0, vec2(bx + C.x, by + C.y) - 2.0);
+      vec3 t = texture2D(uBrand, vec2(px.x / 2048.0, 1.0 - px.y / 4096.0)).rgb;
+      float nl = dot(vN, vN);
+      vec3 N = nl > 1e-8 ? vN * inversesqrt(nl) : vec3(0.0, 0.0, 1.0);
+      vec3 col = t * (stationLight(vW, N) + nightLight(vW, N));
+      float blink = lit > 1.5 ? step(0.22, fract(uTime * 0.55 + vB.x * 0.37)) : 1.0;
+      if (kind > 0.5 && kind < 1.5) col += t * (0.35 + 2.2 * uNight) * blink;            // sel neon: huruf tabung menyala
+      else if (lit > 0.5) col += t * (0.08 + 1.3 * uNight) * blink;                      // kotak lampu: menyala dari belakang
+      gl_FragColor = vec4(col, 1.0);
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`;
+  const signMat = new THREE.ShaderMaterial({ fog: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2,
+    uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), LIGHT.uniforms, { uBrand: BUILD_U.uBrand, uNight: BUILD_U.uNight, uTime: BUILD_U.uTime }),
+    vertexShader: SIGN_VS, fragmentShader: SIGN_FS });
+  const plane = new THREE.PlaneGeometry(1, 1), _t = new THREE.Matrix4(), _s = new THREE.Vector3();
+  const L = {};                                                      // nama kind -> { geo, range, sign, items: [[Matrix4, s, za, (b, jenis, nyala)]] }
+  const kindOf = (name, geo, range, sign) => (L[name] = L[name] || { geo, range, sign, items: [] });
+  const at = (s, za, h) => surfaceMatrix(new THREE.Matrix4(), modS(s) / R, za, h);   // kerangka lokal: x sepanjang s, y atas, z sepanjang za
+  const tr = (m, x, y, z) => m.multiply(_t.makeTranslation(x, y, z));
+  const ry = (m, a) => m.multiply(_t.makeRotationY(a));
+  const rx = (m, a) => m.multiply(_t.makeRotationX(a));
+  const sign = (name, range, m, w, h, b, kind, lit, s, za) => kindOf(name, plane, range, true).items.push([m.clone().scale(_s.set(w, h, 1)), modS(s), za, [b, KIND[kind], lit]]);
+  const solid = (name, geo, range, m, s, za) => kindOf(name, geo, range, false).items.push([m.clone(), modS(s), za, null]);
+  const flat = BUILD.flat, ups = flat.filter((o) => o[5] > 0.5);
+  const occ = (e, top) => ups.some((o) => o !== e && Math.abs(o[5] - top) < 1.2 && Math.abs(wrapS(e[0] - o[0])) < (e[2] + o[2]) / 2 && Math.abs(e[1] - o[1]) < (e[3] + o[3]) / 2);
+  const inSite = (s, za) => SITES.some((S) => Math.abs(wrapS(s - S.q.bs)) < S.q.bw / 2 + 2 && Math.abs(za - S.q.bz) < S.q.bd / 2 + 2);
+
+  // ---- 27c-1 reklame atap: rangka besi 2 tiang + panel 8 x 4 m + titian + lampu sorot, di atap datar gedung rendah pusat ----
+  const roofGeo = mergeSimple([...[-2.9, 2.9].map((x) => ({ geo: g(0.22, 6.2, 0.22, x, 3.1, -0.45), color: IRON })),
+    { geo: g(8.4, 4.4, 0.3, 0, 4.0, -0.16), color: DARK }, { geo: g(8.4, 0.06, 0.9, 0, 1.75, 0.45), color: IRON },
+    ...[-2.6, 0, 2.6].map((x) => ({ geo: g(0.06, 0.06, 1.1, x, 6.35, 0.4), color: IRON })),
+    ...[-2.6, 0, 2.6].map((x) => ({ geo: g(0.3, 0.14, 0.24, x, 6.28, 0.95), color: GREY }))]);
+  const roofs = [];
+  for (const e of flat) {
+    const [s, za, w, d, h, el, , st, front] = e, top = el + h;
+    if (el > 0.5 || top < 8 || top > 36 || ![0, 2, 11, 12, 13].includes(st) || Math.min(w, d) < 10) continue;
+    if (cityDensity(s, za) < 0.55 || r() > 0.16) continue;
+    if (inSite(s, za) || occ(e, top) || roofs.some(([a, b]) => Math.hypot(wrapS(a - s), b - za) < 70)) continue;
+    const fz = front === 1 ? -1 : front === 2 ? 1 : 0, fs = front === 3 ? -1 : front === 4 ? 1 : 0;
+    const ang = fz || fs ? Math.atan2(fs, fz) : (r() < 0.5 ? 0 : Math.PI);
+    if ((Math.abs(Math.sin(ang)) > 0.5 ? d : w) < 9) continue;      // lebar muka yang dihadapi panel
+    roofs.push([s, za]);
+    const m = ry(at(s, za, top), ang), neon = r() < 0.3;
+    solid('ikRoof', roofGeo, 900, m, s, za);
+    sign('ikRoofS', 900, tr(m.clone(), 0, 4.0, 0.02), 8, 4, brand(neon ? 'neon' : 'reklame', s, za), neon ? 'neon' : 'plang', neon ? 1 : (r() < 0.75 ? 1 : 0), s, za);
+  }
+  // ---- 27c-2 logo puncak menara > 60 m (kantor, batu, kaca): satu merek per gedung, satu atau dua muka, menyala malam ----
+  for (const e of flat) {
+    const [s, za, w, d, h, el, , st] = e, top = el + h;
+    if (top < 60 || ![0, 1, 13].includes(st) || occ(e, top) || r() > 0.55) continue;
+    const b = brand('kantor', s, za), sz = Math.max(5, Math.min(12, Math.min(w, d) * 0.45)), y = top - sz * 0.5 - 2.5;
+    if (y - sz / 2 < el + 3) continue;
+    const f0 = r() < 0.5 ? 1 : -1, both = r() < 0.6;
+    for (const f of both ? [1, -1] : [f0]) sign('ikLogo', 2600, ry(tr(at(s, za, 0), 0, y, f * (d / 2 + 0.15)), f > 0 ? 0 : Math.PI), sz, sz, b, 'logo', 1, s, za);
+  }
+  // ---- 27c-3 papan menonjol 22c (kotak 0,1 x 1,5 x 0,75 m): plang tegak di kedua sisi ----
+  for (const [s, za, lx, y, lz, ang] of IKLAN.blades) {
+    const b = brand('toko', s + lx, za + lz), lit = r() < 0.5 ? 1 : 0;
+    for (const f of [1, -1]) {
+      const m = surfaceMatrix(new THREE.Matrix4(), s / R, za, 0); tr(m, lx, y, lz); ry(m, ang); tr(m, f * 0.052, 0.75, 0.62); ry(m, f * Math.PI / 2);
+      sign('ikBlade', 180, m, 0.7, 1.4, b, 'tegak', lit, s + lx, za + lz);
+    }
+  }
+  // ---- 27c-4 panel iklan berlampu di kaca samping halte bus (dua muka, poster tegak 0,9 x 1,8 m) ----
+  for (const st of BUS.stops) {
+    const sh = st.za > BUS.lines[st.line].za ? 1 : -1, b = brand('reklame', st.s, st.za);
+    const m0 = ry(at(st.s, st.za, groundH(st.s, st.za)), Math.atan2(0, -sh));
+    for (const f of [1, -1]) sign('ikHalte', 300, ry(tr(m0.clone(), -2.45 + f * 0.035, 1.3, -0.25), f * Math.PI / 2), 0.9, 1.8, b, 'tegak', 1, st.s, st.za);
+  }
+  // ---- 27c-5 papan nama lapak pasar (muka lorong -za, di bawah tenda) ----
+  for (const [s, z] of MARKET.stalls) sign('ikPasar', 200, ry(tr(at(s, z, groundH(s, z)), 0, 1.98, -0.78), Math.PI), 1.2, 0.6, brand('toko', s, z), 'plang', 0, s, z);
+  // ---- 27c-6 papan A nama kafe di awal deret meja trotoar ----
+  const aGeo = mergeSimple([{ geo: g(0.5, 1.0, 0.03, 0, 0.5, 0).rotateX(-0.18).translate(0, 0, 0.18), color: DARK },
+    { geo: g(0.5, 1.0, 0.03, 0, 0.5, 0).rotateX(0.18).translate(0, 0, -0.18), color: DARK }]);
+  for (const [s0, z0, alongZ] of IKLAN.cafes) {
+    const s = alongZ ? s0 : s0 - 2.2, za = alongZ ? z0 - 2.2 : z0;
+    if (colAt(s, za, 0.4) || onRoad(s, za)) continue;
+    addCollider(modS(s), za, 0.3, 0.3);
+    const m = ry(at(s, za, groundH(s, za)), alongZ ? 0 : Math.PI / 2), b = brand('toko', s, za);
+    solid('ikKafe', aGeo, 160, m, s, za);
+    for (const f of [1, -1]) sign('ikKafeS', 160, rx(tr(m.clone(), 0, 0, f * 0.18), -f * 0.18).multiply(_t.makeTranslation(0, 0.5, f * 0.017)).multiply(_t.makeRotationY(f > 0 ? 0 : Math.PI)), 0.46, 0.92, b, 'tegak', 0, s, za);
+  }
+
+  // ---- 27d-1 billboard tiang suburban: tiang 9 m, panel dua muka 6 x 3 m menghadap arus lalu lintas, jarak >= 300 m, jarang ----
+  const poleGeo = mergeSimple([{ geo: new THREE.CylinderGeometry(0.22, 0.28, 9, 10).translate(0, 4.5, 0), color: GREY },
+    { geo: g(6.4, 3.4, 0.5, 0, 10.6, 0), color: DARK }, ...[-2, 2].map((x) => ({ geo: g(0.08, 0.08, 1.2, x, 12.4, 0), color: IRON }))]);
+  const poles = [];
+  const tryPole = (s, za, ang) => {
+    const d = cityDensity(s, za);
+    if (d < 0.06 || d > 0.5 || !districtAt(s, za) || onRoad(s, za) || inWater(s, za, 6) || colAt(s, za, 3.5)) return;
+    if (Math.abs(wrapS(s - SKY_S)) < 70 || Math.abs(wrapS(s - TRAM.s)) < 30 || poles.some(([a, b]) => Math.hypot(wrapS(a - s), b - za) < 300) || r() > 0.55) return;
+    poles.push([s, za]); addCollider(modS(s), za, 0.3, 0.3);
+    const m = ry(at(s, za, groundH(s, za)), ang), b = brand(r() < 0.5 ? 'suburban' : 'reklame', s, za), lit = r() < 0.7 ? 1 : 0;
+    solid('ikTiang', poleGeo, 1200, m, s, za);
+    for (const f of [1, -1]) sign('ikTiangS', 1200, ry(tr(m.clone(), 0, 10.6, f * 0.27), f > 0 ? 0 : Math.PI), 6, 3, b, 'plang', lit, s, za);
+  };
+  const OFF2 = ROAD.art / 2 + 6;
+  for (let k = 0; k < 26; k++) for (const side of [-1, 1]) for (let za = 300 + r() * 150; za < 3200; za += 150) tryPole(k * ART + side * OFF2, za, 0);
+  for (let m = 1; m * ART_Z < 3200; m++) for (const side of [-1, 1]) for (let s = r() * 150; s < CIRC; s += 150) tryPole(s, m * ART_Z + side * OFF2, Math.PI / 2);
+  // ---- 27d-2 minimarket di sudut simpang permukiman: bangunan 7 x 5 m berkaca depan, plang di fasia, pilon logo ----
+  const kioskGeo = mergeSimple([{ geo: g(7, 3.4, 5, 0, 1.7, 0), color: [0.86, 0.85, 0.8] }, { geo: g(7.2, 0.25, 5.2, 0, 3.5, 0), color: [0.3, 0.3, 0.32] },
+    { geo: g(4.6, 2.1, 0.04, -0.9, 1.2, 2.51), color: [0.08, 0.1, 0.12] }, { geo: g(1.0, 2.2, 0.05, 2.6, 1.1, 2.52), color: [0.25, 0.25, 0.27] },
+    { geo: g(7.0, 0.9, 0.06, 0, 2.95, 2.53), color: [0.2, 0.2, 0.22] }]);
+  const pylonGeo = mergeSimple([{ geo: g(0.25, 4.2, 0.25, 0, 2.1, 0), color: GREY }, { geo: g(1.5, 1.5, 0.3, 0, 4.6, 0), color: DARK }]);
+  const kiosks = [];
+  for (let k = 0; k < 26; k++) for (let m = 1; m * ART_Z < 3200; m++) for (const cs of [-1, 1]) for (const cz of [-1, 1]) {
+    const s = k * ART + cs * (ROAD.art / 2 + 7.5), za = m * ART_Z + cz * (ROAD.art / 2 + 6.5), d = cityDensity(s, za);
+    if (d < 0.12 || d > 0.5 || !districtAt(s, za) || r() > 0.3) continue;
+    if (colAt(s, za, 5) || inWater(s, za, 8) || [[-3.6, -2.6], [3.6, -2.6], [-3.6, 2.6], [3.6, 2.6]].some(([a, b]) => onRoad(s + a, za + b))) continue;
+    if (kiosks.some(([a, b]) => Math.hypot(wrapS(a - s), b - za) < 400)) continue;
+    kiosks.push([s, za]); addCollider(modS(s), za, 3.6, 2.6);
+    const m0 = at(s, za, groundH(s, za)), mk = ry(m0.clone(), cz > 0 ? Math.PI : 0), b = brand(r() < 0.6 ? 'suburban' : 'toko', s, za);   // muka depan menghadap jalan za
+    solid('ikKios', kioskGeo, 500, mk, s, za);
+    sign('ikKiosS', 500, tr(mk.clone(), 0, 2.95, 2.57), 1.8, 0.9, b, 'plang', 1, s, za);
+    const ps = s - cs * 4.6, pz = za - cz * 3.4;
+    if (!onRoad(ps, pz) && !colAt(ps, pz, 0.4)) {
+      addCollider(modS(ps), pz, 0.2, 0.2);
+      const mp = at(ps, pz, groundH(ps, pz));
+      solid('ikPilon', pylonGeo, 500, mp, ps, pz);
+      for (const f of [1, -1]) sign('ikPilonS', 500, ry(tr(mp.clone(), 0, 4.6, f * 0.16), f > 0 ? 0 : Math.PI), 1.3, 1.3, b, 'logo', 1, ps, pz);
+    }
+  }
+
+  // ---- 27e sudut LCD cyberpunk alun-alun New York ----
+  const al = SITES.find((x) => x.type === 'alun'), NEON = IKLAN.lcd = { on: false, t: 0, static: false, ci: -1, last: 0, tick: -1e9 };
+  if (al && new URLSearchParams(location.search).get('neon') !== '0') {
+    const aS = al.q.bs, aZ = al.q.bz;
+    let best = null, bsc = -1e9, diag = false;
+    for (const pass of [true, false]) {                              // dulu cari sudut gedung yang kedua mukanya menghadap alun-alun; bila tidak ada, satu muka
+      for (const e of flat) {
+        const [s, za, w, d, h, el, , st] = e;
+        if (el > 0.5 || h < 24 || Math.min(w, d) < 16 || st === 14 || inSite(s, za)) continue;
+        const ds = wrapS(aS - s), dz = aZ - za, dist = Math.hypot(ds, dz), ox = Math.abs(ds) >= w / 2 + 5, oz = Math.abs(dz) >= d / 2 + 5;
+        if (dist > 120 || (pass ? !(ox && oz) : !(ox || oz))) continue;
+        const sc = Math.min(h, 45) - dist * 0.4;
+        if (sc > bsc) { bsc = sc; best = e; }
+      }
+      if (best) { diag = pass; break; }
+    }
+    if (best) {
+      const [s, za, w, d, h] = best, ds = wrapS(aS - s), dz = aZ - za, sx = Math.sign(ds) || 1, sz = Math.sign(dz) || 1;
+      const y0 = 7, y1 = Math.min(h - 2, 30), cx = sx * w / 2, cz = sz * d / 2;
+      const pts = [];                                               // [x, z, nx, nz] di kerangka gedung
+      let O, out, box;
+      if (diag) {                                                    // dua muka + busur: layar 2,5 m di depan dinding, busur jari-jari 8 m mengitari sudut
+        const OFF = 2.5, A = 5.5, RR = A + OFF, La = Math.min(10, d - A - 4), Lb = Math.min(10, w - A - 4);
+        for (let i = 0; i <= 4; i++) pts.push([cx + sx * OFF, cz - sz * (A + La * (1 - i / 4)), sx, 0]);
+        for (let i = 1; i < 12; i++) { const a = i / 12 * Math.PI / 2, nx = sx * Math.cos(a), nz = sz * Math.sin(a); pts.push([cx - sx * A + nx * RR, cz - sz * A + nz * RR, nx, nz]); }
+        for (let i = 0; i <= 4; i++) pts.push([cx - sx * (A + Lb * i / 4), cz + sz * OFF, 0, sz]);
+        O = [cx - sx * 2, (y0 + y1) / 2, cz - sz * 2]; out = [sx * Math.SQRT1_2, sz * Math.SQRT1_2];
+        box = [Math.min(cx - sx * 24, cx + sx * (OFF + 0.1)), Math.max(cx - sx * 24, cx + sx * (OFF + 0.1)), Math.min(cz - sz * 24, cz + sz * (OFF + 0.1)), Math.max(cz - sz * 24, cz + sz * (OFF + 0.1))];
+      } else if (Math.abs(ds) >= w / 2 + 5) {                        // satu muka x (normal sx)
+        const Lf = Math.min(30, d - 4);
+        for (let i = 0; i <= 6; i++) pts.push([cx + sx * 0.6, (i / 6 - 0.5) * Lf * sx, sx, 0]);
+        O = [cx - sx * 2, (y0 + y1) / 2, 0]; out = [sx, 0];
+        box = [Math.min(cx - sx * 22, cx + sx * 0.7), Math.max(cx - sx * 22, cx + sx * 0.7), -Lf / 2, Lf / 2];
+      } else {                                                       // satu muka z (normal sz)
+        const Lf = Math.min(30, w - 4);
+        for (let i = 0; i <= 6; i++) pts.push([(0.5 - i / 6) * Lf * sz, cz + sz * 0.6, 0, sz]);
+        O = [0, (y0 + y1) / 2, cz - sz * 2]; out = [0, sz];
+        box = [-Lf / 2, Lf / 2, Math.min(cz - sz * 22, cz + sz * 0.7), Math.max(cz - sz * 22, cz + sz * 0.7)];
+      }
+      let len = 0; const acc = [0];
+      for (let i = 1; i < pts.length; i++) { len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); acc.push(len); }
+      const strip = (ya, yb) => {                                    // pita tegak sepanjang lintasan, uv.x = panjang / total, uv.y = 0 bawah 1 atas
+        const P = [], Nn = [], U = [], I = [];
+        pts.forEach(([x, z, nx, nz], i) => { P.push(x, ya, z, x, yb, z); Nn.push(nx, 0, nz, nx, 0, nz); U.push(acc[i] / len, 0, acc[i] / len, 1); });
+        for (let i = 0; i < pts.length - 1; i++) { const a = 2 * i; I.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+        const G = new THREE.BufferGeometry();
+        G.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); G.setAttribute('normal', new THREE.Float32BufferAttribute(Nn, 3));
+        G.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); G.setIndex(I); G.computeBoundingSphere(); return G;
+      };
+      const Mb = at(s, za, 0), place = (mesh) => { mesh.matrixAutoUpdate = false; mesh.matrix.copy(Mb); scene.add(mesh); return mesh; };
+      const E = [ds, 1.7, dz];                                       // titik pandang anamorfik: tengah alun-alun setinggi mata
+      const LCD_VS = /* glsl */`
+        #include <fog_pars_vertex>
+        varying vec3 vLp, vLn;
+        varying vec2 vUv;
+        void main() {
+          vLp = position; vLn = normal; vUv = uv;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`;
+      const LCD_FS = /* glsl */`
+        #include <fog_pars_fragment>
+        uniform sampler2D uBrand;
+        uniform vec3 uE, uO, uCamL;
+        uniform vec2 uS, uY;
+        uniform vec4 uBox;
+        uniform float uT, uNight, uW, uB;
+        varying vec3 vLp, vLn;
+        varying vec2 vUv;
+        float h1(float n) { return fract(sin(n) * 43758.5453); }
+        mat3 rotY(float a) { float c = cos(a), s = sin(a); return mat3(c, 0.0, -s, 0.0, 1.0, 0.0, s, 0.0, c); }
+        mat3 rotX(float a) { float c = cos(a), s = sin(a); return mat3(1.0, 0.0, 0.0, 0.0, c, s, 0.0, -s, c); }
+        vec3 safeDir(vec3 d) { return mix(d, vec3(1e-5), step(abs(d), vec3(1e-5))); }
+        // kotak sejajar sumbu berpusat 0 (setengah ukuran hb): t masuk (-1 = luput), normal muka masuk
+        float boxHit(vec3 ro, vec3 rd, vec3 hb, out vec3 nO) {
+          vec3 rs = safeDir(rd), inv = 1.0 / rs, t1 = (-hb - ro) * inv, t2 = (hb - ro) * inv, tn = min(t1, t2), tf = max(t1, t2);
+          float a = max(max(tn.x, tn.y), tn.z), b = min(min(tf.x, tf.y), tf.z);
+          nO = a == tn.x ? vec3(-sign(rs.x), 0.0, 0.0) : a == tn.y ? vec3(0.0, -sign(rs.y), 0.0) : vec3(0.0, 0.0, -sign(rs.z));
+          return b < max(a, 0.0) ? -1.0 : a;
+        }
+        float sphHit(vec3 ro, vec3 rd, vec3 c, float r) { vec3 oc = ro - c; float b = dot(oc, rd), h = b * b - dot(oc, oc) + r * r; return h < 0.0 ? -1.0 : -b - sqrt(h); }
+        // ruang maya di balik layar (kotak di dalam gedung): dinding berkisi neon berdenyut
+        vec3 room(vec3 ro, vec3 rd, vec3 pal, float lt, out float tW) {
+          vec3 mn = vec3(uBox.x, uY.x, uBox.z), mx = vec3(uBox.y, uY.y, uBox.w), inv = 1.0 / safeDir(rd);
+          vec3 tf = max((mn - ro) * inv, (mx - ro) * inv);
+          float b = min(min(tf.x, tf.y), tf.z); tW = b;
+          vec3 H = ro + rd * b;
+          vec2 q = b == tf.x ? H.zy : b == tf.y ? H.xz : H.xy;
+          vec2 gl2 = abs(fract(q / 2.0 + 0.5) - 0.5) * 2.0;
+          float line = 1.0 - smoothstep(0.0, 0.07, min(gl2.x, gl2.y));
+          float pulse = 0.5 + 0.5 * sin(lt * 3.0 - length(H - uO) * 0.45);
+          return mix(pal * 0.06, pal * (0.5 + 0.9 * pulse), line) * (1.0 - 0.55 * clamp(b / 90.0, 0.0, 1.0));
+        }
+        vec3 atlas(float kind, vec2 l) {                              // sel plang (0) / neon (1) merek uB
+          int b = int(uB + 0.5);
+          float bx = float(b - (b / 8) * 8) * 256.0, by = kind * 768.0 + float(b / 8) * 128.0;
+          vec2 px = clamp(vec2(bx + clamp(l.x, 0.0, 1.0) * 256.0, by + (1.0 - clamp(l.y, 0.0, 1.0)) * 128.0), vec2(bx, by) + 2.0, vec2(bx + 256.0, by + 128.0) - 2.0);
+          return textureLod(uBrand, vec2(px.x / 2048.0, 1.0 - px.y / 4096.0), 0.0).rgb;
+        }
+        void main() {
+          float xs = vUv.x * uW, fwx = fwidth(xs) + fwidth(vLp.y);      // jejak piksel (di luar cabang)
+          vec3 col;
+          if (dot(vLn, uCamL - vLp) < 0.0) col = vec3(0.015);          // punggung layar
+          else {
+            vec3 ro = uE, dv = vLp - uE;
+            float tP = length(dv); vec3 rd = dv / max(tP, 1e-3);
+            float cyc = floor(uT / 9.0), clip = mod(cyc, 4.0), lt = mod(uT, 9.0);
+            vec3 pal = clip < 0.5 ? vec3(0.1, 0.8, 1.0) : clip < 1.5 ? vec3(1.0, 0.25, 0.7) : clip < 2.5 ? vec3(0.7, 0.45, 1.0) : vec3(1.0, 0.65, 0.2);
+            float tW; vec3 c = room(ro, rd, pal, lt, tW);
+            float tMin = tP * 0.45;
+            vec3 outD = vec3(uS.x, 0.0, uS.y), Ld = normalize(vec3(0.4, 1.0, 0.3));
+            float k = smoothstep(0.0, 3.5, lt) - smoothstep(7.5, 9.0, lt);   // benda muncul dari dalam, menonjol keluar layar, lalu kembali
+            vec3 P0 = mix(uO - outD * 14.0, uO + outD * 3.0, k);
+            if (clip < 0.5) {                                        // kubus berputar dengan tepi menyala
+              mat3 Rm = rotY(lt * 0.8) * rotX(0.6 + lt * 0.5), Ri = transpose(Rm);
+              vec3 nO; float t = boxHit(Ri * (ro - P0), Ri * rd, vec3(3.6), nO);
+              if (t > tMin && t < tW) {
+                vec3 a = abs(Ri * (ro + rd * t - P0)) / 3.6;
+                float mid = a.x + a.y + a.z - max(max(a.x, a.y), a.z) - min(min(a.x, a.y), a.z);
+                vec3 fc = abs(nO.x) > 0.5 ? vec3(1.0, 0.45, 0.1) : abs(nO.y) > 0.5 ? vec3(0.1, 0.6, 1.0) : vec3(0.95, 0.95, 0.9);
+                c = fc * (0.25 + 0.75 * max(dot(Rm * nO, Ld), 0.0)) + pal * 2.0 * smoothstep(0.84, 0.95, mid);
+              }
+            } else if (clip < 1.5) {                                 // bola memantul bergaris, memantulkan ruang
+              vec3 cc = P0 + vec3(0.0, 3.0 * abs(sin(lt * 2.2)) - 1.5, 0.0);
+              float t = sphHit(ro, rd, cc, 4.0);
+              if (t > tMin && t < tW) {
+                vec3 n = (ro + rd * t - cc) / 4.0, rr = reflect(rd, n);
+                float az = atan(n.z, abs(n.x) < 1e-5 ? 1e-5 : n.x);
+                vec3 st = step(0.5, fract(az * 1.2732 + n.y * 2.0 + lt)) > 0.5 ? vec3(1.0, 0.2, 0.6) : vec3(0.95);
+                float tw2; vec3 env = room(ro + rd * t, rr, pal, lt, tw2);
+                c = st * (0.2 + 0.8 * max(dot(n, Ld), 0.0)) * 0.7 + env * 0.45;
+              }
+            } else if (clip < 2.5) {                                 // Saturnus dengan cincin miring berputar
+              float t = sphHit(ro, rd, P0, 3.8), best = tW;
+              if (t > tMin && t < best) { vec3 n = (ro + rd * t - P0) / 3.8; best = t;
+                c = mix(vec3(0.85, 0.7, 0.45), vec3(0.98, 0.9, 0.7), 0.5 + 0.5 * sin(n.y * 14.0)) * (0.2 + 0.8 * max(dot(n, Ld), 0.0)); }
+              vec3 nr = rotY(lt * 0.35) * normalize(vec3(0.35, 1.0, 0.15));
+              float dn = dot(rd, nr);
+              if (abs(dn) > 1e-4) {
+                float tr2 = dot(P0 - ro, nr) / dn, rr2 = length(ro + rd * tr2 - P0);
+                if (tr2 > tMin && tr2 < best && rr2 > 5.0 && rr2 < 9.5) c = vec3(0.9, 0.8, 0.62) * (0.55 + 0.45 * sin(rr2 * 7.0)) * (1.0 - 0.5 * smoothstep(7.4, 7.8, rr2) * (1.0 - smoothstep(7.8, 8.2, rr2)));
+              }
+            } else {                                                 // papan merek berayun: muka plang, punggung neon
+              mat3 Rm = rotY(atan(outD.x, outD.z) + sin(lt * 0.9) * 0.9), Ri = transpose(Rm);
+              vec3 nO; float t = boxHit(Ri * (ro - P0), Ri * rd, vec3(6.0, 3.0, 0.35), nO);
+              if (t > tMin && t < tW) {
+                vec3 hl = Ri * (ro + rd * t - P0);
+                vec2 l = vec2(hl.x / 12.0 + 0.5, hl.y / 6.0 + 0.5);
+                c = nO.z > 0.5 ? atlas(0.0, l) * 1.2 : nO.z < -0.5 ? atlas(1.0, vec2(1.0 - l.x, l.y)) * 2.0 : pal * 0.3;
+              }
+            }
+            float g0 = 1.0 - smoothstep(0.0, 0.5, lt);                 // pergantian klip: pita glitch
+            c = mix(c, pal * step(0.5, h1(floor(vLp.y * 3.0) + cyc * 7.0)), g0 * 0.7);
+            // kisi subpiksel RGB pitch 6 cm, hanya terlihat dari dekat (pudar lewat jejak piksel, tanpa moire)
+            float pit = 0.06, kL = 1.0 - smoothstep(pit * 0.2, pit * 0.6, fwx), ph = fract(xs / pit) * 3.0, fy = fract(vLp.y / pit);
+            vec3 sub = vec3(step(ph, 1.0), step(1.0, ph) * step(ph, 2.0), step(2.0, ph)) * smoothstep(0.0, 0.15, fy) * (1.0 - smoothstep(0.85, 1.0, fy));
+            c *= mix(vec3(1.0), sub * 2.6, kL);
+            float edge = smoothstep(0.0, 0.004, vUv.x) * smoothstep(0.0, 0.004, 1.0 - vUv.x) * smoothstep(0.0, 0.01, vUv.y) * smoothstep(0.0, 0.01, 1.0 - vUv.y);
+            col = c * edge * mix(1.8, 1.0, uNight);                   // emisi: siang lebih terang agar tetap terbaca
+          }
+          gl_FragColor = vec4(col, 1.0);
+          #include <colorspace_fragment>
+          #include <fog_fragment>
+        }`;
+      const U = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
+        uBrand: BUILD_U.uBrand, uNight: BUILD_U.uNight, uT: { value: 0 }, uW: { value: len }, uB: { value: 0 },
+        uE: { value: new THREE.Vector3(...E) }, uO: { value: new THREE.Vector3(...O) }, uCamL: { value: new THREE.Vector3() },
+        uS: { value: new THREE.Vector2(...out) }, uY: { value: new THREE.Vector2(y0, y1) }, uBox: { value: new THREE.Vector4(...box) } });
+      const lcd = place(new THREE.Mesh(strip(y0, y1), new THREE.ShaderMaterial({ fog: true, side: THREE.DoubleSide, uniforms: U, vertexShader: LCD_VS, fragmentShader: LCD_FS })));
+      lcd.userData.noLight = true; lcd.userData.noShadow = true;
+      place(new THREE.Mesh(mergeSimple([{ geo: strip(y1, y1 + 0.5), color: DARK }, { geo: strip(y0 - 0.45, y0), color: DARK }]), new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })));
+      // ticker LED berjalan di bawah layar (English: plang dunia game tidak dalam bahasa Indonesia)
+      const tc = document.createElement('canvas'); tc.width = 2048; tc.height = 64;
+      const tex = new THREE.CanvasTexture(tc); tex.colorSpace = THREE.SRGBColorSpace; tex.wrapS = THREE.RepeatWrapping;
+      const TICK_FS = /* glsl */`
+        #include <fog_pars_fragment>
+        uniform sampler2D uTick;
+        uniform vec3 uCamL;
+        uniform float uT, uW, uNight;
+        varying vec3 vLp, vLn;
+        varying vec2 vUv;
+        void main() {
+          vec2 uu = vec2((vUv.x * uW + uT * 4.0) / 38.4, vUv.y);
+          vec3 t = texture2D(uTick, uu).rgb;
+          vec2 dq = fract(vec2(vUv.x * uW, vLp.y) / 0.08) - 0.5;
+          float fw = fwidth(vUv.x * uW), dot2 = mix(1.0 - smoothstep(0.25, 0.45, length(dq)), 0.6, smoothstep(0.02, 0.06, fw));
+          vec3 col = dot(vLn, uCamL - vLp) < 0.0 ? vec3(0.015) : t * dot2 * (1.6 + 0.6 * uNight) + vec3(0.01);
+          gl_FragColor = vec4(col, 1.0);
+          #include <colorspace_fragment>
+          #include <fog_fragment>
+        }`;
+      const UT = Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), { uTick: { value: tex }, uT: U.uT, uW: U.uW, uNight: BUILD_U.uNight, uCamL: U.uCamL });
+      const tick = place(new THREE.Mesh(strip(y0 - 1.75, y0 - 0.65), new THREE.ShaderMaterial({ fog: true, side: THREE.DoubleSide, uniforms: UT, vertexShader: LCD_VS, fragmentShader: TICK_FS })));
+      tick.userData.noLight = true; tick.userData.noShadow = true;
+      const drawTick = () => {
+        const c = tc.getContext('2d'), H = Number.isFinite(clock.hour) ? clock.hour : 12, hh = Math.floor(H), mm = Math.floor((H % 1) * 60);
+        let wx = 'CLEAR';
+        try { const cv = WEATHER.cover; wx = RAIN.k > 0.1 ? 'RAIN' : cv > 0.6 ? 'OVERCAST' : cv > 0.3 ? 'CLOUDY' : 'CLEAR'; } catch (e) { /* cuaca belum siap */ }
+        let ecl = '';
+        try { const se = eclipseIn(), eh = Math.floor(se / 3600), em = Math.floor((se % 3600) / 60); ecl = `NEXT SATURN ECLIPSE IN ${eh} H ${em} MIN`; } catch (e) { /* orbit belum siap */ }
+        const txt = ['COPPER CORN STATION', `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`, 'SPIN 63.4 S', '1.00 G', wx, ecl, 'TRAMS EVERY 4 MIN', 'NEW YORK SQUARE'].filter(Boolean).join('   •   ') + '   •   ';
+        c.fillStyle = '#000'; c.fillRect(0, 0, 2048, 64); c.fillStyle = '#ffb02e'; c.font = 'bold 40px "Courier New", "Liberation Mono", monospace'; c.textBaseline = 'middle';
+        const wT = c.measureText(txt).width || 1;
+        for (let x = 0; x < 2048; x += wT) c.fillText(txt, x, 34);
+        tex.needsUpdate = true;
+      };
+      drawTick();
+      // papan neon tegak di gedung sekitar alun-alun (bilah tegak lurus dinding, dua muka, sebagian berkedip)
+      let nn = 0;
+      for (const e of flat) {
+        if (nn >= 10) break;
+        const [s2, z2, w2, d2, h2, el2] = e;
+        if (e === best || el2 > 0.5 || h2 < 12 || inSite(s2, z2)) continue;
+        const ds2 = wrapS(aS - s2), dz2 = aZ - z2;
+        if (Math.hypot(ds2, dz2) > 95 || r() > 0.7) continue;
+        const fx = Math.abs(ds2) - w2 / 2 > Math.abs(dz2) - d2 / 2, f = fx ? Math.sign(ds2) || 1 : Math.sign(dz2) || 1, span = fx ? d2 : w2;
+        if (span < 8) continue;
+        for (let q = 0; q < 2 && nn < 10; q++, nn++) {
+          const tt = (r() - 0.5) * (span - 4), y = 4 + r() * Math.max(1, Math.min(h2 - 8, 14)), b = brand('neon', s2, z2), lit = r() < 0.3 ? 2 : 1;
+          const m = at(s2, z2, 0); tr(m, fx ? f * (w2 / 2 + 0.8) : tt, y + 1.6, fx ? tt : f * (d2 / 2 + 0.8));
+          if (!fx) ry(m, Math.PI / 2);                               // bilah selalu di bidang yz lokal (menonjol searah normal muka)
+          solid('ikNeonBox', mergeSimple([{ geo: g(1.4, 3.2, 0.12, 0, 0, 0), color: DARK }]), 600, m, s2, z2);
+          for (const f2 of [1, -1]) sign('ikNeonS', 600, ry(tr(m.clone(), 0, 0, f2 * 0.07), f2 > 0 ? 0 : Math.PI), 1.3, 2.6, b, 'tegak', lit, s2, z2);
+        }
+      }
+      // cahaya layar ke sekitar: titik 8 m di depan tengah layar, warna rata-rata klip
+      const lp = new THREE.Vector3(O[0] + out[0] * 10, (y0 + y1) / 2, O[2] + out[1] * 10), lw = new THREE.Vector3(), inv = new THREE.Matrix4();
+      const CLIP_COL = [[0.35, 0.6, 0.85], [0.85, 0.35, 0.6], [0.6, 0.5, 0.9], [0.9, 0.65, 0.35]];
+      const ADS = K.POOL['en:lcd'] || K.POOL['en:reklame'] || [0];
+      Object.assign(NEON, { on: true, mesh: lcd, U, s, za, building: best, diag, len });
+      IKLAN.update = () => {
+        const now = performance.now() / 1000, dt = Math.min(0.1, Math.max(0, now - (NEON.last || now))); NEON.last = now;
+        inv.copy(lcd.matrixWorld).invert();
+        U.uCamL.value.copy(camera.position).applyMatrix4(inv);
+        const near = U.uCamL.value.length() < 600;
+        if (!NEON.static && near) NEON.t += dt;
+        U.uT.value = NEON.t;
+        const ci = Math.floor(NEON.t / 9) % 4;
+        if (ci !== NEON.ci) { NEON.ci = ci; if (ci === 3) U.uB.value = ADS[Math.floor(NEON.t / 36) % ADS.length]; }
+        const c = CLIP_COL[ci];
+        lw.copy(lp).applyMatrix4(lcd.matrixWorld);
+        LIGHT.uniforms.uL_Neon.value.set(lw.x, lw.y, lw.z, NEON.static || !near ? 0 : 0.7 * BUILD_U.uNight.value);
+        LIGHT.uniforms.uL_NeonCol.value.set(c[0], c[1], c[2]);
+        if (near && now - NEON.tick > 5) { NEON.tick = now; drawTick(); }
+      };
+    }
+  }
+
+  // ---- daftarkan semua papan ke FURN (dikirim ke GPU dalam radius, tanpa loop baru per frame) ----
+  for (const [name, o] of Object.entries(L)) {
+    const n = o.items.length; IKLAN.count[name] = n; if (!n) continue;
+    const mesh = new THREE.InstancedMesh(o.geo, o.sign ? signMat : new THREE.MeshBasicMaterial({ vertexColors: true }), n);
+    const mats = new Float32Array(n * 16), ps = new Float32Array(n), pz = new Float32Array(n), cols = o.sign ? new Float32Array(n * 3) : null;
+    o.items.forEach(([m, s, za, c], i) => { m.toArray(mats, i * 16); ps[i] = s; pz[i] = za; if (cols) cols.set(c, i * 3); });
+    mesh.count = 0; mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (cols) { mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage); mesh.userData.noLight = true; mesh.userData.noShadow = true; }
+    scene.add(mesh);
+    FURN.kinds[name] = { mesh, mats, ps, pz, n, range: o.range, base: o.range, idx: null, cols, iklan: true };
+    FURN.total += n;
+  }
+  // 27f: radius papan per preset (Ultra / Tinggi penuh, Sedang 0,8, Rendah 0,6, Hemat 0,45); Hemat: layar LCD diam, tanpa cahaya layar
+  const RK = [1, 1, 0.8, 0.6, 0.45];
+  const applyIklanPreset = (i) => { for (const F of Object.values(FURN.kinds)) if (F.iklan) F.range = F.base * RK[i]; FURN.lastS = 1e9; NEON.static = i === 4; };
+  PRESET_HOOKS.push(applyIklanPreset); applyIklanPreset(PRESET.idx);
   FURN.lastS = 1e9;
 }
 // --- bendera dan umbul-umbul (kain berkibar di shader) ---
