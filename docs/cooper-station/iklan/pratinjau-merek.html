@@ -24,17 +24,20 @@
   .meta { font-size: 13px; color: var(--mut); margin-top: 6px; }
   .meta b { color: var(--tx); }
   #street { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
-  #atlas { width: 100%; max-width: 640px; height: auto; border: 1px solid var(--line); image-rendering: auto; }
+  .grp { font-size: 14px; color: var(--ac); margin: 18px 0 8px; grid-column: 1 / -1; }
+  #atlas { width: 100%; max-width: 480px; height: auto; border: 1px solid var(--line); image-rendering: auto; }
 </style>
 </head>
 <body>
 <header>
   <h1 data-t="judul">Pratinjau merek fiktif (tahap 27a)</h1>
   <p data-t="ket">Semua merek buatan sendiri, bukan merek dunia nyata. Logo digambar dari bentuk dasar. Belum dipasang di game.</p>
+  <p data-t="ket2">Plang memakai bahasa distrik (merek global berbahasa English), tidak ikut bahasa halaman.</p>
   <div class="bar">
     <button id="lId">Indonesia</button><button id="lEn">English</button>
     <button id="tDay" data-t="siang">Siang</button><button id="tNight" data-t="malam">Malam</button>
   </div>
+  <div class="bar" id="dists"></div>
 </header>
 <main>
   <h2 data-t="jalan">Contoh deret toko</h2>
@@ -49,13 +52,18 @@
   const K = window.BRANDKIT;
   const TXT = {
     id: { judul: 'Pratinjau merek fiktif (tahap 27a)', ket: 'Semua merek buatan sendiri, bukan merek dunia nyata. Logo digambar dari bentuk dasar. Belum dipasang di game.',
-      siang: 'Siang', malam: 'Malam', jalan: 'Contoh deret toko', merek: 'Merek (plang siang, neon malam, tegak, logo)', atlas: 'Atlas 2048 x 2048 (satu tekstur untuk semua papan)', pakai: 'Dipakai' },
+      ket2: 'Plang memakai bahasa distrik (merek global berbahasa English), tidak ikut bahasa halaman.',
+      siang: 'Siang', malam: 'Malam', jalan: 'Contoh deret toko (pilih distrik di atas)', merek: 'Merek per bahasa (plang siang, neon malam, tegak, logo)', atlas: 'Atlas 2048 x 4096 (satu tekstur untuk semua papan)', pakai: 'Dipakai', glob: 'Global (semua distrik)' },
     en: { judul: 'Fictional brand preview (stage 27a)', ket: 'All brands are original, not real-world brands. Logos are drawn from basic shapes. Not in the game yet.',
-      siang: 'Day', malam: 'Night', jalan: 'Shop row example', merek: 'Brands (day sign, night neon, vertical, logo)', atlas: 'Atlas 2048 x 2048 (one texture for every sign)', pakai: 'Used for' },
+      ket2: 'Signs use the district language (global brands in English), independent of the page language.',
+      siang: 'Day', malam: 'Night', jalan: 'Shop row example (pick a district above)', merek: 'Brands by language (day sign, night neon, vertical, logo)', atlas: 'Atlas 2048 x 4096 (one texture for every sign)', pakai: 'Used for', glob: 'Global (every district)' },
   };
   const USE = { id: { toko: 'toko', kantor: 'kantor', reklame: 'reklame', suburban: 'suburban', neon: 'neon', lcd: 'LCD' },
     en: { toko: 'shop', kantor: 'office', reklame: 'billboard', suburban: 'suburb', neon: 'neon', lcd: 'LCD' } };
-  let lang = 'id', night = false, atlas = null;
+  const LANGN = { ja: 'Jepang / Japanese', zh: 'Mandarin / Chinese', ar: 'Arab / Arabic', hi: 'Hindi', ru: 'Rusia / Russian', uk: 'Ukraina / Ukrainian',
+    de: 'Jerman / German', it: 'Italia / Italian', pl: 'Polandia / Polish', el: 'Yunani / Greek', es: 'Spanyol / Spanish', vi: 'Vietnam / Vietnamese', uz: 'Uzbek' };
+  const DIST = ['New York', 'Tokyo', 'Shanghai', 'Kairo', 'Delhi', 'Tsiolkovsky', 'Kepler', 'Galileo', 'Hypatia', 'Pampas', 'Taman Mekong', 'Ulugh Beg'];
+  let lang = 'id', night = false, dist = 'Tokyo', atlas = null;
   try { lang = new URLSearchParams(location.search).get('lang') || localStorage.getItem('lazarus.lang') || 'id'; } catch (e) {}
   if (lang !== 'en') lang = 'id';
 
@@ -64,37 +72,49 @@
     cv.width = c.w * scale; cv.height = c.h * scale;
     cv.getContext('2d').drawImage(atlas, c.x, c.y, c.w, c.h, 0, 0, cv.width, cv.height); return cv;
   }
+  const distsOf = (l) => Object.keys(K.DISTRICT_LANG).filter((d) => K.DISTRICT_LANG[d] === l).join(', ');
   function cards() {
     const box = document.getElementById('cards'); box.innerHTML = '';
-    K.BRANDS.forEach((B, b) => {
-      const d = document.createElement('div'); d.className = 'card';
-      const r1 = document.createElement('div'); r1.className = 'row'; r1.append(crop('plang', b, 0.62), crop('neon', b, 0.62));
-      const r2 = document.createElement('div'); r2.className = 'row'; r2.style.marginTop = '8px'; r2.append(crop('tegak', b, 0.5), crop('logo', b, 0.5));
-      const m = document.createElement('div'); m.className = 'meta';
-      m.innerHTML = `<b>${B.name}</b>${B.cjk ? ' · ' + B.cjk : ''} · ${TXT[lang].pakai}: ${B.use.map((u) => USE[lang][u]).join(', ')}`;
-      d.append(r1, r2, m); box.append(d);
-    });
+    const langs = ['en', ...new Set(K.BRANDS.map((B) => B.lang).filter((l) => l !== 'en'))];
+    for (const l of langs) {
+      const h = document.createElement('div'); h.className = 'grp';
+      h.textContent = l === 'en' ? TXT[lang].glob + ' · English' : LANGN[l] + ' · ' + distsOf(l); box.append(h);
+      K.BRANDS.forEach((B, b) => {
+        if (B.lang !== l) return;
+        const d = document.createElement('div'); d.className = 'card';
+        const r1 = document.createElement('div'); r1.className = 'row'; r1.append(crop('plang', b, 0.62), crop('neon', b, 0.62));
+        const r2 = document.createElement('div'); r2.className = 'row'; r2.style.marginTop = '8px'; r2.append(crop('tegak', b, 0.5), crop('logo', b, 0.5));
+        const m = document.createElement('div'); m.className = 'meta';
+        m.innerHTML = `<b>${B.local || B.name}</b>${B.local ? ' · ' + B.name : ''} · ${TXT[lang].pakai}: ${B.use.map((u) => USE[lang][u]).join(', ')}`;
+        d.append(r1, r2, m); box.append(d);
+      });
+    }
   }
-  // deret toko: dinding bata, 6 modul toko, plang per modul (siang: plang, malam: neon menyala di dinding gelap)
+  function distBar() {
+    const bar = document.getElementById('dists'); bar.innerHTML = '';
+    for (const d of DIST) { const e = document.createElement('button'); e.textContent = d; e.classList.toggle('on', d === dist); e.onclick = () => { dist = d; distBar(); street(); }; bar.append(e); }
+  }
+  // deret toko: dinding bata, 6 modul toko, merek dipilih pick() untuk distrik terpilih (siang: plang, malam: neon)
   function street() {
     const cv = document.getElementById('street'), g = cv.getContext('2d'), W = cv.width, H = cv.height;
     g.fillStyle = night ? '#1b0f0c' : '#8a4632'; g.fillRect(0, 0, W, H);
     g.fillStyle = night ? '#140b09' : '#7a3c2a';
     for (let y = 0; y < H; y += 14) for (let x = (y / 14) % 2 ? -20 : 0; x < W; x += 40) g.fillRect(x, y + 12, 40, 2), g.fillRect(x, y, 2, 14);
-    for (let i = 0; i < 6; i++) for (let j = 0; j < 2; j++) {                    // jendela atas
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 2; j++) {
       g.fillStyle = night ? (Math.sin(i * 7 + j) > 0 ? '#e8b866' : '#141820') : '#2a3442';
       g.fillRect(40 + i * 260 + 60, 30 + j * 110, 80, 80);
     }
-    const shops = [0, 10, 1, 16, 15, 17];
+    const seen = new Set(), shops = [];
+    for (let k = 0; shops.length < 6 && k < 60; k++) { const b = K.pick(((k * 0.6180339887) + 0.13) % 1, 'toko', dist); if (!seen.has(b)) { seen.add(b); shops.push(b); } }
     shops.forEach((b, i) => {
-      const x = 20 + i * 260, y = 260, w = 240;
-      const sign = crop(night ? 'neon' : 'plang', b, 1);
+      const x = 20 + i * 260, y = 260, w = 240, sign = crop(night ? 'neon' : 'plang', b, 1);
       if (night) { g.save(); g.shadowColor = K.BRANDS[b].neon; g.shadowBlur = 30; g.drawImage(sign, x, y, w, 120); g.restore(); }
       else g.drawImage(sign, x, y, w, 120);
       g.fillStyle = night ? '#ffe6b0' : '#33424f'; g.globalAlpha = night ? 0.7 : 1; g.fillRect(x + 10, y + 140, w - 90, 150); g.globalAlpha = 1;   // etalase
       g.fillStyle = '#1a1210'; g.fillRect(x + w - 70, y + 140, 60, 160);                                                                       // pintu
     });
-    const T = crop('tegak', 18, 1); if (night) { g.save(); g.shadowColor = K.BRANDS[18].neon; g.shadowBlur = 24; }
+    const tb = shops.find((b) => K.BRANDS[b].lang !== 'en') ?? shops[0], T = crop('tegak', tb, 1);
+    if (night) { g.save(); g.shadowColor = K.BRANDS[tb].neon; g.shadowBlur = 24; }
     g.drawImage(T, W - 110, 20, 80, 160); if (night) g.restore();
   }
   function render() {
@@ -102,13 +122,13 @@
     document.querySelectorAll('[data-t]').forEach((e) => { e.textContent = TXT[lang][e.dataset.t]; });
     document.getElementById('lId').classList.toggle('on', lang === 'id'); document.getElementById('lEn').classList.toggle('on', lang === 'en');
     document.getElementById('tDay').classList.toggle('on', !night); document.getElementById('tNight').classList.toggle('on', night);
-    atlas = K.draw(atlas, lang).canvas; document.getElementById('atlas').width = K.SIZE; document.getElementById('atlas').height = K.SIZE;
-    document.getElementById('atlas').getContext('2d').drawImage(atlas, 0, 0);
-    cards(); street();
+    if (!atlas) atlas = K.draw(null).canvas;
+    const A = document.getElementById('atlas'); A.width = K.W; A.height = K.H; A.getContext('2d').drawImage(atlas, 0, 0);
+    distBar(); cards(); street();
   }
   document.getElementById('lId').onclick = () => { lang = 'id'; render(); };
   document.getElementById('lEn').onclick = () => { lang = 'en'; render(); };
-  document.getElementById('tDay').onclick = () => { night = false; street(); render(); };
+  document.getElementById('tDay').onclick = () => { night = false; render(); };
   document.getElementById('tNight').onclick = () => { night = true; render(); };
   (document.fonts ? document.fonts.ready : Promise.resolve()).then(render);
 </script>

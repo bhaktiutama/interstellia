@@ -25,8 +25,8 @@ Per 16 Oktober 2026 · disusun atas permintaan Bhakti
 
 1. Pertahankan yang ada: `?iklan=0` = kota sebelum tahap 27 persis (pola `?ragam=0`, `?mobil=lama`). Generator acak sendiri `r27()` agar urutan acak lama tidak bergeser.
 2. Semua merek fiktif buatan sendiri: tidak ada merek dunia nyata, tidak ada judul, logo, atau huruf film. Tema ekonomi stasiun: pangan hidroponik, logistik orbit, wahana, asuransi radiasi, kopi, klinik, minuman, bank, tur Saturnus, toko sepeda, laundry, roti.
-3. Satu atlas merek `BRAND` (kanvas 2048 x 2048 dibuat saat muat dari tabel `BRANDS`: nama, warna, bentuk logo primitif, gaya huruf, varian terang dan gelap) dipakai semua jenis papan: satu tekstur, sedikit draw call, tanpa aset luar.
-4. Slogan dua bahasa lewat `t()` + `I18N.en` (`tools/uji_bahasa.py` tetap lulus). Nama merek tidak diterjemahkan.
+3. Satu atlas merek `BRAND` (kanvas 2048 x 4096 dibuat saat muat dari tabel `BRANDS`: nama, warna, bentuk logo primitif, gaya huruf, varian terang dan gelap) dipakai semua jenis papan: satu tekstur, sedikit draw call, tanpa aset luar.
+4. Plang di dunia game memakai bahasa distrik, tidak dalam bahasa Indonesia dan tidak ikut bahasa UI (permintaan Bhakti 16 Oktober): merek global berbahasa English, merek lokal berbahasa distriknya (`DISTRICT_LANG`, tabel di bawah). Di distrik berbahasa lokal sekitar 60% toko memakai merek lokal dan 40% merek global; distrik English hanya merek global.
 5. Papan 3D lewat pola `FURN.kinds` (radius, `updateFurniture()`, tanpa loop baru per frame) dengan atribut indeks sel atlas per instance; menyala malam lewat `BUILD_U.uNight`; siang dicahayai `patchLit`.
 6. Kepadatan ikut `cityDensity()` / `districtAt()`: pusat megacity padat, distrik astronom sedang, suburban jarang dan kecil, ladang dan hutan nol.
 7. Aturan P1 muat: material layar penuh baru lewat `fsMat()`, objek baru ikut `warmFrame()`; `tools/ukur_muat.py cooper-station --cek` tetap 0 program baru di frame pertama.
@@ -51,7 +51,7 @@ Toko yang ada di kode = lantai dasar bertoko di `BUILD_FS`, lapak pasar, dan kaf
 
 | Tahap | Isi | Fungsi / file disentuh | Effort | Model | Thinking |
 | --- | --- | --- | --- | --- | --- |
-| 27a | Atlas merek `BRAND` + tabel `BRANDS` (sekitar 24 merek fiktif, logo primitif kanvas, varian terang / gelap, sel 256 x 128, mipmap) + halaman pratinjau `docs/cooper-station/iklan/pratinjau-merek.html` untuk disetujui Bhakti sebelum dipasang | blok baru setelah `RAGAM_DET` | Medium | Sonnet 5.5 | medium |
+| 27a | Atlas merek `BRAND` + tabel `BRANDS` (48 merek fiktif: 19 global English + 29 lokal dalam 13 bahasa, logo primitif kanvas, varian terang / gelap, sel 256 x 128, mipmap) + halaman pratinjau `docs/cooper-station/iklan/pratinjau-merek.html` untuk disetujui Bhakti sebelum dipasang | blok baru setelah `RAGAM_DET` | Medium | Sonnet 5.5 | medium |
 | 27b | Semua lantai toko memakai atlas: gaya 12 per modul (nama merek menggantikan huruf hash, menyala malam seperti `neon`), gaya 2 / 11 / lain per toko 1-3 etalase, gaya 13 papan perusahaan di lobi; dari jauh plang memudar ke warna rata-rata sel (tanpa kedip) | `BUILD_FS` blok 22a dan sekitar 4355, sampler `uBrand` di `BUILD_U` | High (shader gedung bersama, rawan NaN M1) | Opus 5.5 | high |
 | 27c | Kota: reklame atap (rangka besi + panel, menyala malam, di atap gedung rendah pusat dekat arteri), logo puncak menara kaca dan kantor > 60 m (satu merek per gedung, menyala), blade sign `RAGAM_DET` diberi logo, panel iklan berlampu di halte bus dan halte trem, papan lapak pasar, nama kafe di payung | `RAGAM_DET`, halte 24d, `STOP_LIGHT`, `KACA`, `MARKET`, `VIBE`, `FURN.kinds` | Medium | Sonnet 5.5 | medium |
 | 27d | Suburban dan distrik astronom: minimarket / warung di sudut simpang permukiman (bangunan kecil baru di lahan kosong, rumah lama tetap), billboard tiang tunggal di tepi boulevard dan jalan lingkar (jarang, jarak min 300 m), iklan dinding pudar di sisi buta bata, poster di pagar proyek; pasar tani: papan koperasi tani | `fillHomes()` (titik baru saja), `BLVD`, `MARKET`, kolider `addCollider()` | Medium | Sonnet 5.5 | medium |
@@ -78,7 +78,7 @@ Urutan: 27a dulu (pratinjau merek disetujui), lalu 27b dan 27c, 27d, 27e, terakh
 
 | Item | Perkiraan | Dasar |
 | --- | --- | --- |
-| Atlas merek | 16 MB GPU, sekitar 21 MB dengan mipmap | 2048 x 2048 x 4 byte; mipmap + 1/3 |
+| Atlas merek | 32 MB GPU, sekitar 43 MB dengan mipmap | 2048 x 4096 x 4 byte; mipmap + 1/3 |
 | Papan 3D | +5-8 draw call | satu InstancedMesh per jenis papan |
 | LCD | 1 target 512 x 384 + 1 pass prosedural, hanya saat dekat | 27e |
 | Shader gedung | 1 sampel tekstur tambahan per piksel lantai toko | 27b |
@@ -101,6 +101,7 @@ Angka sebenarnya diukur di 27f dengan `GPUT` dan `tools/ukur_muat.py`; FPS di GT
 | --- | --- |
 | Lokasi LCD | alun-alun New York |
 | Huruf | merek fiktif; boleh huruf Jepang dan Mandarin dekoratif (terutama neon dan LCD) |
+| Bahasa plang | English atau bahasa lain sesuai distrik, jangan bahasa Indonesia |
 | Konten LCD | ilusi 3D anamorfik |
 | Kepadatan iklan suburban | jarang |
 
@@ -108,5 +109,26 @@ Angka sebenarnya diukur di 27f dengan `GPUT` dan `tools/ukur_muat.py`; FPS di GT
 
 | Tahap | Status |
 | --- | --- |
-| 27a | dikerjakan: modul bersama `shared/brand.js` (`window.BRANDKIT`: tabel `BRANDS`, `draw(canvas, lang)` atlas 2048 x 2048, `cell(i, kind)`, warna rata-rata per sel) + pratinjau `docs/cooper-station/iklan/pratinjau-merek.html`; belum dipasang di game, menunggu persetujuan merek. Gambar: `iklan/pratinjau-merek.png` (24 merek x 4 jenis sel), `iklan/pratinjau-malam.png` (deret toko malam) |
+| 27a | dikerjakan (revisi bahasa distrik): modul bersama `shared/brand.js` (`window.BRANDKIT`: 48 merek `BRANDS` dengan `lang` dan `local`, `DISTRICT_LANG`, `pick(u, use, district)`, `draw(canvas)` atlas 2048 x 4096, `cell(i, kind)`, warna rata-rata per sel) + pratinjau `docs/cooper-station/iklan/pratinjau-merek.html` (kelompok per bahasa, contoh deret toko per distrik); belum dipasang di game, menunggu persetujuan merek. Gambar: `iklan/pratinjau-merek.png`, `iklan/malam-tokyo.png`, `malam-kairo.png`, `malam-delhi.png`, `malam-galileo.png` |
 | 27b-27f | belum |
+
+## Bahasa plang per distrik
+
+| Distrik | Bahasa plang lokal | Merek lokal (fiktif) |
+| --- | --- | --- |
+| New York, Sagan, Chandrasekhar, Iowa, di luar distrik | English | hanya merek global (19) |
+| Tokyo | Jepang | 空ラーメン, ネオン堂, 星喫茶 |
+| Shanghai | Mandarin | 环星电器, 土星茶, 土星面馆 |
+| Kairo, Al-Battani, Taman Nil | Arab | مقهى الحلقة, صيدلية المحور, مخبز النيل |
+| Delhi, Punjab | Hindi | चक्र चाय, तारा मिठाई |
+| Tsiolkovsky | Rusia | ОРБИТА ХЛЕБ, АПТЕКА ОСЬ |
+| Ukraina | Ukraina | ЗОРЯНА КАВА, ПОЛЕ АГРО |
+| Kepler | Jerman | KEPLER APOTHEKE, BÄCKEREI ORBIT |
+| Galileo | Italia | CAFFÈ ANELLO, TRATTORIA ORBITA |
+| Copernicus | Polandia | PIEKARNIA ORBITA, KWIACIARNIA GWIAZDA |
+| Hypatia | Yunani | ΦΟΥΡΝΟΣ ΤΡΟΧΙΑ, ΚΑΦΕΝΕΙΟ ΔΑΚΤΥΛΙΟΣ |
+| Pampas | Spanyol | PANADERÍA LA ÓRBITA, PARRILLA EL ANILLO |
+| Taman Mekong | Vietnam | PHỞ VÀNH ĐAI, CÀ PHÊ SAO |
+| Ulugh Beg | Uzbek | NON UYI, CHOYXONA YULDUZ |
+
+Catatan font: huruf Arab dan Hindi memakai font sistem (Windows: Segoe UI / Tahoma, Nirmala UI / Mangal; Mac: Geeza Pro, Kohinoor / Devanagari Sangam). Di sandbox tampil benar (FreeSerif); di GTX 1060 dan M1 belum dicek.
