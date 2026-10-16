@@ -14310,29 +14310,18 @@ if (IKLAN.on) {
     // alun-alun (seberang satu jalan), tiap tata letak diuji garis pandang dari mata 1,7 m ke 7 titik layar; bila tidak ada yang
     // terlihat penuh, layar berdiri sendiri di tepi alun-alun yang searah pandangan awal (ke menara ikon).
     const q = al.q, near = flat.filter((o) => Math.hypot(wrapS(o[0] - aS), o[1] - aZ) < 260);
-    const layout = (e, mode) => {                                    // tata letak di kerangka gedung (x sepanjang s, z sepanjang za)
+    const layout = (e, gh = 0) => {                                  // 28h: selalu siku (dua muka + busur), kerangka gedung (x sepanjang s, z sepanjang za)
       const [s, za, w, d, h] = e, ds = wrapS(aS - s), dz = aZ - za, sx = Math.sign(ds) || 1, sz = Math.sign(dz) || 1;
       const y0 = 7, y1 = Math.min(h - 2, 30), cx = sx * w / 2, cz = sz * d / 2, pts = [];
-      let O, out, box;
-      if (mode === 'diag') {                                         // dua muka + busur: layar 2,5 m di depan dinding, busur jari-jari 8 m mengitari sudut
-        const OFF = 2.5, A = 5.5, RR = A + OFF, La = Math.min(10, d - A - 4), Lb = Math.min(10, w - A - 4);
-        for (let i = 0; i <= 4; i++) pts.push([cx + sx * OFF, cz - sz * (A + La * (1 - i / 4)), sx, 0]);
-        for (let i = 1; i < 12; i++) { const a = i / 12 * Math.PI / 2, nx = sx * Math.cos(a), nz = sz * Math.sin(a); pts.push([cx - sx * A + nx * RR, cz - sz * A + nz * RR, nx, nz]); }
-        for (let i = 0; i <= 4; i++) pts.push([cx - sx * (A + Lb * i / 4), cz + sz * OFF, 0, sz]);
-        O = [cx - sx * 2, (y0 + y1) / 2, cz - sz * 2]; out = [sx * Math.SQRT1_2, sz * Math.SQRT1_2];
-        box = [Math.min(cx - sx * 24, cx + sx * (OFF + 0.1)), Math.max(cx - sx * 24, cx + sx * (OFF + 0.1)), Math.min(cz - sz * 24, cz + sz * (OFF + 0.1)), Math.max(cz - sz * 24, cz + sz * (OFF + 0.1))];
-      } else if (mode === 'x') {                                     // satu muka x (normal sx)
-        const Lf = Math.min(30, d - 4);
-        for (let i = 0; i <= 6; i++) pts.push([cx + sx * 0.6, (i / 6 - 0.5) * Lf * sx, sx, 0]);
-        O = [cx - sx * 2, (y0 + y1) / 2, 0]; out = [sx, 0];
-        box = [Math.min(cx - sx * 22, cx + sx * 0.7), Math.max(cx - sx * 22, cx + sx * 0.7), -Lf / 2, Lf / 2];
-      } else {                                                       // satu muka z (normal sz)
-        const Lf = Math.min(30, w - 4);
-        for (let i = 0; i <= 6; i++) pts.push([(0.5 - i / 6) * Lf * sz, cz + sz * 0.6, 0, sz]);
-        O = [0, (y0 + y1) / 2, cz - sz * 2]; out = [0, sz];
-        box = [-Lf / 2, Lf / 2, Math.min(cz - sz * 22, cz + sz * 0.7), Math.max(cz - sz * 22, cz + sz * 0.7)];
-      }
-      return { e, diag: mode === 'diag', s, za, pts, y0, y1, O, out, box, E: [ds, 1.7, dz], M: at(s, za, 0), world: (x, z) => [s + x, za + z] };
+      // layar 2,5 m di depan dinding, busur jari-jari A + 2,5 mengitari sudut (sudut kotak di dalam busur bila A < 6)
+      const OFF = 2.5, A = Math.min(5.5, Math.min(w, d) * 0.35), RR = A + OFF;
+      const La = Math.max(3, Math.min(10, d - A - 3)), Lb = Math.max(3, Math.min(10, w - A - 3));
+      for (let i = 0; i <= 4; i++) pts.push([cx + sx * OFF, cz - sz * (A + La * (1 - i / 4)), sx, 0]);
+      for (let i = 1; i < 12; i++) { const a = i / 12 * Math.PI / 2, nx = sx * Math.cos(a), nz = sz * Math.sin(a); pts.push([cx - sx * A + nx * RR, cz - sz * A + nz * RR, nx, nz]); }
+      for (let i = 0; i <= 4; i++) pts.push([cx - sx * (A + Lb * i / 4), cz + sz * OFF, 0, sz]);
+      const O = [cx - sx * 2, (y0 + y1) / 2, cz - sz * 2], out = [sx * Math.SQRT1_2, sz * Math.SQRT1_2];
+      const box = [Math.min(cx - sx * 24, cx + sx * (OFF + 0.1)), Math.max(cx - sx * 24, cx + sx * (OFF + 0.1)), Math.min(cz - sz * 24, cz + sz * (OFF + 0.1)), Math.max(cz - sz * 24, cz + sz * (OFF + 0.1))];
+      return { e, diag: true, s, za, pts, y0, y1, O, out, box, E: [ds, 1.7, dz], M: at(s, za, gh), world: (x, z) => [s + x, za + z] };
     };
     const seen = (skip, ps, pz, ph) => {                             // garis mata -> titik layar tidak memotong gedung yang lebih tinggi dari garis di titik masuk
       const dx = wrapS(ps - aS), dz = pz - aZ;
@@ -14349,43 +14338,38 @@ if (IKLAN.on) {
       }
       return true;
     };
-    const visFrac = (Lt) => {
-      const P = Lt.pts, ids = [0, P.length >> 1, P.length - 1], hs = [Lt.y0 + 1, Lt.y1 - 1];
-      const smp = [...ids.flatMap((i) => hs.map((y) => [P[i][0], P[i][1], y])), [P[P.length >> 1][0], P[P.length >> 1][1], (Lt.y0 + Lt.y1) / 2]];
-      return smp.filter(([x, z, y]) => { const [ps, pz] = Lt.world(x, z); return seen(Lt.e, ps, pz, y); }).length / smp.length;
+    // 28h: titik uji = busur tengah (bawah, tengah, atas) + tengah tiap sayap (bawah, atas); ujung sayap tidak diuji (wajar tertutup tetangga).
+    // Lolos bila busur tengah terlihat penuh dan >= 5 dari 7 titik terlihat.
+    const visOK = (Lt) => {
+      const P = Lt.pts, m = P.length >> 1, y0 = Lt.y0 + 1, y1 = Lt.y1 - 1, ym = (Lt.y0 + Lt.y1) / 2;
+      const ok = ([i, y]) => { const [ps, pz] = Lt.world(P[i][0], P[i][1]); return seen(Lt.e, ps, pz, y); };
+      if (![[m, y0], [m, ym], [m, y1]].every(ok)) return false;
+      return 3 + [[2, y0], [2, y1], [P.length - 3, y0], [P.length - 3, y1]].filter(ok).length >= 5;
     };
     let L = null, bsc = -1;
     for (const e of near) {
       const [s, za, w, d, h, el, , st] = e;
-      if (el > 0.5 || h < 22 || Math.min(w, d) < 16 || st === 14 || inSite(s, za)) continue;
+      if (el > 0.5 || h < 19 || Math.min(w, d) < 14 || st === 14 || inSite(s, za)) continue;
       const ds = wrapS(aS - s), dz = aZ - za, gx = Math.abs(ds) - w / 2 - q.bw / 2, gz = Math.abs(dz) - d / 2 - q.bd / 2;
       if (Math.max(gx, gz) > 35 || (gx <= 0 && gz <= 0)) continue;   // di tepi alun-alun (seberang satu jalan), tidak menumpuk
-      const ox = Math.abs(ds) >= w / 2 + 5, oz = Math.abs(dz) >= d / 2 + 5;
-      const Lt = layout(e, ox && oz ? 'diag' : ox ? 'x' : 'z');
-      if (Lt.y1 - Lt.y0 < 12) continue;
-      const f = visFrac(Lt);
-      if (f < 0.99) continue;
-      const sc = Math.min(Lt.y1 - Lt.y0, 23) * (Lt.diag ? 1.3 : 1) / (Math.hypot(ds, dz) + 20);
+      if (Math.abs(ds) < w / 2 + 5 || Math.abs(dz) < d / 2 + 5) continue;   // hanya gedung di diagonal alun-alun: kedua muka sudutnya menghadap alun-alun
+      const Lt = layout(e);
+      if (Lt.y1 - Lt.y0 < 10 || !visOK(Lt)) continue;
+      const sc = Math.min(Lt.y1 - Lt.y0, 23) / (Math.hypot(ds, dz) + 20);
       if (sc > bsc) { bsc = sc; L = Lt; }
     }
-    if (!L) {                                                        // layar berdiri sendiri di tepi alun-alun, menghadap pusat
-      const hd = Math.atan2(wrapS(LANDMARK.s - aS), LANDMARK.za - aZ);
-      const sides = [[0, 1], [0, -1], [1, 0], [-1, 0]].map(([fx, fz2]) => ({ fx, fz2, k: fx * Math.sin(hd) + fz2 * Math.cos(hd) })).sort((a, b) => b.k - a.k);
-      for (const { fx, fz2 } of sides) {
-        const Wd = Math.min(18, (fz2 ? q.bw : q.bd) - 4), Ps = aS + fx * (q.bw / 2 - 3), Pz = aZ + fz2 * (q.bd / 2 - 3);
-        if (Wd < 10) continue;
-        const ang = Math.atan2(-fx, -fz2), ca = Math.cos(ang), sa = Math.sin(ang);
-        const world = (x, z) => [Ps + x * ca + z * sa, Pz - x * sa + z * ca];
-        if ([-0.35, 0, 0.35].some((t) => { const [ps, pz] = world(t * Wd, -0.6); return colAt(ps, pz, 0.8); })) continue;
-        const y0 = 6, y1 = 6 + Math.min(11, Wd * 0.6), pts = [];
-        for (let i = 0; i <= 6; i++) pts.push([(i / 6 - 0.5) * Wd, 0, 0, 1]);
-        const dxw = wrapS(aS - Ps), dzw = aZ - Pz;
-        const frame = mergeSimple([...[-0.35, 0.35].map((t) => ({ geo: g(0.5, y1 + 0.5, 0.5, t * Wd, (y1 + 0.5) / 2, -0.6), color: GREY })),
-          { geo: g(Wd + 0.4, y1 - y0 + 0.6, 0.4, 0, (y0 + y1) / 2, -0.3), color: DARK }]);
-        for (const t of [-0.35, 0.35]) { const [ps, pz] = world(t * Wd, -0.6); addCollider(modS(ps), pz, 0.3, 0.3); }
-        L = { e: null, diag: false, free: true, s: Ps, za: Pz, pts, y0, y1, O: [0, (y0 + y1) / 2, -2], out: [0, 1], box: [-Wd / 2, Wd / 2, -18, 0.1],
-          E: [dxw * ca - dzw * sa, 1.7, dxw * sa + dzw * ca], M: ry(at(Ps, Pz, groundH(Ps, Pz)), ang), frame, world };
-        break;
+    if (!L) {                                                        // 28h: menara LCD sudut berdiri sendiri di pojok alun-alun, siku menghadap pusat
+      const hd = Math.atan2(wrapS(LANDMARK.s - aS), LANDMARK.za - aZ), T = Math.max(8, Math.min(12, Math.min(q.bw, q.bd) * 0.35));
+      const corners = [[1, 1], [1, -1], [-1, 1], [-1, -1]].map(([cs, cz2]) => ({ cs, cz2, k: cs * Math.sin(hd) + cz2 * Math.cos(hd) })).sort((u, v) => v.k - u.k);
+      for (const { cs, cz2 } of corners) {
+        const Ps = aS + cs * (q.bw / 2 - T / 2 - 2), Pz = aZ + cz2 * (q.bd / 2 - T / 2 - 2);
+        if ([[0, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]].some(([u, v]) => colAt(Ps + u * T / 2, Pz + v * T / 2, 0.5))) continue;
+        const Lt = layout([Ps, Pz, T, T, 26], groundH(Ps, Pz));
+        Lt.e = null; Lt.free = true;
+        Lt.frame = mergeSimple([{ geo: g(T, 26, T, 0, 13, 0), color: [0.05, 0.06, 0.08] }, { geo: g(T + 0.6, 0.6, T + 0.6, 0, 26.3, 0), color: GREY },
+          { geo: g(T + 5.6, 0.4, T + 5.6, 0, Lt.y1 + 0.7, 0), color: DARK }]);   // menara kaca gelap + lis + atap penopang layar
+        addCollider(modS(Ps), Pz, T / 2 + 0.3, T / 2 + 0.3);
+        L = Lt; break;
       }
     }
     let best = L ? L.e : null, diag = L ? L.diag : false;
