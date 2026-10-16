@@ -4520,7 +4520,7 @@ if (IKLAN.on) {
   const nL = IKLAN.langs.length, distOf = (l) => Object.keys(K.DISTRICT_LANG).find((d) => K.DISTRICT_LANG[d] === l) || null;
   const pool = new Uint8Array(64 * nL * 2 * 4);
   IKLAN.langs.forEach((l, i) => ['toko', 'kantor'].forEach((use, j) => {
-    for (let k = 0; k < 64; k++) pool[((i + j * nL) * 64 + k) * 4] = K.pick((k + 0.5) / 64, use, distOf(l));
+    for (let k = 0; k < 64; k++) pool[((i + j * nL) * 64 + k) * 4] = K.pick(((k * 29) % 64 + 0.5) / 64, use, distOf(l));   // 28g: kolom diacak (langkah 29), kolom berurutan = merek berbeda
   }));
   const { canvas, avg } = K.draw(null);
   const info = new Uint8Array(NB * 3 * 4), hex = (h) => [1, 3, 5].map((o) => parseInt(h.slice(o, o + 2), 16));
@@ -4595,7 +4595,7 @@ const BUILD_FS = /* glsl */`
   uniform sampler2D uBrand, uBrandPool, uBrandInfo;
   uniform float uBrandNL;
   flat varying float vLang;
-  int brandOf(float h, float row) { return int(texelFetch(uBrandPool, ivec2(int(clamp(h, 0.0, 0.999) * 64.0), int(row + 0.5)), 0).r * 255.0 + 0.5); }
+  int brandOf(float c, float row) { return int(texelFetch(uBrandPool, ivec2(int(mod(floor(c), 64.0)), int(row + 0.5)), 0).r * 255.0 + 0.5); }   // 28g: c = kolom (toko berurutan = kolom berurutan)
   vec3 bInfo(int b, int row) { vec3 c = texelFetch(uBrandInfo, ivec2(b, row), 0).rgb; return c * c * (0.3 + 0.7 * c); }   // sRGB -> linear (pendekatan, c >= 0)
   vec3 bSign(int b, float kind, vec2 l, float fp) {
     float bx = float(b - (b / 8) * 8) * 256.0, by = kind * 768.0 + float(b / 8) * 128.0;
@@ -4819,16 +4819,20 @@ const BUILD_FS = /* glsl */`
         vec3 glyphC = hb2 < 0.7 ? vec3(0.85, 0.8, 0.6) : vec3(0.03);
         wall = mix(wall, vec3(0.03, 0.03, 0.035), band(y, 0.0, 0.55, fwY) * band(sfx, 0.07, 0.93, fws));
         #ifdef IKLAN
-        {                                                          // 28b: plang merek per modul (2:1, sampai 1,35x lebih lebar), sisa papan = warna latar merek
-          int bb = brandOf(hash1(vec2(si + vSeed * 31.0, fz ? 5.0 : 9.0)), vLang);
-          float mw = W / nS, sw = min(mw * 0.9, 2.16), su = (sfx - 0.5) * mw;
-          vec2 l = vec2(su / sw + 0.5, (y - (groundH - 1.1)) / 0.8);
-          float fp = max(fwU * 256.0 / sw, fwY * 160.0), inS = band(l.x, 0.0, 1.0, fwU / sw) * band(l.y, 0.0, 1.0, fwY / 0.8);
+        {                                                          // 28b / 28g: plang merek per modul, ukuran beragam per modul, sebagian tanpa papan latar
+          float fl = fz ? sign(n.z) : -sign(n.x);                  // 28g: u dibalik di muka -z dan +x (dulu tulisan tampak terbalik)
+          float h1m = hash1(vec2(si + vSeed * 17.0, 41.0)), h2m = hash1(vec2(si + vSeed * 23.0, 43.0)), h3m = hash1(vec2(si + vSeed * 29.0, 47.0));
+          int bb = brandOf(si + floor(vSeed * 64.0) + (fz ? 0.0 : 17.0), vLang);
+          float mw = W / nS, bh = 0.55 + 0.25 * h1m, bw = mw * (0.55 + 0.4 * h2m), by0 = groundH - 0.3 - bh;
+          float sw = min(bw * 0.92, bh * 2.7), sh = min(bh * 0.92, sw / 1.6), su = (sfx - 0.5) * mw * fl;
+          vec2 l = vec2(su / sw + 0.5, (y - (by0 + 0.5 * (bh - sh))) / sh);
+          float fp = max(fwU * 256.0 / sw, fwY * 128.0 / sh), inS = band(l.x, 0.0, 1.0, fwU / sw) * band(l.y, 0.0, 1.0, fwY / sh);
+          float brd = h3m < 0.35 ? inS : band(y, by0, by0 + bh, fwY) * band(abs(su), -1.0, bw * 0.5, fwU);   // 35% tanpa papan latar
           float lit = step(0.5, hash1(vec2(si, vSeed * 3.0 + 17.0)));   // setengah plang menyala malam (seperti 22a)
           vec3 nT = bSign(bb, 1.0, l, fp);
           vec3 sA = mix(bInfo(bb, 0), bSign(bb, 0.0, l, fp), inS);
-          wall = mix(wall, mix(sA, nT * 0.35, uNight * lit * inS), board);
-          neon = board * inS * lit; neonC = nT * 1.1;
+          wall = mix(wall, mix(sA, nT * 0.35, uNight * lit * inS), brd);
+          neon = inS * lit; neonC = nT * 1.1;
         }
         #else
         wall = mix(wall, mix(signC, glyphC, glyph), board);
@@ -4842,21 +4846,29 @@ const BUILD_FS = /* glsl */`
         shopM = band(y, 0.15, groundH - 0.9, fwY) * band(sfx, 0.06, 0.94, fwU / 2.6);
         wall = mix(wall, vec3(0.16, 0.16, 0.17), band(y, groundH - 0.8, groundH - 0.3, fwY));   // pita kanopi / papan nama
         #ifdef IKLAN
-        {                                                          // 28b: satu toko = 1-3 etalase 2,6 m, plang merek di pita; gaya 13 = papan perusahaan selebar muka
+        {                                                          // 28b / 28g: toko selebar 1-6 etalase (batas acak per etalase), tiga gaya papan; gaya 13 = papan perusahaan
           bool ofc = code == 13.0;
-          float ne = ofc ? 1.0 : 1.0 + floor(hash1(vec2(vSeed * 53.0, fz ? 2.0 : 6.0)) * 2.999);
-          float q = (u / 2.6 + 0.5) / ne, si = floor(q), sW = ofc ? W : 2.6 * ne, su = ofc ? u : (fract(q) - 0.5) * sW;
-          if (ofc) si = 0.0;
-          float sh = 0.62, y0 = groundH - 0.92, sw = min(sW * 0.9, sh * 2.3);
-          int bb = brandOf(hash1(vec2(si + vSeed * 31.0, fz ? 5.0 : 9.0)), vLang + (ofc ? uBrandNL : 0.0));
+          float fl = fz ? sign(n.z) : -sign(n.x);                  // 28g: u dibalik di muka -z dan +x (dulu tulisan tampak terbalik)
+          float sdB = vSeed * 71.0 + (fz ? 3.0 : 7.0), eu = u / 2.6 + 0.5, k0 = floor(eu), k1 = k0;
+          float kMin = floor(-0.5 * W / 2.6 + 0.5), kMax = floor(0.5 * W / 2.6 + 0.5);
+          for (int i = 0; i < 6; i++) { if (k0 <= kMin || hash1(vec2(k0, sdB)) < 0.4) break; k0 -= 1.0; }          // awal toko
+          for (int i = 0; i < 6; i++) { if (k1 + 1.0 > kMax || hash1(vec2(k1 + 1.0, sdB)) < 0.4) break; k1 += 1.0; }   // akhir toko
+          float ua = max(-0.5 * W, (k0 - 0.5) * 2.6), ub = min(0.5 * W, (k1 + 0.5) * 2.6);
+          float si = ofc ? 0.0 : k0, sW = ofc ? W : max(ub - ua, 0.5), su = (ofc ? u : u - 0.5 * (ua + ub)) * fl;
+          float t1 = hash1(vec2(si, sdB + 11.0)), t2 = hash1(vec2(si, sdB + 13.0)), t3 = hash1(vec2(si, sdB + 19.0));
+          float typ = ofc ? 1.0 : t1 < 0.45 ? 0.0 : t1 < 0.8 ? 1.0 : 2.0;   // 0 fasia penuh + plang, 1 kotak plang, 2 huruf neon di latar gelap
+          float shD = typ == 0.0 ? 0.5 + 0.3 * t2 : typ == 1.0 ? 0.45 + 0.25 * t2 : 0.5 + 0.25 * t2;
+          float wD = typ == 1.0 ? sW * (0.4 + 0.3 * t3) : typ == 2.0 ? sW * (0.5 + 0.4 * t3) : shD * 2.0 * (1.0 + 0.35 * t3);
+          float sw = min(min(wD, sW * 0.88), shD * 2.7), sh = min(shD, sw / 1.6), y0 = groundH - 0.25 - sh;
+          int bb = brandOf(si + floor(vSeed * 64.0) + (fz ? 0.0 : 17.0), vLang + (ofc ? uBrandNL : 0.0));
           vec2 l = vec2(su / sw + 0.5, (y - y0) / sh);
           float fp = max(fwU * 256.0 / sw, fwY * 128.0 / sh), inS = band(l.x, 0.0, 1.0, fwU / sw) * band(l.y, 0.0, 1.0, fwY / sh);
-          float fas = ofc ? 0.0 : band(y, y0, y0 + sh, fwY) * band(abs(su), -1.0, sW * 0.5 - 0.08, fwU);   // latar merek selebar toko
-          float lit = step(0.4, hash1(vec2(si + vSeed * 13.0, 29.0)));
+          float fas = typ == 0.0 ? band(y, y0 - 0.05, groundH - 0.2, fwY) * band(abs(su), -1.0, sW * 0.5 - 0.1, fwU) : 0.0;   // fasia warna merek selebar toko
+          float lit = typ == 2.0 ? 1.0 : step(0.4, hash1(vec2(si + vSeed * 13.0, 29.0)));
           vec3 nT = bSign(bb, 1.0, l, fp);
-          vec3 sA = mix(bInfo(bb, 0), bSign(bb, 0.0, l, fp), inS);
+          vec3 sA = mix(bInfo(bb, 0), typ == 2.0 ? nT : bSign(bb, 0.0, l, fp), inS);
           wall = mix(wall, mix(sA, nT * 0.35, uNight * lit * inS), max(fas, inS));
-          neon = inS * lit; neonC = nT * 1.1; shopM *= 1.0 - inS;
+          neon = inS * lit; neonC = nT * 1.1; shopM *= 1.0 - max(inS, fas);
         }
         #endif
       }
@@ -14188,11 +14200,13 @@ if (IKLAN.on) {
   const occ = (e, top) => ups.some((o) => o !== e && Math.abs(o[5] - top) < 1.2 && Math.abs(wrapS(e[0] - o[0])) < (e[2] + o[2]) / 2 && Math.abs(e[1] - o[1]) < (e[3] + o[3]) / 2);
   const inSite = (s, za) => SITES.some((S) => Math.abs(wrapS(s - S.q.bs)) < S.q.bw / 2 + 2 && Math.abs(za - S.q.bz) < S.q.bd / 2 + 2);
 
-  // ---- 28c-1 reklame atap: rangka besi 2 tiang + panel 8 x 4 m + titian + lampu sorot, di atap datar gedung rendah pusat ----
-  const roofGeo = mergeSimple([...[-2.9, 2.9].map((x) => ({ geo: g(0.22, 6.2, 0.22, x, 3.1, -0.45), color: IRON })),
-    { geo: g(8.4, 4.4, 0.3, 0, 4.0, -0.16), color: DARK }, { geo: g(8.4, 0.06, 0.9, 0, 1.75, 0.45), color: IRON },
-    ...[-2.6, 0, 2.6].map((x) => ({ geo: g(0.06, 0.06, 1.1, x, 6.35, 0.4), color: IRON })),
-    ...[-2.6, 0, 2.6].map((x) => ({ geo: g(0.3, 0.14, 0.24, x, 6.28, 0.95), color: GREY }))]);
+  // ---- 28c-1 reklame atap: rangka besi 2 tiang + panel 8 x 4 m + titian + lampu sorot, di tepi depan atap datar gedung rendah pusat ----
+  // 28g: dulu di tengah atap (tertutup lis dan tidak terlihat dari jalan); kini 1,2 m dari tepi muka yang menghadap jalan, panel mulai 3,5 m di atas atap
+  const roofGeo = mergeSimple([...[-2.9, 2.9].map((x) => ({ geo: g(0.22, 7.7, 0.22, x, 3.85, -0.45), color: IRON })),
+    { geo: g(8.4, 4.4, 0.3, 0, 5.5, -0.16), color: DARK }, { geo: g(8.4, 0.06, 0.9, 0, 3.25, 0.45), color: IRON },
+    ...[-2.6, 0, 2.6].map((x) => ({ geo: g(0.06, 0.06, 1.1, x, 7.85, 0.4), color: IRON })),
+    ...[-2.6, 0, 2.6].map((x) => ({ geo: g(0.3, 0.14, 0.24, x, 7.78, 0.95), color: GREY }))]);
+  const inBox = (ps, pz, skip) => flat.some((o) => o !== skip && Math.abs(wrapS(ps - o[0])) < o[2] / 2 && Math.abs(pz - o[1]) < o[3] / 2);
   const roofs = [];
   for (const e of flat) {
     const [s, za, w, d, h, el, , st, front] = e, top = el + h;
@@ -14201,11 +14215,15 @@ if (IKLAN.on) {
     if (inSite(s, za) || occ(e, top) || roofs.some(([a, b]) => Math.hypot(wrapS(a - s), b - za) < 70)) continue;
     const fz = front === 1 ? -1 : front === 2 ? 1 : 0, fs = front === 3 ? -1 : front === 4 ? 1 : 0;
     const ang = fz || fs ? Math.atan2(fs, fz) : (r() < 0.5 ? 0 : Math.PI);
-    if ((Math.abs(Math.sin(ang)) > 0.5 ? d : w) < 9) continue;      // lebar muka yang dihadapi panel
+    const side = Math.abs(Math.sin(ang)) > 0.5, span = side ? d : w, dep = side ? w : d, fx = Math.sin(ang), fz2 = Math.cos(ang);
+    if (span < 9) continue;                                         // lebar muka yang dihadapi panel
+    // 28g: muka itu harus menghadap jalan: tidak ada gedung lain 3-10 m di depannya (tengah dan sepertiga kiri / kanan)
+    const lat = [-span / 3, 0, span / 3];
+    if ([3, 10].some((a) => lat.some((t) => inBox(s + fx * (dep / 2 + a) + fz2 * t, za + fz2 * (dep / 2 + a) - fx * t, e)))) continue;
     roofs.push([s, za]);
-    const m = ry(at(s, za, top), ang), neon = r() < 0.3;
+    const m = tr(ry(at(s, za, top), ang), 0, 0, dep / 2 - 1.2), neon = r() < 0.3;
     solid('ikRoof', roofGeo, 900, m, s, za);
-    sign('ikRoofS', 900, tr(m.clone(), 0, 4.0, 0.02), 8, 4, brand(neon ? 'neon' : 'reklame', s, za), neon ? 'neon' : 'plang', neon ? 1 : (r() < 0.75 ? 1 : 0), s, za);
+    sign('ikRoofS', 900, tr(m.clone(), 0, 5.5, 0.02), 8, 4, brand(neon ? 'neon' : 'reklame', s, za), neon ? 'neon' : 'plang', neon ? 1 : (r() < 0.75 ? 1 : 0), s, za);
   }
   // ---- 28c-2 logo puncak menara > 60 m (kantor, batu, kaca): satu merek per gedung, satu atau dua muka, menyala malam ----
   for (const e of flat) {
@@ -14288,31 +14306,22 @@ if (IKLAN.on) {
   const al = SITES.find((x) => x.type === 'alun'), NEON = IKLAN.lcd = { on: false, t: 0, static: false, ci: -1, last: 0, tick: -1e9 };
   if (al && new URLSearchParams(location.search).get('neon') !== '0') {
     const aS = al.q.bs, aZ = al.q.bz;
-    let best = null, bsc = -1e9, diag = false;
-    for (const pass of [true, false]) {                              // dulu cari sudut gedung yang kedua mukanya menghadap alun-alun; bila tidak ada, satu muka
-      for (const e of flat) {
-        const [s, za, w, d, h, el, , st] = e;
-        if (el > 0.5 || h < 24 || Math.min(w, d) < 16 || st === 14 || inSite(s, za)) continue;
-        const ds = wrapS(aS - s), dz = aZ - za, dist = Math.hypot(ds, dz), ox = Math.abs(ds) >= w / 2 + 5, oz = Math.abs(dz) >= d / 2 + 5;
-        if (dist > 120 || (pass ? !(ox && oz) : !(ox || oz))) continue;
-        const sc = Math.min(h, 45) - dist * 0.4;
-        if (sc > bsc) { bsc = sc; best = e; }
-      }
-      if (best) { diag = pass; break; }
-    }
-    if (best) {
-      const [s, za, w, d, h] = best, ds = wrapS(aS - s), dz = aZ - za, sx = Math.sign(ds) || 1, sz = Math.sign(dz) || 1;
-      const y0 = 7, y1 = Math.min(h - 2, 30), cx = sx * w / 2, cz = sz * d / 2;
-      const pts = [];                                               // [x, z, nx, nz] di kerangka gedung
+    // 28g: layar harus terlihat dari tengah alun-alun (dulu bisa terpilih gedung di balik deretan depan). Kandidat = gedung di tepi
+    // alun-alun (seberang satu jalan), tiap tata letak diuji garis pandang dari mata 1,7 m ke 7 titik layar; bila tidak ada yang
+    // terlihat penuh, layar berdiri sendiri di tepi alun-alun yang searah pandangan awal (ke menara ikon).
+    const q = al.q, near = flat.filter((o) => Math.hypot(wrapS(o[0] - aS), o[1] - aZ) < 260);
+    const layout = (e, mode) => {                                    // tata letak di kerangka gedung (x sepanjang s, z sepanjang za)
+      const [s, za, w, d, h] = e, ds = wrapS(aS - s), dz = aZ - za, sx = Math.sign(ds) || 1, sz = Math.sign(dz) || 1;
+      const y0 = 7, y1 = Math.min(h - 2, 30), cx = sx * w / 2, cz = sz * d / 2, pts = [];
       let O, out, box;
-      if (diag) {                                                    // dua muka + busur: layar 2,5 m di depan dinding, busur jari-jari 8 m mengitari sudut
+      if (mode === 'diag') {                                         // dua muka + busur: layar 2,5 m di depan dinding, busur jari-jari 8 m mengitari sudut
         const OFF = 2.5, A = 5.5, RR = A + OFF, La = Math.min(10, d - A - 4), Lb = Math.min(10, w - A - 4);
         for (let i = 0; i <= 4; i++) pts.push([cx + sx * OFF, cz - sz * (A + La * (1 - i / 4)), sx, 0]);
         for (let i = 1; i < 12; i++) { const a = i / 12 * Math.PI / 2, nx = sx * Math.cos(a), nz = sz * Math.sin(a); pts.push([cx - sx * A + nx * RR, cz - sz * A + nz * RR, nx, nz]); }
         for (let i = 0; i <= 4; i++) pts.push([cx - sx * (A + Lb * i / 4), cz + sz * OFF, 0, sz]);
         O = [cx - sx * 2, (y0 + y1) / 2, cz - sz * 2]; out = [sx * Math.SQRT1_2, sz * Math.SQRT1_2];
         box = [Math.min(cx - sx * 24, cx + sx * (OFF + 0.1)), Math.max(cx - sx * 24, cx + sx * (OFF + 0.1)), Math.min(cz - sz * 24, cz + sz * (OFF + 0.1)), Math.max(cz - sz * 24, cz + sz * (OFF + 0.1))];
-      } else if (Math.abs(ds) >= w / 2 + 5) {                        // satu muka x (normal sx)
+      } else if (mode === 'x') {                                     // satu muka x (normal sx)
         const Lf = Math.min(30, d - 4);
         for (let i = 0; i <= 6; i++) pts.push([cx + sx * 0.6, (i / 6 - 0.5) * Lf * sx, sx, 0]);
         O = [cx - sx * 2, (y0 + y1) / 2, 0]; out = [sx, 0];
@@ -14323,6 +14332,66 @@ if (IKLAN.on) {
         O = [0, (y0 + y1) / 2, cz - sz * 2]; out = [0, sz];
         box = [-Lf / 2, Lf / 2, Math.min(cz - sz * 22, cz + sz * 0.7), Math.max(cz - sz * 22, cz + sz * 0.7)];
       }
+      return { e, diag: mode === 'diag', s, za, pts, y0, y1, O, out, box, E: [ds, 1.7, dz], M: at(s, za, 0), world: (x, z) => [s + x, za + z] };
+    };
+    const seen = (skip, ps, pz, ph) => {                             // garis mata -> titik layar tidak memotong gedung yang lebih tinggi dari garis di titik masuk
+      const dx = wrapS(ps - aS), dz = pz - aZ;
+      for (const o of near) {
+        if (o === skip) continue;
+        const top = o[5] + o[4], ox = wrapS(o[0] - aS), oz = o[1] - aZ;
+        let t0 = 0, t1 = 1;
+        for (const [dd, lo, hi] of [[dx, ox - o[2] / 2, ox + o[2] / 2], [dz, oz - o[3] / 2, oz + o[3] / 2]]) {
+          if (Math.abs(dd) < 1e-9) { if (lo > 0 || hi < 0) { t0 = 2; break; } continue; }
+          let ta = lo / dd, tb = hi / dd; if (ta > tb) [ta, tb] = [tb, ta];
+          t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+        }
+        if (t0 < t1 && t0 < 0.97 && top > 1.7 + (ph - 1.7) * t0) return false;
+      }
+      return true;
+    };
+    const visFrac = (Lt) => {
+      const P = Lt.pts, ids = [0, P.length >> 1, P.length - 1], hs = [Lt.y0 + 1, Lt.y1 - 1];
+      const smp = [...ids.flatMap((i) => hs.map((y) => [P[i][0], P[i][1], y])), [P[P.length >> 1][0], P[P.length >> 1][1], (Lt.y0 + Lt.y1) / 2]];
+      return smp.filter(([x, z, y]) => { const [ps, pz] = Lt.world(x, z); return seen(Lt.e, ps, pz, y); }).length / smp.length;
+    };
+    let L = null, bsc = -1;
+    for (const e of near) {
+      const [s, za, w, d, h, el, , st] = e;
+      if (el > 0.5 || h < 22 || Math.min(w, d) < 16 || st === 14 || inSite(s, za)) continue;
+      const ds = wrapS(aS - s), dz = aZ - za, gx = Math.abs(ds) - w / 2 - q.bw / 2, gz = Math.abs(dz) - d / 2 - q.bd / 2;
+      if (Math.max(gx, gz) > 35 || (gx <= 0 && gz <= 0)) continue;   // di tepi alun-alun (seberang satu jalan), tidak menumpuk
+      const ox = Math.abs(ds) >= w / 2 + 5, oz = Math.abs(dz) >= d / 2 + 5;
+      const Lt = layout(e, ox && oz ? 'diag' : ox ? 'x' : 'z');
+      if (Lt.y1 - Lt.y0 < 12) continue;
+      const f = visFrac(Lt);
+      if (f < 0.99) continue;
+      const sc = Math.min(Lt.y1 - Lt.y0, 23) * (Lt.diag ? 1.3 : 1) / (Math.hypot(ds, dz) + 20);
+      if (sc > bsc) { bsc = sc; L = Lt; }
+    }
+    if (!L) {                                                        // layar berdiri sendiri di tepi alun-alun, menghadap pusat
+      const hd = Math.atan2(wrapS(LANDMARK.s - aS), LANDMARK.za - aZ);
+      const sides = [[0, 1], [0, -1], [1, 0], [-1, 0]].map(([fx, fz2]) => ({ fx, fz2, k: fx * Math.sin(hd) + fz2 * Math.cos(hd) })).sort((a, b) => b.k - a.k);
+      for (const { fx, fz2 } of sides) {
+        const Wd = Math.min(18, (fz2 ? q.bw : q.bd) - 4), Ps = aS + fx * (q.bw / 2 - 3), Pz = aZ + fz2 * (q.bd / 2 - 3);
+        if (Wd < 10) continue;
+        const ang = Math.atan2(-fx, -fz2), ca = Math.cos(ang), sa = Math.sin(ang);
+        const world = (x, z) => [Ps + x * ca + z * sa, Pz - x * sa + z * ca];
+        if ([-0.35, 0, 0.35].some((t) => { const [ps, pz] = world(t * Wd, -0.6); return colAt(ps, pz, 0.8); })) continue;
+        const y0 = 6, y1 = 6 + Math.min(11, Wd * 0.6), pts = [];
+        for (let i = 0; i <= 6; i++) pts.push([(i / 6 - 0.5) * Wd, 0, 0, 1]);
+        const dxw = wrapS(aS - Ps), dzw = aZ - Pz;
+        const frame = mergeSimple([...[-0.35, 0.35].map((t) => ({ geo: g(0.5, y1 + 0.5, 0.5, t * Wd, (y1 + 0.5) / 2, -0.6), color: GREY })),
+          { geo: g(Wd + 0.4, y1 - y0 + 0.6, 0.4, 0, (y0 + y1) / 2, -0.3), color: DARK }]);
+        for (const t of [-0.35, 0.35]) { const [ps, pz] = world(t * Wd, -0.6); addCollider(modS(ps), pz, 0.3, 0.3); }
+        L = { e: null, diag: false, free: true, s: Ps, za: Pz, pts, y0, y1, O: [0, (y0 + y1) / 2, -2], out: [0, 1], box: [-Wd / 2, Wd / 2, -18, 0.1],
+          E: [dxw * ca - dzw * sa, 1.7, dxw * sa + dzw * ca], M: ry(at(Ps, Pz, groundH(Ps, Pz)), ang), frame, world };
+        break;
+      }
+    }
+    let best = L ? L.e : null, diag = L ? L.diag : false;
+    if (L) {
+      const { s, za, pts, y0, y1, O, out, box } = L;
+      if (L.frame) { const fm = new THREE.Mesh(L.frame, new THREE.MeshBasicMaterial({ vertexColors: true })); fm.matrixAutoUpdate = false; fm.matrix.copy(L.M); scene.add(fm); }
       let len = 0; const acc = [0];
       for (let i = 1; i < pts.length; i++) { len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); acc.push(len); }
       const strip = (ya, yb) => {                                    // pita tegak sepanjang lintasan, uv.x = panjang / total, uv.y = 0 bawah 1 atas
@@ -14333,8 +14402,8 @@ if (IKLAN.on) {
         G.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); G.setAttribute('normal', new THREE.Float32BufferAttribute(Nn, 3));
         G.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); G.setIndex(I); G.computeBoundingSphere(); return G;
       };
-      const Mb = at(s, za, 0), place = (mesh) => { mesh.matrixAutoUpdate = false; mesh.matrix.copy(Mb); scene.add(mesh); return mesh; };
-      const E = [ds, 1.7, dz];                                       // titik pandang anamorfik: tengah alun-alun setinggi mata
+      const Mb = L.M, place = (mesh) => { mesh.matrixAutoUpdate = false; mesh.matrix.copy(Mb); scene.add(mesh); return mesh; };
+      const E = L.E;                                                 // titik pandang anamorfik: tengah alun-alun setinggi mata (kerangka layar)
       const LCD_VS = /* glsl */`
         #include <fog_pars_vertex>
         varying vec3 vLp, vLn;

@@ -1,6 +1,6 @@
 # Rencana Tahap 28 Copper Corn Station: iklan, reklame, plang toko, dan sudut LCD cyberpunk
 
-Per 16 Oktober 2026 · disusun atas permintaan Bhakti
+Per 16 Oktober 2026 · disusun atas permintaan Bhakti · nomor tahap 28 (nomor 27 dipakai warna daun di main)
 
 ## Ringkasan
 
@@ -115,6 +115,7 @@ Angka sebenarnya diukur di 28f dengan `GPUT` dan `tools/ukur_muat.py`; FPS di GT
 | 28d | dikerjakan: billboard tiang 9 m dua muka 6 x 3 m di tepi arteri permukiman (jarak >= 300 m, `ikTiang` / `ikTiangS`), minimarket 7 x 5 m di sudut simpang permukiman dengan plang fasia dan pilon logo (`ikKios`, `ikPilon`, jarak >= 400 m). Iklan dinding pudar dan papan koperasi tani belum |
 | 28e | dikerjakan: `IKLAN.lcd`, layar melengkung di sudut gedung dekat alun-alun (dua muka 10 m + busur jari-jari 8 m, 2,5 m di depan dinding, y 7-30 m; cadangan satu muka datar), isi 3D anamorfik per piksel dari titik pandang tengah alun-alun (4 klip 9 s: kubus, bola memantul, Saturnus bercincin, papan merek berayun; ruang maya berkisi neon di balik layar, pita glitch saat ganti), kisi subpiksel RGB dari dekat, ticker LED English di bawah layar, 10 papan neon tegak di gedung sekitar, cahaya layar `uL_Neon` / `uL_NeonCol` di `nightLight()` dan shader tanah. Tanpa render target (isi dihitung langsung di shader layar). Suara belum |
 | 28f | dikerjakan: radius papan per preset (Ultra / Tinggi 1, Sedang 0,8, Rendah 0,6, Hemat 0,45; `PRESET_HOOKS`), Hemat layar diam tanpa cahaya layar, uji `tools/uji_iklan.py` (ditulis, belum dijalankan), CLAUDE.md |
+| 28g | revisi dari 4 foto Bhakti (dikerjakan tanpa uji): tulisan plang tidak lagi terbalik di muka -z / +x; toko lantai dasar selebar 1-6 etalase (batas acak per etalase, dulu 1 jendela 1 usaha) dengan tiga gaya papan (fasia penuh + plang, kotak plang, huruf neon di latar gelap) dan ukuran beragam; deret bata gaya 12 ukuran papan per modul beragam, 35% tanpa papan latar; toko bersebelahan tidak bermerek sama (tabel merek berlangkah 29); reklame atap pindah ke tepi depan atap yang menghadap jalan dan dinaikkan 1,5 m; LCD dipilih dengan uji garis pandang dari tengah alun-alun (gedung di tepi alun-alun, 7 titik layar harus terlihat), bila tidak ada: layar berdiri sendiri di tepi alun-alun searah pandangan awal ke menara ikon |
 
 ## Bahasa plang per distrik
 
