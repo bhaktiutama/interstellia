@@ -414,6 +414,7 @@
 <script src="../../shared/camera.js"></script>
 <script src="../../shared/vr.js"></script>
 <script src="../../shared/music.js"></script>
+<script src="../../shared/brand.js"></script>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
 </script>
@@ -4087,6 +4088,33 @@ building('gambrel', COOPER.s - 32, COOPER.za + 24, 16, 12, 9, '#8e3b2f', 0, true
 // saat pola lebih kecil dari beberapa piksel (LOD di shader, tanpa geometri tambahan). Malam: sebagian jendela menyala.
 const BUILD_U = { uNight: { value: 0 }, uInterior: { value: 1 }, uLodK: { value: 1 },   // 14c: 1 = ruangan maya di balik jendela; K10: faktor zoom lensa
   uLitT: { value: new THREE.Vector2(1, 1) }, uTime: groundMat.uniforms.uTime };   // 21c: faktor nyala jendela per jam (x kantor, y hunian), kedip lampu atap
+// 27b: plang merek fiktif di semua lantai toko (atlas shared/brand.js, rencana docs/cooper-station/rencana-tahap-27-cooper-station.md).
+// Bahasa plang ikut distrik gedung (DISTRICT_LANG), bukan bahasa UI. Tiga tekstur: atlas 2048 x 4096 (sRGB, mipmap), tabel merek
+// per baris bahasa (64 kolom = pick(u) untuk u bertingkat, baris nL + i = papan kantor), info per merek (latar, rata-rata plang, rata-rata neon).
+// ?iklan=0 = kota sebelum tahap 27 persis: define IKLAN tidak dipasang, atribut aLang tidak dibuat.
+const IKLAN = { on: !!window.BRANDKIT && new URLSearchParams(location.search).get('iklan') !== '0', langs: [], row: {} };
+if (IKLAN.on) {
+  const K = window.BRANDKIT, NB = K.BRANDS.length;
+  IKLAN.langs = ['en', ...new Set(Object.values(K.DISTRICT_LANG).filter((l) => l !== 'en'))];
+  IKLAN.langs.forEach((l, i) => { IKLAN.row[l] = i; });
+  const nL = IKLAN.langs.length, distOf = (l) => Object.keys(K.DISTRICT_LANG).find((d) => K.DISTRICT_LANG[d] === l) || null;
+  const pool = new Uint8Array(64 * nL * 2 * 4);
+  IKLAN.langs.forEach((l, i) => ['toko', 'kantor'].forEach((use, j) => {
+    for (let k = 0; k < 64; k++) pool[((i + j * nL) * 64 + k) * 4] = K.pick((k + 0.5) / 64, use, distOf(l));
+  }));
+  const { canvas, avg } = K.draw(null);
+  const info = new Uint8Array(NB * 3 * 4), hex = (h) => [1, 3, 5].map((o) => parseInt(h.slice(o, o + 2), 16));
+  K.BRANDS.forEach((B, b) => {
+    const put = (row, c) => { const o = (row * NB + b) * 4; info[o] = c[0]; info[o + 1] = c[1]; info[o + 2] = c[2]; info[o + 3] = 255; };
+    const av = (kind) => { const k = K.cellIndex(b, kind) * 3; return [0, 1, 2].map((q) => Math.round(avg[k + q] * 255)); };
+    put(0, hex(B.bg)); put(1, av('plang')); put(2, av('neon'));
+  });
+  const atlas = new THREE.CanvasTexture(canvas);
+  atlas.colorSpace = THREE.SRGBColorSpace; atlas.generateMipmaps = true; atlas.minFilter = THREE.LinearMipmapLinearFilter;
+  const dt = (data, w, h) => { const t = new THREE.DataTexture(data, w, h); t.magFilter = t.minFilter = THREE.NearestFilter; t.needsUpdate = true; return t; };
+  IKLAN.atlas = atlas; IKLAN.avg = avg;
+  Object.assign(BUILD_U, { uBrand: { value: atlas }, uBrandPool: { value: dt(pool, 64, nL * 2) }, uBrandInfo: { value: dt(info, NB, 3) }, uBrandNL: { value: nL } });
+}
 const BUILD_VS = /* glsl */`
   #include <fog_pars_vertex>
   attribute float aPart;
@@ -4096,9 +4124,16 @@ const BUILD_VS = /* glsl */`
   flat varying vec3 vCol, vScale;
   flat varying float vPart, vSeed;
   flat varying vec2 vStyle;
+  #ifdef IKLAN
+  attribute float aLang;
+  flat varying float vLang;
+  #endif
   void main() {
     vec3 sc = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
     vO = position * sc; vNo = normal; vScale = sc; vPart = aPart; vStyle = aStyle;
+    #ifdef IKLAN
+    vLang = aLang;
+    #endif
     vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
     vW = wp.xyz;
     { mat3 M = mat3(modelMatrix) * mat3(instanceMatrix); vec3 dW = wp.xyz - cameraPosition;   // kolom M = sumbu objek x skala
@@ -4134,6 +4169,22 @@ const BUILD_FS = /* glsl */`
     float d = abs(fract(x / period + 0.5) - 0.5) * period;
     return (1.0 - smoothstep(w - fw, w + fw, d)) * (1.0 - smoothstep(period * 0.25, period * 0.6, fw));
   }
+  #ifdef IKLAN
+  // 27b: plang merek. brandOf = merek dari tabel bahasa (baris), bSign = sel atlas (kind 0 plang, 1 neon) di koordinat plang l (0..1,
+  // y ke atas) dengan lod eksplisit dari jejak piksel (aman di cabang tidak seragam), dari jauh pudar ke warna rata-rata sel (tanpa kedip)
+  uniform sampler2D uBrand, uBrandPool, uBrandInfo;
+  uniform float uBrandNL;
+  flat varying float vLang;
+  int brandOf(float h, float row) { return int(texelFetch(uBrandPool, ivec2(int(clamp(h, 0.0, 0.999) * 64.0), int(row + 0.5)), 0).r * 255.0 + 0.5); }
+  vec3 bInfo(int b, int row) { vec3 c = texelFetch(uBrandInfo, ivec2(b, row), 0).rgb; return c * c * (0.3 + 0.7 * c); }   // sRGB -> linear (pendekatan, c >= 0)
+  vec3 bSign(int b, float kind, vec2 l, float fp) {
+    float bx = float(b - (b / 8) * 8) * 256.0, by = kind * 768.0 + float(b / 8) * 128.0;
+    vec2 px = vec2(bx + clamp(l.x, 0.0, 1.0) * 256.0, by + (1.0 - clamp(l.y, 0.0, 1.0)) * 128.0);
+    px = clamp(px, vec2(bx + 3.0, by + 3.0), vec2(bx + 253.0, by + 125.0));
+    vec3 t = textureLod(uBrand, vec2(px.x / 2048.0, 1.0 - px.y / 4096.0), clamp(log2(max(fp, 1.0)), 0.0, 3.0)).rgb;
+    return mix(t, bInfo(b, 1 + int(kind)), smoothstep(4.0, 10.0, fp));
+  }
+  #endif
   void main() {
     float code = floor(vStyle.x + 0.001), front = floor(vStyle.y + 0.001);   // 22c: bilangan bulat = gaya / depan, pecahan / 0,99 = p1 / p2
     float sp1 = fract(vStyle.x) / 0.99, sp2 = fract(vStyle.y) / 0.99;
@@ -4347,15 +4398,47 @@ const BUILD_FS = /* glsl */`
         glyph = mix(glyph, 0.45, smoothstep(0.15, 0.4, fwU / 0.3)) * band(sfx, 0.2, 0.8, fws) * band(y, groundH - 0.9, groundH - 0.5, fwY);
         vec3 glyphC = hb2 < 0.7 ? vec3(0.85, 0.8, 0.6) : vec3(0.03);
         wall = mix(wall, vec3(0.03, 0.03, 0.035), band(y, 0.0, 0.55, fwY) * band(sfx, 0.07, 0.93, fws));
+        #ifdef IKLAN
+        {                                                          // 27b: plang merek per modul (2:1, sampai 1,35x lebih lebar), sisa papan = warna latar merek
+          int bb = brandOf(hash1(vec2(si + vSeed * 31.0, fz ? 5.0 : 9.0)), vLang);
+          float mw = W / nS, sw = min(mw * 0.9, 2.16), su = (sfx - 0.5) * mw;
+          vec2 l = vec2(su / sw + 0.5, (y - (groundH - 1.1)) / 0.8);
+          float fp = max(fwU * 256.0 / sw, fwY * 160.0), inS = band(l.x, 0.0, 1.0, fwU / sw) * band(l.y, 0.0, 1.0, fwY / 0.8);
+          float lit = step(0.5, hash1(vec2(si, vSeed * 3.0 + 17.0)));   // setengah plang menyala malam (seperti 22a)
+          vec3 nT = bSign(bb, 1.0, l, fp);
+          vec3 sA = mix(bInfo(bb, 0), bSign(bb, 0.0, l, fp), inS);
+          wall = mix(wall, mix(sA, nT * 0.35, uNight * lit * inS), board);
+          neon = board * inS * lit; neonC = nT * 1.1;
+        }
+        #else
         wall = mix(wall, mix(signC, glyphC, glyph), board);
-        wall = mix(wall, vec3(0.06, 0.045, 0.035), drM);
         neon = board * glyph * step(hb2, 0.7) * step(0.5, hash1(vec2(si, vSeed * 3.0 + 17.0)));   // setengah papan berhuruf terang menyala malam
         neonC = hash1(vec2(si, 23.0)) < 0.7 ? vec3(1.0, 0.85, 0.6) : vec3(1.0, 0.3, 0.25);
+        #endif
+        wall = mix(wall, vec3(0.06, 0.045, 0.035), drM);
       }
       if (code != 12.0 && groundH > 0.0 && y < groundH) {
         float sfx = fract(u / 2.6 + 0.5);
         shopM = band(y, 0.15, groundH - 0.9, fwY) * band(sfx, 0.06, 0.94, fwU / 2.6);
         wall = mix(wall, vec3(0.16, 0.16, 0.17), band(y, groundH - 0.8, groundH - 0.3, fwY));   // pita kanopi / papan nama
+        #ifdef IKLAN
+        {                                                          // 27b: satu toko = 1-3 etalase 2,6 m, plang merek di pita; gaya 13 = papan perusahaan selebar muka
+          bool ofc = code == 13.0;
+          float ne = ofc ? 1.0 : 1.0 + floor(hash1(vec2(vSeed * 53.0, fz ? 2.0 : 6.0)) * 2.999);
+          float q = (u / 2.6 + 0.5) / ne, si = floor(q), sW = ofc ? W : 2.6 * ne, su = ofc ? u : (fract(q) - 0.5) * sW;
+          if (ofc) si = 0.0;
+          float sh = 0.62, y0 = groundH - 0.92, sw = min(sW * 0.9, sh * 2.3);
+          int bb = brandOf(hash1(vec2(si + vSeed * 31.0, fz ? 5.0 : 9.0)), vLang + (ofc ? uBrandNL : 0.0));
+          vec2 l = vec2(su / sw + 0.5, (y - y0) / sh);
+          float fp = max(fwU * 256.0 / sw, fwY * 128.0 / sh), inS = band(l.x, 0.0, 1.0, fwU / sw) * band(l.y, 0.0, 1.0, fwY / sh);
+          float fas = ofc ? 0.0 : band(y, y0, y0 + sh, fwY) * band(abs(su), -1.0, sW * 0.5 - 0.08, fwU);   // latar merek selebar toko
+          float lit = step(0.4, hash1(vec2(si + vSeed * 13.0, 29.0)));
+          vec3 nT = bSign(bb, 1.0, l, fp);
+          vec3 sA = mix(bInfo(bb, 0), bSign(bb, 0.0, l, fp), inS);
+          wall = mix(wall, mix(sA, nT * 0.35, uNight * lit * inS), max(fas, inS));
+          neon = inS * lit; neonC = nT * 1.1; shopM *= 1.0 - inS;
+        }
+        #endif
       }
       if (code == 12.0 || code == 13.0) {                         // 22a: pita batu di bawah lis dan di atas toko
         vec3 beltC = code == 12.0 ? vec3(0.55, 0.5, 0.42) : base * 1.08;
@@ -4569,7 +4652,7 @@ if (KACA.on) {
     KACA.n++; if (top2 > 45) KACA.n45++; KACA.list.push([+ts.toFixed(1), +tz.toFixed(1), +top.toFixed(1), +top2.toFixed(1)]);
   }
 }
-const buildMat = new THREE.ShaderMaterial({ fog: true, side: THREE.DoubleSide,
+const buildMat = new THREE.ShaderMaterial({ fog: true, side: THREE.DoubleSide, defines: IKLAN.on ? { IKLAN: '' } : {},
   uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), LIGHT.uniforms, BUILD_U),
   vertexShader: BUILD_VS, fragmentShader: BUILD_FS });
 const cityMeshes = {};
@@ -4579,6 +4662,11 @@ for (const type of Object.keys(BUILD)) {
   const st = new Float32Array(Math.max(1, list.length) * 2);
   list.forEach((b, i) => { st[i * 2] = b[7] + 0.99 * (b[9] || 0); st[i * 2 + 1] = b[8] + 0.99 * (b[10] || 0); });   // 22c: pecahan = p1, p2
   geo.setAttribute('aStyle', new THREE.InstancedBufferAttribute(st, 2));
+  if (IKLAN.on) {                                                 // 27b: baris bahasa plang per gedung dari distriknya
+    const la = new Float32Array(Math.max(1, list.length)), K = window.BRANDKIT;
+    list.forEach((b, i) => { const D = districtAt(b[0], b[1]); la[i] = IKLAN.row[(D && K.DISTRICT_LANG[D.name]) || 'en'] || 0; });
+    geo.setAttribute('aLang', new THREE.InstancedBufferAttribute(la, 1));
+  }
   const mesh = new THREE.InstancedMesh(geo, buildMat, Math.max(1, list.length));
   list.forEach(([s, za, w, d, h, elev, col], i) => placeAt(mesh, i, s, za, w, h, d, elev, _c.set(col)));
   mesh.count = list.length;
@@ -16757,7 +16845,7 @@ setTimeout(warmLater, 1500);                       // P4
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { warmLater, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, IKLAN, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
 /* =====================================================================
    VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).
    Rig = pose kamera lama dengan pitch 0 dan tanpa gerak kepala, diputar balik sebesar yaw kepala: di dalam stasiun "atas" =
