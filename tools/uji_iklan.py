@@ -1,11 +1,11 @@
-"""Uji tahap 27 (Copper Corn Station): plang, reklame, dan sudut LCD.
+"""Uji tahap 28 (Copper Corn Station): plang, reklame, dan sudut LCD.
 - Atlas BRANDKIT: 48 merek, tiap sel punya warna rata-rata (tidak hitam semua), tabel bahasa IKLAN.langs lengkap.
-- 27b: semua mesh gedung punya atribut aLang (baris bahasa plang per gedung), gedung di Tokyo memakai baris 'ja'.
-- 27c / 27d: jumlah papan per jenis (reklame atap, logo menara, papan menonjol, halte, lapak, kafe, billboard tiang, minimarket) > 0;
+- 28b: semua mesh gedung punya atribut aLang (baris bahasa plang per gedung), gedung di Tokyo memakai baris 'ja'.
+- 28c / 28d: jumlah papan per jenis (reklame atap, logo menara, papan menonjol, halte, lapak, kafe, billboard tiang, minimarket) > 0;
   billboard tiang, minimarket, dan papan A tidak di badan jalan atau air; billboard tiang hanya di distrik dan tidak di distrik tani.
-- 27e: layar LCD di alun-alun New York dibuat, render malam di alun-alun tanpa nilai tidak valid (piksel kanvas terbaca, bukan NaN).
-- 27f: preset Hemat = radius papan 0,45x dan layar LCD diam.
-- ?iklan=0: tidak ada atribut aLang, tidak ada kind FURN 'ik*', layar LCD tidak dibuat (kota sebelum tahap 27).
+- 28e: layar LCD di alun-alun New York dibuat, render malam di alun-alun tanpa nilai tidak valid (piksel kanvas terbaca, bukan NaN).
+- 28f: preset Hemat = radius papan 0,45x dan layar LCD diam.
+- ?iklan=0: tidak ada atribut aLang, tidak ada kind FURN 'ik*', layar LCD tidak dibuat (kota sebelum tahap 28).
 - ?neon=0: papan lain tetap, layar LCD tidak dibuat.
 Pakai: python tools/uji_iklan.py   (THREE_LOCAL = folder three.module.js untuk sandbox tanpa CDN, CHROMIUM opsional)"""
 import asyncio, json, os, pathlib, sys
@@ -95,7 +95,7 @@ async def main():
               lcd: !!(S.IKLAN.lcd && S.IKLAN.lcd.on), def: 'IKLAN' in (S.cityMeshes.flat.material.defines || {}) }; }""")
         r2, errs2 = await run(b, '?preset=ultra&iklan=0', local, lama)
         print('?iklan=0:', json.dumps(r2), 'error:', errs2[:5] or 'tidak ada')
-        if r2['on'] or r2['aLang'] or r2['ik'] or r2['lcd'] or r2['def']: gagal.append('?iklan=0: objek tahap 27 masih dibuat')
+        if r2['on'] or r2['aLang'] or r2['ik'] or r2['lcd'] or r2['def']: gagal.append('?iklan=0: objek tahap 28 masih dibuat')
         if errs2: gagal.append('error halaman (?iklan=0)')
 
         async def tanpaNeon(pg):

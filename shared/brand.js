@@ -1,4 +1,4 @@
-/* shared/brand.js: atlas merek fiktif bersama (Rencana tahap 27, docs/cooper-station/rencana-tahap-27-cooper-station.md).
+/* shared/brand.js: atlas merek fiktif bersama (Rencana tahap 28, docs/cooper-station/rencana-tahap-28-cooper-station.md).
    Skrip biasa (bukan modul) agar jalan dari file://, mengisi window.BRANDKIT. Tanpa three.js, tanpa aset luar.
    Semua merek fiktif buatan sendiri (bukan merek dunia nyata, bukan dari film). Logo digambar dari bentuk primitif kanvas.
    Plang di dunia game memakai bahasa distrik, tidak ikut bahasa UI dan tidak dalam bahasa Indonesia (permintaan Bhakti):
@@ -16,7 +16,7 @@
      cellIndex(b, kind)     indeks sel global (urutan KINDS lalu merek)
      pick(u, use, district) merek deterministik dari u (0..1): di distrik berbahasa X sekitar 60% merek lokal X + 40% merek global,
                             distrik berbahasa English hanya merek global
-   Sel bisa dihitung di shader: asal sel = (b % cols) * w, y0 + floor(b / cols) * h. Baris y 2688-4096 dicadangkan (LCD 27e). */
+   Sel bisa dihitung di shader: asal sel = (b % cols) * w, y0 + floor(b / cols) * h. Baris y 2688-4096 dicadangkan (LCD 28e). */
 (function () {
   'use strict';
   const W = 2048, H = 4096, SIZE = W, TAU = Math.PI * 2;
