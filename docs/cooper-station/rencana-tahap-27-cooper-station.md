@@ -95,9 +95,18 @@ Angka sebenarnya diukur di 27f dengan `GPUT` dan `tools/ukur_muat.py`; FPS di GT
 - LCD tanpa nilai tidak valid siang, malam, hujan.
 - 0 program shader baru di frame pertama dan saat tombol (`ukur_muat.py --cek`).
 
-## Pertanyaan untuk Bhakti
+## Keputusan Bhakti (16 Oktober 2026)
 
-1. Lokasi LCD di alun-alun New York setuju, atau pindah ke pusat megacity lain?
-2. Merek fiktif saja (diusulkan) dan teks Latin saja, atau boleh huruf Jepang / Mandarin dekoratif di neon ala cyberpunk?
-3. LCD memakai ilusi 3D anamorfik (rumit, terbaik dari satu titik) atau iklan datar beranimasi (lebih murah)?
-4. Kepadatan iklan suburban: jarang (diusulkan) atau ramai seperti jalan raya Amerika?
+| Pertanyaan | Keputusan |
+| --- | --- |
+| Lokasi LCD | alun-alun New York |
+| Huruf | merek fiktif; boleh huruf Jepang dan Mandarin dekoratif (terutama neon dan LCD) |
+| Konten LCD | ilusi 3D anamorfik |
+| Kepadatan iklan suburban | jarang |
+
+## Status
+
+| Tahap | Status |
+| --- | --- |
+| 27a | dikerjakan: modul bersama `shared/brand.js` (`window.BRANDKIT`: tabel `BRANDS`, `draw(canvas, lang)` atlas 2048 x 2048, `cell(i, kind)`, warna rata-rata per sel) + pratinjau `docs/cooper-station/iklan/pratinjau-merek.html`; belum dipasang di game, menunggu persetujuan merek. Gambar: `iklan/pratinjau-merek.png` (24 merek x 4 jenis sel), `iklan/pratinjau-malam.png` (deret toko malam) |
+| 27b-27f | belum |

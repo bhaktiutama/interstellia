@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pratinjau Merek Fiktif</title>
+<!-- Tahap 27a: pratinjau atlas merek fiktif shared/brand.js sebelum dipasang di Copper Corn Station. Buka langsung dari file://. -->
+<style>
+  :root { --bg: #101114; --card: #1a1c21; --line: #2c2f36; --tx: #e8e6e1; --mut: #9a9ca3; --ac: #ffb45a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--tx); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 20px 16px 8px; max-width: 1200px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 10px; }
+  p { color: var(--mut); margin: 4px 0; }
+  main { max-width: 1200px; margin: 0 auto; padding: 0 16px 40px; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  button { background: var(--card); color: var(--tx); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font: inherit; cursor: pointer; }
+  button.on { border-color: var(--ac); color: var(--ac); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+  .card .row { display: flex; gap: 8px; align-items: flex-start; }
+  .card canvas { display: block; border-radius: 3px; max-width: 100%; }
+  .meta { font-size: 13px; color: var(--mut); margin-top: 6px; }
+  .meta b { color: var(--tx); }
+  #street { width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  #atlas { width: 100%; max-width: 640px; height: auto; border: 1px solid var(--line); image-rendering: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1 data-t="judul">Pratinjau merek fiktif (tahap 27a)</h1>
+  <p data-t="ket">Semua merek buatan sendiri, bukan merek dunia nyata. Logo digambar dari bentuk dasar. Belum dipasang di game.</p>
+  <div class="bar">
+    <button id="lId">Indonesia</button><button id="lEn">English</button>
+    <button id="tDay" data-t="siang">Siang</button><button id="tNight" data-t="malam">Malam</button>
+  </div>
+</header>
+<main>
+  <h2 data-t="jalan">Contoh deret toko</h2>
+  <canvas id="street" width="1600" height="560"></canvas>
+  <h2 data-t="merek">Merek (plang siang, neon malam, tegak, logo)</h2>
+  <div class="grid" id="cards"></div>
+  <h2 data-t="atlas">Atlas 2048 x 2048 (satu tekstur untuk semua papan)</h2>
+  <canvas id="atlas"></canvas>
+</main>
+<script src="../../../shared/brand.js"></script>
+<script>
+  const K = window.BRANDKIT;
+  const TXT = {
+    id: { judul: 'Pratinjau merek fiktif (tahap 27a)', ket: 'Semua merek buatan sendiri, bukan merek dunia nyata. Logo digambar dari bentuk dasar. Belum dipasang di game.',
+      siang: 'Siang', malam: 'Malam', jalan: 'Contoh deret toko', merek: 'Merek (plang siang, neon malam, tegak, logo)', atlas: 'Atlas 2048 x 2048 (satu tekstur untuk semua papan)', pakai: 'Dipakai' },
+    en: { judul: 'Fictional brand preview (stage 27a)', ket: 'All brands are original, not real-world brands. Logos are drawn from basic shapes. Not in the game yet.',
+      siang: 'Day', malam: 'Night', jalan: 'Shop row example', merek: 'Brands (day sign, night neon, vertical, logo)', atlas: 'Atlas 2048 x 2048 (one texture for every sign)', pakai: 'Used for' },
+  };
+  const USE = { id: { toko: 'toko', kantor: 'kantor', reklame: 'reklame', suburban: 'suburban', neon: 'neon', lcd: 'LCD' },
+    en: { toko: 'shop', kantor: 'office', reklame: 'billboard', suburban: 'suburb', neon: 'neon', lcd: 'LCD' } };
+  let lang = 'id', night = false, atlas = null;
+  try { lang = new URLSearchParams(location.search).get('lang') || localStorage.getItem('lazarus.lang') || 'id'; } catch (e) {}
+  if (lang !== 'en') lang = 'id';
+
+  function crop(kind, b, scale) {
+    const c = K.cell(b, kind), cv = document.createElement('canvas');
+    cv.width = c.w * scale; cv.height = c.h * scale;
+    cv.getContext('2d').drawImage(atlas, c.x, c.y, c.w, c.h, 0, 0, cv.width, cv.height); return cv;
+  }
+  function cards() {
+    const box = document.getElementById('cards'); box.innerHTML = '';
+    K.BRANDS.forEach((B, b) => {
+      const d = document.createElement('div'); d.className = 'card';
+      const r1 = document.createElement('div'); r1.className = 'row'; r1.append(crop('plang', b, 0.62), crop('neon', b, 0.62));
+      const r2 = document.createElement('div'); r2.className = 'row'; r2.style.marginTop = '8px'; r2.append(crop('tegak', b, 0.5), crop('logo', b, 0.5));
+      const m = document.createElement('div'); m.className = 'meta';
+      m.innerHTML = `<b>${B.name}</b>${B.cjk ? ' · ' + B.cjk : ''} · ${TXT[lang].pakai}: ${B.use.map((u) => USE[lang][u]).join(', ')}`;
+      d.append(r1, r2, m); box.append(d);
+    });
+  }
+  // deret toko: dinding bata, 6 modul toko, plang per modul (siang: plang, malam: neon menyala di dinding gelap)
+  function street() {
+    const cv = document.getElementById('street'), g = cv.getContext('2d'), W = cv.width, H = cv.height;
+    g.fillStyle = night ? '#1b0f0c' : '#8a4632'; g.fillRect(0, 0, W, H);
+    g.fillStyle = night ? '#140b09' : '#7a3c2a';
+    for (let y = 0; y < H; y += 14) for (let x = (y / 14) % 2 ? -20 : 0; x < W; x += 40) g.fillRect(x, y + 12, 40, 2), g.fillRect(x, y, 2, 14);
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 2; j++) {                    // jendela atas
+      g.fillStyle = night ? (Math.sin(i * 7 + j) > 0 ? '#e8b866' : '#141820') : '#2a3442';
+      g.fillRect(40 + i * 260 + 60, 30 + j * 110, 80, 80);
+    }
+    const shops = [0, 10, 1, 16, 15, 17];
+    shops.forEach((b, i) => {
+      const x = 20 + i * 260, y = 260, w = 240;
+      const sign = crop(night ? 'neon' : 'plang', b, 1);
+      if (night) { g.save(); g.shadowColor = K.BRANDS[b].neon; g.shadowBlur = 30; g.drawImage(sign, x, y, w, 120); g.restore(); }
+      else g.drawImage(sign, x, y, w, 120);
+      g.fillStyle = night ? '#ffe6b0' : '#33424f'; g.globalAlpha = night ? 0.7 : 1; g.fillRect(x + 10, y + 140, w - 90, 150); g.globalAlpha = 1;   // etalase
+      g.fillStyle = '#1a1210'; g.fillRect(x + w - 70, y + 140, 60, 160);                                                                       // pintu
+    });
+    const T = crop('tegak', 18, 1); if (night) { g.save(); g.shadowColor = K.BRANDS[18].neon; g.shadowBlur = 24; }
+    g.drawImage(T, W - 110, 20, 80, 160); if (night) g.restore();
+  }
+  function render() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-t]').forEach((e) => { e.textContent = TXT[lang][e.dataset.t]; });
+    document.getElementById('lId').classList.toggle('on', lang === 'id'); document.getElementById('lEn').classList.toggle('on', lang === 'en');
+    document.getElementById('tDay').classList.toggle('on', !night); document.getElementById('tNight').classList.toggle('on', night);
+    atlas = K.draw(atlas, lang).canvas; document.getElementById('atlas').width = K.SIZE; document.getElementById('atlas').height = K.SIZE;
+    document.getElementById('atlas').getContext('2d').drawImage(atlas, 0, 0);
+    cards(); street();
+  }
+  document.getElementById('lId').onclick = () => { lang = 'id'; render(); };
+  document.getElementById('lEn').onclick = () => { lang = 'en'; render(); };
+  document.getElementById('tDay').onclick = () => { night = false; street(); render(); };
+  document.getElementById('tNight').onclick = () => { night = true; render(); };
+  (document.fonts ? document.fonts.ready : Promise.resolve()).then(render);
+</script>
+</body>
+</html>
