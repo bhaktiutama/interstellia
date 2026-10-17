@@ -12295,6 +12295,7 @@ function postEnd() {
 }
 function cyclePost() {
   POST.mode = (POST.mode + 1) % POST.names.length;
+  warmNext();                                                      // varian kanvas dikompilasi saat sudah dekat (mode 1 -> 2), bukan saat muat
   uiLabel('labPost', () => t('Efek layar: {m} (P)', { m: t(POST.names[POST.mode]) }));
 }
 function toggleAdapt() {                                           // 17c: adaptasi mata nyala/mati (untuk membandingkan)
@@ -12642,6 +12643,7 @@ function applyPreset(i) {
   TRAFFIC.U.uTraffic.value = P.traffic;
   LEAF.presetN = [3000, 2200, 1500, 900, 0][i]; applyFall();                  // 12b-2: daun jatuh per preset (Hemat: mati)
   for (const f of PRESET_HOOKS) f(i);                                            // 12b-3: fitur yang didefinisikan belakangan (pejalan kaki)
+  if (typeof warmNext === 'function') warmNext();
   RAYS.n = [16, 10, 0, 0, 0][i]; toggleRays(); toggleRays();
   uiLabel('labPreset', () => t('Preset: {p}', { p: t(P.name) }) + (PRESET.auto ? t(' (otomatis)') : '') + ' (Q)');
   try { localStorage.setItem('cooperStation.preset', JSON.stringify({ idx: i, auto: PRESET.auto })); } catch (e) { /* penyimpanan tidak tersedia */ }
@@ -17516,6 +17518,11 @@ function warmLater(force) {                                         // force: uj
   const other = POST.mode !== 2 ? null : POST_R.hdr;               // varian lain dulu, varian yang sedang dipakai terakhir
   return WARMKIT.background(renderer, [...sceneJobs(other), ...sceneJobs(POST_TGT())], force);
 }
+let warmDone = false;
+function warmNext() {                                               // aman dipanggil sebelum muat selesai (tidak melakukan apa pun)
+  if (!window.__stationReady || warmDone || POST.mode !== 1) return;   // __stationReady dulu: warmDone belum ada sebelum muat selesai
+  warmDone = true; setTimeout(warmLater, 1500);
+}
 await bootStep(1, 'Siap');
 BOOT.ms = Math.round(performance.now() - BOOT.t0);
 {
@@ -17535,7 +17542,9 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 }
 window.__stationReady = true;
 diagApply();
-setTimeout(warmLater, 1500);                       // P4
+// P4 (revisi): dulu warmLater() jalan otomatis 1,5 s setelah muat dan mengompilasi ulang seluruh adegan untuk target kanvas; di GPU asli itu
+// memakai CPU / driver selama berpuluh detik sampai menit saat pemain sudah bermain (FPS rendah, resolusi dinamis turun, gambar buram).
+// Kini hanya sekali, ketika efek layar tinggal satu langkah dari mode Mati (target kanvas): warmNext() dipanggil dari cyclePost() dan applyPreset().
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { warmLater, LEAFG, LEAF_SP, DAUN, HX, EXT_LIGHT, extLightUpdate, toggleExterior, ext, exteriorGroup, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,

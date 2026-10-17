@@ -617,8 +617,12 @@ void main() {
       tu = mix(vec3(2.0), a0 / da, ca); tl = mix(vec3(2.0), b0 / db, cb);
       tu = mix(tu, vec3(2.0), step(vec3(tP), tu)); tl = mix(tl, vec3(2.0), step(vec3(tP), tl));   // di belakang planet: lewati
     }
-    if (min(min(min(tu.x, tu.y), tu.z), min(min(tl.x, tl.y), tl.z)) < 1.5) {
-      for (int n = 0; n < 7; n++) {
+    // Perf muat: shadeDisk dan shadeDust cukup satu kali dimasukkan ke program. Dulu cabang piringan tipis (else) menyalin shadeDisk
+    // sekali lagi, dan batas konstan 7 membuat kompilator HLSL (ANGLE / D3D) membuka loop jadi 7 salinan shadeDisk + shadeDust
+    // (layar kosong sekitar 30 detik saat muat). Batas memakai uniform (uMaxSteps) agar tetap loop; paling banyak 7 kejadian
+    // (1 piringan + 6 lembar) karena tiap putaran menghabiskan satu kejadian atau keluar lewat best > 1.5.
+    if (min(min(min(tu.x, tu.y), tu.z), min(min(tl.x, tl.y), tl.z)) < 1.5 || !diskDone) {
+      for (int n = 0; n < uMaxSteps; n++) {
         float mu = min(tu.x, min(tu.y, tu.z)), ml = min(tl.x, min(tl.y, tl.z)), best = min(mu, ml);
         if (!diskDone && tD <= best) {
           diskDone = true;
@@ -638,16 +642,6 @@ void main() {
         vec4 dc = shadeDust(mix(prev, pos, best), bi);
         col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
         if (trans < 0.01) { opaque = true; break; }
-      }
-    } else if (!diskDone) {
-      // thin-disk crossing (plane y = 0): interpolate hit, composite front-to-back
-      vec3 hit = mix(prev, pos, tD);
-      float rh = length(hit.xz);
-      if (rh > uRin && rh < uRout) {
-        vec4 dcol = shadeDisk(hit, vel, rh);
-        col += trans * dcol.rgb * dcol.a;
-        trans *= 1.0 - dcol.a;
-        if (trans < 0.01) opaque = true;
       }
     }
     if (opaque) { state = 3; break; }
