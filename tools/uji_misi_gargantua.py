@@ -60,6 +60,12 @@ Kelompok 10 (K1, menoleh di kokpit; docs/gargantua/rencana-kokpit-gx01.md):
 - menoleh tidak mengubah sikap, posisi, kecepatan, sikap X, prakiraan; pegas mencapai sasaran tanpa lewat,
 - mouse: seret kiri (atau kursor terkunci) = kepala, seret kanan = hidung, klik ganda = depan, roda = FOV 50-95; VR mengabaikan kepala mouse,
 - render kokpit menoleh jauh dekat piringan tanpa nilai tidak valid, kamus ID.
+Kelompok MK (planet Millar dan suasana Kelam; docs/gargantua/rencana-millar-dan-suasana-kelam.md):
+- ?mood=klasik&millar=0 = render identik dengan commit rencana sebelum MK1 (luar misi dan kokpit),
+- Kelam: render tanpa nilai tidak valid di 4 kualitas x 4 kamera preset dan di misi dekat piringan; Kelam mengubah tampilan,
+- planet: menutup piringan (piksel berubah saat dinyalakan), orbit Kepler omega = akar(M / r^3), dilatasi 1 / akar(1 - 1,5 / r),
+- N mengganti Kelam / Klasik + localStorage; bantuan bertab (5 tab, satu tabel tampil, tab diingat); klik saat kursor terkunci = lepas,
+- kamus ID untuk teks baru.
 Pakai: python tools/uji_misi_gargantua.py   (butuh: pip install playwright; CHROMIUM=<jalur> opsional, default /opt/pw-browsers/chromium
 bila ada). Tanpa GPU dipakai SwiftShader."""
 import asyncio, os, pathlib, sys
@@ -88,7 +94,7 @@ async def main():
         errs = []
         pg.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))
         pg.on('console', lambda m: errs.append(m.type + ': ' + m.text[:200]) if m.type in ('error', 'warning') else None)
-        await pg.goto(PAGE.as_uri() + '?lang=id')
+        await pg.goto(PAGE.as_uri() + '?lang=id&mood=klasik&millar=0', timeout=120000)   # MK: uji lama memakai tampilan Klasik tanpa planet (Kelam diuji di kelompok MK)
         await pg.wait_for_function('window.__gargantua !== undefined', timeout=60000)
         await pg.wait_for_timeout(1500)
 
@@ -223,13 +229,13 @@ async def kelompok2(p, exe, pg):
         await pg.evaluate('() => { window.__gargantua.stopMission(); }')
         # V4 (turbulensi piringan, bintang HDR) sengaja mengubah tampilan: pembanding G1 memakai ?v4=0 (= sebelum V4) di halaman sekarang
         pg3 = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
-        await pg3.goto(PAGE.as_uri() + '?lang=id&v4=0'); await pg3.wait_for_function('window.__gargantua !== undefined'); await pg3.wait_for_timeout(1000)
+        await pg3.goto(PAGE.as_uri() + '?lang=id&v4=0&mood=klasik&millar=0', timeout=120000); await pg3.wait_for_function('window.__gargantua !== undefined', timeout=120000); await pg3.wait_for_timeout(1000)
         await pg3.evaluate(setup); await pg3.wait_for_timeout(500); baru = await pixels(pg3); await pg3.close()
         pg2 = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
-        await pg2.goto(tmp.as_uri() + '?lang=id'); await pg2.wait_for_function('window.__gargantua !== undefined'); await pg2.wait_for_timeout(1000)
+        await pg2.goto(tmp.as_uri() + '?lang=id', timeout=120000); await pg2.wait_for_function('window.__gargantua !== undefined', timeout=120000); await pg2.wait_for_timeout(1000)
         await pg2.evaluate(setup); await pg2.wait_for_timeout(500); lama = await pixels(pg2)
         d = beda(baru, lama)
-        cek('misi mati: render identik dengan versi sebelum G2 (uFall = 0, ?v4=0)', d == 0, f'{d * 100:.3f}% piksel berbeda')
+        cek('misi mati: render identik dengan versi sebelum G2 (uFall = 0, ?v4=0, ?mood=klasik, ?millar=0)', d == 0, f'{d * 100:.3f}% piksel berbeda')
 
     # --- alur misi lewat UI ---
     await pg.evaluate("() => { const s = [...document.querySelectorAll('#uiBody select')].find((x) => [...x.options].some((o) => o.value === 'fast')); s.value = 'fast'; s.dispatchEvent(new Event('change')); }")
@@ -520,7 +526,7 @@ async def kelompok7(pg):
       [...document.querySelectorAll('#uiBody .btns button')].find((b) => b.textContent === 'Bahasa Indonesia').click();
       return { tabs: tabs.map((b) => b.textContent), n, vis, after, lbl, ls: localStorage.getItem('gargantua.panelTab') }; }''')
     cek('panel bertab: 7 tab, hanya satu pane tampil, tab diingat setelah ganti bahasa, semua kontrol tetap ada',
-        len(t['tabs']) == 7 and t['vis'] == ['disk'] and t['after'] == 'disk' and t['lbl'] == 'Disk' and t['ls'] == 'disk' and t['n'] == 42, str(t))   # 38 + musik: putar / jeda, pilih file, input file, volume
+        len(t['tabs']) == 7 and t['vis'] == ['disk'] and t['after'] == 'disk' and t['lbl'] == 'Disk' and t['ls'] == 'disk' and t['n'] == 46, str(t))   # 38 + musik: putar / jeda, pilih file, input file, volume + MK: Millar (centang, orbit, radius), Kelam
     # --- musik dari file sendiri (seperti Copper): J putar / jeda, volume tersimpan ---
     mu = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MUSIC, n = 4800, b = new ArrayBuffer(44 + n * 2), v = new DataView(b);
       const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
@@ -741,6 +747,7 @@ async def kelompok9(pg):
         a2['pos'] == a1['pos'] and a2['manual'] and 25 <= a2['fov'] < 70 and a2['ok'] and abs(a3['pos'][1] - a0['pos'][1]) < 1e-9 and a3['fov'] == 70 and not a3['manual'],
         f"fov {a2['fov']:.1f}, awal y {a3['pos'][1]:.2f}")
     await kelompok10(pg)
+    await kelompokMK(pg)
     cek('kartu akhir: bawaan di kanan, latar tembus, x menutup, tombol ringkasan membuka lagi, kepala bisa diseret',
         r['shown'] and r['right'] and r['bg'] == 'none' and r['closed'] and r['btn'] and r['reopen'] and 'translate(' in tr and tr != 'translate(0px, 0px)', f"{r} {tr}")
 
@@ -759,7 +766,7 @@ async def kelompok10(pg):
             px = {}
             for nama, url in (('baru', PAGE.as_uri()), ('lama', tmp.as_uri())):
                 pgx = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
-                await pgx.goto(url + '?lang=id'); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.wait_for_timeout(1000)
+                await pgx.goto(url + '?lang=id&mood=klasik&millar=0', timeout=120000); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.wait_for_timeout(1000)
                 for view in ('lubang hitam',):
                     await pgx.evaluate(setup, view); px[(nama, view)] = await pixels(pgx)
                 await pgx.close()
@@ -834,8 +841,88 @@ async def kelompok10(pg):
     src = PAGE.read_text(encoding='utf-8')
     idb = src[src.index('const ID = {'):src.index('const txt =')]
     kunci = ['Cockpit view: click, then move the mouse to look around',
-             'Cursor locked: move the mouse to look around, right button = nose, double-click = forward, Esc releases']
+             'Cursor locked: move the mouse to look around, right button = nose, double-click = forward, click or Esc releases']
     hilang = [k for k in kunci if f"'{k}':" not in idb]
     cek('K1 kamus ID lengkap', not hilang, ', '.join(hilang))
+
+async def kelompokMK(pg):
+    import subprocess, math
+    setup = '''(mis) => new Promise((res) => { const G = window.__gargantua; G.state.paused = true; G.state.simTime = 7.5; G.state.postMode = 2;
+      G.CONFIG.adaptive = false; G.CONFIG.renderScale = 0.8; if (mis) { G.startMission('polar'); G.state.paused = true; G.setShip(true, 'chase'); } setTimeout(res, 600); })'''   # kamera luar: layar MFD kokpit beranimasi menurut jam
+    # --- saklar mati = identik dengan versi sebelum MK1 ---
+    c0 = subprocess.run(['git', 'log', '--format=%H', '-1', '--grep=Gargantua MK1-MK2'], cwd=ROOT, capture_output=True, text=True).stdout.strip()   # induk commit MK1
+    old = subprocess.run(['git', 'show', f'{c0}~1:experiences/gargantua/index.html'], cwd=ROOT, capture_output=True, text=True).stdout if c0 else ''
+    if not old or 'uPlOn' in old:
+        cek('MK pembanding versi sebelum MK1 tersedia', False, 'commit rencana tidak ditemukan')
+    else:
+        tmp = PAGE.parent / '_uji_lama_mk.html'; tmp.write_text(old, encoding='utf-8')
+        try:
+            px = {}
+            for nama, url in (('baru', PAGE.as_uri()), ('lama', tmp.as_uri())):
+                pgx = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
+                await pgx.goto(url + '?lang=id&mood=klasik&millar=0', timeout=120000); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.wait_for_timeout(1000)
+                for mis in (False, True):
+                    await pgx.evaluate(setup, mis); px[(nama, mis)] = await pixels(pgx)
+                await pgx.close()
+            for mis in (False, True):
+                d = beda(px[('baru', mis)], px[('lama', mis)])
+                cek(f"MK Klasik + Millar mati: {'misi (kamera luar)' if mis else 'luar misi'} identik dengan versi sebelum MK1", d == 0, f'{d * 100:.3f}% piksel berbeda')
+        finally:
+            tmp.unlink(missing_ok=True)
+
+    # --- Kelam: tanpa nilai tidak valid di semua kualitas dan kamera ---
+    await pg.evaluate("() => { const G = window.__gargantua; G.stopMission(); G.setMood(true); G.MILLAR.on = true; G.state.paused = true; G.CONFIG.adaptive = false; }")
+    buruk = []
+    for q in ('ultra', 'high', 'medium', 'low'):
+        for pr in ('film', 'edge', 'top', 'close'):
+            st = await pg.evaluate('''([q, pr]) => new Promise((res) => { const G = window.__gargantua; G.CONFIG.quality = q; G.setPreset(pr); G.state.tween = null;
+              const P = { film: [22, 5], edge: [20, 0.6], top: [26, 78], close: [9, 12] }[pr]; G.cam.dist = P[0]; G.cam.pitch = P[1];
+              setTimeout(() => { G.state.readCb = res; }, 300); })''', [q, pr])
+            if st['bad'] or st['max'] > 1e4 or st['mean'] <= 0: buruk.append(f"{q}/{pr}: {st}")
+    cek('MK Kelam: 4 kualitas x 4 kamera tanpa nilai tidak valid', not buruk, '; '.join(buruk[:3]) or '16 render')
+    await pg.evaluate("() => { const G = window.__gargantua; G.CONFIG.quality = 'high'; G.setPreset('edge'); G.state.tween = null; G.cam.dist = 20; G.cam.pitch = 0.6; }")
+    await pg.wait_for_timeout(300); pk = await pixels(pg)
+    await pg.evaluate("() => window.__gargantua.setMood(false)"); await pg.wait_for_timeout(300); pc = await pixels(pg)
+    cek('MK Kelam mengubah tampilan (debu, palet, langit)', beda(pk, pc) > 0.05, f'{beda(pk, pc) * 100:.1f}% piksel berbeda')
+    await pg.evaluate("() => window.__gargantua.setMood(true)")
+    st = await pg.evaluate('''() => new Promise((res) => { const G = window.__gargantua; G.startMission('skim'); G.state.paused = true; G.setShip(true, 'cockpit');
+      setTimeout(() => { G.state.readCb = res; }, 600); })''')
+    cek('MK Kelam saat misi susur piringan (kokpit) tanpa nilai tidak valid', st['bad'] == 0 and st['mean'] > 0, str(st))
+    await pg.evaluate("() => window.__gargantua.stopMission()")
+
+    # --- planet: tergambar, orbit, dilatasi ---
+    a = await pg.evaluate('''() => { const G = window.__gargantua, M = G.millarState(0), M2 = G.millarState(10);
+      const da = Math.atan2(M2.pos[2] / Math.cos(6 * Math.PI / 180), M2.pos[0]) - Math.atan2(M.pos[2] / Math.cos(6 * Math.PI / 180), M.pos[0]);
+      return { r: Math.hypot(...M.pos), dil: M.dil, T: M.T, om: da / 10, nrm: M.nrm, rad: M.rad }; }''')   # 10 satuan: sudut tidak melewati pi
+    cek('MK orbit Millar: r 13, omega = akar(0,5 / r^3), periode 2 pi / omega, dilatasi 1 / akar(1 - 1,5 / 13) = 1,0632',
+        abs(a['r'] - 13) < 1e-9 and abs(a['om'] - math.sqrt(0.5 / 13 ** 3)) < 1e-9 and abs(a['T'] - 2 * math.pi / math.sqrt(0.5 / 13 ** 3)) < 1e-6
+        and abs(a['dil'] - 1 / math.sqrt(1 - 1.5 / 13)) < 1e-12 and abs(sum(x * y for x, y in zip(a['nrm'], a['rad']))) < 1e-12,
+        f"dil {a['dil']:.4f}, T {a['T']:.1f} rs/c")
+    px = []
+    for on in (True, False):
+        await pg.evaluate('''(on) => { const G = window.__gargantua, M = G.millarState(G.state.simTime), d = 8; G.MILLAR.on = on; G.MILLAR.rad = 0.3;
+          const p = M.pos, L = Math.hypot(...p); G.cam.dist = L + d; G.cam.pitch = Math.asin(p[1] / L) * 180 / Math.PI; G.cam.yaw = Math.atan2(p[0], p[2]); G.state.tween = null; }''', on)
+        await pg.wait_for_timeout(300); px.append(await pixels(pg))
+    cek('MK planet Millar tergambar (piksel berubah saat dinyalakan, kamera di belakang planet)', beda(px[0], px[1]) > 0.0005, f'{beda(px[0], px[1]) * 100:.2f}% piksel berbeda')   # planet gelap di depan bayangan gelap: sebagian piksel tidak berubah
+    await pg.evaluate("() => { const G = window.__gargantua; G.MILLAR.rad = 0.06; G.setPreset('film'); }")
+
+    # --- N, bantuan bertab ---
+    await pg.evaluate("() => window.__gargantua.setMood(true)")
+    await pg.keyboard.press('KeyN'); n1 = await pg.evaluate("() => [window.__gargantua.MOOD.on, localStorage.getItem('gargantua.mood')]")
+    await pg.keyboard.press('KeyN'); n2 = await pg.evaluate("() => [window.__gargantua.MOOD.on, localStorage.getItem('gargantua.mood')]")
+    cek('MK N: Kelam -> Klasik -> Kelam, tersimpan di localStorage', n1 == [False, 'klasik'] and n2 == [True, 'kelam'], f'{n1} {n2}')
+    h = await pg.evaluate('''() => { const G = window.__gargantua; G.toggleHelp(true); const tabs = [...document.querySelectorAll('#helpTabs button')];
+      tabs[1].click(); const vis = [...document.querySelectorAll('#help [data-pane]')].filter((t) => getComputedStyle(t).display !== 'none').map((t) => t.dataset.pane);
+      const ls = localStorage.getItem('gargantua.helpTab'); G.toggleHelp(false);
+      return { n: tabs.length, names: tabs.map((b) => b.textContent), vis, ls, rows: document.querySelectorAll('#help tr').length }; }''')
+    cek('MK bantuan bertab: 5 tab, satu tabel tampil, tab diingat', h['n'] == 5 and h['vis'] == ['mission'] and h['ls'] == 'mission' and h['rows'] > 25, str(h))
+
+    src = PAGE.read_text(encoding='utf-8')
+    idb = src[src.index('const ID = {'):src.index('const txt =')]
+    kunci = ['Planet Millar', 'Show Millar', 'Orbit', 'Shown radius (rs)', 'Near the disk (13 rs)', 'Film (4 rs, in the disk)', 'period', 'h', 'Millar clock',
+             'far away', 'Film 61,362x: needs near-extremal Kerr', 'Mood', 'Dark mood (dust clouds) (N)', 'Mood: dark (dust clouds)', 'Mood: classic',
+             'Mood: dark (dust clouds) or classic', 'Basics', 'Graphics and sound', 'Camera and photo', 'Thrust; Shift = main engine', 'Autopilot skim', 'End the mission']
+    hilang = [k for k in kunci if f"'{k}':" not in idb]
+    cek('MK kamus ID lengkap', not hilang, ', '.join(hilang))
 
 asyncio.run(main())
