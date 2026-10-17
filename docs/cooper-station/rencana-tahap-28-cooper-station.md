@@ -2,7 +2,7 @@
 
 Per 17 Oktober 2026 · disusun atas permintaan Bhakti ("enhance manusia biar tidak kotak-kotak seperti Roblox") · Status: 28a dan 28b selesai (17 Oktober 2026), menunggu persetujuan bentuk dari blokout sebelum 28c
 
-> Revisi 17 Oktober 2026: hasil generator prosedural (28b) dinilai tidak bagus. Tahap 28c dan seterusnya diganti rencana model GLB: `docs/cooper-station/rencana-tahap-28-glb-cooper-station.md`. Bagian 28a (ukur, saklar `?orang=lama`) tetap berlaku.
+> Revisi 17 Oktober 2026: hasil generator prosedural (28b) dinilai tidak bagus. Tahap 28c dan seterusnya diganti rencana model GLB: `docs/cooper-station/rencana-tahap-28-glb-cooper-station.md`. Bagian 28a (ukur, saklar `?orang=lama`) tetap berlaku. Kode prosedural 28b (`shared/orang.js`, blokout, `tools/uji_orang_bentuk.cjs`) dihapus saat tahap GLB selesai.
 
 ## Ringkasan
 

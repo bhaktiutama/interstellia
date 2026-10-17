@@ -16,7 +16,7 @@ BARU = r"""
     st.teleport(k); st.updateCamera(); for (let i = 0; i < 40; i++) { st.clock.sim += 0.1; st.stepPeds(0.1); } st.updatePeds(); await frames(3);
     const B = P.buckets, sum = B.reduce((s, b) => s + b.n, 0), vis = B.filter((b) => b.mesh.visible).length;
     let salah = 0, tri = 0, instOk = 0;
-    for (const b of B) { if (b.g.instanceCount !== b.n) salah++; if (b.n > b.cap) salah++; tri += b.n * P.chars[b.ch].lods[b.lod].nt;
+    for (const b of B) { if (b.g.instanceCount !== b.n) salah++; if (b.n > b.cap) salah++; for (let i = 0; i < b.n; i++) tri += P.chars[Math.floor(b.J[i * 4 + 2] / 4)].lods[b.lod].nt;
       for (let i = 0; i < b.n * 4; i++) if (!Number.isFinite(b.P[i]) || !Number.isFinite(b.I[i]) || !Number.isFinite(b.J[i])) salah++; if (b.n > 0 && !b.mesh.visible) salah++; }
     const per = [0, 1, 2].map((l) => B.filter((b) => b.lod === l).reduce((s, b) => s + b.n, 0));
     hasil[k] = { n: P.n, jumlahEmber: sum, tingkat: per, ember_terlihat: vis, salah, tiriOrang: tri, draw: renderer_calls(st) };
@@ -60,7 +60,7 @@ async def main():
         if chromium: kw['executable_path'] = chromium
         b = await p.chromium.launch(**kw)
         pg, errs = await buka(b, base, local); r = await pg.evaluate(BARU)
-        cek('model GLB terpasang (13 karakter x 3 tingkat = 39 ember, tanpa mesh kotak lama)', r['newModel'] and not r['lama'] and not r['mesh'] and r['ember'] == 39 and r['karakter'] == 13, f"ember {r['ember']}, karakter {r['karakter']}")
+        cek('model GLB terpasang (13 ember L0 per karakter + L1 dan L2 per jenis kelamin = 17 ember, tanpa mesh kotak lama)', r['newModel'] and not r['lama'] and not r['mesh'] and r['ember'] == 17 and r['karakter'] == 13, f"ember {r['ember']}, karakter {r['karakter']}")
         for k, v in r['lokasi'].items():
             cek(f'{k}: {v["n"]} orang = jumlah ember, instanceCount cocok, nilai valid, ember berisi terlihat', v['n'] == v['jumlahEmber'] and v['salah'] == 0, f"tingkat {v['tingkat']}, ember terlihat {v['ember_terlihat']}, tiri orang {v['tiriOrang']}, draw call adegan {v['draw']}")
         cek('radius tingkat detail per preset (Ultra 30 / 90 m, Hemat tanpa L0)', r['lodR_ultra'] == [30, 90] and r['lodR_hemat'] == [0, 35], f"{r['lodR_ultra']} {r['lodR_hemat']}")

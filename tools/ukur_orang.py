@@ -32,7 +32,7 @@ UKUR = r"""
       await frames(3); const pts = []; if (P.mesh) { const a = P.mesh.geometry.attributes.aP.array; for (let i = 0; i < P.n; i++) pts.push([a[i * 4], a[i * 4 + 1]]); } else for (const b of P.buckets) for (let i = 0; i < b.n; i++) pts.push([b.P[i * 4], b.P[i * 4 + 1]]);
       const c = st.camera.position, n = P.n, eS = ((Math.atan2(c.y, c.x) * st.R) % CIRC + CIRC) % CIRC, eZ = c.z + 4000, cnt = [0, 0, 0, 0];   // mata dari kamera (sama dengan VU.uEyeSZ)
       for (const [px, pz] of pts) { const d = Math.hypot(wrap(px - eS), pz - eZ); cnt[bands.findIndex((b) => d < b)]++; }
-      out.lokasi[nm][k] = { n, band: cnt, msUpdate: +(ms / N).toFixed(3), triSemua: st.renderer.info.render.triangles, tiriOrang: P.mesh ? n * out.geometri.tri : P.buckets.reduce((s, b) => s + b.n * P.chars[b.ch].lods[b.lod].nt, 0), draw: P.buckets ? P.buckets.filter((b) => b.n > 0).length : 1 };
+      out.lokasi[nm][k] = { n, band: cnt, msUpdate: +(ms / N).toFixed(3), triSemua: st.renderer.info.render.triangles, tiriOrang: P.mesh ? n * out.geometri.tri : P.buckets.reduce((s, b) => { let t = 0; for (let i = 0; i < b.n; i++) t += P.chars[Math.floor(b.J[i * 4 + 2] / 4)].lods[b.lod].nt; return s + t; }, 0), draw: P.buckets ? P.buckets.filter((b) => b.n > 0).length : 1 };
     }
   }
   st.applyPreset(0);

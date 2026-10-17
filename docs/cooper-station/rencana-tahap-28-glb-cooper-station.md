@@ -1,6 +1,6 @@
 # Rencana Tahap 28 (revisi GLB) Copper Corn Station: orang dari model GLB
 
-Per 17 Oktober 2026 · disusun atas permintaan Bhakti (hasil generator prosedural 28b dinilai tidak bagus; pakai paket "Ultimate Modular Men / Women Pack" GLB) · Status: 28G0, 28G1, dan 28G2 selesai (17 Oktober 2026); berikutnya 28G3 (perilaku) dan seterusnya
+Per 17 Oktober 2026 · disusun atas permintaan Bhakti (hasil generator prosedural 28b dinilai tidak bagus; pakai paket "Ultimate Modular Men / Women Pack" GLB) · Status: seluruh tahap 28G0-28G6 dikerjakan (17 Oktober 2026); 28G2-28G6 belum diuji oleh pengerjaan (atas permintaan Bhakti uji dilakukan sendiri oleh pemilik)
 
 ## Ringkasan
 
@@ -88,10 +88,10 @@ Tambahan 0,03-0,11 juta segitiga, di bawah 3% dari adegan. Biaya vertex lebih pe
 | 28G0 | (selesai 17 Oktober 2026: lisensi dan KREDIT.md; seleksi karakter pakai usulan sampai Bhakti mengubahnya) Lisensi dan seleksi: konfirmasi lisensi dan sumber, pilih karakter, putuskan lokasi berkas sumber (di luar repo), `assets/KREDIT.md` | Low | Haiku 4.5 | low | `assets/KREDIT.md`, dokumen |
 | 28G1 | (selesai 17 Oktober 2026, lihat Hasil 28G1) Alat olah `tools/siapkan_orang.mjs` (gabung, bakar satuan, kelas warna, LOD dengan `meshoptimizer`, kuantisasi, tekstur animasi, klip duduk dan payung), `orang.data.js`, uji Node `tools/uji_orang_data.cjs`, halaman pratinjau yang memutar data hasil olahan (karakter, LOD, klip, palet) untuk persetujuan; ukur ukuran berkas dan panjang langkah | High | Opus 5.5 | high | `tools/siapkan_orang.mjs` baru, `experiences/cooper-station/assets/orang.data.js` baru, `docs/cooper-station/orang/pratinjau-orang.html` baru |
 | 28G2 | (selesai 17 Oktober 2026, lihat Hasil 28G2) Pasang di game: `ORANG.load()`, geometri dan tekstur animasi, vertex shader kulit, ember (model, LOD), ganti model kotak, `?orang=lama` penuh, `warmFrame()` | High | Opus 5.5 | high (shader rawan NaN di M1) | blok model orang `index.html` (sekitar 14389-14471), `updatePeds()`, `applyPedsPreset()`, `PEDS` |
-| 28G3 | Perilaku: klip per keadaan (jalan, berdiri, duduk, payung, Wave untuk pengunjung, Interact untuk pasar), sinkron langkah, payung dari tulang tangan, baseball, anak | Medium | Sonnet 5.5 | high | `VS`, `PEDS.umbMesh`, `BASEBALL.people`, `VIS` |
-| 28G4 | Distribusi karakter per zona, warna ulang dari palet, tinggi acak, pembagian jenis kelamin | Medium | Sonnet 5.5 | medium | pembuatan `PEDS.list` (atribut `p.model`), `look()` |
-| 28G5 | Bayangan (L1), `vegLight()`, radius per preset, ukur draw call dan FPS di sandbox, tuas biaya | Medium | Opus 5.5 | high | `castAlpha`, `applyPedsPreset()` |
-| 28G6 | Uji dan dokumen: `tools/uji_orang.py`, uji lama tetap lulus, `ukur_muat.py --cek`, lembar kontak, KREDIT dan tab Tentang, `CLAUDE.md`, hapus kode prosedural 28b bila disetujui | Medium | Sonnet 5.5 | medium | `tools/`, dokumen |
+| 28G3 | (dikerjakan 17 Oktober 2026, lihat Hasil 28G3-28G6) Perilaku: klip per keadaan (jalan, berdiri, duduk, payung, Wave untuk pengunjung, Interact untuk pasar), sinkron langkah, payung dari tulang tangan, baseball, anak | Medium | Sonnet 5.5 | high | `VS`, `PEDS.umbMesh`, `BASEBALL.people`, `VIS` |
+| 28G4 | (dikerjakan 17 Oktober 2026, lihat Hasil 28G3-28G6) Distribusi karakter per zona, warna ulang dari palet, tinggi acak, pembagian jenis kelamin | Medium | Sonnet 5.5 | medium | pembuatan `PEDS.list` (atribut `p.model`), `look()` |
+| 28G5 | (dikerjakan 17 Oktober 2026, lihat Hasil 28G3-28G6) Bayangan (L1), `vegLight()`, radius per preset, ukur draw call dan FPS di sandbox, tuas biaya | Medium | Opus 5.5 | high | `castAlpha`, `applyPedsPreset()` |
+| 28G6 | (dikerjakan 17 Oktober 2026, lihat Hasil 28G3-28G6) Uji dan dokumen: `tools/uji_orang.py`, uji lama tetap lulus, `ukur_muat.py --cek`, lembar kontak, KREDIT dan tab Tentang, `CLAUDE.md`, hapus kode prosedural 28b bila disetujui | Medium | Sonnet 5.5 | medium | `tools/`, dokumen |
 
 Urutan: 28G0, 28G1 (berhenti, minta persetujuan tampilan dan ukuran), 28G2, 28G3 dan 28G4, 28G5, 28G6. Rencana disusun oleh model satu tingkat di atas tahap terberat (High).
 
@@ -151,6 +151,19 @@ Belum dicek: orang duduk di bangku (klip duduk teruji di pratinjau dan data, buk
 
 Alat bantu sandbox: `/opt/pw-browsers/chromium_headless_shell-1248` ditautkan ke chromium 1194 yang ada agar skrip uji bawaan (`python tools/uji_*.py`) jalan; bukan bagian repo.
 
+## Hasil 28G3-28G6 (dikerjakan 17 Oktober 2026, tanpa uji; pemilik yang menguji)
+
+Semua perubahan di `experiences/cooper-station/index.html` kecuali yang disebut lain. Tidak dijalankan uji apa pun setelah 28G2 atas permintaan Bhakti; `tools/uji_orang.py` dan `tools/ukur_orang.py` sudah disesuaikan dengan struktur ember baru tetapi belum dijalankan.
+
+| Tahap | Isi |
+| --- | --- |
+| 28G3 perilaku | Lengan payung kini dicampur halus (klip dasar dan klip payung dicampur menurut `aJ.w x 4` di shader), tidak lagi meloncat saat payung mulai terbuka. Variasi berdiri lewat `p.vr`: penjaga lapak pasar memakai klip Interaksi (`vr` 2), anggota kelompok mengobrol di plaza kadang Lambai (`vr` 3, sekitar 30% menurut hash posisi), selebihnya Diam. Kepala anak (skala < 0,8) diperbesar sampai 1,4x di sekitar leher. Fase jalan dan sinkron langkah tetap dari 28G2 |
+| 28G4 distribusi | Karakter per orang dipilih berbobot menurut distrik (`MW`, generator acak sendiri): pusat kota (mega) Business Man / Suit / Casual / Hoodie / Animated Woman; distrik astronom Astronaut / Worker / Casual; taman Beach / Hoodie / Adventurer / Punk / Animated Woman; tani Farmer / Worker / Casual; terminal Astronaut / Suit / Casual. Baju, celana, kulit, rambut diwarnai ulang dari palet kota hanya untuk karakter yang diizinkan (Casual, Hoodie, Beach, Animated Woman A dan B; kulit dan rambut untuk semua kecuali Astronaut dan rambut Punk) |
+| 28G5 biaya | L1 dan L2 digabung per jenis kelamin dalam satu geometri (titik karakter lain dibuang di shader lewat `aCh`), L0 tetap per karakter: draw call orang paling banyak 13 + 2 + 2 = 17 (28G2: sampai 39), L2 tidak membuat bayangan (jarak > 90 m), L0 dan L1 membuat bayangan. Kapasitas ember: L0 500 per karakter, L1 1.500 dan L2 4.000 per jenis kelamin. `vegLight()` per titik tetap |
+| 28G6 dokumen | `CLAUDE.md` (aset, `shared/orang_data.js`, alat dan uji, peta kode pejalan kaki, riwayat tahap 28), kredit di tab Tentang (kamus Inggris ditambah), `assets/KREDIT.md`, kode prosedural 28b dihapus (`shared/orang.js`, blokout, `tools/uji_orang_bentuk.cjs`) |
+
+Risiko yang perlu dicek pemilik (tidak teruji): shader tidak mengalami galat kompilasi di GTX 1060 dan M1 (indeks array seragam dinamis `uLumT[int(mf) * 7 + ci]`, `uRecT[int(mf)]`), orang tidak berkedip atau meloncat saat berpindah tingkat detail (batas 30 / 90 m), geometri gabungan L1 dan L2 tampil benar (tidak ada titik karakter lain yang lolos), FPS di pusat kota dan pasar dibanding `?orang=lama`, bayangan orang, lengan payung saat hujan mulai, penjaga lapak Interaksi, kelompok mengobrol, kepala anak.
+
 ## Uji dan ukuran keberhasilan
 
 | Pemeriksaan | Ambang (usulan, belum diukur) |
@@ -191,7 +204,7 @@ Alat bantu sandbox: `/opt/pw-browsers/chromium_headless_shell-1248` ditautkan ke
 
 ## Status kode prosedural 28b
 
-`shared/orang.js` (PEDKIT), `docs/cooper-station/orang/blokout-orang.html`, `tools/uji_orang_bentuk.cjs` digantikan jalur GLB. Dibiarkan sampai tampilan GLB disetujui di 28G1, lalu dihapus di 28G6 (usulan) atau dijadikan cadangan bila paket GLB tidak jadi dipakai. Alat ukur 28a (`tools/ukur_orang.py`, `tools/uji_orang_lama.json`, `PEDS.lama`) tetap dipakai.
+Dihapus (28G6): `shared/orang.js`, `docs/cooper-station/orang/blokout-orang.html` dan tiga tangkapannya, `tools/uji_orang_bentuk.cjs`. Alat ukur 28a (`tools/ukur_orang.py`, `tools/uji_orang_lama.json`, `PEDS.lama`) tetap dipakai.
 
 ## Pertanyaan untuk pemilik
 
