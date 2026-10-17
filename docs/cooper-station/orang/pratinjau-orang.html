@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pratinjau orang GLB 28G1</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #b9bec2; font: 13px/1.4 system-ui, sans-serif; color: #222; }
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #info { position: fixed; left: 10px; top: 8px; right: 10px; background: rgba(255,255,255,0.8); padding: 6px 10px; border-radius: 8px; pointer-events: none; }
+  #credit { position: fixed; left: 10px; bottom: 96px; background: rgba(255,255,255,0.7); padding: 3px 8px; border-radius: 6px; font-size: 11px; pointer-events: none; }
+  #bar { position: fixed; left: 8px; right: 8px; bottom: 8px; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  #bar button { background: rgba(255,255,255,0.88); border: 1px solid #8a9096; border-radius: 8px; padding: 7px 10px; font: inherit; color: #222; cursor: pointer; }
+  #bar button.on { background: #2f5f9e; color: #fff; border-color: #2f5f9e; }
+  .lab { position: fixed; transform: translate(-50%, 0); background: rgba(255,255,255,0.8); padding: 1px 6px; border-radius: 6px; font-size: 11px; white-space: nowrap; pointer-events: none; text-align: center; }
+</style>
+</head>
+<body>
+<div id="info"></div>
+<div id="credit">Ultimate Modular Women Pack by Quaternius [CC-BY] via Poly Pizza. Ultimate Modular Men Pack by Quaternius via Poly Pizza. Dioleh tools/siapkan_orang.mjs.</div>
+<div id="bar"></div>
+<script src="../../../shared/orang_data.js"></script>
+<script src="../../../experiences/cooper-station/assets/orang.data.js"></script>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
+</script>
+<script type="module">
+/* Pratinjau data orang olahan (rencana tahap 28G1): memutar data yang sama dengan yang akan dipasang di game (3 tingkat detail, klip hasil bakar,
+   kulit CPU dari shared/orang_data.js). Seret = putar, roda = zoom. */
+import * as THREE from 'three';
+const K = window.ORANGKIT, D = K.decode(window.ORANG_DATA);
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); document.body.prepend(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xb9bec2);
+const camera = new THREE.PerspectiveCamera(30, 1, 0.05, 100);
+scene.add(new THREE.HemisphereLight(0xe6eeff, 0x7a756a, 1.2)); const sun = new THREE.DirectionalLight(0xfff4e0, 2.2); sun.position.set(2.5, 4, 3.5); scene.add(sun);
+scene.add(new THREE.Mesh(new THREE.CircleGeometry(8, 48).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x8c8f8a })));
+const S = { mode: 'semua', lod: 0, clip: 'Jalan', palette: false, wire: false, play: true, t: 0, sel: 0 };
+const srgb = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+const hexLin = (h) => { const c = new THREE.Color(h); return [c.r, c.g, c.b]; };
+let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const mat = new THREE.MeshLambertMaterial({ vertexColors: true }), matW = new THREE.MeshBasicMaterial({ color: 0x10202b, wireframe: true });
+const inst = [];   // { c, g (geometry), mesh, wire, lod, P, N, lab }
+const pick = D.chars.map(() => ({ shirt: Math.floor(rnd() * 14), pants: Math.floor(rnd() * 8), skin: Math.floor(rnd() * 6), hair: Math.floor(rnd() * 6) }));
+const lab = () => { const d = document.createElement('div'); d.className = 'lab'; document.body.appendChild(d); return d; };
+const hand = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2222 })), umb = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.18, 12, 1, true).translate(0, 1.0, 0), new THREE.MeshBasicMaterial({ color: 0xff2222, side: THREE.DoubleSide, wireframe: true }));
+scene.add(hand, umb);
+
+function colorize(c, L, k) {
+  const out = new Float32Array(L.nv * 3), P = pick[k], pl = K.PAL;
+  const pal = [null, hexLin(pl.skin[P.skin]), hexLin(pl.hair[P.hair]), hexLin(pl.shirt[P.shirt]), hexLin(pl.pants[P.pants])];
+  for (let i = 0; i < L.nv; i++) {
+    const cl = L.cls[i], r = srgb(L.col[i * 3]), g = srgb(L.col[i * 3 + 1]), b = srgb(L.col[i * 3 + 2]); let o = [r, g, b];
+    const allow = cl === 1 ? c.recolor.skin : cl === 2 ? c.recolor.hair : cl === 3 ? c.recolor.top : cl === 4 ? c.recolor.bottom : false;
+    if (S.palette && allow && pal[cl]) { const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b, f = lum / Math.max(0.01, c.lum[cl]); o = pal[cl].map((v) => Math.min(1, v * f)); }
+    out.set(o, i * 3);
+  }
+  return out;
+}
+function build() {
+  for (const it of inst) { scene.remove(it.mesh, it.wire); it.g.dispose(); it.lab.remove(); } inst.length = 0;
+  const list = S.mode === 'semua' ? D.chars.map((c, k) => ({ k, lod: S.lod })) : [0, 1, 2].map((l) => ({ k: S.sel, lod: l }));
+  const cols = S.mode === 'semua' ? 7 : 3;
+  list.forEach((e, i) => {
+    const c = D.chars[e.k], L = c.lods[e.lod], g = new THREE.BufferGeometry();
+    const P = new Float32Array(L.nv * 3), N = new Float32Array(L.nv * 3);
+    g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(N, 3)); g.setAttribute('color', new THREE.BufferAttribute(colorize(c, L, e.k), 3)); g.setIndex(new THREE.BufferAttribute(L.index, 1));
+    const mesh = new THREE.Mesh(g, mat), wire = new THREE.Mesh(g, matW); mesh.frustumCulled = wire.frustumCulled = false; wire.visible = S.wire;
+    const x = (i % cols - (cols - 1) / 2) * (S.mode === 'semua' ? 1.1 : 1.4), z = -Math.floor(i / cols) * 1.5 + 0.4; mesh.position.set(x, 0, z); wire.position.copy(mesh.position); scene.add(mesh, wire);
+    inst.push({ c, L, g, mesh, wire, P, N, lab: lab(), name: c.id + ' L' + e.lod, phase: (i * 0.37) % 1 });
+  });
+}
+const cam = { az: 0.2, el: 0.12, dist: 11, ty: 0.9, tx: 0, tz: -0.4 };
+const VIEWS = { Depan: { az: 0, el: 0.1, dist: 11, ty: 0.9, tx: 0, tz: -0.4 }, Samping: { az: 1.5, el: 0.1, dist: 11, ty: 0.9, tx: 0, tz: -0.4 }, Atas: { az: 0.2, el: 1.1, dist: 11, ty: 0.5, tx: 0, tz: -0.4 }, Dekat: { az: 0.3, el: 0.1, dist: 3.4, ty: 1.0, tx: 0, tz: 0 } };
+function applyCam() { const c = cam, ce = Math.cos(c.el); camera.position.set(c.tx + Math.sin(c.az) * ce * c.dist, c.ty + Math.sin(c.el) * c.dist, c.tz + Math.cos(c.az) * ce * c.dist); camera.lookAt(c.tx, c.ty, c.tz); }
+let drag = null; const cv = renderer.domElement;
+cv.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointermove', (e) => { if (!drag) return; cam.az -= (e.clientX - drag.x) * 0.008; cam.el = Math.max(-0.2, Math.min(1.45, cam.el + (e.clientY - drag.y) * 0.006)); drag = { x: e.clientX, y: e.clientY }; });
+cv.addEventListener('pointerup', () => { drag = null; });
+cv.addEventListener('wheel', (e) => { e.preventDefault(); cam.dist = Math.max(0.8, Math.min(24, cam.dist * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+const bar = document.getElementById('bar'), btns = {};
+const btn = (t, fn, key) => { const b = document.createElement('button'); b.textContent = t; b.onclick = () => { fn(); sync(); }; bar.appendChild(b); if (key) btns[key] = b; };
+btn('Semua karakter', () => { S.mode = 'semua'; build(); }, 'm_semua'); btn('Satu karakter x 3 LOD', () => { S.mode = 'satu'; build(); }, 'm_satu');
+btn('< Karakter', () => { S.sel = (S.sel + D.chars.length - 1) % D.chars.length; build(); }); btn('Karakter >', () => { S.sel = (S.sel + 1) % D.chars.length; build(); });
+for (const l of [0, 1, 2]) btn('L' + l, () => { S.lod = l; build(); }, 'l' + l);
+for (const c of D.anim.m.clips) btn(c.name, () => { S.clip = c.name; }, 'c_' + c.name);
+btn('Palet kota', () => { S.palette = !S.palette; build(); }, 'pal'); btn('Kerangka', () => { S.wire = !S.wire; for (const it of inst) it.wire.visible = S.wire; }, 'wire'); btn('Putar/jeda', () => { S.play = !S.play; }, 'play');
+for (const v of Object.keys(VIEWS)) btn(v, () => Object.assign(cam, VIEWS[v]));
+function sync() { for (const [k, b] of Object.entries(btns)) { const on = k === 'm_' + S.mode || k === 'l' + S.lod || k === 'c_' + S.clip || (k === 'pal' && S.palette) || (k === 'wire' && S.wire) || (k === 'play' && S.play); b.classList.toggle('on', on); } }
+const info = document.getElementById('info');
+function resize() { renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); } addEventListener('resize', resize); resize();
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.1, (now - last) / 1000); last = now; if (S.play) S.t += dt;
+  let handShown = false;
+  for (const it of inst) {
+    const A = D.anim[it.c.g], c = A.byName[S.clip], ph = ((S.t / c.dur + it.phase) % 1) * c.frames, f0 = Math.floor(ph), f1 = (f0 + 1) % c.frames;
+    K.skin(it.L, A, c.start + f0, c.start + f1, ph - f0, it.P, it.N);
+    it.g.attributes.position.needsUpdate = true; it.g.attributes.normal.needsUpdate = true;
+    if (!handShown && /Payung/.test(S.clip)) { const h0 = (c.start + f0) * 3, hx = A.hand[h0], hy = A.hand[h0 + 1], hz = A.hand[h0 + 2]; hand.position.set(hx + it.mesh.position.x, hy, hz + it.mesh.position.z); umb.position.copy(hand.position); handShown = true; }
+    const v = new THREE.Vector3(it.mesh.position.x, -0.02, it.mesh.position.z).project(camera); it.lab.style.left = ((v.x + 1) / 2 * innerWidth) + 'px'; it.lab.style.top = ((1 - v.y) / 2 * innerHeight + 2) + 'px'; it.lab.textContent = it.name + ' ' + it.L.nt;
+  }
+  hand.visible = umb.visible = handShown;
+  const A = D.anim.m; info.innerHTML = `Pratinjau 28G1: ${D.chars.length} karakter, 3 tingkat detail, klip ${S.clip}. Data ${(window.ORANG_DATA.meta.blobBytes / 1e6).toFixed(2)} MB biner. Langkah Jalan pria ${A.strideM} m per siklus, wanita ${D.anim.w.strideM} m. Tinggi pinggul duduk ${A.sitDy} / ${D.anim.w.sitDy} m (lama -0,38).`;
+  applyCam(); renderer.render(scene, camera); requestAnimationFrame(frame);
+}
+build(); sync(); requestAnimationFrame(frame);
+window.__pratinjau = { S, cam, VIEWS, build, D, ready: true };
+</script>
+</body>
+</html>
