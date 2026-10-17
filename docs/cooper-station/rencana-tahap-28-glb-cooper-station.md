@@ -1,6 +1,6 @@
 # Rencana Tahap 28 (revisi GLB) Copper Corn Station: orang dari model GLB
 
-Per 17 Oktober 2026 · disusun atas permintaan Bhakti (hasil generator prosedural 28b dinilai tidak bagus; pakai paket "Ultimate Modular Men / Women Pack" GLB) · Status: rencana, belum dikerjakan
+Per 17 Oktober 2026 · disusun atas permintaan Bhakti (hasil generator prosedural 28b dinilai tidak bagus; pakai paket "Ultimate Modular Men / Women Pack" GLB) · Status: 28G0 dan 28G1 selesai (17 Oktober 2026), menunggu persetujuan tampilan dan ukuran sebelum 28G2
 
 ## Ringkasan
 
@@ -86,7 +86,7 @@ Tambahan 0,03-0,11 juta segitiga, di bawah 3% dari adegan. Biaya vertex lebih pe
 | Tahap | Isi | Effort | Model | Thinking | File dan fungsi yang disentuh |
 | --- | --- | --- | --- | --- | --- |
 | 28G0 | (selesai 17 Oktober 2026: lisensi dan KREDIT.md; seleksi karakter pakai usulan sampai Bhakti mengubahnya) Lisensi dan seleksi: konfirmasi lisensi dan sumber, pilih karakter, putuskan lokasi berkas sumber (di luar repo), `assets/KREDIT.md` | Low | Haiku 4.5 | low | `assets/KREDIT.md`, dokumen |
-| 28G1 | Alat olah `tools/siapkan_orang.mjs` (gabung, bakar satuan, kelas warna, LOD dengan `meshoptimizer`, kuantisasi, tekstur animasi, klip duduk dan payung), `orang.data.js`, uji Node `tools/uji_orang_data.cjs`, halaman pratinjau yang memutar data hasil olahan (karakter, LOD, klip, palet) untuk persetujuan; ukur ukuran berkas dan panjang langkah | High | Opus 5.5 | high | `tools/siapkan_orang.mjs` baru, `experiences/cooper-station/assets/orang.data.js` baru, `docs/cooper-station/orang/pratinjau-orang.html` baru |
+| 28G1 | (selesai 17 Oktober 2026, lihat Hasil 28G1) Alat olah `tools/siapkan_orang.mjs` (gabung, bakar satuan, kelas warna, LOD dengan `meshoptimizer`, kuantisasi, tekstur animasi, klip duduk dan payung), `orang.data.js`, uji Node `tools/uji_orang_data.cjs`, halaman pratinjau yang memutar data hasil olahan (karakter, LOD, klip, palet) untuk persetujuan; ukur ukuran berkas dan panjang langkah | High | Opus 5.5 | high | `tools/siapkan_orang.mjs` baru, `experiences/cooper-station/assets/orang.data.js` baru, `docs/cooper-station/orang/pratinjau-orang.html` baru |
 | 28G2 | Pasang di game: `ORANG.load()`, geometri dan tekstur animasi, vertex shader kulit, ember (model, LOD), ganti model kotak, `?orang=lama` penuh, `warmFrame()` | High | Opus 5.5 | high (shader rawan NaN di M1) | blok model orang `index.html` (sekitar 14389-14471), `updatePeds()`, `applyPedsPreset()`, `PEDS` |
 | 28G3 | Perilaku: klip per keadaan (jalan, berdiri, duduk, payung, Wave untuk pengunjung, Interact untuk pasar), sinkron langkah, payung dari tulang tangan, baseball, anak | Medium | Sonnet 5.5 | high | `VS`, `PEDS.umbMesh`, `BASEBALL.people`, `VIS` |
 | 28G4 | Distribusi karakter per zona, warna ulang dari palet, tinggi acak, pembagian jenis kelamin | Medium | Sonnet 5.5 | medium | pembuatan `PEDS.list` (atribut `p.model`), `look()` |
@@ -94,6 +94,40 @@ Tambahan 0,03-0,11 juta segitiga, di bawah 3% dari adegan. Biaya vertex lebih pe
 | 28G6 | Uji dan dokumen: `tools/uji_orang.py`, uji lama tetap lulus, `ukur_muat.py --cek`, lembar kontak, KREDIT dan tab Tentang, `CLAUDE.md`, hapus kode prosedural 28b bila disetujui | Medium | Sonnet 5.5 | medium | `tools/`, dokumen |
 
 Urutan: 28G0, 28G1 (berhenti, minta persetujuan tampilan dan ukuran), 28G2, 28G3 dan 28G4, 28G5, 28G6. Rencana disusun oleh model satu tingkat di atas tahap terberat (High).
+
+## Hasil 28G1 (selesai 17 Oktober 2026)
+
+Alat `tools/siapkan_orang.mjs` (Node, three.js + GLTFLoader + `meshoptimizer` hanya di alat), keluaran `experiences/cooper-station/assets/orang.data.js`, pembaca `shared/orang_data.js` (`window.ORANGKIT`: `decode()`, `skin()` kulit CPU kembaran shader), uji `tools/uji_orang_data.cjs`, pratinjau `docs/cooper-station/orang/pratinjau-orang.html` (memutar data olahan yang sama dengan yang akan dipasang: 13 karakter, 3 tingkat detail, 8 klip, palet kota, kerangka, penanda tangan payung) dan tiga tangkapan (`pratinjau-jalan.png`, `pratinjau-lod.png`, `pratinjau-duduk.png`).
+
+| Item | Hasil |
+| --- | --- |
+| Ukuran | `orang.data.js` 3,52 MB (biner 2,63 MB), di bawah batas 4,5 MB |
+| Karakter | 13 (7 pria: Business Man, Casual, Hoodie, Farmer, Worker, Beach, Astronaut; 6 wanita: Suit, Animated Woman A dan B, Worker, Adventurer, Punk) |
+| Segitiga | L0 2.992-3.000 (sumber 5.240-10.558), L1 692-700, L2 153-160; galat meshoptimizer 0,0014-0,003 / 0,007-0,010 / 0,020-0,027 (relatif terhadap ukuran model) |
+| Animasi | 20 fps; pria 244 frame, wanita 308 frame; klip: Jalan, Diam, Lambai, Interaksi, Duduk, Jalan_Payung, Diam_Payung, Duduk_Payung; galat skala matriks tulang < 2e-5 (matriks kulit tegar, kuaternion + translasi cukup) |
+| Langkah | Jalan pria 1,235 m per siklus (0,93 m/s kaki tumpu), wanita 1,443 m (0,87 m/s); game memakai 1,45 m per siklus, jadi frame diputar dari jarak tempuh dengan pengali stride (pria 1,17x lebih cepat) |
+| Duduk | pinggul turun 0,430 m (pria), 0,472 m (wanita); lama 0,38 m. Pinggul duduk di 0,53 m, sesuai bangku 0,45-0,5 m. Kaki menapak (pergelangan kembali ke tinggi berdiri), tangan di pangkuan |
+| Payung | tangan kiri ke depan: tinggi 1,14 m, depan 0,33 m, samping 0,21 m (pria), ayun selama berjalan 7-13 cm (model lama: 0,99 / 0,42 / 0,25) |
+| Uji | `uji_orang_data.cjs` 53 dari 53 lulus (nilai valid, bobot 1, tulang < 62, normal satuan, tinggi, kuaternion satuan, loop Jalan mulus, tinggi duduk, langkah, tangan payung, kulit 13 x 3 x 8 tanpa nilai tidak valid, bentuk L1 dan L2 mengikuti L0: rata-rata 1,0-3,0 cm dan 2,3-6,0 cm) |
+
+Temuan teknis yang mengubah rancangan:
+
+- Nama tulang di GLTFLoader tanpa titik (`FootL`, bukan `Foot.L`).
+- Tulang `Foot.L/R` dan `PT.L/R` bergaya IK (induknya Root, bukan betis), dan paha adalah anak `Body` bukan `Hips`: klip duduk menggeser `Body` dan memindahkan pergelangan ke ujung betis.
+- Tulang tanpa trek animasi menyimpan timpaan frame sebelumnya; pose diam dikembalikan sebelum tiap cuplikan.
+- Penyederhanaan meshoptimizer macet (hanya 2 segitiga dibuang) tanpa flag `Permissive`, karena model tersusun dari banyak titik terbelah; dengan flag itu target tercapai.
+- Matriks dunia mesh = skala 100 dan putaran -90 derajat di x, dibakar ke titik bind (meter y-atas); matriks tulang akhir = `meshWorld x bindInv x tulang x bind x meshWorld^-1`.
+
+Kelemahan dan hal yang perlu dinilai Bhakti di pratinjau:
+
+- L2 (160 segitiga) kasar (kepala runcing, tangan hilang); dimaksudkan untuk di atas 90 m.
+- L1 (700) kehilangan fitur wajah; terbaca dari 30-90 m.
+- Gaya tetap berfaset kartun seperti paket aslinya; warna titik membuat kesan tambalan tonal.
+- Klip duduk dan payung buatan sendiri: lengan duduk agak lurus ke depan, tangan payung di sekitar pinggang, bukan di tangkai payung nyata; payung sendiri belum dipasang.
+- Pratinjau dirender CPU di SwiftShader; kinerja shader GPU (kulit tekstur animasi) baru diuji di 28G2.
+- Pesan `computeBoundingSphere ... NaN` muncul sekali di konsol halaman pratinjau; data dan hasil kulit diuji tanpa NaN (0 dari seluruh titik), jadi penyebabnya di halaman pratinjau (belum dicari).
+
+Kredit: baris `orang.data.js` di `experiences/cooper-station/assets/KREDIT.md` dan teks atribusi di pratinjau. Berkas GLB sumber tidak di-commit. Alat butuh `THREE_LOCAL`, `MESHOPT_LOCAL`, `--men`, `--women` (lihat kepala berkas).
 
 ## Uji dan ukuran keberhasilan
 
