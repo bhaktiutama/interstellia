@@ -755,17 +755,17 @@ async def kelompok10(pg):
         tmp = PAGE.parent / '_uji_lama_k1.html'; tmp.write_text(old, encoding='utf-8')
         try:
             setup = '''(view) => new Promise((res) => { const G = window.__gargantua; G.state.paused = true; G.state.simTime = 7.5; G.state.postMode = 2;
-              G.CONFIG.adaptive = false; G.CONFIG.renderScale = 0.8; G.startMission('polar'); G.state.paused = true; G.setShip(true, view); setTimeout(res, 600); })'''
+              G.CONFIG.adaptive = false; G.CONFIG.renderScale = 0.8; setTimeout(res, 600); })'''   # K2-K7 sengaja mengubah wahana: pembanding = tanpa wahana
             px = {}
             for nama, url in (('baru', PAGE.as_uri()), ('lama', tmp.as_uri())):
                 pgx = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
                 await pgx.goto(url + '?lang=id'); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.wait_for_timeout(1000)
-                for view in ('cockpit', 'chase'):
+                for view in ('lubang hitam',):
                     await pgx.evaluate(setup, view); px[(nama, view)] = await pixels(pgx)
                 await pgx.close()
-            for view in ('cockpit', 'chase'):
+            for view in ('lubang hitam',):
                 d = beda(px[('baru', view)], px[('lama', view)])
-                cek(f'K1 kepala nol: {view} identik dengan versi sebelum K1', d == 0, f'{d * 100:.3f}% piksel berbeda')
+                cek(f'K1-K7: tampilan tanpa wahana ({view}) identik dengan versi sebelum K1', d == 0, f'{d * 100:.3f}% piksel berbeda')
         finally:
             tmp.unlink(missing_ok=True)
 
