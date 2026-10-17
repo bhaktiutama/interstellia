@@ -351,11 +351,21 @@ vec3 moodRamp(float t) {
 // 4-6 rs sampai 17-25 rs: tidak ada batas tajam (pelajaran G3a: tepi lempeng tebal tampak sebagai lingkaran).
 float dustK(int i) { return i == 0 ? 0.02 : i == 1 ? -0.02 : i == 2 ? 0.05 : i == 3 ? -0.05 : i == 4 ? 0.10 : -0.10; }
 float dustG(vec3 p, float k) { return p.y - k * length(p.xz); }
+// MK4c (revisi tangkapan layar Bhakti: debu terlalu halus): awan bergejolak = derau billow (1 - |2n - 1| per oktaf: tepi
+// gumpalan bulat, lipatan tajam) di atas domain yang dibelokkan derau skala besar, frekuensi 2,5x lebih tinggi dari MK4.
+// Gumpalan sedikit memanjang searah orbit (frekuensi sudut lebih rendah dari radial).
 float dustPat(float r, float phi, float seed) {
   vec2 cs = vec2(cos(phi), sin(phi));
-  vec3 q = vec3(r * 0.42, cs * 1.25) + seed;
-  float s = 0.0, a = 0.5, n = 0.0;
-  for (int i = 0; i < 4; i++) { if (i >= uOct) break; s += a * vnoise(q); n += a; q = q * 2.07 + vec3(4.1, 1.3, 7.7); a *= 0.5; }
+  vec3 q = vec3(r * 1.05, cs * 2.6) + seed;
+  float wq = vnoise(q * 0.45 + 17.0);
+  q += vec3(wq * 1.6, wq * 0.9, -wq * 0.9);                        // pembelokan domain: gumpalan tidak berjajar rapi
+  float s = 0.0, a = 0.55, n = 0.0;
+  for (int i = 0; i < 5; i++) {
+    if (i >= uOct) break;
+    float v = vnoise(q);
+    s += a * (1.0 - abs(2.0 * v - 1.0)); n += a;
+    q = q * 2.11 + vec3(4.1, 1.3, 7.7); a *= 0.5;
+  }
   return s / n;
 }
 vec4 shadeDust(vec3 hp, int i) {                                    // rgb = cahaya hamburan, a = serapan
@@ -368,18 +378,23 @@ vec4 shadeDust(vec3 hp, int i) {                                    // rgb = cah
   float c1 = fract(uTime / P), c2 = fract(uTime / P + 0.5), w1 = 1.0 - abs(2.0 * c1 - 1.0);
   float sd = float(i) * 13.7;
   float n = mix(dustPat(r, phi - om * c2 * P, sd + 41.0), dustPat(r, phi - om * c1 * P, sd), w1);
-  // makin jauh dari piringan makin tipis; lembar dekat lebih merata (kabut bercahaya), lembar jauh bergumpal
-  float dens = (lv == 0 ? smoothstep(0.25, 0.70, n) * 0.55 : lv == 1 ? smoothstep(0.36, 0.70, n) * 0.70 : smoothstep(0.44, 0.74, n) * 0.60) * w;
+  // makin jauh dari piringan makin tipis; lembar dekat lebih banyak tertutup, lembar jauh gumpalan terpisah
+  float dens = (lv == 0 ? smoothstep(0.50, 0.68, n) * 0.62 : lv == 1 ? smoothstep(0.55, 0.70, n) * 0.78 : smoothstep(0.60, 0.74, n) * 0.70) * w;
+  if (uFall > 0.5) dens *= smoothstep(0.5, 2.0, distance(hp, uCamPos));   // MK6: saat misi debu memudar dalam 2 rs dari wahana
   if (dens <= 0.002) return vec4(0.0);
+  // bayangan sendiri: kerapatan satu langkah ke arah lubang hitam (sumber cahaya), satu fase saja agar murah;
+  // sisi gumpalan yang menghadap piringan dalam terang, sisi baliknya gelap -> tampak bervolume
+  float nl = dustPat(max(r - 0.35, 0.5), phi - om * c1 * P, sd);
+  float lit = exp(-3.2 * smoothstep(0.50, 0.70, nl));
   // cahaya piringan dalam yang dihamburkan debu: turun dengan r, tepi gumpalan (kerapatan rendah) lebih terang
   float x = max(r / uRin, 1.0);
   float E = uDiskBright * 0.55 / (x * sqrt(x));
-  vec3 em = vec3(0.62, 0.30, 0.15) * E * (1.35 - dens);
+  vec3 em = vec3(0.62, 0.30, 0.15) * E * (1.35 - dens) * (0.25 + 1.1 * lit);
   // MK4b: pendar piringan di r yang sama (suhu Tn seperti shadeDisk), kuat di lembar dekat, lemah di lembar jauh
   float Tn = pow(x, -0.75) * pow(max(1.0 - 0.85 * inversesqrt(x), 0.0), 0.25) / 0.62233;
   vec3 lc = uFilm > 0.5 ? moodRamp(Tn) : blackbody(max(7500.0 * Tn, 800.0));
   float gk = lv == 0 ? 0.42 : lv == 1 ? 0.16 : 0.04;
-  em += lc * uDiskBright * (0.05 + 2.2 * Tn * Tn * Tn) * gk * (1.0 - smoothstep(uRout - 2.0, uRout + 4.0, r) * 0.8);
+  em += lc * uDiskBright * (0.05 + 2.2 * Tn * Tn * Tn) * gk * (1.0 - smoothstep(uRout - 2.0, uRout + 4.0, r) * 0.8) * (0.35 + 0.9 * lit);
   return vec4(em, clamp(dens * 0.9, 0.0, 0.92));
 }
 
@@ -1277,7 +1292,8 @@ const ID = {
   'End the mission': 'Akhiri misi', 'Tesseract scenario: W/S angle, A/D plane, Enter locks the aim': 'Skenario tesseract: W/S sudut, A/D bidang, Enter mengunci bidikan',
   'Cursor locked: move the mouse to look around, right button = nose, double-click = forward, click or Esc releases': 'Kursor terkunci: gerakkan mouse untuk menoleh, tombol kanan = hidung, klik ganda = depan, klik atau Esc melepas',
   // MK3-MK5: suasana Kelam
-  'Mood': 'Suasana', 'Dark mood (dust clouds)': 'Suasana Kelam (awan debu)',
+  'Mood': 'Suasana', 'Dark mood (dust clouds) (N)': 'Suasana Kelam (awan debu) (N)',
+  'Mood: dark (dust clouds)': 'Suasana: Kelam (awan debu)', 'Mood: classic': 'Suasana: Klasik', 'Mood: dark (dust clouds) or classic': 'Suasana: Kelam (awan debu) atau Klasik',
   // MK2: planet Millar
   'Planet Millar': 'Planet Millar', 'Show Millar': 'Tampilkan Millar', 'Orbit': 'Orbit', 'Shown radius (rs)': 'Radius tampil (rs)',
   'Near the disk (13 rs)': 'Dekat piringan (13 rs)', 'Film (4 rs, in the disk)': 'Film (4 rs, di piringan)',
@@ -1312,7 +1328,7 @@ function applyStaticLang() {
       ['O', txt('Autopilot skim')], ['E', txt('Flare')], ['M', txt('Relay view and spacetime diagram')], ['Z', txt('Time warp')],
       ['Esc', txt('End the mission')], [txt('Tesseract'), txt('Tesseract scenario: W/S angle, A/D plane, Enter locks the aim')]]],
     ['gfx', txt('Graphics and sound'), [
-      ['Q', txt('Quality preset: Ultra, High, Medium, Low')], ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')],
+      ['Q', txt('Quality preset: Ultra, High, Medium, Low')], ['N', txt('Mood: dark (dust clouds) or classic')], ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')],
       ['U', txt('Sound on / off: synthesized; space carries no sound, so cabin and impact sounds travel through the hull, the disk roar is distilled')],
       ['J', txt('Music from your own file: play / pause (choose the file in the panel, Sound tab)')]]],
     ['cam', txt('Camera and photo'), [
@@ -1492,12 +1508,13 @@ function main() {
   } catch (e) { /* abaikan */ }
   if (new URLSearchParams(location.search).get('millar') === '0') MILLAR.on = false;
   // MK3-MK5: suasana Kelam (palet krem-karat, lembar debu, langit gelap, grade) atau Klasik (tampilan lama persis).
-  // localStorage gargantua.mood, ?mood=klasik; mati saat misi (dirapikan di MK6)
+  // localStorage gargantua.mood, ?mood=klasik; tombol N (cuaca / suasana, docs/app/tombol.md)
   const MOOD = { on: true };
   try { if (localStorage.getItem('gargantua.mood') === 'klasik') MOOD.on = false; } catch (e) { /* abaikan */ }
   { const m = new URLSearchParams(location.search).get('mood'); if (m === 'klasik') MOOD.on = false; else if (m === 'kelam') MOOD.on = true; }
   function setMood(on) { MOOD.on = on; try { localStorage.setItem('gargantua.mood', on ? 'kelam' : 'klasik'); } catch (e) { /* abaikan */ } }
-  const moodK = () => (MOOD.on && !MIS.on ? 1 : 0);
+  function cycleMood() { setMood(!MOOD.on); syncUI(); toast(txt(MOOD.on ? 'Mood: dark (dust clouds)' : 'Mood: classic')); }
+  const moodK = () => (MOOD.on ? 1 : 0);                             // MK6: juga saat misi (debu memudar dekat wahana di shader)
   function millarSave() { try { localStorage.setItem('gargantua.millar', JSON.stringify({ on: MILLAR.on, orbit: MILLAR.orbit, rad2: MILLAR.rad })); } catch (e) { /* abaikan */ } }
   function millarState(t) {                                           // posisi (rs), arah radial, normal orbit, angka orbit
     const O = MILLAR.ORBITS[MILLAR.orbit], r = O.r, i = O.inc * Math.PI / 180;
@@ -3758,6 +3775,7 @@ function main() {
     else if (c === 'KeyH') { $('#ui').classList.toggle('hidden'); $('#caption').classList.toggle('hidden'); $('#hint').classList.toggle('hidden'); document.body.classList.toggle('hideUI', $('#ui').classList.contains('hidden')); dashT = 0; }
     else if (c === 'Backquote') { $('#ui').classList.remove('hidden'); $('#ui').classList.toggle('collapsed'); }
     else if (c === 'KeyQ') cycleQuality();
+    else if (c === 'KeyN') cycleMood();
     else if (c === 'KeyU') setSound();
     else if (c === 'KeyJ') setMusic();
     else if (c === 'KeyP') cyclePost();
@@ -3811,7 +3829,7 @@ function main() {
     { type: 'range', label: 'Spin (approx.)', obj: CONFIG.physics, key: 'spin', min: 0, max: 1, step: 0.01 },
     { tab: 'graphics', label: 'Graphics' },
     { sec: 'Mood' },
-    { type: 'check', label: 'Dark mood (dust clouds)', get: () => MOOD.on, set: setMood },
+    { type: 'check', label: 'Dark mood (dust clouds) (N)', get: () => MOOD.on, set: setMood },
     { sec: 'Quality' },
     { type: 'select', label: 'Preset', options: ['low', 'medium', 'high', 'ultra'], get: () => CONFIG.quality, set: applyQuality },
     { type: 'check', label: 'Adaptive resolution', obj: CONFIG, key: 'adaptive' },
@@ -4256,7 +4274,7 @@ function main() {
       { label: () => txt('Sound: {s}').replace('{s}', txt(AUDIO.on ? 'on' : 'off')), act: () => setSound() },
     ] });
 
-  window.__gargantua = { CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
+  window.__gargantua = { MILLAR, millarState, MOOD, setMood, cycleMood, CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
     SHIP, setShip, cycleShipView, viewBasis, CKP, ckpLook, ckpStep, ckpReset, ckpOn, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
     misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, AE, stepMission,
     REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,

@@ -92,5 +92,7 @@ Tambahan opsional (tidak dikerjakan tanpa diminta):
 | MK4 | Selesai 17 Oktober 2026 (belum diuji): lembar debu kerucut y = k abs(xz), k +-0,06 / +-0,14 (`dustK()`, `dustG()`, `dustPat()`, `shadeDust()`), jendela 4-6 sampai 17-25 rs, dua lintasan sebelum / sesudah piringan dalam satu langkah, jumlah lembar `CONFIG.presets` `dust` (Rendah 1, Sedang 2, Tinggi 3, Ultra 4) |
 | MK4b | 17 Oktober 2026 (belum diuji), revisi tangkapan layar Bhakti (debu tampak melayang terpisah dari piringan, celah 0,6 rs di 10 rs): lembar dirapatkan k +-0,02 / +-0,05 / +-0,10 (celah 0,2 rs di 10 rs), tiga tingkat `lv` (dekat mulai dari rIn + 0,3, pendar piringan Tn x 0,42 / 0,16 / 0,04, kerapatan 0,55 / 0,70 / 0,60), jumlah lembar Rendah 2, Sedang 4, Tinggi 4, Ultra 6 |
 | MK5 | Selesai 17 Oktober 2026 (belum diuji): `sky()` bintang 40% lebih jarang, awan molekul gelap menyerap 88%, tepi debu coklat samar |
-| MK6 sebagian | `MOOD` (localStorage `gargantua.mood`, `?mood=klasik` / `?mood=kelam`), Kelam bawaan, kotak centang tab Grafik; mati saat misi. Sisa MK6: tombol N, debu saat misi |
-| MK7-MK8 | Belum dimulai |
+| MK4c | 17 Oktober 2026, revisi tangkapan layar Bhakti (debu terlalu halus): `dustPat()` derau billow 5 oktaf + pembelokan domain, frekuensi 2,5x, ambang lebih tajam, bayangan sendiri (satu sampel 0,35 rs ke arah lubang hitam, `lit = exp(-3,2 x kerapatan)`) |
+| MK6 | 17 Oktober 2026: `MOOD`, tombol N `cycleMood()`, Kelam bawaan dan juga saat misi (debu memudar 0,5-2 rs dari kamera saat `uFall`), jumlah lembar per kualitas, baris N di bantuan, `docs/app/tombol.md` |
+| MK7 | 17 Oktober 2026: kelompok MK di `tools/uji_misi_gargantua.py`; uji lama memakai `?mood=klasik&millar=0`, panel 46 kontrol |
+| MK8 | 17 Oktober 2026: CLAUDE.md, `docs/app/tombol.md` |

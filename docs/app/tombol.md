@@ -12,7 +12,7 @@ Per 30 September 2026. Patokan: Copper Corn Station. Fungsi yang sama memakai to
 | Q | Kualitas grafik (preset berikutnya) | ya | ya (dulu P) | ya (baru) |
 | P | Efek layar: Tinggi / Sedang / Mati | ya | ya (baru) | ya (baru; dulu tangkap layar) |
 | U | Suara nyala / mati | ya | ya (dulu M) | ya (G7, suara disintesis) |
-| N | Cuaca / suasana | cuaca | suasana | - |
+| N | Cuaca / suasana | cuaca | suasana | suasana Kelam / Klasik |
 | Z | Kecepatan waktu | ya | ya | - |
 | V | Tampilan / kamera luar | kamera luar | jalan kaki, drone, tinggi | wahana GX-01: kamera luar / kokpit (Esc keluar) |
 | F | Kamera rangefinder (Rencana K; jenis terakhir diingat, panel kamera = Foto bebas lama: UI disembunyikan, Enter simpan PNG), F atau Esc keluar | ya | ya | ya (di luar misi atau saat jeda) |
