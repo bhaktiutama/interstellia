@@ -84,6 +84,12 @@
   #help table { border-collapse: collapse; width: 100%; }
   #help td { padding: 4px 8px; vertical-align: top; border-top: 1px solid var(--panel-border); color: var(--text); }
   #help td:first-child { color: var(--accent); white-space: nowrap; }
+  /* bantuan bertab seperti Copper (helpTab) */
+  #help .htabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+  #help .htabs button { font: inherit; font-size: 11px; color: var(--text); background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+  #help .htabs button.on { border-color: var(--accent); color: #fff; background: rgba(240,164,90,0.18); }
+  #help [data-pane] { display: none; }
+  #help [data-pane].on { display: table; }
   #dash { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
   #dash[hidden] { display: none; }
   #ckhud { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }   /* K6: HUD kanopi */
@@ -137,7 +143,7 @@
 <div id="caption" class="overlay-text">Gargantua Black Hole · Schwarzschild ray-traced approximation</div>
 <div id="hint" class="overlay-text">drag: orbit &middot; wheel/pinch: zoom &middot; 1-4: presets &middot; H: hide UI &middot; ?: help</div>
 <div id="toast" class="overlay-text"></div>
-<div id="help" hidden><div class="card"><div class="hh"><span id="helpTitle">Help</span><button type="button" id="helpClose">Close (?)</button></div><table id="helpRows"></table></div></div>
+<div id="help" hidden><div class="card"><div class="hh"><span id="helpTitle">Help</span><button type="button" id="helpClose">Close (?)</button></div><div class="htabs" id="helpTabs"></div><div id="helpRows"></div></div></div>
 <canvas id="dash" hidden></canvas>
 <canvas id="ckhud" hidden></canvas>
 <div id="boxBtns"></div>
@@ -165,10 +171,11 @@ const CONFIG = {
   quality: 'medium',
   presets: {
     //        max RK steps | step factor (dt = k*r) | fbm octaves | max render scale | G3: volume samples, disk particles
-    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, parts: 400 },
-    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, parts: 900 },
-    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, parts: 1600 },
-    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500 },
+    // MK4: dust = jumlah lembar debu suasana Kelam
+    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, parts: 400, dust: 1 },
+    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, parts: 900, dust: 2 },
+    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, parts: 1600, dust: 3 },
+    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500, dust: 4 },
   },
   adaptive: true,          // adaptive resolution
   renderScale: 0.8,        // current internal resolution factor
@@ -237,6 +244,9 @@ uniform vec3 uObsV;
 uniform float uPlOn;
 uniform vec4  uPl;
 uniform vec3  uPlR, uPlN;
+// MK3-MK5 suasana Kelam (foto contoh 2): uMood 0 = perilaku lama persis; uDust = jumlah lembar debu (0-4, per kualitas)
+uniform float uMood;
+uniform int   uDust;
 float gObsK = 1.0;                   // G2: frekuensi teramati / frekuensi di tak hingga untuk sinar piksel ini
 
 // Geometric units: G = c = 1, Schwarzschild radius rs = 1  =>  M = 0.5
@@ -325,6 +335,45 @@ float diskDensity(float r, float phi, float t) {
   return mix(n2, n1, w1);
 }
 
+// MK3: palet Kelam: inti putih krem -> peach -> karat -> coklat tua (kurang jenuh dari filmRamp)
+vec3 moodRamp(float t) {
+  vec3 c = mix(vec3(0.13, 0.055, 0.03), vec3(0.58, 0.29, 0.16), smoothstep(0.22, 0.50, t));
+  c = mix(c, vec3(0.93, 0.72, 0.56), smoothstep(0.50, 0.76, t));
+  c = mix(c, vec3(1.00, 0.96, 0.92), smoothstep(0.76, 1.00, t));
+  return c;
+}
+
+// MK4: lembar debu gelap. Tiap lembar = kerucut tipis y = k_i |xz| (k +-0,06, +-0,14): dekat lubang hitam hampir di bidang
+// piringan, makin jauh makin tinggi, jadi piringan tampak tebal dan berasap di luar. Kerapatan fbm skala besar ikut rotasi Kepler
+// setempat dengan dua fase saling memudar (seperti diskDensity, agar tidak tergulung jadi spiral tipis). Jendela radial halus
+// 4-6 rs sampai 17-25 rs: tidak ada batas tajam (pelajaran G3a: tepi lempeng tebal tampak sebagai lingkaran).
+float dustK(int i) { return i == 0 ? 0.06 : i == 1 ? -0.06 : i == 2 ? 0.14 : -0.14; }
+float dustG(vec3 p, float k) { return p.y - k * length(p.xz); }
+float dustPat(float r, float phi, float seed) {
+  vec2 cs = vec2(cos(phi), sin(phi));
+  vec3 q = vec3(r * 0.42, cs * 1.25) + seed;
+  float s = 0.0, a = 0.5, n = 0.0;
+  for (int i = 0; i < 4; i++) { if (i >= uOct) break; s += a * vnoise(q); n += a; q = q * 2.07 + vec3(4.1, 1.3, 7.7); a *= 0.5; }
+  return s / n;
+}
+vec4 shadeDust(vec3 hp, int i) {                                    // rgb = cahaya hamburan, a = serapan
+  float r = length(hp.xz);
+  float w = smoothstep(4.0, 6.0, r) * (1.0 - smoothstep(17.0, 25.0, r));
+  if (w <= 0.0) return vec4(0.0);
+  float phi = atan(hp.z, hp.x);
+  float om = sqrt(M / (r * r * r)), P = uFlowPeriod * 2.0;
+  float c1 = fract(uTime / P), c2 = fract(uTime / P + 0.5), w1 = 1.0 - abs(2.0 * c1 - 1.0);
+  float sd = float(i) * 13.7;
+  float n = mix(dustPat(r, phi - om * c2 * P, sd + 41.0), dustPat(r, phi - om * c1 * P, sd), w1);
+  float dens = smoothstep(0.40, 0.72, n) * w * (i < 2 ? 0.9 : 0.75);
+  if (dens <= 0.002) return vec4(0.0);
+  // cahaya piringan dalam yang dihamburkan debu: turun dengan r, tepi gumpalan (kerapatan rendah) lebih terang
+  float x = max(r / uRin, 1.0);
+  float E = uDiskBright * 0.55 / (x * sqrt(x));
+  vec3 em = vec3(0.62, 0.30, 0.15) * E * (1.35 - dens);
+  return vec4(em, clamp(dens * 0.9, 0.0, 0.92));
+}
+
 vec4 shadeDisk(vec3 hit, vec3 vel, float r) {
   float phi = atan(hit.z, hit.x);
   // Novikov-Thorne-like temperature: T ~ r^-3/4 (1 - k sqrt(rIn/r))^1/4 ; k = 0.85 softens the
@@ -385,7 +434,8 @@ vec4 shadeDisk(vec3 hit, vec3 vel, float r) {
   vec3 col;
   if (uFilm > 0.5) {
     // Film mode: no Doppler colour shift or beaming, symmetric warm palette
-    col = filmRamp(Tn);
+    col = uMood > 0.5 ? moodRamp(Tn) : filmRamp(Tn);
+    if (uMood > 0.5) I *= 0.45 + 0.85 * pat;                      // MK3: kontras gumpalan lebih kuat (lajur gelap karat)
     I *= g * g;
     if (uFall > 0.5) I = min(I, 60.0);
   } else {
@@ -460,9 +510,10 @@ vec3 starLayer(vec3 d, float scale, float density, float seed, float bright) {
 
 vec3 sky(vec3 d) {
   vec3 c = vec3(0.0);
-  c += starLayer(d, 55.0, 0.10, 0.0, 0.45);
-  c += starLayer(d, 130.0, 0.08, 311.0, 0.30);
-  c += starLayer(d, 300.0, 0.05, 733.0, 0.22);
+  float sk = 1.0 - 0.4 * uMood;                                     // MK5: bintang lebih jarang (posisi bintang yang tersisa tetap)
+  c += starLayer(d, 55.0, 0.10 * sk, 0.0, 0.45);
+  c += starLayer(d, 130.0, 0.08 * sk, 311.0, 0.30);
+  c += starLayer(d, 300.0, 0.05 * sk, 733.0, 0.22);
   // faint galactic band, tilted relative to the disk plane
   vec3 bn = normalize(vec3(0.35, 1.0, -0.45));
   float b = dot(d, bn);
@@ -470,6 +521,13 @@ vec3 sky(vec3 d) {
   float neb = fbm(d * 4.0 + 11.0);
   float dust = smoothstep(0.45, 0.75, fbm(d * 9.0 + 3.0));
   c += band * (0.010 + 0.045 * neb * neb) * mix(vec3(0.55, 0.62, 0.85), vec3(0.75, 0.62, 0.5), neb) * (1.0 - 0.7 * dust);
+  if (uMood > 0.5) {
+    // MK5: awan molekul gelap skala besar menyerap bintang dan pita galaksi, tepinya debu coklat samar
+    float m = fbm(d * 2.3 + 40.0);
+    float ab = smoothstep(0.42, 0.66, m);
+    c *= 1.0 - 0.88 * ab;
+    c += vec3(0.010, 0.0065, 0.0045) * smoothstep(0.30, 0.50, m) * (1.0 - ab);
+  }
   return c * uStars;
 }
 
@@ -528,6 +586,20 @@ void main() {
       if (qa > 1e-12 && qd >= 0.0) { float tt = (-qb - sqrt(qd)) / qa; if (tt >= 0.0 && tt <= 1.0) tP = tt; }
     }
 
+    // MK4: lembar debu dalam langkah ini, dua lintasan: yang dilewati sebelum piringan, lalu (setelah piringan) yang sesudahnya
+    float tD = prev.y * pos.y < 0.0 ? prev.y / (prev.y - pos.y) : 2.0;
+    if (uMood > 0.5 && uDust > 0) {
+      for (int i = 0; i < 4; i++) {
+        if (i >= uDust) break;
+        float k = dustK(i), g0 = dustG(prev, k), g1 = dustG(pos, k);
+        if (g0 * g1 >= 0.0) continue;
+        float tt = g0 / (g0 - g1);
+        if (tt >= min(tD, tP)) continue;
+        vec4 dc = shadeDust(mix(prev, pos, tt), i);
+        col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
+      }
+    }
+
     // thin-disk crossing (plane y = 0): interpolate hit, composite front-to-back
     if (prev.y * pos.y < 0.0 && prev.y / (prev.y - pos.y) < tP) {
       float t = prev.y / (prev.y - pos.y);
@@ -539,6 +611,18 @@ void main() {
         trans *= 1.0 - dcol.a;
         if (trans < 0.01) { state = 3; break; }
       }
+    }
+    if (uMood > 0.5 && uDust > 0 && tD <= 1.0) {
+      for (int i = 0; i < 4; i++) {
+        if (i >= uDust) break;
+        float k = dustK(i), g0 = dustG(prev, k), g1 = dustG(pos, k);
+        if (g0 * g1 >= 0.0) continue;
+        float tt = g0 / (g0 - g1);
+        if (tt < tD || tt >= tP) continue;
+        vec4 dc = shadeDust(mix(prev, pos, tt), i);
+        col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
+      }
+      if (trans < 0.01) { state = 3; break; }
     }
     if (tP <= 1.0) { col += trans * shadePlanet(mix(prev, pos, tP), vel); state = 3; break; }
 
@@ -628,6 +712,7 @@ in vec2 vUv; out vec4 o;
 uniform sampler2D uScene, uB0, uB1, uB2, uB3, uStreak;
 uniform float uExposure, uBloom, uStreakAmt, uGrain, uVig, uDec;
 uniform vec3 uWhite;  // V0: white balance (shared/post.js), netral = 1
+uniform float uMood;  // MK3: grade Kelam (0 = lama persis)
 uniform vec2 uRes; uniform uint uFrame;
 // K: kamera rangefinder (shared/camera.js): adegan praktis di tak hingga (lubang hitam, piringan, bintang), jadi jarak = tak hingga
 ${CAMKIT.GLSL_U}
@@ -643,9 +728,14 @@ void main() {
           + texture(uB2, vUv).rgb * 0.22 + texture(uB3, vUv).rgb * 0.18) * uDec;
   vec3 s = texture(uStreak, vUv).rgb * uDec;
   c += b * uBloom + s * uStreakAmt * vec3(0.9, 0.95, 1.0);
-  c = aces(camPost(vUv, c * uExposure * camMul(1.0) * uWhite));    // K: pengali kamera + derau ISO
+  c = aces(camPost(vUv, c * uExposure * (1.0 - 0.15 * uMood) * camMul(1.0) * uWhite));    // K: pengali kamera + derau ISO
+  if (uMood > 0.5) {                                               // MK3: kejenuhan turun, hitam lebih dalam
+    float lu = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    c = mix(vec3(lu), c, 0.78);
+    c = max(c - 0.012, 0.0) / 0.988;
+  }
   vec2 q = vUv - 0.5; q.x *= uRes.x / uRes.y;
-  c *= 1.0 - uVig * smoothstep(0.35, 1.15, length(q));
+  c *= 1.0 - (uVig + 0.15 * uMood) * smoothstep(0.35, 1.15, length(q));
   c = pow(c, vec3(1.0 / 2.2));
   uvec3 h = pcg3d(uvec3(uvec2(gl_FragCoord.xy), uFrame));
   float n = float(h.x) * (1.0 / 4294967295.0) - 0.5;
@@ -1167,6 +1257,18 @@ const ID = {
     'VR: stik kiri dorong, stik kanan atas/bawah R/F, genggam kanan mesin utama, picu kanan suar, picu kiri sikap, A tampilan, B autopilot',
   'VR: left stick orbits and zooms, right stick turns, A vessel and view, left stick click pauses':
     'VR: stik kiri mengitari dan zoom, stik kanan belok, A wahana dan tampilan, klik stik kiri jeda',
+  // bantuan bertab
+  'Basics': 'Dasar', 'Graphics and sound': 'Grafik dan suara', 'Camera and photo': 'Kamera dan foto', 'Drag': 'Seret', 'Cockpit': 'Kokpit', 'Tesseract': 'Tesseract',
+  'Thrust; Shift = main engine': 'Dorong; Shift = mesin utama',
+  'Chase camera: orbit around the vessel (double-click resets); right-drag or Ctrl = nose': 'Kamera luar: mengitari wahana (klik ganda kembali); seret kanan atau Ctrl = hidung',
+  'Click locks the cursor and the mouse looks around; click again or Esc releases it. Right button or Ctrl = nose, wheel = field of view, double-click = forward, click a cockpit screen = next page':
+    'Klik mengunci kursor dan mouse menoleh; klik lagi atau Esc melepasnya. Tombol kanan atau Ctrl = hidung, roda = sudut pandang, klik ganda = depan, klik layar kokpit = halaman berikutnya',
+  'View: chase camera, cockpit, relay at 22 rs': 'Tampilan: kamera luar, kokpit, relai di 22 rs', 'Attitude: centre, level, track, free': 'Sikap: pusat, datar, lintasan, bebas',
+  'Autopilot skim': 'Autopilot susur', 'Flare': 'Suar', 'Relay view and spacetime diagram': 'Pandangan relai dan diagram ruang-waktu', 'Time warp': 'Percepat waktu',
+  'End the mission': 'Akhiri misi', 'Tesseract scenario: W/S angle, A/D plane, Enter locks the aim': 'Skenario tesseract: W/S sudut, A/D bidang, Enter mengunci bidikan',
+  'Cursor locked: move the mouse to look around, right button = nose, double-click = forward, click or Esc releases': 'Kursor terkunci: gerakkan mouse untuk menoleh, tombol kanan = hidung, klik ganda = depan, klik atau Esc melepas',
+  // MK3-MK5: suasana Kelam
+  'Mood': 'Suasana', 'Dark mood (dust clouds)': 'Suasana Kelam (awan debu)',
   // MK2: planet Millar
   'Planet Millar': 'Planet Millar', 'Show Millar': 'Tampilkan Millar', 'Orbit': 'Orbit', 'Shown radius (rs)': 'Radius tampil (rs)',
   'Near the disk (13 rs)': 'Dekat piringan (13 rs)', 'Film (4 rs, in the disk)': 'Film (4 rs, di piringan)',
@@ -1176,20 +1278,44 @@ const ID = {
     'Ukuran diperbesar: planet nyata (8.282 km) sekitar 2,8e-5 rs, jauh di bawah satu piksel. Ray tracer ini Schwarzschild, jadi orbit lingkaran memperlambat jam paling banyak 1,414x (di ISCO, 3 rs); angka film 61.362x butuh lubang hitam Kerr yang berputar sekitar 1e-14 dari batas.',
 };
 const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
+function helpTab(id, noSave) {
+  if (!noSave) try { localStorage.setItem('gargantua.helpTab', id); } catch (e) { /* abaikan */ }
+  document.querySelectorAll('#help [data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
+  document.querySelectorAll('#help [data-pane]').forEach((t) => t.classList.toggle('on', t.dataset.pane === id));
+}
 function applyStaticLang() {
   document.documentElement.lang = LANG;
   $('#caption').textContent = txt('Gargantua Black Hole · Schwarzschild ray-traced approximation');
   $('#hint').textContent = txt('drag: orbit · wheel/pinch: zoom · 1-4: presets · H: hide UI · ?: help');
   $('#helpTitle').textContent = txt('Help'); $('#helpClose').textContent = txt('Close (?)');
-  $('#helpRows').innerHTML = [
-    [txt('Drag / wheel / pinch'), txt('Orbit and zoom the camera')], ['1 - 4', txt('Camera presets: film, edge-on, top-down, close approach')],
-    ['Space', txt('Pause / resume time')], ['Q', txt('Quality preset: Ultra, High, Medium, Low')],
-    ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')], ['U', txt('Sound on / off: synthesized; space carries no sound, so cabin and impact sounds travel through the hull, the disk roar is distilled')], ['J', txt('Music from your own file: play / pause (choose the file in the panel, Sound tab)')], ['F', txt('Rangefinder camera outside a mission or while paused (keys below); the old free photo mode is in the camera panel')],
-    ['V · Esc', txt('Vessel view: GX-01 chase camera / cockpit (Esc exits)')], [txt('Mission'), txt('Start a mission from the panel (`): 10 ways to fall in, two of them skimming the disk, one aiming for the fictional tesseract')],
-    [txt('In the mission'), txt('Mission keys: W/S A/D R/F thrust, Shift main engine, drag orbits the chase camera around the vessel (double-click resets), right-drag turns the nose; in the cockpit click locks the cursor and the mouse looks around (drag also works, right-drag or Ctrl = nose, wheel = field of view, double-click = forward, Esc releases, click a cockpit screen = next page), X attitude (centre, level, track, free), O autopilot skim, E flare, M relay view and spacetime diagram, Z time, V view (chase camera, cockpit, relay at 22 rs), Esc ends; tesseract scenario: W/S angle, A/D plane, Enter locks the aim')], ['R · H', txt('Reset camera · hide UI')], [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')],
-    ['VR', txt('PC headset (WebXR): Enter VR button at bottom right; X VR menu, Y recenter, left stick thrust in the mission, right trigger flare')],   // VR6
-    [`<b>${CAMKIT.helpHead(LANG)}</b>`, ''], ...CAMKIT.helpRows(LANG),   // K: tombol mode kamera
-  ].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+  // bantuan bertab seperti Copper: Dasar, Misi, Grafik dan suara, Kamera, VR (localStorage gargantua.helpTab)
+  const HELP = [
+    ['basic', txt('Basics'), [
+      [txt('Drag / wheel / pinch'), txt('Orbit and zoom the camera')], ['1 - 4', txt('Camera presets: film, edge-on, top-down, close approach')],
+      ['Space', txt('Pause / resume time')], ['R · H', txt('Reset camera · hide UI')],
+      [txt('` (backtick)'), txt('Open / collapse the control panel')], [txt('? (or F1)'), txt('Show / close this help')]]],
+    ['mission', txt('Mission'), [
+      [txt('Mission'), txt('Start a mission from the panel (`): 10 ways to fall in, two of them skimming the disk, one aiming for the fictional tesseract')],
+      ['W/S A/D R/F', txt('Thrust; Shift = main engine')],
+      [txt('Drag'), txt('Chase camera: orbit around the vessel (double-click resets); right-drag or Ctrl = nose')],
+      [txt('Cockpit'), txt('Click locks the cursor and the mouse looks around; click again or Esc releases it. Right button or Ctrl = nose, wheel = field of view, double-click = forward, click a cockpit screen = next page')],
+      ['V', txt('View: chase camera, cockpit, relay at 22 rs')], ['X', txt('Attitude: centre, level, track, free')],
+      ['O', txt('Autopilot skim')], ['E', txt('Flare')], ['M', txt('Relay view and spacetime diagram')], ['Z', txt('Time warp')],
+      ['Esc', txt('End the mission')], [txt('Tesseract'), txt('Tesseract scenario: W/S angle, A/D plane, Enter locks the aim')]]],
+    ['gfx', txt('Graphics and sound'), [
+      ['Q', txt('Quality preset: Ultra, High, Medium, Low')], ['P', txt('Screen effects: high, medium, off (bloom, streak, grain, vignette)')],
+      ['U', txt('Sound on / off: synthesized; space carries no sound, so cabin and impact sounds travel through the hull, the disk roar is distilled')],
+      ['J', txt('Music from your own file: play / pause (choose the file in the panel, Sound tab)')]]],
+    ['cam', txt('Camera and photo'), [
+      ['F', txt('Rangefinder camera outside a mission or while paused (keys below); the old free photo mode is in the camera panel')],
+      [`<b>${CAMKIT.helpHead(LANG)}</b>`, ''], ...CAMKIT.helpRows(LANG)]],   // K: tombol mode kamera
+    ['vr', 'VR', [['VR', txt('PC headset (WebXR): Enter VR button at bottom right; X VR menu, Y recenter, left stick thrust in the mission, right trigger flare')]]],   // VR6
+  ];
+  $('#helpTabs').innerHTML = HELP.map(([k, n]) => `<button type="button" data-tab="${k}">${n}</button>`).join('');
+  $('#helpRows').innerHTML = HELP.map(([k, , rows]) => `<table data-pane="${k}">${rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</table>`).join('');
+  $('#helpTabs').querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => helpTab(b.dataset.tab)));
+  let ht = 'basic'; try { ht = localStorage.getItem('gargantua.helpTab') || ht; } catch (e) { /* abaikan */ }
+  helpTab(HELP.some((h) => h[0] === ht) ? ht : 'basic', true);
   $('#mendAgain').textContent = txt('Fly again'); $('#mendExit').textContent = txt('Exit mission');
   $('#mendShow').textContent = txt('Mission summary (Enter: fly again)'); $('#mendMove').textContent = txt('drag to move'); $('#mendClose').title = txt('Close');
   const m = $('#menuLink'); if (m) { m.href = `../../index.html?lang=${LANG}`; m.title = txt('Back to the main menu'); }
@@ -1347,16 +1473,23 @@ function main() {
   // omega = akar(M / r^3) pada jam yang sama dengan piringan (state.simTime), arah putar sama dengan piringan (x -> z), bidang
   // orbit dimiringkan inc terhadap piringan (putar di sumbu x). rad = radius tampil (diperbesar: radius nyata 8.282 km sekitar
   // 2,8e-5 rs). Mati saat misi. localStorage gargantua.millar, ?millar=0.
-  const MILLAR = { on: true, orbit: 'near', rad: 0.2, ph0: 2.25,
+  const MILLAR = { on: true, orbit: 'near', rad: 0.06, ph0: 2.25,
     ORBITS: { near: { r: 13, inc: 6, name: 'Near the disk (13 rs)' }, film: { r: 4, inc: 0, name: 'Film (4 rs, in the disk)' } } };
   try {
     const o = JSON.parse(localStorage.getItem('gargantua.millar') || '{}');
     if (typeof o.on === 'boolean') MILLAR.on = o.on;
     if (MILLAR.ORBITS[o.orbit]) MILLAR.orbit = o.orbit;
-    if (isFinite(o.rad)) MILLAR.rad = Math.min(0.5, Math.max(0.05, o.rad));
+    if (isFinite(o.rad2)) MILLAR.rad = Math.min(0.3, Math.max(0.02, o.rad2));   // rad2: radius bawaan diperkecil 0,2 -> 0,06 (nilai lama diabaikan)
   } catch (e) { /* abaikan */ }
   if (new URLSearchParams(location.search).get('millar') === '0') MILLAR.on = false;
-  function millarSave() { try { localStorage.setItem('gargantua.millar', JSON.stringify({ on: MILLAR.on, orbit: MILLAR.orbit, rad: MILLAR.rad })); } catch (e) { /* abaikan */ } }
+  // MK3-MK5: suasana Kelam (palet krem-karat, lembar debu, langit gelap, grade) atau Klasik (tampilan lama persis).
+  // localStorage gargantua.mood, ?mood=klasik; mati saat misi (dirapikan di MK6)
+  const MOOD = { on: true };
+  try { if (localStorage.getItem('gargantua.mood') === 'klasik') MOOD.on = false; } catch (e) { /* abaikan */ }
+  { const m = new URLSearchParams(location.search).get('mood'); if (m === 'klasik') MOOD.on = false; else if (m === 'kelam') MOOD.on = true; }
+  function setMood(on) { MOOD.on = on; try { localStorage.setItem('gargantua.mood', on ? 'kelam' : 'klasik'); } catch (e) { /* abaikan */ } }
+  const moodK = () => (MOOD.on && !MIS.on ? 1 : 0);
+  function millarSave() { try { localStorage.setItem('gargantua.millar', JSON.stringify({ on: MILLAR.on, orbit: MILLAR.orbit, rad2: MILLAR.rad })); } catch (e) { /* abaikan */ } }
   function millarState(t) {                                           // posisi (rs), arah radial, normal orbit, angka orbit
     const O = MILLAR.ORBITS[MILLAR.orbit], r = O.r, i = O.inc * Math.PI / 180;
     const om = Math.sqrt(0.5 / (r * r * r)), a = MILLAR.ph0 + om * t;
@@ -3438,7 +3571,7 @@ function main() {
     try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* seret tetap jalan */ }
   }
   document.addEventListener('pointerlockchange', () => {
-    if (document.pointerLockElement === canvas) toast(txt('Cursor locked: move the mouse to look around, right button = nose, double-click = forward, Esc releases'), 3);
+    if (document.pointerLockElement === canvas) toast(txt('Cursor locked: move the mouse to look around, right button = nose, double-click = forward, click or Esc releases'), 3);
     else CKP.unlockAt = performance.now();
   });
   document.addEventListener('mousemove', (e) => {
@@ -3448,12 +3581,14 @@ function main() {
     if ((e.buttons & 2) || e.ctrlKey) noseDrag(dx, dy);
     else ckpLook(dx * 0.0025, -dy * 0.0025);
   });
+  let freedAt = 0;                                                  // klik kiri saat terkunci = lepas kursor (seperti Copper); klik lagi = kunci
   canvas.addEventListener('pointerdown', (e) => {
     if (e.button === 0 && ckpOn() && MIS.on) {                    // K5: klik layar MFD = halaman berikutnya (kursor terkunci = titik tengah)
       const locked = document.pointerLockElement === canvas, rc = canvas.getBoundingClientRect();
       if (ckpPick(locked ? 0 : (e.clientX - rc.left) / rc.width * 2 - 1, locked ? 0 : 1 - (e.clientY - rc.top) / rc.height * 2)) return;
     }
-    if (e.pointerType === 'mouse' && e.button === 0 && ckpOn() && !e.ctrlKey) ckpLockPointer();
+    if (e.button === 0 && document.pointerLockElement === canvas) { freedAt = performance.now(); document.exitPointerLock(); return; }
+    if (e.pointerType === 'mouse' && e.button === 0 && ckpOn() && !e.ctrlKey && performance.now() - freedAt > 400) ckpLockPointer();
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* K1: kursor terkunci tidak bisa ditangkap, tidak perlu */ }
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, alt: e.button === 2 || e.ctrlKey });   // alt = seret kanan / Ctrl
     canvas.classList.add('dragging');
@@ -3657,7 +3792,7 @@ function main() {
     { sec: 'Planet Millar' },
     { type: 'check', label: 'Show Millar', get: () => MILLAR.on, set: (v) => { MILLAR.on = v; millarSave(); } },
     { type: 'select', label: 'Orbit', options: Object.keys(MILLAR.ORBITS), names: (k) => MILLAR.ORBITS[k].name, get: () => MILLAR.orbit, set: (v) => { MILLAR.orbit = v; millarSave(); } },
-    { type: 'range', label: 'Shown radius (rs)', get: () => MILLAR.rad, set: (v) => { MILLAR.rad = v; millarSave(); }, min: 0.05, max: 0.5, step: 0.01 },
+    { type: 'range', label: 'Shown radius (rs)', get: () => MILLAR.rad, set: (v) => { MILLAR.rad = v; millarSave(); }, min: 0.02, max: 0.3, step: 0.01 },
     { type: 'note', text: 'Size is enlarged: the real planet (8,282 km) is about 2.8e-5 rs, far below one pixel. This ray tracer is Schwarzschild, so a circular orbit slows clocks at most 1.414x (at the ISCO, 3 rs); the film value 61,362x needs a Kerr hole spinning within about 1e-14 of the limit.' },
     { tab: 'physics', label: 'Physics' },
     { sec: 'Physics' },
@@ -3666,6 +3801,8 @@ function main() {
     { type: 'check', label: 'Gravitational redshift', obj: CONFIG.physics, key: 'redshift' },
     { type: 'range', label: 'Spin (approx.)', obj: CONFIG.physics, key: 'spin', min: 0, max: 1, step: 0.01 },
     { tab: 'graphics', label: 'Graphics' },
+    { sec: 'Mood' },
+    { type: 'check', label: 'Dark mood (dust clouds)', get: () => MOOD.on, set: setMood },
     { sec: 'Quality' },
     { type: 'select', label: 'Preset', options: ['low', 'medium', 'high', 'ultra'], get: () => CONFIG.quality, set: applyQuality },
     { type: 'check', label: 'Adaptive resolution', obj: CONFIG, key: 'adaptive' },
@@ -3922,6 +4059,7 @@ function main() {
       gl.uniform1f(p.u('uEnc'), enc);
       const pl = MILLAR.on && !MIS.on;                                 // MK2: planet Millar (mati saat misi)
       gl.uniform1f(p.u('uPlOn'), pl ? 1 : 0);
+      gl.uniform1f(p.u('uMood'), moodK()); gl.uniform1i(p.u('uDust'), q.dust || 0);
       if (pl) {
         const Ms = millarState(state.simTime);
         gl.uniform4f(p.u('uPl'), Ms.pos[0], Ms.pos[1], Ms.pos[2], MILLAR.rad);
@@ -3982,6 +4120,7 @@ function main() {
       const ow = GV.out ? GV.out.w : canvas.width, oh = GV.out ? GV.out.h : canvas.height;   // VR2: ukuran viewport mata
       gl.uniform2f(p.u('uCamT'), 1 / ow, 1 / oh);
       gl.uniform1f(p.u('uVig'), GV.on ? 0 : po.vignette * PM.vig); gl.uniform1f(p.u('uDec'), dec);
+      gl.uniform1f(p.u('uMood'), moodK());
       gl.uniform2f(p.u('uRes'), ow, oh);
       gl.uniform1ui(p.u('uFrame'), state.paused ? 0 : state.frame);
     });

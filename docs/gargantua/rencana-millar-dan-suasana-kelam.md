@@ -37,7 +37,7 @@ Cara menjalankan di sesi baru: "jalankan kelompok 1 dari `docs/gargantua/rencana
 | Periode orbit r = 14 rs | 465,5 rs/c, sekitar 155 s di layar pada kecepatan 1 | `CONFIG.timeScale` 3 satuan per detik |
 | Rasio radius planet nyata / rs | sekitar 2,8e-5 | R_P 8.282 km (`CONFIG` Millar) / rs 2,95e8 km (1e8 massa Matahari) |
 | Planet nyata di layar | sekitar 0,0015 piksel radius | Jarak kamera 22 rs, FOV 55 derajat, tinggi 1.080 px |
-| Radius tampil usulan | 0,2 rs (diperbesar sekitar 7.000x), panel 0,05-0,5 | Foto 1: radius planet sekitar 1,2% tinggi gambar |
+| Radius tampil | 0,06 rs (diperbesar sekitar 2.100x), panel 0,02-0,3 (revisi; awalnya 0,2 rs terlalu besar) | Foto 1: radius planet sekitar 1,2% tinggi gambar |
 
 Yang ditampilkan di HUD: r orbit, periode, dilatasi Schwarzschild dari rumus di atas, plus catatan "angka film butuh Kerr hampir ekstrem" dan "ukuran planet diperbesar". Tidak ada angka 61.362x yang dihitung dari spin di ray tracer ini (spin di shader adalah pendekatan berlabel, bukan Kerr).
 
@@ -86,4 +86,10 @@ Tambahan opsional (tidak dikerjakan tanpa diminta):
 | --- | --- |
 | MK1 | Selesai 17 Oktober 2026 (belum diuji): `shadePlanet()` dan uji potong tali busur di loop `SCENE_FS` (`uPlOn`, `uPl`, `uPlR`, `uPlN`; piringan di belakang planet dilewati) |
 | MK2 | Selesai 17 Oktober 2026 (belum diuji): `MILLAR` / `millarState()` / `millarSave()`, uniform di `drawScene()`, baris HUD (r, periode, jam Millar, catatan Kerr), panel tab Piringan bagian Planet Millar, kamus `ID`, `?millar=0`, localStorage `gargantua.millar`; fase awal 2,25 rad = kiri depan pada kamera Film |
-| MK3-MK8 | Belum dimulai |
+| MK2 revisi | 17 Oktober 2026, dari tangkapan layar Bhakti (planet terlalu besar, Gargantua tampak kecil): radius tampil bawaan 0,2 -> 0,06 rs (sekitar 2.100x radius nyata), panel 0,02-0,3, disimpan sebagai `rad2` (nilai lama diabaikan) |
+| Lain | 17 Oktober 2026: bantuan (?) bertab seperti Copper (Dasar, Misi, Grafik dan suara, Kamera dan foto, VR; `HELP`, `helpTab()`, localStorage `gargantua.helpTab`; baris misi yang panjang dipecah per tombol); klik kiri saat kursor terkunci di kokpit = lepas kursor seperti Copper (`freedAt`, klik lagi = kunci; klik layar MFD tetap ganti halaman) |
+| MK3 | Selesai 17 Oktober 2026 (belum diuji): `moodRamp()` di mode film, kontras gumpalan `0,45 + 0,85 pat`, grade di `COMPOSITE_FS` (eksposur x0,85, kejenuhan 0,78, hitam -0,012, vinyet +0,15); uniform `uMood` |
+| MK4 | Selesai 17 Oktober 2026 (belum diuji): lembar debu kerucut y = k abs(xz), k +-0,06 / +-0,14 (`dustK()`, `dustG()`, `dustPat()`, `shadeDust()`), jendela 4-6 sampai 17-25 rs, dua lintasan sebelum / sesudah piringan dalam satu langkah, jumlah lembar `CONFIG.presets` `dust` (Rendah 1, Sedang 2, Tinggi 3, Ultra 4) |
+| MK5 | Selesai 17 Oktober 2026 (belum diuji): `sky()` bintang 40% lebih jarang, awan molekul gelap menyerap 88%, tepi debu coklat samar |
+| MK6 sebagian | `MOOD` (localStorage `gargantua.mood`, `?mood=klasik` / `?mood=kelam`), Kelam bawaan, kotak centang tab Grafik; mati saat misi. Sisa MK6: tombol N, debu saat misi |
+| MK7-MK8 | Belum dimulai |
