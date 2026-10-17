@@ -848,7 +848,7 @@ async def kelompok10(pg):
 async def kelompokMK(pg):
     import subprocess, math
     setup = '''(mis) => new Promise((res) => { const G = window.__gargantua; G.state.paused = true; G.state.simTime = 7.5; G.state.postMode = 2;
-      G.CONFIG.adaptive = false; G.CONFIG.renderScale = 0.8; if (mis) { G.startMission('polar'); G.state.paused = true; G.setShip(true, 'cockpit'); } setTimeout(res, 600); })'''
+      G.CONFIG.adaptive = false; G.CONFIG.renderScale = 0.8; if (mis) { G.startMission('polar'); G.state.paused = true; G.setShip(true, 'chase'); } setTimeout(res, 600); })'''   # kamera luar: layar MFD kokpit beranimasi menurut jam
     # --- saklar mati = identik dengan versi sebelum MK1 ---
     c0 = subprocess.run(['git', 'log', '--format=%H', '-1', '--grep=Gargantua MK1-MK2'], cwd=ROOT, capture_output=True, text=True).stdout.strip()   # induk commit MK1
     old = subprocess.run(['git', 'show', f'{c0}~1:experiences/gargantua/index.html'], cwd=ROOT, capture_output=True, text=True).stdout if c0 else ''
@@ -866,7 +866,7 @@ async def kelompokMK(pg):
                 await pgx.close()
             for mis in (False, True):
                 d = beda(px[('baru', mis)], px[('lama', mis)])
-                cek(f"MK Klasik + Millar mati: {'kokpit misi' if mis else 'luar misi'} identik dengan versi sebelum MK1", d == 0, f'{d * 100:.3f}% piksel berbeda')
+                cek(f"MK Klasik + Millar mati: {'misi (kamera luar)' if mis else 'luar misi'} identik dengan versi sebelum MK1", d == 0, f'{d * 100:.3f}% piksel berbeda')
         finally:
             tmp.unlink(missing_ok=True)
 
@@ -891,9 +891,9 @@ async def kelompokMK(pg):
     await pg.evaluate("() => window.__gargantua.stopMission()")
 
     # --- planet: tergambar, orbit, dilatasi ---
-    a = await pg.evaluate('''() => { const G = window.__gargantua, M = G.millarState(0), M2 = G.millarState(100);
+    a = await pg.evaluate('''() => { const G = window.__gargantua, M = G.millarState(0), M2 = G.millarState(10);
       const da = Math.atan2(M2.pos[2] / Math.cos(6 * Math.PI / 180), M2.pos[0]) - Math.atan2(M.pos[2] / Math.cos(6 * Math.PI / 180), M.pos[0]);
-      return { r: Math.hypot(...M.pos), dil: M.dil, T: M.T, om: da / 100, nrm: M.nrm, rad: M.rad }; }''')
+      return { r: Math.hypot(...M.pos), dil: M.dil, T: M.T, om: da / 10, nrm: M.nrm, rad: M.rad }; }''')   # 10 satuan: sudut tidak melewati pi
     cek('MK orbit Millar: r 13, omega = akar(0,5 / r^3), periode 2 pi / omega, dilatasi 1 / akar(1 - 1,5 / 13) = 1,0632',
         abs(a['r'] - 13) < 1e-9 and abs(a['om'] - math.sqrt(0.5 / 13 ** 3)) < 1e-9 and abs(a['T'] - 2 * math.pi / math.sqrt(0.5 / 13 ** 3)) < 1e-6
         and abs(a['dil'] - 1 / math.sqrt(1 - 1.5 / 13)) < 1e-12 and abs(sum(x * y for x, y in zip(a['nrm'], a['rad']))) < 1e-12,
@@ -903,7 +903,7 @@ async def kelompokMK(pg):
         await pg.evaluate('''(on) => { const G = window.__gargantua, M = G.millarState(G.state.simTime), d = 8; G.MILLAR.on = on; G.MILLAR.rad = 0.3;
           const p = M.pos, L = Math.hypot(...p); G.cam.dist = L + d; G.cam.pitch = Math.asin(p[1] / L) * 180 / Math.PI; G.cam.yaw = Math.atan2(p[0], p[2]); G.state.tween = null; }''', on)
         await pg.wait_for_timeout(300); px.append(await pixels(pg))
-    cek('MK planet Millar tergambar (piksel berubah saat dinyalakan, kamera di belakang planet)', beda(px[0], px[1]) > 0.002, f'{beda(px[0], px[1]) * 100:.2f}% piksel berbeda')
+    cek('MK planet Millar tergambar (piksel berubah saat dinyalakan, kamera di belakang planet)', beda(px[0], px[1]) > 0.0005, f'{beda(px[0], px[1]) * 100:.2f}% piksel berbeda')   # planet gelap di depan bayangan gelap: sebagian piksel tidak berubah
     await pg.evaluate("() => { const G = window.__gargantua; G.MILLAR.rad = 0.06; G.setPreset('film'); }")
 
     # --- N, bantuan bertab ---

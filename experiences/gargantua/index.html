@@ -356,19 +356,25 @@ float dustG(vec3 p, float k) { return p.y - k * length(p.xz); }
 // tingkat dekat / tengah / jauh, sudah termasuk rotasi Kepler dua fase dan jendela radial); di sini hanya 2 baca tekstur.
 // Lembar bawah tiap tingkat membaca tekstur yang sama di phi + 2,3 rad (pola berbeda tanpa kanal tambahan).
 uniform sampler2D uDustTex;
-float dustTex(vec2 uv, int lv) { vec4 t = textureLod(uDustTex, uv, 0.0); return lv == 0 ? t.r : lv == 1 ? t.g : t.b; }
+float dustRaw(vec2 uv, int lv) { vec4 t = textureLod(uDustTex, uv, 0.0); return lv == 0 ? t.r : lv == 1 ? t.g : t.b; }
+// kerapatan dari derau mentah: makin jauh dari piringan makin tipis; lembar dekat lebih banyak tertutup, lembar jauh gumpalan terpisah
+float dustTex(vec2 uv, int lv, float r) {
+  float n = dustRaw(uv, lv);
+  float w = (lv == 0 ? smoothstep(uRin + 0.3, uRin + 2.0, r) : smoothstep(4.0, 6.0, r)) * (1.0 - smoothstep(17.0, 25.0, r));
+  return (lv == 0 ? smoothstep(0.50, 0.68, n) * 0.62 : lv == 1 ? smoothstep(0.55, 0.70, n) * 0.78 : smoothstep(0.60, 0.74, n) * 0.70) * w;
+}
 vec4 shadeDust(vec3 hp, int i) {                                    // rgb = cahaya hamburan, a = serapan
   float r = length(hp.xz);
   if (r < 3.0 || r > 26.0) return vec4(0.0);
   int lv = i / 2;                                                    // 0 dekat piringan, 1 tengah, 2 jauh
   float phi = atan(hp.z, hp.x) + (i - lv * 2 == 1 ? 2.3 : 0.0);
   vec2 uv = vec2(phi / 6.2831853 + 0.5, (r - 3.0) / 23.0);
-  float dens = dustTex(uv, lv);
+  float dens = dustTex(uv, lv, r);
   if (uFall > 0.5) dens *= smoothstep(0.5, 2.0, distance(hp, uCamPos));   // MK6: saat misi debu memudar dalam 2 rs dari wahana
   if (dens <= 0.002) return vec4(0.0);
   // bayangan sendiri: kerapatan 0,35 rs ke arah lubang hitam (sumber cahaya); sisi gumpalan yang menghadap piringan dalam
   // terang, sisi baliknya gelap -> tampak bervolume
-  float lit = exp(-4.5 * dustTex(vec2(uv.x, (r - 3.35) / 23.0), lv));
+  float lit = exp(-4.5 * dustTex(vec2(uv.x, (r - 3.35) / 23.0), lv, r - 0.35));
   // cahaya piringan dalam yang dihamburkan debu: turun dengan r, tepi gumpalan (kerapatan rendah) lebih terang
   float x = max(r / uRin, 1.0);
   float E = uDiskBright * 0.55 / (x * sqrt(x));
@@ -593,44 +599,40 @@ void main() {
       if (qa > 1e-12 && qd >= 0.0) { float tt = (-qb - sqrt(qd)) / qa; if (tt >= 0.0 && tt <= 1.0) tP = tt; }
     }
 
-    // MK4: lembar debu dalam langkah ini, dua lintasan: yang dilewati sebelum piringan, lalu (setelah piringan) yang sesudahnya
+    // MK4: lembar debu dan piringan dalam langkah ini, digabung depan ke belakang MENURUT JARAK di sepanjang langkah (MK4e: dulu
+    // menurut nomor lembar; bila dua lembar jatuh di langkah yang sama urutannya terbalik dan batasnya tampak sebagai goresan lurus)
     float tD = prev.y * pos.y < 0.0 ? prev.y / (prev.y - pos.y) : 2.0;
-    if (uMood > 0.5 && uDust > 0) {
-      for (int i = 0; i < 6; i++) {
-        if (i >= uDust) break;
-        float k = dustK(i), g0 = dustG(prev, k), g1 = dustG(pos, k);
-        if (g0 * g1 >= 0.0) continue;
-        float tt = g0 / (g0 - g1);
-        if (tt >= min(tD, tP)) continue;
-        vec4 dc = shadeDust(mix(prev, pos, tt), i);
-        col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
-      }
+    bool diskDone = !(tD < tP), opaque = false;
+    float ts[6];
+    for (int i = 0; i < 6; i++) {
+      ts[i] = 2.0;
+      if (uMood < 0.5 || i >= uDust) continue;
+      float k = dustK(i), g0 = dustG(prev, k), g1 = dustG(pos, k);
+      if (g0 * g1 < 0.0) { float tt = g0 / (g0 - g1); if (tt < tP) ts[i] = tt; }
     }
-
-    // thin-disk crossing (plane y = 0): interpolate hit, composite front-to-back
-    if (prev.y * pos.y < 0.0 && prev.y / (prev.y - pos.y) < tP) {
-      float t = prev.y / (prev.y - pos.y);
-      vec3 hit = mix(prev, pos, t);
-      float rh = length(hit.xz);
-      if (rh > uRin && rh < uRout) {
-        vec4 dcol = shadeDisk(hit, vel, rh);
-        col += trans * dcol.rgb * dcol.a;
-        trans *= 1.0 - dcol.a;
-        if (trans < 0.01) { state = 3; break; }
+    float last = -1.0;
+    for (int n = 0; n < 7; n++) {
+      float best = 2.0; int bi = -1;
+      for (int i = 0; i < 6; i++) if (ts[i] > last && ts[i] < best) { best = ts[i]; bi = i; }
+      if (!diskDone && tD <= best) {
+      // thin-disk crossing (plane y = 0): interpolate hit, composite front-to-back
+        diskDone = true;
+        vec3 hit = mix(prev, pos, tD);
+        float rh = length(hit.xz);
+        if (rh > uRin && rh < uRout) {
+          vec4 dcol = shadeDisk(hit, vel, rh);
+          col += trans * dcol.rgb * dcol.a;
+          trans *= 1.0 - dcol.a;
+          if (trans < 0.01) { opaque = true; break; }
+        }
       }
+      if (bi < 0) break;
+      vec4 dc = shadeDust(mix(prev, pos, best), bi);
+      col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
+      if (trans < 0.01) { opaque = true; break; }
+      last = best;
     }
-    if (uMood > 0.5 && uDust > 0 && tD <= 1.0) {
-      for (int i = 0; i < 6; i++) {
-        if (i >= uDust) break;
-        float k = dustK(i), g0 = dustG(prev, k), g1 = dustG(pos, k);
-        if (g0 * g1 >= 0.0) continue;
-        float tt = g0 / (g0 - g1);
-        if (tt < tD || tt >= tP) continue;
-        vec4 dc = shadeDust(mix(prev, pos, tt), i);
-        col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
-      }
-      if (trans < 0.01) { state = 3; break; }
-    }
+    if (opaque) { state = 3; break; }
     if (tP <= 1.0) { col += trans * shadePlanet(mix(prev, pos, tP), vel); state = 3; break; }
 
     float rn = length(pos);
@@ -975,10 +977,12 @@ float pat(float r, float phi, float seed) {
   vec3 q = ROT * (vec3(r * 1.05, cos(phi) * 2.6, sin(phi) * 2.6) + seed);
   q += (vec3(vn(q * 0.45 + 17.0), vn(q * 0.45 + 31.0), vn(q * 0.45 + 5.0)) - 0.5) * 2.0;   // pembelokan domain
   float s = 0.0, a = 0.55, n = 0.0;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 3; i++) {                                       // MK4e: maks 3 oktaf: oktaf 4-5 (fitur 0,05 rs) lebih halus dari texel = aliasing (gerigi, goresan)
     if (i >= uOct) break;
-    float v = vn(q);
-    s += a * (1.0 - abs(2.0 * v - 1.0)); n += a;
+    float v = vn(q), x = 2.0 * v - 1.0;
+    // MK4e: billow dengan punggung dibulatkan (sqrt(x^2 + 0,05)) hanya di 2 oktaf kasar; oktaf halus derau biasa. Punggung tajam
+    // |x| di oktaf halus tampak sebagai goresan tipis lurus
+    s += a * (i < 2 ? 1.05 - sqrt(x * x + 0.05) : v); n += a;
     q = ROT * q * 2.07 + vec3(4.1, 1.3, 7.7); a *= 0.5;
   }
   return s / n;
@@ -988,14 +992,12 @@ void main() {
   float phi = (uv.x - 0.5) * 6.2831853, r = 3.0 + uv.y * 23.0;
   float om = sqrt(0.5 / (r * r * r)), P = uFlowPeriod * 2.0;
   float c1 = fract(uTime / P), c2 = fract(uTime / P + 0.5), w1 = 1.0 - abs(2.0 * c1 - 1.0);
-  float fo = 1.0 - smoothstep(17.0, 25.0, r);
+  // MK4e: derau mentah per tingkat (bukan kerapatan berambang): ambang tajam diterapkan setelah baca tekstur di shadeDust(), jadi
+  // interpolasi bilinear terjadi pada medan halus dan tepi gumpalan tidak bertangga mengikuti kisi kutub (goresan / baji radial)
   vec3 d = vec3(0.0);
   for (int lv = 0; lv < 3; lv++) {
     float sd = float(lv) * 27.4;
-    float n = mix(pat(r, phi - om * c2 * P, sd + 41.0), pat(r, phi - om * c1 * P, sd), w1);
-    // makin jauh dari piringan makin tipis; lembar dekat lebih banyak tertutup, lembar jauh gumpalan terpisah
-    float w = (lv == 0 ? smoothstep(uRin + 0.3, uRin + 2.0, r) : smoothstep(4.0, 6.0, r)) * fo;
-    d[lv] = (lv == 0 ? smoothstep(0.50, 0.68, n) * 0.62 : lv == 1 ? smoothstep(0.55, 0.70, n) * 0.78 : smoothstep(0.60, 0.74, n) * 0.70) * w;
+    d[lv] = mix(pat(r, phi - om * c2 * P, sd + 41.0), pat(r, phi - om * c1 * P, sd), w1);
   }
   o = vec4(d, 1.0);
 }`;
@@ -1477,11 +1479,11 @@ function main() {
     return { tex, fb, w, h };
   }
   function freeTarget(t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fb); }
-  // MK4d: tekstur kutub kerapatan debu (RGBA8, phi berulang, r dijepit), dipanggang di dustBake() hanya bila waktu / setelan berubah
+  // MK4d: tekstur kutub derau debu (phi berulang, r dijepit), dipanggang di dustBake() hanya bila waktu / setelan berubah
   const DMAP = (() => {
-    const w = 768, h = 192, tex = gl.createTexture();
+    const w = 1024, h = 512, tex = gl.createTexture();                 // MK4e: half float (derau mentah, ambang tajam sesudah baca)
     gl.bindTexture(gl.TEXTURE_2D, tex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texImage2D(gl.TEXTURE_2D, 0, FMT.internal, w, h, 0, gl.RGBA, FMT.type, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
