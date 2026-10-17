@@ -232,6 +232,11 @@ uniform float uEnc;
 // uObsG = Lorentz gamma-nya, uBeta = sqrt(rs / r) di posisi kamera. uFall = 0: perilaku lama persis.
 uniform float uFall, uObsG, uBeta;
 uniform vec3 uObsV;
+// MK1: planet Millar. uPl = pusat (rs) + radius tampil, uPlOn 0 = perilaku lama persis; uPlR / uPlN = arah radial keluar dan
+// normal orbit (kerangka permukaan terkunci pasang surut: muka yang sama selalu menghadap lubang hitam)
+uniform float uPlOn;
+uniform vec4  uPl;
+uniform vec3  uPlR, uPlN;
 float gObsK = 1.0;                   // G2: frekuensi teramati / frekuensi di tak hingga untuk sinar piksel ini
 
 // Geometric units: G = c = 1, Schwarzschild radius rs = 1  =>  M = 0.5
@@ -392,6 +397,33 @@ vec4 shadeDisk(vec3 hit, vec3 vel, float r) {
   return vec4(col * I, alpha);
 }
 
+// MK1: planet laut Millar disinari piringan. Cahaya dari arah lubang hitam (piringan dalam) + dari bidang piringan di sisi
+// planet (piringan di bawah / di atasnya), terminator lembut, pita awan fbm di kerangka terkunci pasang surut, pinggir
+// atmosfer tipis. Albedo rendah: dari jauh tampak sebagai siluet gelap bertepi samar (foto contoh 1).
+vec3 shadePlanet(vec3 hp, vec3 vel) {
+  vec3 n = (hp - uPl.xyz) / uPl.w;
+  vec3 v = -vel / max(length(vel), 1e-6);                          // ke arah pengamat
+  vec3 t3 = cross(uPlN, uPlR);
+  vec3 q = vec3(dot(n, uPlR), dot(n, uPlN), dot(n, t3));            // koordinat permukaan tetap terhadap lubang hitam
+  float cl = fbm(q * 3.2 + vec3(0.0, 0.0, uTime * 0.004) + 21.0);
+  float band = 0.5 + 0.5 * sin(q.y * 9.0 + cl * 3.0);
+  float cloud = smoothstep(0.45, 0.75, cl * 0.75 + band * 0.35);
+  float alb = mix(0.035, 0.16, cloud);
+  vec3 base = mix(vec3(0.20, 0.30, 0.36), vec3(0.85, 0.83, 0.80), cloud);   // laut kelabu kebiruan, awan pucat
+  float rc = length(uPl.xyz);
+  vec3 Lb = -uPl.xyz / rc;                                          // ke lubang hitam
+  float sy = uPl.y >= 0.0 ? -1.0 : 1.0;                             // piringan di sisi bawah bila planet di atas bidang
+  float side = clamp(1.0 - abs(uPl.y) / (0.5 * rc), 0.0, 1.0);
+  float wrapB = clamp((dot(n, Lb) + 0.25) / 1.25, 0.0, 1.0);
+  float wrapD = clamp((n.y * sy + 0.3) / 1.3, 0.0, 1.0);
+  vec3 lc = uFilm > 0.5 ? filmRamp(0.72) : blackbody(4500.0);
+  float E = uDiskBright * (0.9 * wrapB * wrapB + 0.45 * side * wrapD);
+  vec3 c = base * alb * lc * E * 3.0;
+  float mu = clamp(dot(n, v), 0.0, 1.0);
+  float rim = (1.0 - mu) * (1.0 - mu); rim *= rim;
+  c += vec3(0.55, 0.62, 0.70) * lc * rim * (0.15 + 0.85 * wrapB) * uDiskBright * 0.25;   // hamburan atmosfer di pinggir
+  return c;
+}
 
 vec3 starLayer(vec3 d, float scale, float density, float seed, float bright) {
   vec3 p = d * scale;
@@ -487,8 +519,17 @@ void main() {
     vec3 a1 = accel(pos, vel + a0 * dt, h2);
     vel += 0.5 * (a0 + a1) * dt;
 
+    // MK1: potong tali busur langkah ini dengan bola planet (tP = 2: tidak kena); piringan di belakang planet dilewati
+    float tP = 2.0;
+    if (uPlOn > 0.5) {
+      vec3 sd = pos - prev, sf = prev - uPl.xyz;
+      float qa = dot(sd, sd), qb = dot(sf, sd), qc = dot(sf, sf) - uPl.w * uPl.w;
+      float qd = qb * qb - qa * qc;
+      if (qa > 1e-12 && qd >= 0.0) { float tt = (-qb - sqrt(qd)) / qa; if (tt >= 0.0 && tt <= 1.0) tP = tt; }
+    }
+
     // thin-disk crossing (plane y = 0): interpolate hit, composite front-to-back
-    if (prev.y * pos.y < 0.0) {
+    if (prev.y * pos.y < 0.0 && prev.y / (prev.y - pos.y) < tP) {
       float t = prev.y / (prev.y - pos.y);
       vec3 hit = mix(prev, pos, t);
       float rh = length(hit.xz);
@@ -499,6 +540,7 @@ void main() {
         if (trans < 0.01) { state = 3; break; }
       }
     }
+    if (tP <= 1.0) { col += trans * shadePlanet(mix(prev, pos, tP), vel); state = 3; break; }
 
     float rn = length(pos);
     if (rn < RS && (uFall < 0.5 || dot(pos, vel) < 0.0 || rn < 2e-3)) { state = 1; break; }   // captured by the horizon
@@ -1125,6 +1167,13 @@ const ID = {
     'VR: stik kiri dorong, stik kanan atas/bawah R/F, genggam kanan mesin utama, picu kanan suar, picu kiri sikap, A tampilan, B autopilot',
   'VR: left stick orbits and zooms, right stick turns, A vessel and view, left stick click pauses':
     'VR: stik kiri mengitari dan zoom, stik kanan belok, A wahana dan tampilan, klik stik kiri jeda',
+  // MK2: planet Millar
+  'Planet Millar': 'Planet Millar', 'Show Millar': 'Tampilkan Millar', 'Orbit': 'Orbit', 'Shown radius (rs)': 'Radius tampil (rs)',
+  'Near the disk (13 rs)': 'Dekat piringan (13 rs)', 'Film (4 rs, in the disk)': 'Film (4 rs, di piringan)',
+  'period': 'periode', 'h': 'jam', 'Millar clock': 'Jam Millar', 'far away': 'di jauh',
+  'Film 61,362x: needs near-extremal Kerr': 'Film 61.362x: butuh Kerr hampir ekstrem',
+  'Size is enlarged: the real planet (8,282 km) is about 2.8e-5 rs, far below one pixel. This ray tracer is Schwarzschild, so a circular orbit slows clocks at most 1.414x (at the ISCO, 3 rs); the film value 61,362x needs a Kerr hole spinning within about 1e-14 of the limit.':
+    'Ukuran diperbesar: planet nyata (8.282 km) sekitar 2,8e-5 rs, jauh di bawah satu piksel. Ray tracer ini Schwarzschild, jadi orbit lingkaran memperlambat jam paling banyak 1,414x (di ISCO, 3 rs); angka film 61.362x butuh lubang hitam Kerr yang berputar sekitar 1e-14 dari batas.',
 };
 const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
 function applyStaticLang() {
@@ -1293,6 +1342,29 @@ function main() {
   const cam = CONFIG.camera;
   const state = { paused: false, simTime: 0, last: performance.now(), frame: 0,
     fps: 0, fpsFrames: 0, fpsTime: 0, lowTime: 0, highTime: 0, tween: null, shot: false, photo: false, postMode: 0 };
+
+  // MK2: planet Millar mengorbit (rencana docs/gargantua/rencana-millar-dan-suasana-kelam.md). Orbit lingkaran Kepler dengan
+  // omega = akar(M / r^3) pada jam yang sama dengan piringan (state.simTime), arah putar sama dengan piringan (x -> z), bidang
+  // orbit dimiringkan inc terhadap piringan (putar di sumbu x). rad = radius tampil (diperbesar: radius nyata 8.282 km sekitar
+  // 2,8e-5 rs). Mati saat misi. localStorage gargantua.millar, ?millar=0.
+  const MILLAR = { on: true, orbit: 'near', rad: 0.2, ph0: 2.25,
+    ORBITS: { near: { r: 13, inc: 6, name: 'Near the disk (13 rs)' }, film: { r: 4, inc: 0, name: 'Film (4 rs, in the disk)' } } };
+  try {
+    const o = JSON.parse(localStorage.getItem('gargantua.millar') || '{}');
+    if (typeof o.on === 'boolean') MILLAR.on = o.on;
+    if (MILLAR.ORBITS[o.orbit]) MILLAR.orbit = o.orbit;
+    if (isFinite(o.rad)) MILLAR.rad = Math.min(0.5, Math.max(0.05, o.rad));
+  } catch (e) { /* abaikan */ }
+  if (new URLSearchParams(location.search).get('millar') === '0') MILLAR.on = false;
+  function millarSave() { try { localStorage.setItem('gargantua.millar', JSON.stringify({ on: MILLAR.on, orbit: MILLAR.orbit, rad: MILLAR.rad })); } catch (e) { /* abaikan */ } }
+  function millarState(t) {                                           // posisi (rs), arah radial, normal orbit, angka orbit
+    const O = MILLAR.ORBITS[MILLAR.orbit], r = O.r, i = O.inc * Math.PI / 180;
+    const om = Math.sqrt(0.5 / (r * r * r)), a = MILLAR.ph0 + om * t;
+    const x = r * Math.cos(a), z0 = r * Math.sin(a);
+    const pos = [x, z0 * Math.sin(i), z0 * Math.cos(i)];
+    return { r, pos, rad: [pos[0] / r, pos[1] / r, pos[2] / r], nrm: [0, -Math.cos(i), Math.sin(i)],
+      T: 2 * Math.PI / om, dil: 1 / Math.sqrt(1 - 1.5 / r) };   // periode koordinat (rs/c), dt/dtau orbit lingkaran Schwarzschild
+  }
 
   const CAM_PRESETS = {
     film:  { dist: 22, pitch: 5,   fov: 55, yawDelta: 0 },
@@ -2733,6 +2805,12 @@ function main() {
       const rs = Math.hypot(...cameraBasis().pos);
       rows = [['GX-01', 'AMBANG'], [txt('Distance to centre'), `${fmtN(rs, 2)} rs · ${(rs * RS_KM).toExponential(3)} km`],
         ['', txt('Holding position. Start a fall from the panel (Mission).')]];
+      if (MILLAR.on) {                                                // MK2: angka orbit planet Millar
+        const Ms = millarState(state.simTime), hr = Ms.T * MIS_T / 3600;
+        rows.push(['Millar', `r ${fmtN(Ms.r, 0)} rs · ${txt('period')} ${fmtN(hr, 1)} ${txt('h')}`],
+          [txt('Millar clock'), `1 ${txt('h')} = ${fmtN(Ms.dil, 3)} ${txt('h')} ${txt('far away')}`],
+          ['', txt('Film 61,362x: needs near-extremal Kerr')]);
+      }
     }
     const mobile = innerWidth < 640;                              // ponsel: info kiri disembunyikan (menimpa panel dan pandangan)
     const hideAll = document.body.classList.contains('hideUI');  // H: semua kotak info disembunyikan
@@ -3576,6 +3654,11 @@ function main() {
     { type: 'range', label: 'Brightness', obj: CONFIG.disk, key: 'brightness', min: 0, max: 3, step: 0.01 },
     { type: 'range', label: 'Turbulence', obj: CONFIG.disk, key: 'turbulence', min: 0, max: 1, step: 0.01 },
     { type: 'range', label: 'Rotation speed', obj: CONFIG.disk, key: 'speed', min: 0, max: 4, step: 0.01 },
+    { sec: 'Planet Millar' },
+    { type: 'check', label: 'Show Millar', get: () => MILLAR.on, set: (v) => { MILLAR.on = v; millarSave(); } },
+    { type: 'select', label: 'Orbit', options: Object.keys(MILLAR.ORBITS), names: (k) => MILLAR.ORBITS[k].name, get: () => MILLAR.orbit, set: (v) => { MILLAR.orbit = v; millarSave(); } },
+    { type: 'range', label: 'Shown radius (rs)', get: () => MILLAR.rad, set: (v) => { MILLAR.rad = v; millarSave(); }, min: 0.05, max: 0.5, step: 0.01 },
+    { type: 'note', text: 'Size is enlarged: the real planet (8,282 km) is about 2.8e-5 rs, far below one pixel. This ray tracer is Schwarzschild, so a circular orbit slows clocks at most 1.414x (at the ISCO, 3 rs); the film value 61,362x needs a Kerr hole spinning within about 1e-14 of the limit.' },
     { tab: 'physics', label: 'Physics' },
     { sec: 'Physics' },
     { type: 'check', label: 'Film mode (no Doppler)', obj: CONFIG.physics, key: 'film' },
@@ -3837,6 +3920,13 @@ function main() {
       gl.uniform1f(p.u('uStars'), CONFIG.sky.stars);
       gl.uniform1f(p.u('uV4'), !V4OFF && CONFIG.quality !== 'low' ? 1 : 0);
       gl.uniform1f(p.u('uEnc'), enc);
+      const pl = MILLAR.on && !MIS.on;                                 // MK2: planet Millar (mati saat misi)
+      gl.uniform1f(p.u('uPlOn'), pl ? 1 : 0);
+      if (pl) {
+        const Ms = millarState(state.simTime);
+        gl.uniform4f(p.u('uPl'), Ms.pos[0], Ms.pos[1], Ms.pos[2], MILLAR.rad);
+        gl.uniform3fv(p.u('uPlR'), Ms.rad); gl.uniform3fv(p.u('uPlN'), Ms.nrm);
+      }
     });
 
     // 1b) G1: wahana GX-01 di atas hasil ray tracing, sebelum bloom; G3b: awan debu sebelum wahana, garis bara dan tumbukan kaca sesudahnya
