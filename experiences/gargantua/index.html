@@ -600,37 +600,55 @@ void main() {
     }
 
     // MK4: lembar debu dan piringan dalam langkah ini, digabung depan ke belakang MENURUT JARAK di sepanjang langkah (MK4e: dulu
-    // menurut nomor lembar; bila dua lembar jatuh di langkah yang sama urutannya terbalik dan batasnya tampak sebagai goresan lurus)
+    // menurut nomor lembar; bila dua lembar jatuh di langkah yang sama urutannya terbalik dan batasnya tampak sebagai goresan lurus).
+    // MK4f (FPS turun ke 30 setelah MK4e): uji silang 6 lembar dengan vec3 (2 length per langkah), pengurutan hanya bila langkah ini
+    // memang menembus lembar debu; langkah tanpa debu = jalur lama (sama dengan Klasik). Tanpa array berindeks dinamis.
     float tD = prev.y * pos.y < 0.0 ? prev.y / (prev.y - pos.y) : 2.0;
     bool diskDone = !(tD < tP), opaque = false;
-    float ts[6];
-    for (int i = 0; i < 6; i++) {
-      ts[i] = 2.0;
-      if (uMood < 0.5 || i >= uDust) continue;
-      float k = dustK(i), g0 = dustG(prev, k), g1 = dustG(pos, k);
-      if (g0 * g1 < 0.0) { float tt = g0 / (g0 - g1); if (tt < tP) ts[i] = tt; }
+    vec3 tu = vec3(2.0), tl = vec3(2.0);                              // parameter silang lembar atas / bawah per tingkat (2 = tidak)
+    if (uMood > 0.5 && uDust > 0) {
+      const vec3 KD = vec3(0.02, 0.05, 0.10);
+      float L0 = length(prev.xz), L1 = length(pos.xz);
+      vec3 on = vec3(1.0, uDust > 2 ? 1.0 : 0.0, uDust > 4 ? 1.0 : 0.0);
+      vec3 a0 = prev.y - KD * L0, a1 = pos.y - KD * L1, b0 = prev.y + KD * L0, b1 = pos.y + KD * L1;
+      vec3 da = a0 - a1, db = b0 - b1;                                 // penyebut aman (tidak dipakai bila tidak ada silang)
+      da = mix(da, vec3(1.0), step(abs(da), vec3(1e-20))); db = mix(db, vec3(1.0), step(abs(db), vec3(1e-20)));
+      vec3 ca = on * (1.0 - step(0.0, a0 * a1)), cb = on * (1.0 - step(0.0, b0 * b1));   // 1 = berganti tanda di langkah ini
+      tu = mix(vec3(2.0), a0 / da, ca); tl = mix(vec3(2.0), b0 / db, cb);
+      tu = mix(tu, vec3(2.0), step(vec3(tP), tu)); tl = mix(tl, vec3(2.0), step(vec3(tP), tl));   // di belakang planet: lewati
     }
-    float last = -1.0;
-    for (int n = 0; n < 7; n++) {
-      float best = 2.0; int bi = -1;
-      for (int i = 0; i < 6; i++) if (ts[i] > last && ts[i] < best) { best = ts[i]; bi = i; }
-      if (!diskDone && tD <= best) {
-      // thin-disk crossing (plane y = 0): interpolate hit, composite front-to-back
-        diskDone = true;
-        vec3 hit = mix(prev, pos, tD);
-        float rh = length(hit.xz);
-        if (rh > uRin && rh < uRout) {
-          vec4 dcol = shadeDisk(hit, vel, rh);
-          col += trans * dcol.rgb * dcol.a;
-          trans *= 1.0 - dcol.a;
-          if (trans < 0.01) { opaque = true; break; }
+    if (min(min(min(tu.x, tu.y), tu.z), min(min(tl.x, tl.y), tl.z)) < 1.5) {
+      for (int n = 0; n < 7; n++) {
+        float mu = min(tu.x, min(tu.y, tu.z)), ml = min(tl.x, min(tl.y, tl.z)), best = min(mu, ml);
+        if (!diskDone && tD <= best) {
+          diskDone = true;
+          vec3 hit = mix(prev, pos, tD);
+          float rh = length(hit.xz);
+          if (rh > uRin && rh < uRout) {
+            vec4 dcol = shadeDisk(hit, vel, rh);
+            col += trans * dcol.rgb * dcol.a;
+            trans *= 1.0 - dcol.a;
+            if (trans < 0.01) { opaque = true; break; }
+          }
         }
+        if (best > 1.5) break;
+        int bi;
+        if (mu <= ml) { int lv = tu.x == mu ? 0 : tu.y == mu ? 1 : 2; bi = lv * 2; if (lv == 0) tu.x = 2.0; else if (lv == 1) tu.y = 2.0; else tu.z = 2.0; }
+        else { int lv = tl.x == ml ? 0 : tl.y == ml ? 1 : 2; bi = lv * 2 + 1; if (lv == 0) tl.x = 2.0; else if (lv == 1) tl.y = 2.0; else tl.z = 2.0; }
+        vec4 dc = shadeDust(mix(prev, pos, best), bi);
+        col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
+        if (trans < 0.01) { opaque = true; break; }
       }
-      if (bi < 0) break;
-      vec4 dc = shadeDust(mix(prev, pos, best), bi);
-      col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
-      if (trans < 0.01) { opaque = true; break; }
-      last = best;
+    } else if (!diskDone) {
+      // thin-disk crossing (plane y = 0): interpolate hit, composite front-to-back
+      vec3 hit = mix(prev, pos, tD);
+      float rh = length(hit.xz);
+      if (rh > uRin && rh < uRout) {
+        vec4 dcol = shadeDisk(hit, vel, rh);
+        col += trans * dcol.rgb * dcol.a;
+        trans *= 1.0 - dcol.a;
+        if (trans < 0.01) opaque = true;
+      }
     }
     if (opaque) { state = 3; break; }
     if (tP <= 1.0) { col += trans * shadePlanet(mix(prev, pos, tP), vel); state = 3; break; }
@@ -975,7 +993,8 @@ float vn(vec3 p) {
 }
 float pat(float r, float phi, float seed) {
   vec3 q = ROT * (vec3(r * 1.05, cos(phi) * 2.6, sin(phi) * 2.6) + seed);
-  q += (vec3(vn(q * 0.45 + 17.0), vn(q * 0.45 + 31.0), vn(q * 0.45 + 5.0)) - 0.5) * 2.0;   // pembelokan domain
+  float wq = vn(q * 0.45 + 17.0) - 0.5;                              // pembelokan domain (MK4f: satu derau, arah tetap yang tidak sejajar sumbu)
+  q += vec3(2.0, 1.2, -1.4) * wq;
   float s = 0.0, a = 0.55, n = 0.0;
   for (int i = 0; i < 3; i++) {                                       // MK4e: maks 3 oktaf: oktaf 4-5 (fitur 0,05 rs) lebih halus dari texel = aliasing (gerigi, goresan)
     if (i >= uOct) break;
