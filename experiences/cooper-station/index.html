@@ -414,6 +414,8 @@
 <script src="../../shared/camera.js"></script>
 <script src="../../shared/vr.js"></script>
 <script src="../../shared/music.js"></script>
+<script src="../../shared/orang_data.js"></script>
+<script src="assets/orang.data.js"></script>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
 </script>
@@ -14162,7 +14164,7 @@ const PARK_PATHS = { runs: [], w: 2.6, mesh: null };
   mesh.frustumCulled = false; mesh.userData.noShadow = true; scene.add(mesh); PARK_PATHS.mesh = mesh;
 }
 // 28a: lama = ?orang=lama: model orang persis seperti sebelum tahap 28 (17 kotak, geometri dan shader lama)
-const PEDS = { lama: new URLSearchParams(location.search).get('orang') === 'lama', rainList: [], rk: 0, uk: 0, uOn: false, hk: 0, shelter: false, calm: 0, busy: 0, list: [], walk: [], near: [], nearAt: 0, nearS: 1e9, nearZ: 1e9, frame: 0, max: 4000, n: 0, radius: 300, dens: 1, user: 1, users: [1, 0.4, 0], names: ['nyala', 'sedikit', 'mati'] };
+const PEDS = { lodR: [30, 90], lama: new URLSearchParams(location.search).get('orang') === 'lama', newModel: false, rainList: [], rk: 0, uk: 0, uOn: false, hk: 0, shelter: false, calm: 0, busy: 0, list: [], walk: [], near: [], nearAt: 0, nearS: 1e9, nearZ: 1e9, frame: 0, max: 4000, n: 0, radius: 300, dens: 1, user: 1, users: [1, 0.4, 0], names: ['nyala', 'sedikit', 'mati'] };
 // 21a-1: pengunjung plaza (kind 'visit'). Keadaan: 'loop' keliling tepi dalam plaza, 'in' jalan lurus ke tujuan, 'stay' diam
 // (berdiri / duduk), 'out' jalan lurus kembali ke jalur keliling. Dua jenis: pengunjung air mancur (VIS.fount, berdiri di tepi
 // kolam atau duduk di bibir kolam 20-90 s) dan anggota kelompok mengobrol (VIS.groups, bubar tiap 3-8 menit, berkumpul lagi di
@@ -14386,9 +14388,13 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     p.umb = ur() < (p.scale < 0.7 ? 0.55 : 0.75) ? 1 : 0; p.uc = Math.floor(ur() * 8); p.ud = ur(); p.uv = ur();
     if (p.bench) PEDS.rainList.push(p);
   }
+  // 28G2: karakter (indeks model GLB 0..12) dari generator acak sendiri, tidak mengubah urutan acak lain
+  let msd = 98765; const mr = () => ((msd = (msd * 16807) % 2147483647) / 2147483647);
+  for (const p of PEDS.list) p.model = Math.floor(mr() * 13);
 }
-// --- model orang: kotak-kotak dengan id bagian (aPart) untuk animasi dan warna ---
-{
+PEDS.newModel = !PEDS.lama && !!window.ORANG_DATA && !!window.ORANGKIT;   // gagal muat data = model kotak lama otomatis
+// --- model orang: kotak-kotak dengan id bagian (aPart) untuk animasi dan warna (cadangan: ?orang=lama atau data GLB tidak termuat) ---
+if (!PEDS.newModel) {
   const parts = [];                                                   // [sx, sy, sz, x, y, z, bagian]
   for (const [side, L] of [[-1, 0], [1, 1]]) {
     parts.push([0.15, 0.42, 0.17, side * 0.1, 0.69, 0, 3 + L]);      // paha
@@ -14470,6 +14476,90 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
   PEDS.mesh.frustumCulled = false; PEDS.mesh.userData.noLight = true;
   castAlpha(PEDS.mesh, vegMaterial({ vertex: VS, fragment: FS, uniforms: U, depth: true, side: THREE.FrontSide }));   // 17f: pejalan kaki membuat bayangan
   realGroup.add(PEDS.mesh);
+} else {
+  // 28G2: orang dari model GLB olahan (assets/orang.data.js, tools/siapkan_orang.mjs; kredit di assets/KREDIT.md). Satu InstancedBufferGeometry per
+  // (karakter, tingkat detail); kulit tulang di vertex shader dari tekstur animasi (satu per jenis kelamin, 2 texel per tulang per frame:
+  // kuaternion, translasi). Atribut instance aP / aI / aJ sama dengan model lama.
+  const D = ORANGKIT.decode(window.ORANG_DATA), NCH = D.chars.length, hexl = (h) => new THREE.Color(h);
+  const PL = ORANGKIT.PAL, CAP = [500, 1200, 4000];
+  const animU = {};
+  for (const g of ['m', 'w']) {
+    const A = D.anim[g], w = A.nb * 2, h = A.frames, data = new Float32Array(w * h * 4);
+    for (let f = 0; f < h; f++) for (let j = 0; j < A.nb; j++) { const o = (f * A.nb + j) * 7, t = (f * w + 2 * j) * 4; data.set([A.q[o], A.q[o + 1], A.q[o + 2], A.q[o + 3], A.q[o + 4], A.q[o + 5], A.q[o + 6], 0], t); }
+    const tex = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, THREE.FloatType);
+    tex.minFilter = tex.magFilter = THREE.NearestFilter; tex.generateMipmaps = false; tex.needsUpdate = true;
+    animU[g] = { uAnim: { value: tex }, uClip: { value: A.clips.map((c) => new THREE.Vector4(c.start, c.frames, c.dur, 0)) }, uStride: { value: A.strideM } };
+  }
+  const VS = /* glsl */`
+    attribute vec3 aCol; attribute vec4 aJt, aWt; attribute float aCls;
+    attribute vec4 aP, aI, aJ;                                      // aP: s, za, arah hadap, fase langkah; aI: baju, celana, kulit/rambut, pose; aJ: skala, tinggi lantai, -, payung (23f)
+    uniform sampler2D uAnim; uniform vec4 uClip[8]; uniform float uStride, uLum[7]; uniform vec4 uRec;
+    uniform vec3 uShirt[14], uPants[8], uSkin[6], uHair[6];
+    varying vec3 vCol;
+    vec3 qrot(vec4 q, vec3 v) { vec3 c = cross(q.xyz, v); return v + 2.0 * (q.w * c + cross(q.xyz, c)); }
+    void main() {
+      float pose = aI.w, ph = aP.w; bool umb = aJ.w > 0.0;
+      int clip = pose < 0.5 ? (umb ? 5 : 0) : pose < 1.5 ? (umb ? 6 : 1) : (umb ? 7 : 4);   // Jalan, Diam, Duduk (+ payung)
+      vec4 cl = uClip[clip];
+      float cyc = pose < 0.5 ? fract(ph / 6.2831853 * (1.45 / uStride)) : fract(uTime / cl.z + fract(aP.x * 0.37 + aP.y * 0.113));
+      float fp = cyc * cl.y; float fl = floor(fp), tt = fp - fl;
+      int fA = int(cl.x + fl), fB = int(cl.x + (fl + 1.0 >= cl.y ? 0.0 : fl + 1.0));
+      vec3 p = vec3(0.0), n = vec3(0.0);
+      for (int k = 0; k < 4; k++) {
+        float w = aWt[k]; if (w <= 0.0) continue;
+        int j = int(aJt[k] + 0.5);
+        vec4 qa = texelFetch(uAnim, ivec2(2 * j, fA), 0), qb = texelFetch(uAnim, ivec2(2 * j, fB), 0);
+        vec3 ta = texelFetch(uAnim, ivec2(2 * j + 1, fA), 0).xyz, tb = texelFetch(uAnim, ivec2(2 * j + 1, fB), 0).xyz;
+        if (dot(qa, qb) < 0.0) qb = -qb;
+        vec4 q = mix(qa, qb, tt); float ql = length(q); q = ql > 1e-6 ? q / ql : vec4(0.0, 0.0, 0.0, 1.0);
+        p += w * (qrot(q, position) + mix(ta, tb, tt)); n += w * qrot(q, normal);
+      }
+      p *= aJ.x;
+      vec3 up, tS; vec3 base = groundFrame(aP.xy, aJ.y, up, tS);
+      vec3 F = tS * sin(aP.z) + vec3(0.0, 0.0, 1.0) * cos(aP.z), Rt = cross(up, F);
+      vec3 p3 = base + Rt * p.x + up * p.y + F * p.z;
+      #ifndef DEPTH_ONLY
+      vec3 c = pow(aCol, vec3(2.2));                                // warna titik sRGB 8 bit -> linear
+      int ci = int(aCls + 0.5), sh = int(aI.x), pa = int(aI.y), sk = int(aI.z);
+      vec3 pal = vec3(-1.0);
+      if (ci == 3 && uRec.x > 0.5) pal = uShirt[sh]; else if (ci == 4 && uRec.y > 0.5) pal = uPants[pa]; else if (ci == 1 && uRec.z > 0.5) pal = uSkin[sk]; else if (ci == 2 && uRec.w > 0.5) pal = uHair[sk];
+      if (pal.x >= 0.0) c = min(pal * (dot(c, vec3(0.2126, 0.7152, 0.0722)) / max(0.01, uLum[ci])), vec3(1.0));   // palet kota x kecerahan titik asli
+      float nl = length(n); vec3 nn = nl > 1e-5 ? n / nl : vec3(0.0, 1.0, 0.0);
+      vec3 nw = normalize(Rt * nn.x + up * nn.y + F * nn.z);
+      vCol = c * vegLight(p3, nw, aP.xy, 1.0);
+      #endif
+      vec4 mvPosition = viewMatrix * vec4(p3, 1.0);
+      gl_Position = projectionMatrix * mvPosition;
+      #ifndef DEPTH_ONLY
+      #include <fog_vertex>
+      #endif
+    }`;
+  const FS = /* glsl */`
+    varying vec3 vCol;
+    void main() { gl_FragColor = vec4(vCol, 1.0);
+      #include <colorspace_fragment>
+      #include <fog_fragment>
+    }`;
+  const pal = (arr) => arr.map(hexl);
+  const PU = { uShirt: { value: pal(PL.shirt) }, uPants: { value: pal(PL.pants) }, uSkin: { value: pal(PL.skin) }, uHair: { value: pal(PL.hair) } };
+  PEDS.buckets = []; PEDS.chars = D.chars; PEDS.anim = D.anim;
+  D.chars.forEach((ch, ci) => {
+    const lum = ch.lum.map((v) => Math.max(0.01, v)), rec = new THREE.Vector4(ch.recolor.top ? 1 : 0, ch.recolor.bottom ? 1 : 0, ch.recolor.skin ? 1 : 0, ch.recolor.hair ? 1 : 0);
+    const U = Object.assign({}, animU[ch.g], PU, { uLum: { value: lum }, uRec: { value: rec } });
+    const mat = vegMaterial({ vertex: VS, fragment: FS, uniforms: U, side: THREE.FrontSide }), dmat = vegMaterial({ vertex: VS, fragment: FS, uniforms: U, depth: true, side: THREE.FrontSide });
+    ch.lods.forEach((L, li) => {
+      const g = new THREE.InstancedBufferGeometry();
+      g.setIndex(new THREE.BufferAttribute(new Uint16Array(L.index), 1));
+      g.setAttribute('position', new THREE.BufferAttribute(L.pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(L.nrm, 3)); g.setAttribute('aCol', new THREE.BufferAttribute(L.col, 3));
+      g.setAttribute('aJt', new THREE.BufferAttribute(Float32Array.from(L.joints), 4)); g.setAttribute('aWt', new THREE.BufferAttribute(L.weights, 4)); g.setAttribute('aCls', new THREE.BufferAttribute(Float32Array.from(L.cls), 1));
+      const arr = {}; for (const nm of ['aP', 'aI', 'aJ']) { arr[nm] = new Float32Array(CAP[li] * 4); g.setAttribute(nm, new THREE.InstancedBufferAttribute(arr[nm], 4).setUsage(THREE.DynamicDrawUsage)); }
+      g.instanceCount = 0;
+      const mesh = new THREE.Mesh(g, mat); mesh.frustumCulled = false; mesh.userData.noLight = true; mesh.visible = ci === 0 && li === 0;   // visible: program ikut dikompilasi di warmFrame
+      castAlpha(mesh, dmat); realGroup.add(mesh);
+      PEDS.buckets.push({ ch: ci, lod: li, g, mesh, cap: CAP[li], P: arr.aP, I: arr.aI, J: arr.aJ, n: 0 });
+    });
+  });
+  PEDS.mesh = null;
 }
 // 23f: payung pejalan kaki saat hujan. InstancedMesh terpisah; posisi dari data orang yang sama dengan buffer PEDS (ditulis di
 // updatePeds, radius sama). Kanopi kubah 8 segi diameter 1,04 m, puncak 2,02 m, tangkai tipis dari tangan kanan (lengan kanan
@@ -14500,9 +14590,10 @@ const PEDS_UMB_COL = ['#1c1c1f', '#1e2c4f', '#b0262a', '#e3b52b', '#d6dfe4', '#2
       float k = bP.w;
       if (k < 0.01) { ${CLIP_AWAY} }
       float aSh = (bJ.w < -0.1 ? -0.35 : 0.0);
-      float arm = mix(aSh, -0.75, k);                                // sama dengan lengan kanan di shader pejalan kaki
+      ${PEDS.newModel ? `vec3 H = bJ.w < -0.1 ? vec3(0.22, 0.68, 0.30) : vec3(0.215, 1.14, 0.35); // 28G2: tangan kiri model GLB (klip payung: berdiri dan duduk)
+      vec3 A = H + vec3(-0.13, 0.95, -0.22);` : `float arm = mix(aSh, -0.75, k);                                // sama dengan lengan kanan di shader pejalan kaki
       vec3 H = vec3(0.25, 1.44 - 0.61 * cos(arm), -0.61 * sin(arm)); // tangan kanan
-      vec3 A = H + vec3(-0.13, 1.06, -0.22);                         // puncak payung (di atas kepala)
+      vec3 A = H + vec3(-0.13, 1.06, -0.22);`}                         // puncak payung (di atas kepala)
       float grow = smoothstep(0.0, 0.25, k);                         // muncul bertahap
       vec3 p, n;
       if (aU.x < -0.5) {                                             // tangkai
@@ -14670,7 +14761,58 @@ function stepPeds(dt, t = clock.sim) {
     if (v > 0) p.ph += v / 1.45 * TAU * dt;
   }
 }
+// 28G2: versi model GLB: orang dipilah ke ember (karakter, tingkat detail) menurut p.model dan jarak ke mata (histeresis 4 m); atribut instance sama dengan model lama
+function updatePedsNew() {
+  const B = PEDS.buckets, UG = PEDS.umbMesh.geometry;
+  const off = () => { for (const b of B) { b.n = 0; b.g.instanceCount = 0; if (b.mesh.visible && !(b.ch === 0 && b.lod === 0)) b.mesh.visible = false; } PEDS.n = UG.instanceCount = 0; };
+  if (ext.active || !PEDS.user || !PEDS.dens) { off(); return; }
+  const L0 = lodShift(PEDS.radius), eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, cS = eS + L0.ds, cZ = eZ + L0.dz, R2 = L0.r * L0.r, h = clock.hour, f = PEDS.dens * PEDS.user;
+  const now = performance.now();
+  if (now > PEDS.nearAt || LODK.ver !== PEDS.lodVer || Math.hypot(wrapS(cS - PEDS.nearS), cZ - PEDS.nearZ) > 30) {   // daftar orang dekat, tiap 0,5 s
+    PEDS.nearAt = now + 500; PEDS.nearS = cS; PEDS.nearZ = cZ; PEDS.near.length = 0; PEDS.lodVer = LODK.ver;
+    const RN = L0.r + 60;
+    for (const p of PEDS.list) { p.isNear = Math.abs(wrapS(p.s - cS)) < RN && Math.abs(p.za - cZ) < RN; if (p.isNear) PEDS.near.push(p); }
+  }
+  const act = [pedAct(h, 0) * f, pedAct(h, 1) * f, pedAct(h, 2) * f];
+  for (const b of B) b.n = 0;
+  const BP = UG.attributes.bP.array, BJ = UG.attributes.bJ.array, am = 1 - 0.4 * PEDS.hk; let nu = 0, n = 0;
+  const r0 = PEDS.lodR[0], r1 = PEDS.lodR[1], NCH = PEDS.chars.length;
+  const put = (o, model, d2, lodPrev, s, za, hd, ph, shirt, pants, skin, pose, scale, elev, uk) => {   // mengembalikan tingkat detail terpilih
+    const d = Math.sqrt(d2), l = d < r0 + (lodPrev === 0 ? 4 : 0) ? 0 : d < r1 + (lodPrev <= 1 ? 4 : 0) ? 1 : 2;
+    const b = B[(model % NCH) * 3 + l]; if (b.n >= b.cap) return l;
+    const q = b.n++ * 4; b.P[q] = s; b.P[q + 1] = za; b.P[q + 2] = hd; b.P[q + 3] = ph;
+    b.I[q] = shirt; b.I[q + 1] = pants; b.I[q + 2] = skin; b.I[q + 3] = pose; b.J[q] = scale; b.J[q + 1] = elev; b.J[q + 2] = 0; b.J[q + 3] = uk; n++; return l;
+  };
+  for (const p of PEDS.near) {
+    if (p.thr >= act[p.zone] * (p.wk && !p.roof ? am : 1)) continue;   // 23f: hujan deras = pejalan kaki berkurang 40%
+    const ds = wrapS(p.s - eS), dz = p.za - eZ, qs = wrapS(p.s - cS), qz = p.za - cZ;
+    if (qs * qs + qz * qz > R2) continue;
+    const uk = pedUmbK(p);                                             // 23f: payung
+    p.lod = put(0, p.model, ds * ds + dz * dz, p.lod ?? 2, eS + ds, p.za, p.hd, p.ph, p.shirt, p.pants, p.skin, p.pose, p.scale, p.elev, uk);
+    if (uk > 0) {
+      const q = nu * 4; nu++;
+      BP[q] = eS + ds; BP[q + 1] = p.za; BP[q + 2] = p.hd; BP[q + 3] = uk;
+      BJ[q] = p.scale; BJ[q + 1] = p.elev; BJ[q + 2] = p.uc; BJ[q + 3] = p.pose > 1.5 ? -0.38 : 0;
+    }
+    if (n >= PEDS.max) break;
+  }
+  if (BASEBALL.on) for (const q of BASEBALL.people) {                  // pemain dan penonton baseball
+    if (n >= PEDS.max) break;
+    const s = FIELD.s + q.u, za = FIELD.za + q.v, ds = wrapS(s - eS), dz = za - eZ;
+    if (ds * ds + dz * dz > R2) continue;
+    if (q.model === undefined) q.model = Math.floor((((q.u * 13.37 + q.v * 7.11) % 1) + 1) % 1 * NCH);
+    q.lod = put(0, q.model, ds * ds + dz * dz, q.lod ?? 2, eS + ds, za, q.hd, q.ph, q.shirt, q.pants, q.skin, q.pose, 1, q.elev, 0);
+  }
+  for (const b of B) {
+    for (const nm of ['aP', 'aI', 'aJ']) { const a = b.g.attributes[nm]; a.clearUpdateRanges(); a.addUpdateRange(0, b.n * 4); a.needsUpdate = true; }
+    b.g.instanceCount = b.n; b.mesh.visible = b.n > 0 || (b.ch === 0 && b.lod === 0);
+  }
+  PEDS.n = n;
+  for (const nm of ['bP', 'bJ']) { const a = UG.attributes[nm]; a.clearUpdateRanges(); a.addUpdateRange(0, nu * 4); a.needsUpdate = true; }
+  UG.instanceCount = PEDS.nu = nu;
+}
 function updatePeds() {                                                 // pilih orang dalam radius, tulis atribut instance
+  if (PEDS.buckets) return updatePedsNew();
   const g = PEDS.mesh.geometry;
   if (ext.active || !PEDS.user || !PEDS.dens) { g.instanceCount = PEDS.n = PEDS.umbMesh.geometry.instanceCount = 0; return; }
   const L0 = lodShift(PEDS.radius), eS = VU.uEyeSZ.value.x, eZ = VU.uEyeSZ.value.y, cS = eS + L0.ds, cZ = eZ + L0.dz, R2 = L0.r * L0.r, h = clock.hour, f = PEDS.dens * PEDS.user;   // K10: pusat dan radius ikut lensa
@@ -14715,6 +14857,7 @@ function updatePeds() {                                                 // pilih
 }
 function applyPedsPreset(i) {
   PEDS.radius = [300, 250, 180, 120, 80][i]; PEDS.dens = [1, 1, 0.85, 0.6, 0.3][i];
+  PEDS.lodR = [[30, 90], [25, 80], [18, 60], [12, 45], [0, 35]][i];   // 28G2: batas tingkat detail dekat / menengah dan menengah / jauh (m)
   uiLabel('labPeds', () => t('Pejalan kaki: {s}', { s: t(PEDS.names[PEDS.users.indexOf(PEDS.user)]) }));
 }
 function cyclePeds() {

@@ -1,6 +1,6 @@
 # Rencana Tahap 28 (revisi GLB) Copper Corn Station: orang dari model GLB
 
-Per 17 Oktober 2026 · disusun atas permintaan Bhakti (hasil generator prosedural 28b dinilai tidak bagus; pakai paket "Ultimate Modular Men / Women Pack" GLB) · Status: 28G0 dan 28G1 selesai (17 Oktober 2026), menunggu persetujuan tampilan dan ukuran sebelum 28G2
+Per 17 Oktober 2026 · disusun atas permintaan Bhakti (hasil generator prosedural 28b dinilai tidak bagus; pakai paket "Ultimate Modular Men / Women Pack" GLB) · Status: 28G0, 28G1, dan 28G2 selesai (17 Oktober 2026); berikutnya 28G3 (perilaku) dan seterusnya
 
 ## Ringkasan
 
@@ -87,7 +87,7 @@ Tambahan 0,03-0,11 juta segitiga, di bawah 3% dari adegan. Biaya vertex lebih pe
 | --- | --- | --- | --- | --- | --- |
 | 28G0 | (selesai 17 Oktober 2026: lisensi dan KREDIT.md; seleksi karakter pakai usulan sampai Bhakti mengubahnya) Lisensi dan seleksi: konfirmasi lisensi dan sumber, pilih karakter, putuskan lokasi berkas sumber (di luar repo), `assets/KREDIT.md` | Low | Haiku 4.5 | low | `assets/KREDIT.md`, dokumen |
 | 28G1 | (selesai 17 Oktober 2026, lihat Hasil 28G1) Alat olah `tools/siapkan_orang.mjs` (gabung, bakar satuan, kelas warna, LOD dengan `meshoptimizer`, kuantisasi, tekstur animasi, klip duduk dan payung), `orang.data.js`, uji Node `tools/uji_orang_data.cjs`, halaman pratinjau yang memutar data hasil olahan (karakter, LOD, klip, palet) untuk persetujuan; ukur ukuran berkas dan panjang langkah | High | Opus 5.5 | high | `tools/siapkan_orang.mjs` baru, `experiences/cooper-station/assets/orang.data.js` baru, `docs/cooper-station/orang/pratinjau-orang.html` baru |
-| 28G2 | Pasang di game: `ORANG.load()`, geometri dan tekstur animasi, vertex shader kulit, ember (model, LOD), ganti model kotak, `?orang=lama` penuh, `warmFrame()` | High | Opus 5.5 | high (shader rawan NaN di M1) | blok model orang `index.html` (sekitar 14389-14471), `updatePeds()`, `applyPedsPreset()`, `PEDS` |
+| 28G2 | (selesai 17 Oktober 2026, lihat Hasil 28G2) Pasang di game: `ORANG.load()`, geometri dan tekstur animasi, vertex shader kulit, ember (model, LOD), ganti model kotak, `?orang=lama` penuh, `warmFrame()` | High | Opus 5.5 | high (shader rawan NaN di M1) | blok model orang `index.html` (sekitar 14389-14471), `updatePeds()`, `applyPedsPreset()`, `PEDS` |
 | 28G3 | Perilaku: klip per keadaan (jalan, berdiri, duduk, payung, Wave untuk pengunjung, Interact untuk pasar), sinkron langkah, payung dari tulang tangan, baseball, anak | Medium | Sonnet 5.5 | high | `VS`, `PEDS.umbMesh`, `BASEBALL.people`, `VIS` |
 | 28G4 | Distribusi karakter per zona, warna ulang dari palet, tinggi acak, pembagian jenis kelamin | Medium | Sonnet 5.5 | medium | pembuatan `PEDS.list` (atribut `p.model`), `look()` |
 | 28G5 | Bayangan (L1), `vegLight()`, radius per preset, ukur draw call dan FPS di sandbox, tuas biaya | Medium | Opus 5.5 | high | `castAlpha`, `applyPedsPreset()` |
@@ -130,6 +130,26 @@ Kelemahan dan hal yang perlu dinilai Bhakti di pratinjau:
 - Pesan `computeBoundingSphere ... NaN` muncul sekali di konsol halaman pratinjau; data dan hasil kulit diuji tanpa NaN (0 dari seluruh titik), jadi penyebabnya di halaman pratinjau (belum dicari).
 
 Kredit: baris `orang.data.js` di `experiences/cooper-station/assets/KREDIT.md` dan teks atribusi di pratinjau. Berkas GLB sumber tidak di-commit. Alat butuh `THREE_LOCAL`, `MESHOPT_LOCAL`, `--men`, `--women` (lihat kepala berkas).
+
+## Hasil 28G2 (selesai 17 Oktober 2026)
+
+Model GLB terpasang di Copper (`experiences/cooper-station/index.html`): tag skrip `shared/orang_data.js` dan `assets/orang.data.js`, blok model orang lama dibungkus `if (!PEDS.newModel)` (cadangan otomatis bila data gagal dimuat atau `?orang=lama`), blok baru `else` (tekstur animasi per jenis kelamin `uAnim` RGBA32F 124 texel lebar, 39 `InstancedBufferGeometry` = 13 karakter x 3 tingkat, material per karakter dengan `uRec` / `uLum`, vertex shader kulit 4 tulang dengan campuran dua frame), `updatePedsNew()` (ember per (karakter, tingkat) menurut `p.model` dan jarak ke mata, histeresis 4 m), `PEDS.lodR` per preset, payung memakai titik tangan GLB.
+
+| Item | Hasil |
+| --- | --- |
+| Atribut instance | `aP`, `aI`, `aJ` sama dengan model lama; simulasi pejalan kaki, kelompok, baseball, payung tidak berubah; model per orang dari generator acak sendiri (`p.model` 0..12), baseball dari hash posisi |
+| Warna | warna titik asli (sRGB8 -> linear di shader); baju atas / celana / kulit / rambut diganti palet kota hanya untuk karakter yang diberi izin (`recolor`) dengan kecerahan titik asli dipertahankan |
+| Langkah | fase jalan dikali `1,45 / strideM` (pria 1,235 m, wanita 1,443 m per siklus) agar kaki tidak meluncur; diam dan duduk memakai `uTime` dan hash posisi |
+| Payung | klip Payung dipilih bila payung terbuka (`aJ.w > 0`); titik pegang di shader payung: berdiri (0,215; 1,14; 0,35), duduk (0,22; 0,68; 0,30); lengan loncat ke pose payung saat payung mulai terbuka (campuran dua klip ditunda ke 28G3) |
+| Radius tingkat detail | Ultra 30 / 90 m, Tinggi 25 / 80, Sedang 18 / 60, Rendah 12 / 45, Hemat tanpa L0 dan 35 m |
+| Kompilasi | satu ember dibiarkan terlihat di `warmFrame()`; `ukur_muat.py cooper-station --cek` lulus (0 program baru di frame pertama dan saat tombol) |
+| Ukur (Ultra, sandbox) | orang tergambar 117 (pasar) / 331 (New York) / 275 (spaceport) / 282 (baseball); tingkat [L0, L1, L2] pasar [37, 2, 78], New York [13, 23, 295], spaceport [16, 59, 200]; segitiga orang 0,10-0,125 juta (lama 0,02-0,07 juta); ember digambar 27-36 (draw call adegan 659 / 1.033 / 748 / 663, model lama menambah 1) |
+| Uji | `tools/uji_orang.py` baru: 11 dari 11 lulus (termasuk `?orang=lama` = sidik jari lama persis); `uji_pejalan_kaki.py` lulus; `uji_air_mancur.py` dan `uji_trotoar.py` gagal pada 1 dan 2 pemeriksaan yang sama persis di kode sebelum tahap 28 (diukur di worktree commit sebelumnya), jadi bukan akibat tahap ini; `qc_load.py` tanpa error |
+| Tampilan | tangkapan layar game: orang berjalan berpakaian gelap dengan bayangan di jalan; wanita memegang payung hitam dengan tangkai di tangan |
+
+Belum dicek: orang duduk di bangku (klip duduk teruji di pratinjau dan data, bukan tangkapan layar di game), FPS di GPU asli (draw call naik sekitar 30, titik per orang dekat sekitar 6.000), NaN di Apple M1, `vegLight()` per titik pada orang dekat.
+
+Alat bantu sandbox: `/opt/pw-browsers/chromium_headless_shell-1248` ditautkan ke chromium 1194 yang ada agar skrip uji bawaan (`python tools/uji_*.py`) jalan; bukan bagian repo.
 
 ## Uji dan ukuran keberhasilan
 

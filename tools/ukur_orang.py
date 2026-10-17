@@ -14,9 +14,12 @@ UKUR = r"""
 (async () => {
   const st = window.__station, P = st.PEDS, out = {};
   const fnv = (arr) => { let h = 0x811c9dc5; const u = new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength); for (let i = 0; i < u.length; i++) { h ^= u[i]; h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); };
-  const g = P.mesh.geometry, A = g.attributes;
-  out.geometri = { tri: g.index.count / 3, titik: A.position.count, hashPos: fnv(A.position.array), hashNrm: fnv(A.normal.array), hashPart: fnv(A.aPart.array), hashIdx: fnv(g.index.array) };
-  out.lama = P.lama; out.layerMask = P.mesh.layers.mask; out.total = P.list.length;
+  if (P.mesh) {   // model kotak lama (?orang=lama)
+    const g = P.mesh.geometry, A = g.attributes;
+    out.geometri = { tri: g.index.count / 3, titik: A.position.count, hashPos: fnv(A.position.array), hashNrm: fnv(A.normal.array), hashPart: fnv(A.aPart.array), hashIdx: fnv(g.index.array) };
+    out.layerMask = P.mesh.layers.mask;
+  } else out.geometri = { model: 'GLB', ember: P.buckets.length, segitigaPerTingkat: [0, 1, 2].map((l) => P.chars.map((c) => c.lods[l].nt).join('/')) };
+  out.lama = P.lama; out.total = P.list.length;
   const CIRC = 2 * Math.PI * st.R, wrap = (d) => ((d % CIRC) + 1.5 * CIRC) % CIRC - CIRC / 2;
   const bands = [12, 30, 90, 1e9], lok = ['cooper', 'nyc', 'market', 'fountain', 'baseball', 'spaceport'];
   const frames = (n) => new Promise((r) => { let k = 0; const f = () => (++k >= n ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); });
@@ -26,9 +29,10 @@ UKUR = r"""
     for (const k of lok) {
       st.teleport(k); st.updateCamera(); for (let i = 0; i < 40; i++) { st.clock.sim += 0.1; st.stepPeds(0.1); }
       let ms = 0; const N = 20; for (let i = 0; i < N; i++) { const t0 = performance.now(); st.updatePeds(); ms += performance.now() - t0; }
-      await frames(3); const a = g.attributes.aP.array, n = P.n, eS = st.player.theta * st.R, eZ = st.player.za, cnt = [0, 0, 0, 0];
-      for (let i = 0; i < n; i++) { const d = Math.hypot(wrap(a[i * 4] - eS), a[i * 4 + 1] - eZ); cnt[bands.findIndex((b) => d < b)]++; }
-      out.lokasi[nm][k] = { n, band: cnt, msUpdate: +(ms / N).toFixed(3), triSemua: st.renderer.info.render.triangles, tiriOrang: n * out.geometri.tri };
+      await frames(3); const pts = []; if (P.mesh) { const a = P.mesh.geometry.attributes.aP.array; for (let i = 0; i < P.n; i++) pts.push([a[i * 4], a[i * 4 + 1]]); } else for (const b of P.buckets) for (let i = 0; i < b.n; i++) pts.push([b.P[i * 4], b.P[i * 4 + 1]]);
+      const c = st.camera.position, n = P.n, eS = ((Math.atan2(c.y, c.x) * st.R) % CIRC + CIRC) % CIRC, eZ = c.z + 4000, cnt = [0, 0, 0, 0];   // mata dari kamera (sama dengan VU.uEyeSZ)
+      for (const [px, pz] of pts) { const d = Math.hypot(wrap(px - eS), pz - eZ); cnt[bands.findIndex((b) => d < b)]++; }
+      out.lokasi[nm][k] = { n, band: cnt, msUpdate: +(ms / N).toFixed(3), triSemua: st.renderer.info.render.triangles, tiriOrang: P.mesh ? n * out.geometri.tri : P.buckets.reduce((s, b) => s + b.n * P.chars[b.ch].lods[b.lod].nt, 0), draw: P.buckets ? P.buckets.filter((b) => b.n > 0).length : 1 };
     }
   }
   st.applyPreset(0);
