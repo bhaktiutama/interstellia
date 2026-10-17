@@ -9,7 +9,7 @@
      dibuang dan diganti pod kaca GX-01 di depan, duduk di pelat dek di antara ujung lengan, disambung leher ke badan tengah:
      kaca depan, atas, dan samping, rangka tipis hanya di sudut, konsol rendah dengan 3 layar MFD. Mata pilot di z -13,0 m,
      sejajar kabin ujung lengan, jadi lengan ada tepat di samping (80-90 derajat) dan pandangan depan bebas.
-   - Posisi int16 (langkah 1 mm), normal int8, warna uint8, id material uint8 (0 badan, 1 kaca, 2 interior kokpit).
+   - Posisi int16 (langkah 1 mm), normal int8, warna uint8, id material uint8 (0 badan, 1 kaca, 2 interior panel, 3 LED, 4 logam, 5 karet, 6 kain, 7 plastik, 10 + k indikator).
    - Kerangka: +x kanan, +y atas, -z depan (sama dengan buildV3), titik 0 = sumbu badan.
    Pakai: node tools/siapkan_wahana_gx.mjs   (butuh three@0.186.1: THREE_LOCAL=<folder node_modules/three> atau `npm i three@0.186.1`) */
 import fs from 'node:fs';
@@ -307,6 +307,16 @@ part('throttle', [-1.0, 0.12, -12.62], () => {
   obox([-0.95, 0.312, -12.67], [1, 0, 0], [0, 1, 0], [0, 0, 1], 0.012, 0.005, 0.012, LED_A, 3);
 });
 
+// ---------- K7: id bahan interior dari warna dasar (2 panel komposit, 4 logam, 5 karet, 6 kain kursi, 7 plastik tombol) ----------
+const same = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 1e-6;
+function bahan(c) {
+  if (same(c, METAL) || same(c, LIP)) return 4;
+  if (same(c, RUB)) return 5;
+  if (same(c, SEAT) || same(c, SEAT2)) return 6;
+  if (same(c, BTN) || same(c, BTN2)) return 7;
+  return 2;
+}
+
 // ---------- tulis keluaran ----------
 const n = T.length * 3, SCALE = 1000;                          // 1 satuan int16 = 1 mm (jangkauan +-32,7 m)
 const pos = new Int16Array(n * 3), nrm = new Int8Array(n * 3), col = new Uint8Array(n * 3), mat = new Uint8Array(n);
@@ -320,7 +330,7 @@ for (const t of T) for (let k = 0; k < 3; k++, v++) {
     nrm[v * 3 + a] = Math.round(Math.max(-1, Math.min(1, t.n[k][a])) * 127);
     col[v * 3 + a] = Math.round(Math.max(0, Math.min(1, t.c[a] * (t.ao ? t.ao[k] : 1))) * 255);
   }
-  mat[v] = t.m; if (t.m === 1) glassN++; if (t.m >= 2) interiorN++;
+  mat[v] = t.m === 2 ? bahan(t.c) : t.m; if (t.m === 1) glassN++; if (t.m >= 2) interiorN++;
 }
 if (maxA * SCALE > 32767) throw new Error('model melebihi jangkauan int16: ' + maxA);
 const b64 = (a) => Buffer.from(a.buffer, a.byteOffset, a.byteLength).toString('base64');
