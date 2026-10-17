@@ -1,5 +1,16 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.15: keluar lewat celah Skyway, motor di lajur yang benar, jalan di tengah trotoar
+
+| Masukan | Perubahan |
+| --- | --- |
+| Penutup lewat celah jendela Skyway, bukan kaca end cap B | Langit pagi (14 s): naik dari danau ke 480 m, terbang ke strip jendela Skyway (za di antara balok 50 m, jauh dari akuaduk dan cincin), turun sampai 2 m di atas kaca menghadap keliling dan menunduk 80 derajat ke celah. Jam 6,6 -> 9,6 (kabut pagi habis saat tiba). Meninggalkan stasiun (`ext: 'slot'`, 18 s, tanpa layar gelap): 6 s pertama kamera ikut berputar dengan stasiun (kerangka stasiun dikali putaran omega t) menembus kaca dan celah lambung 80 m sambil berbalik menengadah 170 derajat (sumbu kanan kamera), lalu menjauh 22 km di kerangka inersia (Hermite koordinat silinder: laju awal = laju ikut berputar, jari-jari tidak pernah kurang dari 1,3 km, jadi tidak menembus stasiun). Roll kamera luar dipasang `tourCamPost()` setelah `updateCamera()` |
+| Saturnus di latar | Fase orbit (diatur saat Pagi berkabut) dipilih dari waktu keluar celah: kamera berakhir di seberang Saturnus dari stasiun dengan Saturnus terang (115-150 atau 210-245 derajat dari gerhana), arah hadap di kaca (+s / -s) dipilih agar akhir penutup tegak (`tourOutroPlan()`) |
+| Diam sebelum naik motor terlalu lama | Hujan miring diam 12 -> 5 s |
+| Motor di sisi kanan menabrak mobil lawan arah | Lalu lintas lajur kiri: arah -s memakai sisi +za. Motor mulai di tepi kiri (9,5 m dari as, dekat trotoar), menyetir ke tengah jalan (0,8 m dari as, celah antara lajur dalam kedua arah) lewat joystick analog `input.joyS` seperti pemain di layar sentuh (`tourMotoSteer()`), lalu 260 m sebelum titik berhenti menepi lagi ke kiri dan berhenti |
+| Jalan kaki di pinggir menabrak bangku dan pohon | Jalur trotoar 15,2 m dari as arteri (bangku, pohon jalan, tiang lampu di 13-13,5 m, gedung di 17 m) |
+
+
 ## Revisi v2.14: putar balik saat mundur, penutup lewat kaca end cap B, Spasi = lewati
 
 | Masukan | Perubahan |
