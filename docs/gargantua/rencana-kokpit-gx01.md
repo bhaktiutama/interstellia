@@ -178,4 +178,5 @@ Tugas terberat High, jadi rencana disusun model Opus 5.5. Urutan: kelompok 1 dul
 
 | Tahap | Status |
 | --- | --- |
-| K1-K6 | Rencana, belum dikerjakan |
+| K1 | Selesai 17 Oktober 2026: kepala pilot `CKP` (pegas teredam kritis 14 / s, leher 0,10 m di belakang dan 0,12 m di bawah mata), klik = kunci kursor, seret kiri / satu jari = menoleh, seret kanan / Ctrl / tahan klik kanan = hidung, dua jari = hidung, roda = FOV 50-95, klik ganda = depan, Esc pertama melepas kursor; VR mengabaikan kepala mouse. Uji kelompok 10 di `tools/uji_misi_gargantua.py` 15/15 lulus (SwiftShader), termasuk render kepala nol identik 0,000% dengan commit sebelum K1. Belum diuji di GTX 1060 dan M1 |
+| K2-K6 | Belum dikerjakan |

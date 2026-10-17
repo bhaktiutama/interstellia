@@ -31,7 +31,7 @@ Kelompok 4 (G4, informasi tidak bisa keluar) + kamera luar mengitari wahana:
   pulsa dari dalam horizon tidak pernah tiba, semua pulsa dari luar akhirnya tiba,
 - suar keluar dari dalam horizon tetap turun sampai r = 0, suar dari luar tiba di relai, pesan relai tetap sampai ke wahana di dalam horizon,
 - jendela relai dan diagram tergambar (M), E menembak suar, layar akhir memuat pulsa dan jendela relai hidup,
-- seret di kamera luar memutar kamera mengitari wahana tanpa mengubah sikap, seret kanan / kokpit = arah hidung, klik ganda kembali.
+- seret di kamera luar memutar kamera mengitari wahana tanpa mengubah sikap, seret kanan (juga di kokpit) = arah hidung, klik ganda kembali.
 Kelompok 5 (G5, sudut masuk tesseract, fiksi):
 - sudut tangkap kritis 24,62 derajat = asin(2 sqrt(21) / 22), integrator: sedikit di bawah kritis tertangkap, sedikit di atas lolos,
 - zoom-whirl: sapuan sudut bertambah ln(10) / sqrt(1/2) = 186,6 derajat tiap delta 10 kali lebih kecil (eksponen ketidakstabilan orbit 2 rs),
@@ -54,6 +54,12 @@ Kelompok 9 (G9, pandangan relai 22 rs; docs/gargantua/rumus-pandangan-relai.md):
 - render pandangan relai tanpa nilai tidak valid, titik wahana tergambar,
 - suar dari 10 rs diterima relai saat waktu relai >= waktu tiba; suar dari dalam horizon tidak pernah diterima.
 - revisi 3: relai 4,6 derajat di atas piringan, susur dua arah: lompatan antar titik jejak <= 1 derajat; kartu akhir bawaan di kanan.
+Kelompok 10 (K1, menoleh di kokpit; docs/gargantua/rencana-kokpit-gx01.md):
+- kepala nol = render kokpit dan kamera luar identik dengan commit sebelum K1,
+- basis kepala ortonormal, depan = hidung diputar yaw / pitch, mata berputar di titik leher, batas yaw 140 / pitch +80 / -60 derajat,
+- menoleh tidak mengubah sikap, posisi, kecepatan, sikap X, prakiraan; pegas mencapai sasaran tanpa lewat,
+- mouse: seret kiri (atau kursor terkunci) = kepala, seret kanan = hidung, klik ganda = depan, roda = FOV 50-95; VR mengabaikan kepala mouse,
+- render kokpit menoleh jauh dekat piringan tanpa nilai tidak valid, kamus ID.
 Pakai: python tools/uji_misi_gargantua.py   (butuh: pip install playwright; CHROMIUM=<jalur> opsional, default /opt/pw-browsers/chromium
 bila ada). Tanpa GPU dipakai SwiftShader."""
 import asyncio, os, pathlib, sys
@@ -395,9 +401,9 @@ async def kelompok4(pg):
     await pg.mouse.dblclick(160, 100)
     d3 = await pg.evaluate('() => window.__gargantua.MIS.orb')
     await pg.evaluate("() => { const G = window.__gargantua; G.SHIP.view = 'cockpit'; G.MIS.lock = 'centre'; G.misData(); }")
-    await pg.mouse.move(160, 100); await pg.mouse.down(); await pg.mouse.move(200, 100, steps=4); await pg.mouse.up()
-    d4 = await pg.evaluate('() => ({ lock: window.__gargantua.MIS.lock, orb: window.__gargantua.MIS.orb })')
-    cek('klik ganda = kamera kembali; di kokpit seret tetap arah hidung', d3['yaw'] == 0 and d3['pitch'] == 0 and d4['lock'] == 'free' and d4['orb']['yaw'] == 0, f"{d3} {d4}")
+    await pg.mouse.move(160, 100); await pg.mouse.down(button='right'); await pg.mouse.move(200, 100, steps=4); await pg.mouse.up(button='right')
+    d4 = await pg.evaluate('() => { if (document.pointerLockElement) document.exitPointerLock(); return { lock: window.__gargantua.MIS.lock, orb: window.__gargantua.MIS.orb }; }')
+    cek('klik ganda = kamera kembali; di kokpit seret kanan = arah hidung (K1: seret kiri = menoleh)', d3['yaw'] == 0 and d3['pitch'] == 0 and d4['lock'] == 'free' and d4['orb']['yaw'] == 0, f"{d3} {d4}")
 
     # --- jendela relai, suar (E), M, layar akhir ---
     await pg.set_viewport_size({'width': 900, 'height': 700})
@@ -734,7 +740,102 @@ async def kelompok9(pg):
     cek('pandangan relai: seret kanan = arah pandang (posisi tetap), roda = zoom, klik ganda = posisi dan FOV awal',
         a2['pos'] == a1['pos'] and a2['manual'] and 25 <= a2['fov'] < 70 and a2['ok'] and abs(a3['pos'][1] - a0['pos'][1]) < 1e-9 and a3['fov'] == 70 and not a3['manual'],
         f"fov {a2['fov']:.1f}, awal y {a3['pos'][1]:.2f}")
+    await kelompok10(pg)
     cek('kartu akhir: bawaan di kanan, latar tembus, x menutup, tombol ringkasan membuka lagi, kepala bisa diseret',
         r['shown'] and r['right'] and r['bg'] == 'none' and r['closed'] and r['btn'] and r['reopen'] and 'translate(' in tr and tr != 'translate(0px, 0px)', f"{r} {tr}")
+
+async def kelompok10(pg):
+    import subprocess
+    # --- kepala nol: render identik dengan commit sebelum K1 (berkas sementara di folder yang sama agar jalur aset benar) ---
+    k1 = subprocess.run(['git', 'log', '--format=%H', '-1', '--grep=Rencana kokpit GX-01'], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    old = subprocess.run(['git', 'show', f'{k1}:experiences/gargantua/index.html'], cwd=ROOT, capture_output=True, text=True).stdout if k1 else ''
+    if not old or 'CKP' in old:
+        cek('pembanding versi sebelum K1 tersedia', False, 'commit rencana kokpit tidak ditemukan')
+    else:
+        tmp = PAGE.parent / '_uji_lama_k1.html'; tmp.write_text(old, encoding='utf-8')
+        try:
+            setup = '''(view) => new Promise((res) => { const G = window.__gargantua; G.state.paused = true; G.state.simTime = 7.5; G.state.postMode = 2;
+              G.CONFIG.adaptive = false; G.CONFIG.renderScale = 0.8; G.startMission('polar'); G.state.paused = true; G.setShip(true, view); setTimeout(res, 600); })'''
+            px = {}
+            for nama, url in (('baru', PAGE.as_uri()), ('lama', tmp.as_uri())):
+                pgx = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
+                await pgx.goto(url + '?lang=id'); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.wait_for_timeout(1000)
+                for view in ('cockpit', 'chase'):
+                    await pgx.evaluate(setup, view); px[(nama, view)] = await pixels(pgx)
+                await pgx.close()
+            for view in ('cockpit', 'chase'):
+                d = beda(px[('baru', view)], px[('lama', view)])
+                cek(f'K1 kepala nol: {view} identik dengan versi sebelum K1', d == 0, f'{d * 100:.3f}% piksel berbeda')
+        finally:
+            tmp.unlink(missing_ok=True)
+
+    # --- basis kepala, batas, fisika tidak berubah ---
+    m = await pg.evaluate("""() => { const G = window.__gargantua, M = G.MIS, C = G.CKP, out = {}; G.state.paused = true;
+      const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+      G.startMission('skim'); G.setShip(true, 'cockpit'); const S = M.att, b0 = G.viewBasis();
+      out.zero = Math.max(...[0, 1, 2].map((k) => Math.abs(b0.f[k] - S.f[k]) + Math.abs(b0.r[k] - S.r[k]) + Math.abs(b0.u[k] - S.u[k])));
+      const snap = () => JSON.stringify([M.att, M.x, M.xd, M.lock, M.look, M.pred && M.pred.kind, M.pred && M.pred.dTau, M.tau]);
+      const s0 = snap(), y = 0.9, p = -0.4; G.ckpLook(y, p); for (let i = 0; i < 200; i++) G.ckpStep(1 / 60);
+      out.reach = [C.yaw - y, C.pitch - p]; const b = G.viewBasis();
+      out.ortho = Math.max(Math.abs(dot(b.f, b.f) - 1), Math.abs(dot(b.r, b.r) - 1), Math.abs(dot(b.u, b.u) - 1), Math.abs(dot(b.f, b.r)), Math.abs(dot(b.f, b.u)), Math.abs(dot(b.r, b.u)),
+        Math.max(...cr(b.r, b.f).map((x, k) => Math.abs(x - b.u[k]))));
+      out.fdot = [dot(b.f, S.f), Math.cos(y) * Math.cos(p)]; out.fup = [dot(b.f, S.u), Math.sin(p)]; out.fr = [dot(b.f, S.r), Math.sin(y) * Math.cos(p)];
+      const e0 = G.SHIP.data.eye, neck = [e0[0], e0[1] - C.NECK[1], e0[2] + C.NECK[2]];
+      out.neck = [Math.hypot(...b.eyeM.map((x, k) => x - neck[k])), Math.hypot(C.NECK[1], C.NECK[2])]; out.moved = Math.hypot(...b.eyeM.map((x, k) => x - e0[k]));
+      G.ckpReset(); G.ckpLook(1, 0); let over = 0; for (let i = 0; i < 300; i++) { G.ckpStep(1 / 30); over = Math.max(over, C.yaw - 1); }
+      out.over = over;
+      G.ckpLook(100, 100); out.maxUp = [C.ty * 180 / Math.PI, C.tp * 180 / Math.PI]; G.ckpLook(-200, -200); out.maxDn = [C.ty * 180 / Math.PI, C.tp * 180 / Math.PI];
+      for (let i = 0; i < 300; i++) G.ckpStep(1 / 60); G.viewBasis(); out.same = snap() === s0;
+      G.GV.on = true; const bv = G.viewBasis(); out.vr = Math.max(...[0, 1, 2].map((k) => Math.abs(bv.f[k] - S.f[k]))); out.vrOn = G.ckpOn(); G.GV.on = false;
+      G.ckpReset(); return out; }""")
+    cek('K1 kepala nol = basis hidung persis', m['zero'] == 0, str(m['zero']))
+    cek('K1 basis kepala ortonormal, depan = hidung diputar yaw / pitch', m['ortho'] < 1e-12 and all(abs(a - b) < 1e-9 for a, b in (m['fdot'], m['fup'], m['fr'])) and max(abs(x) for x in m['reach']) < 1e-6,
+        f"ortho {m['ortho']:.1e}, cos {m['fdot'][0]:.4f}")
+    cek('K1 mata berputar di titik leher (jarak tetap, mata bergeser)', abs(m['neck'][0] - m['neck'][1]) < 1e-12 and m['moved'] > 0.03, f"geser {m['moved'] * 100:.1f} cm")
+    cek('K1 pegas tanpa lewat sasaran; batas yaw 140, pitch +80 / -60 derajat', m['over'] <= 1e-12 and abs(m['maxUp'][0] - 140) < 1e-9 and abs(m['maxUp'][1] - 80) < 1e-9
+        and abs(m['maxDn'][0] + 140) < 1e-9 and abs(m['maxDn'][1] + 60) < 1e-9, f"{m['maxUp']} {m['maxDn']}")
+    cek('K1 menoleh tidak mengubah sikap, posisi, kecepatan, sikap X, prakiraan', m['same'])
+    cek('K1 VR: kepala mouse diabaikan', m['vr'] == 0 and not m['vrOn'], str(m['vr']))
+
+    # --- input mouse ---
+    await pg.set_viewport_size({'width': 640, 'height': 400})
+    await pg.evaluate("() => { const G = window.__gargantua; G.startMission('polar'); G.state.paused = true; G.setShip(true, 'cockpit'); }")
+    a0 = await pg.evaluate("() => ({ f: window.__gargantua.MIS.att.f.slice(), lock: window.__gargantua.MIS.lock })")
+    await pg.mouse.move(320, 200); await pg.mouse.down(); await pg.mouse.move(380, 170, steps=5); await pg.mouse.up()
+    await pg.wait_for_timeout(100)
+    q = "() => ({ ty: window.__gargantua.CKP.ty, tp: window.__gargantua.CKP.tp, f: window.__gargantua.MIS.att.f.slice(), lock: window.__gargantua.MIS.lock, locked: !!document.pointerLockElement })"
+    a1 = await pg.evaluate(q)
+    if a1['locked']:   # kursor terkunci: gerak mouse = kepala lewat movementX
+        await pg.mouse.move(420, 150, steps=4); await pg.wait_for_timeout(100); a1 = await pg.evaluate(q); a1['locked'] = True
+    cek('K1 seret kiri / kursor terkunci di kokpit = menoleh ke kanan dan atas, hidung tetap',
+        a1['ty'] > 0.05 and a1['tp'] > 0.02 and a1['f'] == a0['f'] and a1['lock'] == a0['lock'], f"yaw {a1['ty']:.3f}, pitch {a1['tp']:.3f}, terkunci {a1['locked']}")
+    await pg.evaluate("() => { if (document.pointerLockElement) document.exitPointerLock(); }"); await pg.wait_for_timeout(400)
+    await pg.mouse.move(320, 200); await pg.mouse.down(button='right'); await pg.mouse.move(360, 200, steps=4); await pg.mouse.up(button='right')
+    a2 = await pg.evaluate("() => ({ ty: window.__gargantua.CKP.ty, f: window.__gargantua.MIS.att.f.slice(), lock: window.__gargantua.MIS.lock })")
+    await pg.mouse.wheel(0, 600); await pg.wait_for_timeout(100)
+    fov1 = await pg.evaluate("() => window.__gargantua.CKP.fov")
+    await pg.mouse.wheel(0, -5000); await pg.wait_for_timeout(100)
+    fov2 = await pg.evaluate("() => window.__gargantua.CKP.fov")
+    await pg.mouse.dblclick(320, 200); await pg.wait_for_timeout(100)
+    a3 = await pg.evaluate("() => { if (document.pointerLockElement) document.exitPointerLock(); const C = window.__gargantua.CKP; return { ty: C.ty, tp: C.tp, fov: C.fov }; }")
+    cek('K1 seret kanan di kokpit = hidung (kepala tetap)', a2['lock'] == 'free' and a2['f'] != a0['f'] and a2['ty'] == a1['ty'], a2['lock'])
+    cek('K1 roda = FOV kokpit 50-95 derajat, klik ganda = kepala ke depan', 75 < fov1 <= 95 and fov2 == 50 and a3['ty'] == 0 and a3['tp'] == 0 and a3['fov'] == 75,
+        f"fov {fov1:.1f} -> {fov2:.1f}, klik ganda {a3}")
+    await pg.set_viewport_size({'width': 320, 'height': 200})
+
+    # --- render menoleh jauh dekat piringan tanpa nilai tidak valid ---
+    for y, p in ((140, -60), (-140, 80), (90, 0)):
+        st = await pg.evaluate('''([y, p]) => new Promise((res) => { const G = window.__gargantua, C = G.CKP; G.state.paused = true; G.startMission('skim');
+          G.setShip(true, 'cockpit'); G.ckpLook(y * Math.PI / 180, p * Math.PI / 180); C.yaw = C.ty; C.pitch = C.tp;
+          setTimeout(() => { G.state.readCb = (r) => { res(r); }; }, 600); })''', [y, p])
+        cek(f'K1 render kokpit menoleh yaw {y} pitch {p} dekat piringan tanpa nilai tidak valid', st['bad'] == 0 and st['mean'] > 0, str(st))
+    await pg.evaluate("() => { window.__gargantua.ckpReset(); window.__gargantua.stopMission(); }")
+
+    src = PAGE.read_text(encoding='utf-8')
+    idb = src[src.index('const ID = {'):src.index('const txt =')]
+    kunci = ['Cockpit view: click, then move the mouse to look around',
+             'Cursor locked: move the mouse to look around, right button = nose, double-click = forward, Esc releases']
+    hilang = [k for k in kunci if f"'{k}':" not in idb]
+    cek('K1 kamus ID lengkap', not hilang, ', '.join(hilang))
 
 asyncio.run(main())
