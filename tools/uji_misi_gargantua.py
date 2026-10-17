@@ -94,7 +94,7 @@ async def main():
         errs = []
         pg.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))
         pg.on('console', lambda m: errs.append(m.type + ': ' + m.text[:200]) if m.type in ('error', 'warning') else None)
-        await pg.goto(PAGE.as_uri() + '?lang=id')
+        await pg.goto(PAGE.as_uri() + '?lang=id&mood=klasik&millar=0')   # MK: uji lama memakai tampilan Klasik tanpa planet (Kelam diuji di kelompok MK)
         await pg.wait_for_function('window.__gargantua !== undefined', timeout=60000)
         await pg.wait_for_timeout(1500)
 
