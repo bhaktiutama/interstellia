@@ -171,11 +171,11 @@ const CONFIG = {
   quality: 'medium',
   presets: {
     //        max RK steps | step factor (dt = k*r) | fbm octaves | max render scale | G3: volume samples, disk particles
-    // MK4: dust = jumlah lembar debu suasana Kelam
-    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, parts: 400, dust: 1 },
-    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, parts: 900, dust: 2 },
-    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, parts: 1600, dust: 3 },
-    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500, dust: 4 },
+    // MK4b: dust = jumlah lembar debu suasana Kelam, berpasangan atas-bawah (2 = dekat, 4 = + tengah, 6 = + jauh)
+    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, parts: 400, dust: 2 },
+    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, parts: 900, dust: 4 },
+    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, parts: 1600, dust: 4 },
+    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500, dust: 6 },
   },
   adaptive: true,          // adaptive resolution
   renderScale: 0.8,        // current internal resolution factor
@@ -246,7 +246,7 @@ uniform vec4  uPl;
 uniform vec3  uPlR, uPlN;
 // MK3-MK5 suasana Kelam (foto contoh 2): uMood 0 = perilaku lama persis; uDust = jumlah lembar debu (0-4, per kualitas)
 uniform float uMood;
-uniform int   uDust;
+uniform int   uDust;                 // MK4b: 0-6 lembar (sepasang per tingkat: dekat, tengah, jauh)
 float gObsK = 1.0;                   // G2: frekuensi teramati / frekuensi di tak hingga untuk sinar piksel ini
 
 // Geometric units: G = c = 1, Schwarzschild radius rs = 1  =>  M = 0.5
@@ -343,11 +343,13 @@ vec3 moodRamp(float t) {
   return c;
 }
 
-// MK4: lembar debu gelap. Tiap lembar = kerucut tipis y = k_i |xz| (k +-0,06, +-0,14): dekat lubang hitam hampir di bidang
-// piringan, makin jauh makin tinggi, jadi piringan tampak tebal dan berasap di luar. Kerapatan fbm skala besar ikut rotasi Kepler
+// MK4: lembar debu gelap. Tiap lembar = kerucut tipis y = k_i |xz|: dekat lubang hitam hampir di bidang piringan, makin jauh
+// makin tinggi, jadi piringan tampak tebal dan berasap di luar. MK4b (revisi tangkapan layar Bhakti: debu tampak melayang
+// terpisah dari piringan): lembar dirapatkan k +-0,02 / +-0,05 / +-0,10 (dekat dulu); lembar dekat bercahaya seperti piringan
+// di r yang sama (Tn), lembar jauh gelap berasap, sehingga terang -> gelap menyambung tanpa celah. Kerapatan fbm skala besar ikut rotasi Kepler
 // setempat dengan dua fase saling memudar (seperti diskDensity, agar tidak tergulung jadi spiral tipis). Jendela radial halus
 // 4-6 rs sampai 17-25 rs: tidak ada batas tajam (pelajaran G3a: tepi lempeng tebal tampak sebagai lingkaran).
-float dustK(int i) { return i == 0 ? 0.06 : i == 1 ? -0.06 : i == 2 ? 0.14 : -0.14; }
+float dustK(int i) { return i == 0 ? 0.02 : i == 1 ? -0.02 : i == 2 ? 0.05 : i == 3 ? -0.05 : i == 4 ? 0.10 : -0.10; }
 float dustG(vec3 p, float k) { return p.y - k * length(p.xz); }
 float dustPat(float r, float phi, float seed) {
   vec2 cs = vec2(cos(phi), sin(phi));
@@ -358,19 +360,26 @@ float dustPat(float r, float phi, float seed) {
 }
 vec4 shadeDust(vec3 hp, int i) {                                    // rgb = cahaya hamburan, a = serapan
   float r = length(hp.xz);
-  float w = smoothstep(4.0, 6.0, r) * (1.0 - smoothstep(17.0, 25.0, r));
+  int lv = i / 2;                                                    // 0 dekat piringan, 1 tengah, 2 jauh
+  float w = (lv == 0 ? smoothstep(uRin + 0.3, uRin + 2.0, r) : smoothstep(4.0, 6.0, r)) * (1.0 - smoothstep(17.0, 25.0, r));
   if (w <= 0.0) return vec4(0.0);
   float phi = atan(hp.z, hp.x);
   float om = sqrt(M / (r * r * r)), P = uFlowPeriod * 2.0;
   float c1 = fract(uTime / P), c2 = fract(uTime / P + 0.5), w1 = 1.0 - abs(2.0 * c1 - 1.0);
   float sd = float(i) * 13.7;
   float n = mix(dustPat(r, phi - om * c2 * P, sd + 41.0), dustPat(r, phi - om * c1 * P, sd), w1);
-  float dens = smoothstep(0.40, 0.72, n) * w * (i < 2 ? 0.9 : 0.75);
+  // makin jauh dari piringan makin tipis; lembar dekat lebih merata (kabut bercahaya), lembar jauh bergumpal
+  float dens = (lv == 0 ? smoothstep(0.25, 0.70, n) * 0.55 : lv == 1 ? smoothstep(0.36, 0.70, n) * 0.70 : smoothstep(0.44, 0.74, n) * 0.60) * w;
   if (dens <= 0.002) return vec4(0.0);
   // cahaya piringan dalam yang dihamburkan debu: turun dengan r, tepi gumpalan (kerapatan rendah) lebih terang
   float x = max(r / uRin, 1.0);
   float E = uDiskBright * 0.55 / (x * sqrt(x));
   vec3 em = vec3(0.62, 0.30, 0.15) * E * (1.35 - dens);
+  // MK4b: pendar piringan di r yang sama (suhu Tn seperti shadeDisk), kuat di lembar dekat, lemah di lembar jauh
+  float Tn = pow(x, -0.75) * pow(max(1.0 - 0.85 * inversesqrt(x), 0.0), 0.25) / 0.62233;
+  vec3 lc = uFilm > 0.5 ? moodRamp(Tn) : blackbody(max(7500.0 * Tn, 800.0));
+  float gk = lv == 0 ? 0.42 : lv == 1 ? 0.16 : 0.04;
+  em += lc * uDiskBright * (0.05 + 2.2 * Tn * Tn * Tn) * gk * (1.0 - smoothstep(uRout - 2.0, uRout + 4.0, r) * 0.8);
   return vec4(em, clamp(dens * 0.9, 0.0, 0.92));
 }
 
@@ -589,7 +598,7 @@ void main() {
     // MK4: lembar debu dalam langkah ini, dua lintasan: yang dilewati sebelum piringan, lalu (setelah piringan) yang sesudahnya
     float tD = prev.y * pos.y < 0.0 ? prev.y / (prev.y - pos.y) : 2.0;
     if (uMood > 0.5 && uDust > 0) {
-      for (int i = 0; i < 4; i++) {
+      for (int i = 0; i < 6; i++) {
         if (i >= uDust) break;
         float k = dustK(i), g0 = dustG(prev, k), g1 = dustG(pos, k);
         if (g0 * g1 >= 0.0) continue;
@@ -613,7 +622,7 @@ void main() {
       }
     }
     if (uMood > 0.5 && uDust > 0 && tD <= 1.0) {
-      for (int i = 0; i < 4; i++) {
+      for (int i = 0; i < 6; i++) {
         if (i >= uDust) break;
         float k = dustK(i), g0 = dustG(prev, k), g1 = dustG(pos, k);
         if (g0 * g1 >= 0.0) continue;
