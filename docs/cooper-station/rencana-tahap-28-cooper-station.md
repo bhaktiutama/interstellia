@@ -2,6 +2,8 @@
 
 Per 17 Oktober 2026 · disusun atas permintaan Bhakti ("enhance manusia biar tidak kotak-kotak seperti Roblox") · Status: 28a dan 28b selesai (17 Oktober 2026), menunggu persetujuan bentuk dari blokout sebelum 28c
 
+> Revisi 17 Oktober 2026: hasil generator prosedural (28b) dinilai tidak bagus. Tahap 28c dan seterusnya diganti rencana model GLB: `docs/cooper-station/rencana-tahap-28-glb-cooper-station.md`. Bagian 28a (ukur, saklar `?orang=lama`) tetap berlaku.
+
 ## Ringkasan
 
 - Penyebab langsung: pejalan kaki Copper dibangun dari 17 `BoxGeometry` (204 segitiga, 408 titik) yang diputar kaku per bagian. Komentar kodenya sendiri: "model orang: kotak-kotak" (`experiences/cooper-station/index.html` baris 14389-14407). Tidak ada leher, bahu, pinggang, pergelangan, wajah, atau jari, dan kotak saling tembus atau bercelah di lutut dan siku.
