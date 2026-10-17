@@ -1,5 +1,39 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.15: keluar lewat celah Skyway, motor di lajur yang benar, jalan di tengah trotoar
+
+| Masukan | Perubahan |
+| --- | --- |
+| Penutup lewat celah jendela Skyway, bukan kaca end cap B | Langit pagi (14 s): naik dari danau ke 480 m, terbang ke strip jendela Skyway (za di antara balok 50 m, jauh dari akuaduk dan cincin), turun sampai 2 m di atas kaca menghadap keliling dan menunduk 80 derajat ke celah. Jam 6,6 -> 9,6 (kabut pagi habis saat tiba). Meninggalkan stasiun (`ext: 'slot'`, 18 s, tanpa layar gelap): 6 s pertama kamera ikut berputar dengan stasiun (kerangka stasiun dikali putaran omega t) menembus kaca dan celah lambung 80 m sambil berbalik menengadah 170 derajat (sumbu kanan kamera), lalu menjauh 22 km di kerangka inersia (Hermite koordinat silinder: laju awal = laju ikut berputar, jari-jari tidak pernah kurang dari 1,3 km, jadi tidak menembus stasiun). Roll kamera luar dipasang `tourCamPost()` setelah `updateCamera()` |
+| Saturnus di latar | Fase orbit (diatur saat Pagi berkabut) dipilih dari waktu keluar celah: kamera berakhir di seberang Saturnus dari stasiun dengan Saturnus terang (115-150 atau 210-245 derajat dari gerhana), arah hadap di kaca (+s / -s) dipilih agar akhir penutup tegak (`tourOutroPlan()`) |
+| Diam sebelum naik motor terlalu lama | Hujan miring diam 12 -> 5 s |
+| Motor di sisi kanan menabrak mobil lawan arah | Lalu lintas lajur kiri: arah -s memakai sisi +za. Motor mulai di tepi kiri (9,5 m dari as, dekat trotoar), menyetir ke tengah jalan (0,8 m dari as, celah antara lajur dalam kedua arah) lewat joystick analog `input.joyS` seperti pemain di layar sentuh (`tourMotoSteer()`), lalu 260 m sebelum titik berhenti menepi lagi ke kiri dan berhenti |
+| Jalan kaki di pinggir menabrak bangku dan pohon | Jalur trotoar 15,2 m dari as arteri (bangku, pohon jalan, tiang lampu di 13-13,5 m, gedung di 17 m) |
+
+
+## Revisi v2.14: putar balik saat mundur, penutup lewat kaca end cap B, Spasi = lewati
+
+| Masukan | Perubahan |
+| --- | --- |
+| Titik 18 ke 19: putar balik terlalu lama setelah tiba | Lampu kota malam: saat mundur ke arah rumah Cooper, setelah 55% lintasan (sudah jauh dari kota) kamera mulai berputar pelan menghadap end cap B (arah 0) dan sedikit menengadah (+8 derajat). Terbang ke gerhana tinggal geser, tanpa putar balik |
+| Pagi terlalu cepat: jeda 5 s | Pagi berkabut diam 5 -> 10 s |
+| Keluar jangan tembus tembok, lewat langit, Saturnus terlihat saat menjauh | Titik baru Langit pagi (13 s, terbang): naik dari danau ke 400 m dari sumbu sambil menunduk melihat danau, lalu datar menghadap end cap B, tiba 20 m di depan kaca end cap B tepat di titik inersia (0, -400) (`tourS0()`). Penutup Meninggalkan stasiun (`ext: 'away'`, 16 s, `noFade`): kamera luar mulai di pose yang sama (tanpa layar gelap), menembus kaca end cap B 400 m dari sumbu, keluar 2,5 km, lalu berbelok menjauh 22 km sambil berbalik: stasiun di depan Saturnus, Saturnus sedikit di atas stasiun (9 derajat). Setelan layar kebalikan pembuka: adaptasi mata tetap, bloom turun ke 0,25 dalam 6 s, kabut udara menipis ke 0 dalam 3 s |
+| Saturnus terang di latar | Saat gerhana Saturnus gelap (stasiun di bayangannya). Selama Pagi berkabut waktu orbit diatur (seperti tombol I dan T): 3 s pertama mundur pelan keluar bayangan (Matahari muncul lagi di balik tepi Saturnus), lalu dipercepat ke 120 derajat sebelum gerhana (`K.orb`). Saturnus 75% terang di belakang stasiun, stasiun disinari Matahari dari sisi kamera |
+| Spasi = lewati titik | `tourSkip()` (Spasi atau tombol Lewati (Spasi) di kartu tur): langsung ke titik berikutnya, terbang berikutnya mulai dari pose sekarang; bila Pagi berkabut dilewati, orbit langsung di tujuan |
+
+Tur 22 titik, sekitar 347 s. Uji: akhir Langit pagi dan awal penutup beda 1,7 m (tinggi mata) dan 0 derajat, tanpa layar gelap, kaca end cap B ditembus 400 m dari sumbu, tidak pernah di dalam lambung, akhir penutup 22 km dengan stasiun dan Saturnus di bingkai.
+
+
+## Revisi v2.13: titik baru kulit luar dari dekat sebelum pembuka
+
+| Bagian | Isi |
+| --- | --- |
+| Titik 1 baru: Kulit luar Copper (9 s) | Kamera luar 260 m di atas sisi atas lambung (sisi yang kena Matahari), dekat end cap A (za 850), menghadap lambung ke arah end cap B; lambung X1 berputar 107 m/s lewat di bawah kamera; kamera bergeser pelan 70 m ke samping. Teks: lambung 80 m, 107 m/s, 63,4 s |
+| Titik 2 (pembuka) diubah, 16 s | Bukan lagi dari 40 km: satu lintasan Bezier kubik dari posisi akhir titik 1, mundur melewati end cap A (1,6 km di luar), turun ke 400 m di bawah sumbu, lalu masuk perlahan lewat kaca end cap A sampai 20 m di dalam (`tourExtCam()` = kamera luar dari posisi mata dan titik bidik, `TOUR_SKIN`). Titik bidik bergeser dari kulit ke pusat end cap lalu ke arah masuk. Sisanya sama (tanpa layar gelap ke Ukuran stasiun, kabut dan adaptasi mata naik di 7 s terakhir) |
+
+Tur 21 titik, 325 s. Tangkapan sandbox: lambung dekat jelas, lintasan tidak menembus lambung (jarak kamera ke sumbu >= 1.191 m selama masih di sisi silinder).
+
+
 ## Revisi v2.12: kartu teks ringkas, tawaran tur pertama kali
 
 | Masukan | Perubahan |
