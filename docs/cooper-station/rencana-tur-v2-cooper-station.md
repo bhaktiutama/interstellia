@@ -1,5 +1,18 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.14: putar balik saat mundur, penutup lewat kaca end cap B, Spasi = lewati
+
+| Masukan | Perubahan |
+| --- | --- |
+| Titik 18 ke 19: putar balik terlalu lama setelah tiba | Lampu kota malam: saat mundur ke arah rumah Cooper, setelah 55% lintasan (sudah jauh dari kota) kamera mulai berputar pelan menghadap end cap B (arah 0) dan sedikit menengadah (+8 derajat). Terbang ke gerhana tinggal geser, tanpa putar balik |
+| Pagi terlalu cepat: jeda 5 s | Pagi berkabut diam 5 -> 10 s |
+| Keluar jangan tembus tembok, lewat langit, Saturnus terlihat saat menjauh | Titik baru Langit pagi (13 s, terbang): naik dari danau ke 400 m dari sumbu sambil menunduk melihat danau, lalu datar menghadap end cap B, tiba 20 m di depan kaca end cap B tepat di titik inersia (0, -400) (`tourS0()`). Penutup Meninggalkan stasiun (`ext: 'away'`, 16 s, `noFade`): kamera luar mulai di pose yang sama (tanpa layar gelap), menembus kaca end cap B 400 m dari sumbu, keluar 2,5 km, lalu berbelok menjauh 22 km sambil berbalik: stasiun di depan Saturnus, Saturnus sedikit di atas stasiun (9 derajat). Setelan layar kebalikan pembuka: adaptasi mata tetap, bloom turun ke 0,25 dalam 6 s, kabut udara menipis ke 0 dalam 3 s |
+| Saturnus terang di latar | Saat gerhana Saturnus gelap (stasiun di bayangannya). Selama Pagi berkabut waktu orbit diatur (seperti tombol I dan T): 3 s pertama mundur pelan keluar bayangan (Matahari muncul lagi di balik tepi Saturnus), lalu dipercepat ke 120 derajat sebelum gerhana (`K.orb`). Saturnus 75% terang di belakang stasiun, stasiun disinari Matahari dari sisi kamera |
+| Spasi = lewati titik | `tourSkip()` (Spasi atau tombol Lewati (Spasi) di kartu tur): langsung ke titik berikutnya, terbang berikutnya mulai dari pose sekarang; bila Pagi berkabut dilewati, orbit langsung di tujuan |
+
+Tur 22 titik, sekitar 347 s. Uji: akhir Langit pagi dan awal penutup beda 1,7 m (tinggi mata) dan 0 derajat, tanpa layar gelap, kaca end cap B ditembus 400 m dari sumbu, tidak pernah di dalam lambung, akhir penutup 22 km dengan stasiun dan Saturnus di bingkai.
+
+
 ## Revisi v2.13: titik baru kulit luar dari dekat sebelum pembuka
 
 | Bagian | Isi |

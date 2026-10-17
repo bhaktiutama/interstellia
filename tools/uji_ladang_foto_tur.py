@@ -1,6 +1,7 @@
 """Uji tahap 12d (Copper Corn Station): siklus tanam gandum dan mesin ladang, mode foto (FOV, blur, simpan PNG,
-semua dikembalikan saat keluar), tur sinematik v2.13 (21 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
-lempar bola melawan putaran, gerhana dari dalam, pembuka dan penutup kamera luar, tanpa NaN, semua dikembalikan).
+semua dikembalikan saat keluar), tur sinematik v2.14 (22 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
+lempar bola melawan putaran, gerhana dari dalam, pembuka dan penutup kamera luar, penutup tanpa layar gelap lewat kaca end cap B dengan Saturnus
+terang di belakang stasiun, Spasi = lewati titik, tanpa NaN, semua dikembalikan).
 Pakai: python tools/uji_ladang_foto_tur.py   (butuh: pip install playwright && playwright install chromium; CHROMIUM opsional)"""
 import asyncio, os, pathlib
 from playwright.async_api import async_playwright
@@ -37,6 +38,7 @@ UJI = r"""
   for (let k = 0; k < 8000 && st.TOUR.on; k++, steps++) {
     const key = st.TOUR.keys[st.TOUR.i];
     for (let q = 0; q < nSub; q++) st.physicsStep(st.STEP);           // urutan seperti worldStep
+    if (key.title === 'Meninggalkan stasiun' && st.TOUR.t + 0.05 >= key.hold) break;   // v2.14: berhenti di frame terakhir penutup (kamera dan orbit dicek), tur diakhiri di bawah
     st.stepTour(0.05); if (!st.TOUR.on) break;
     st.updateCamera();
     st.updateReal();                                                   // posisi mata untuk burung (seperti worldStep)
@@ -45,7 +47,7 @@ UJI = r"""
     const P = st.player, ps = P.theta * st.R, hold = st.TOUR.t > (key.dur || 0);
     const r = K[key.title] || (K[key.title] = { rain: 0, wetMin: 1, ecl: 1, ext: false, cloud: 0, bird: 1e9, z0: st.MOTO.za, ground: false });
     { const q = { s: ((ps % CIRC) + CIRC) % CIRC, za: P.za, h: P.h }; if (!st.ext.active && !(key.moto && !st.MOTO.on)) { if (!r.anyFirst) r.anyFirst = q; r.anyLast = q; } }
-    r.hour = st.clock.hour; r.rain = Math.max(r.rain, st.RAIN.k); r.ecl = Math.min(r.ecl, st.ECL.k); r.ext = r.ext || st.ext.active; r.rainEnd = st.RAIN.k;
+    r.hour = st.clock.hour; r.rain = Math.max(r.rain, st.RAIN.k); r.ecl = Math.min(r.ecl, st.ECL.k); r.eclEnd = st.ECL.k; r.ext = r.ext || st.ext.active; r.rainEnd = st.RAIN.k;
     if (key.ext === 'in') { r.camZ = st.camera.position.z; r.lookEnd = [st.ADAPT.on, st.POST.bloom, st.RAYS.on]; r.fogEnd = st.scene.fog.density; }
     if (!r.lookStart) r.lookStart = [st.ADAPT.on, st.POST.bloom, st.RAYS.on]; if (r.fogStart === undefined) r.fogStart = st.scene.fog.density;              // pembuka: posisi kamera luar terakhir (sudah menembus kaca end cap A?)
     r.rays = r.rays || st.RAYS.on; if (key.fly) r.hMax = Math.max(r.hMax || 0, P.h - st.groundH(ps, P.za));
@@ -106,13 +108,32 @@ UJI = r"""
       r.v1 = st.MOTO.v; r.vMax = Math.max(r.vMax || 0, st.MOTO.v); r.gMin = Math.min(r.gMin ?? 9, st.MOTO.gFelt); r.ground = r.ground || P.state === 'ground';
     }
     if (st.ext.active && !ext0.seen) Object.assign(ext0, { seen: true, adapt: st.ADAPT.on, bloom: st.POST.bloom });
+    if (key.title === 'Langit pagi' || key.title === 'Meninggalkan stasiun') {   // v2.14: pose kamera di kerangka inersia (dalam: diputar omega t seperti kamera luar)
+      st.camera.updateMatrixWorld(); const a = st.ext.active ? 0 : st.OMEGA * st.clock.sim, c = Math.cos(a), sn = Math.sin(a);
+      const rot = (v) => [v.x * c - v.y * sn, v.x * sn + v.y * c, v.z], d = st.camera.getWorldDirection(new st.camera.position.constructor());
+      const q = { p: rot(st.camera.position), d: rot(d), ext: st.ext.active }; if (!r.camFirst) r.camFirst = q; r.camLast = q;
+      if (st.TOUR.t < key.hold - 1) r.fade = Math.max(r.fade || 0, +document.getElementById('tourFade').style.opacity || 0);   // layar gelap akhir tur (kembali ke pemain) tidak dihitung
+      if (st.ext.active) {
+        const [x, y, z] = q.p, rr = Math.hypot(x, y);
+        if (r.zPrev !== undefined && r.zPrev < 4000 && z >= 4000) r.rCross = rr;      // menembus bidang kaca end cap B
+        if (Math.abs(z) < 4030 && rr > st.R - 60 && rr < 1110) r.hull = (r.hull || 0) + 1;   // di dalam lambung
+        r.zPrev = z; r.adaptMin = Math.min(r.adaptMin ?? 1, st.ADAPT.on ? 1 : 0);
+      }
+    }
     fadeMax = Math.max(fadeMax, +document.getElementById('tourFade').style.opacity || 0);
     if (!isFinite(P.theta + P.za + P.h + P.heading + P.pitch + st.clock.hour + st.camera.position.length())) bad = true;
     if (!st.ext.active) maxH = Math.max(maxH, P.h);
   }
-  const T = steps * 0.05, get = (n) => K[n] || {}, eye = st.TOUR.keys.filter((q) => q.h === 0).length;
+  const get = (n) => K[n] || {};
+  const endCam = (() => {                                               // v2.14: frame terakhir penutup (sebelum tur berakhir)
+    const S = st.saturnDirInertial(new st.camera.position.constructor()), C = st.camera; C.updateMatrixWorld();
+    const ndc = (v) => v.clone().project(C);
+    return { sun: S.dot(st.SUN_DIR), sN: ndc(C.position.clone().addScaledVector(S, 1e4)), cN: ndc(new C.position.constructor(0, 0, 0)), D: C.position.length(), k: st.ECL.k, ext: st.ext.active };
+  })();
+  while (st.TOUR.on) { for (let q = 0; q < nSub; q++) st.physicsStep(st.STEP); st.stepTour(0.05); st.updateCamera(); steps++; }
+  const T = steps * 0.05, eye = st.TOUR.keys.filter((q) => q.h === 0).length;
   const ball = st.TOUR.keys.find((q) => q.ball), L = ball && ball.landing, deg = 180 / Math.PI;
-  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 260-360 s), tanpa NaN`] = !bad && idx.size === N && N === 21 && T > 260 && T < 360;
+  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 260-370 s), tanpa NaN`] = !bad && idx.size === N && N === 22 && T > 260 && T < 370;
   out[`tur: ${eye} titik setinggi mata (>= 9)`] = eye >= 9;
   out[`tur: tinggi maksimum ${maxH.toFixed(0)} m (tidak melewati sumbu)`] = maxH < st.R - 30;
   out[`tur: jam mulai ${hour0.toFixed(2)}, akhir ${(get('Meninggalkan stasiun').hour || 0).toFixed(2)}`] = hour0 === 12 && Math.abs(get('Meninggalkan stasiun').hour - 7) < 0.05;
@@ -127,8 +148,8 @@ UJI = r"""
   const Sk = get('Skyway: jendela ke angkasa'), skM = ((Sk.last.za % 50) + 50) % 50;
   out[`tur: Skyway za ${Sk.last.za.toFixed(1)}, ${Math.min(skM, 50 - skM).toFixed(1)} m dari balok jendela (>= 10)`] = Math.min(skM, 50 - skM) >= 10;
   const Lc = get('Lampu kota malam'), Lm = Lc.last;
-  out[`tur: lampu kota malam: naik ${(Lc.hMax || 0).toFixed(0)} m, menghadap kota (arah ${(Lm.hd * deg0).toFixed(0)} derajat), berakhir za ${Lm.za.toFixed(0)} dekat rumah Cooper`] =
-    Lc.hMax > 300 && Math.abs(Math.abs(wrap(Lm.hd * st.R) / st.R) - Math.PI) < 0.2 && Lm.za > 6000;
+  out[`tur: lampu kota malam: naik ${(Lc.hMax || 0).toFixed(0)} m, berakhir za ${Lm.za.toFixed(0)} dekat rumah Cooper sudah berbalik ke end cap B (arah ${(Lm.hd * deg0).toFixed(0)} derajat)`] =
+    Lc.hMax > 300 && Math.abs(wrap(Lm.hd * st.R) / st.R) < 0.2 && Lm.za > 6000;
   const Hu = get('Hutan lebat'), huD = Math.hypot(wrap(Hu.last.s - Hu.first.s), Hu.last.za - Hu.first.za);
   out[`tur: hutan berjalan ${huD.toFixed(0)} m setinggi mata (${Hu.last.eyeH.toFixed(2)}), dari dalam hutan ke luar`] = huD >= 25 && Math.abs(Hu.last.eyeH) < 0.1 && st.inForest(Hu.first.s, Hu.first.za) && !st.inForest(Hu.last.s, Hu.last.za);
   const M = get('Naik motor ke New York');
@@ -178,8 +199,26 @@ UJI = r"""
   out[`tur: kamera luar tanpa adaptasi mata (${ext0.adapt}) dan bloom ${ext0.bloom}`] = ext0.adapt === false && Math.abs(ext0.bloom - 0.25) < 1e-9;
   out[`tur: gerhana dari dalam (ECL.k min ${get('Gerhana Saturnus').ecl.toFixed(2)})`] = get('Gerhana Saturnus').ecl < 0.2 && !get('Gerhana Saturnus').ext;
   out[`tur: layar gelap saat pindah kamera (maks ${fadeMax.toFixed(2)})`] = fadeMax > 0.9;
+  { const Lp = get('Langit pagi'), Ou = get('Meninggalkan stasiun'), a = Lp.camLast, b = Ou.camFirst, dP = Math.hypot(a.p[0] - b.p[0], a.p[1] - b.p[1], a.p[2] - b.p[2]);
+    const dA = Math.acos(Math.min(1, a.d[0] * b.d[0] + a.d[1] * b.d[1] + a.d[2] * b.d[2])) * deg;
+    out[`tur: penutup tanpa layar gelap (maks ${Math.max(Lp.fade, Ou.fade).toFixed(2)}): akhir Langit pagi -> kamera luar beda ${dP.toFixed(2)} m, ${dA.toFixed(2)} derajat`] = !a.ext && b.ext && Math.max(Lp.fade, Ou.fade) < 0.01 && dP < 3 && dA < 1;
+    out[`tur: penutup menembus kaca end cap B ${(Ou.rCross ?? 9999).toFixed(0)} m dari sumbu, ${Ou.hull || 0} frame di dalam lambung, adaptasi mata tetap ${Ou.adaptMin}`] = Ou.rCross < st.R - 100 && !Ou.hull && Ou.adaptMin === (w0.adapt ? 1 : 0);
+    const { sun, sN, cN, D } = endCam;
+    out[`tur: akhir penutup: jarak ${(D / 1000).toFixed(1)} km, Saturnus di bingkai (${sN.x.toFixed(2)}, ${sN.y.toFixed(2)}), stasiun di bingkai (${cN.x.toFixed(2)}, ${cN.y.toFixed(2)}), sisi terang (S.Matahari ${sun.toFixed(2)}), gerhana pagi usai (ECL.k ${endCam.k.toFixed(2)})`] =
+      endCam.ext && D > 15000 && Math.abs(sN.x) < 0.9 && Math.abs(sN.y) < 0.9 && sN.z < 1 && Math.abs(cN.x) < 0.9 && Math.abs(cN.y) < 0.9 && cN.z < 1 && sun < -0.3 && endCam.k > 0.99 && get('Pagi berkabut').eclEnd > 0.99; }
   out['tur selesai: kembali ke posisi awal, berjalan'] = !st.TOUR.on && st.player.state === 'ground' && Math.abs(st.player.za - p0.za) < 0.01 && Math.abs(st.player.theta - p0.th) < 1e-6 && !st.ext.active;
   out['tur selesai: jam, laju jam, orbit, cuaca, motor dikembalikan'] = st.clock.hour === w0.hour && st.clock.hourRate === w0.rate && st.clock.orbit === w0.orbit && st.WEATHER.mode === w0.mode && st.MOTO.on === w0.moto && st.ADAPT.on === w0.adapt && st.POST.bloom === w0.bloom && st.RAYS.on === w0.rays && document.getElementById('tourFade').style.opacity === '0';
+  {                                                                     // v2.14: Spasi = lewati titik
+    st.startTour(); const i0 = st.TOUR.i, sp = () => window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }));
+    for (let k = 0; k < 10; k++) { for (let q = 0; q < nSub; q++) st.physicsStep(st.STEP); st.stepTour(0.05); st.updateCamera(); }
+    sp(); const i1 = st.TOUR.i; let n = 1, bad2 = false;
+    while (st.TOUR.on && n < 60) {
+      for (let k = 0; k < 6; k++) { for (let q = 0; q < nSub; q++) st.physicsStep(st.STEP); st.stepTour(0.05); st.updateCamera(); if (!st.TOUR.on) break; }
+      const P = st.player; if (!isFinite(P.theta + P.za + P.h + P.heading + P.pitch + st.camera.position.length())) bad2 = true;
+      if (st.TOUR.on) { sp(); n++; }
+    }
+    out[`tur: Spasi lewati titik (${i0} -> ${i1}), ${n} kali sampai tur selesai, tanpa NaN, posisi dan keadaan dikembalikan`] = i1 === i0 + 1 && !st.TOUR.on && !bad2 && st.player.state === 'ground' && !st.ext.active && st.clock.orbit === w0.orbit && !st.MOTO.on;
+  }
   return out;
 })()
 """

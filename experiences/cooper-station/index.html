@@ -226,7 +226,7 @@
   <div class="btns"><button id="phWeather" type="button">Cuaca (N)</button><button id="phSave" type="button">Simpan PNG (Enter)</button><button id="phCam" type="button">Kamera rangefinder</button></div>
   <div class="note">WASD bergerak, seret mouse untuk melihat. H menyembunyikan panel ini. Gambar disimpan tanpa panel.</div>
 </div>
-<div id="tourOffer" hidden><b>Tur sinematik</b><span>Sekitar 5 menit keliling stasiun dengan penjelasan fisika.</span><div><button id="tourOfferGo" class="go" type="button">Mulai tur (Y)</button><button id="tourOfferNo" type="button">Lewati</button></div></div><div id="tourFade"></div><div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><button id="tourStop" type="button">Berhenti (Y)</button></div></div>
+<div id="tourOffer" hidden><b>Tur sinematik</b><span>Sekitar 5 menit keliling stasiun dengan penjelasan fisika.</span><div><button id="tourOfferGo" class="go" type="button">Mulai tur (Y)</button><button id="tourOfferNo" type="button">Lewati</button></div></div><div id="tourFade"></div><div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><span><button id="tourSkip" type="button">Lewati (Spasi)</button> <button id="tourStop" type="button">Berhenti (Y)</button></span></div></div>
 <div id="plaque" hidden><div class="card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
 <div id="map" hidden><div class="mcard">
   <div class="mhead"><span>Peta silinder (dibuka)</span><span class="mbtns"><button id="mapZoomIn" type="button">+</button><button id="mapZoomOut" type="button">-</button><button id="mapMe" type="button">Posisi saya</button><button id="mapHoloBtn" type="button">Hologram</button><button id="mapCtlBtn" type="button">Kendali 3D</button><button id="mapClose" type="button">Tutup (M)</button></span></div>
@@ -901,7 +901,10 @@ Object.assign(I18N.en, {
   "Pagi berkabut": "Misty morning",
   "Pagi: kabut tipis menempel di tanah dan burung kembali terbang.": "Morning: thin mist clings to the ground and the birds fly again.",
   "Meninggalkan stasiun": "Leaving the station",
-  "Kita keluar dan menjauh dari stasiun. Sampai jumpa di Copper Corn Station.": "We pull away from the station. See you at Copper Corn Station.",
+  "Langit pagi": "Morning sky",
+  "Naik ke langit pagi di atas danau, menuju kaca end cap B.": "Rising into the morning sky above the lake, toward the end cap B glass.",
+  "Kita keluar lewat kaca end cap B dan menjauh. Saturnus di belakang. Sampai jumpa di Copper Corn Station.": "We leave through the end cap B glass and pull away, Saturn behind. See you at Copper Corn Station.",
+  "Lewati (Spasi)": "Skip (Space)",
   "Museum Cooper Farm\n\nReplika rumah pertanian keluarga Cooper, dipindahkan ke stasiun sebagai museum. Stasiun ini dinamai dari Murphy Cooper.\n\nRak buku di dinding belakang adalah rak kamar Murph.\n\n(Teks placeholder tahap gray-box.)": "Cooper Farm Museum\n\nA replica of the Cooper family farmhouse, moved to the station as a museum. The station is named after Murphy Cooper.\n\nThe bookshelf on the back wall is the shelf from Murph's room.\n\n(Placeholder text from the gray-box stage.)",
   "Air Mancur Coriolis\n\nSemburan tengah naik lurus 10 m/s sampai sekitar 5,1 m, tetapi mendarat sekitar {s10} m searah putaran stasiun (semburan kecil 6 m/s: {s6} m).\n\nSaat air naik menuju sumbu, jaraknya ke sumbu mengecil. Momentum sudutnya tetap, jadi air sedikit mendahului lantai yang berputar di bawahnya (gaya Coriolis). Besarnya: (4/3) x omega x v^3 / g^2.\n\nDi Bumi efek yang sama hanya beberapa milimeter. Di sini putaran stasiun (satu kali tiap 63 detik) membuatnya terlihat.\n\nHujan di stasiun juga miring sekitar 8 derajat melawan arah putaran walau tanpa angin: tetes jatuh menjauhi sumbu dan tertinggal.": "Coriolis Fountain\n\nThe central jet rises straight up at 10 m/s to about 5.1 m, yet lands about {s10} m in the direction of the station's spin (small 6 m/s jets: {s6} m).\n\nAs the water rises toward the axis, its distance to the axis shrinks. Its angular momentum stays the same, so the water gets slightly ahead of the spinning floor beneath it (the Coriolis force). Its size: (4/3) x omega x v^3 / g^2.\n\nOn Earth the same effect is only a few millimetres. Here the spin of the station (one turn every 63 seconds) makes it visible.\n\nRain on the station also tilts about 8 degrees against the direction of spin even without wind: drops fall away from the axis and lag behind.",
   "FPS": "FPS",
@@ -7082,7 +7085,7 @@ window.addEventListener('keydown', (e) => {
   if (!AUDIO.started) startAudio();                                  // audio butuh interaksi pengguna
   if (e.repeat) return;
   if (ext.flight && portKey(e.code)) { e.preventDefault(); return; }   // tombol pesawat
-  if (TOUR.on) { if (e.code === 'KeyY' || e.code === 'Escape') stopTour(); else if (e.code === 'KeyH') document.body.classList.toggle('hidden-ui'); else if (e.code === 'KeyU') toggleSound(); e.preventDefault(); return; }   // 12d: saat tur hanya Y/Esc, H, U
+  if (TOUR.on) { if (e.code === 'KeyY' || e.code === 'Escape') stopTour(); else if (e.code === 'Space') { if (!e.repeat) tourSkip(); } else if (e.code === 'KeyH') document.body.classList.toggle('hidden-ui'); else if (e.code === 'KeyU') toggleSound(); e.preventDefault(); return; }   // 12d: saat tur hanya Y/Esc, Spasi (v2.14: lewati titik), H, U
   if (e.code === 'KeyY') { startTour(); return; }
   if (e.code === 'KeyF') { togglePhoto(undefined, PHOTO.last); return; }   // K: jenis terakhir (bawaan kamera rangefinder)
   if (PHOTO.on && (e.code === 'Enter' || e.code === 'NumpadEnter')) { savePhoto(); return; }
@@ -16741,9 +16744,9 @@ function tourKeys() {
       cap: 'Hujan reda. Genangan di jalan memantulkan gedung dan lampu kota.' },
     { fly: (K, t) => {                                                  // naik sambil berputar menghadap lampu kota, lalu mundur ke arah rumah Cooper
         const A = K.p0, u = t / K.hold, up = sstep(0, 0.45, u), mv = sstep(0.2, 1, u);
-        const z1 = COOPER.za - 650;
+        const z1 = COOPER.za - 650, bk = sstep(0.55, 1, u);              // v2.14: setelah jauh dari kota mulai berputar balik pelan ke arah end cap B (gerhana)
         return { s: modS(A.s + wrapS(COOPER.s - A.s) * mv), za: A.za + (z1 - A.za) * mv, hA: A.hA + 420 * up,
-          hd: angLerp(A.hd, Math.PI, sstep(0, 0.4, u)), pt: A.pt + (-14 * DEG - A.pt) * up };
+          hd: angLerp(angLerp(A.hd, Math.PI, sstep(0, 0.4, u)), 0, bk), pt: A.pt + (-14 * DEG - A.pt) * up + (8 * DEG + 14 * DEG) * bk };
       },
       hold: 16, hr: 21, wx: 'cerah', title: 'Lampu kota malam',
       cap: 'Naik dari jalan: lampu kota di seberang silinder tergantung di atas kepala. Kita menuju rumah Cooper.' },
@@ -16768,10 +16771,19 @@ function tourKeys() {
       },
       h: 0, hd: 0, pt: 18, eclipse: true, durF: 8, hold: 9, hr: 23, wx: 'cerah', title: 'Gerhana Saturnus',
       cap: 'Lihat ke end cap B: Saturnus menutup Matahari sekitar {eH} jam tiap orbit {oH} jam. Sinar Matahari di dalam stasiun padam.' },
-    { s: Lk.s, za: Lk.za, h: 0, hd: Lk.heading, pt: 2, hold: 5, hr: 6.6, wx: 'cerah', title: 'Pagi berkabut',
+    { s: Lk.s, za: Lk.za, h: 0, hd: Lk.heading, pt: 2, hold: 10, hr: 6.6, wx: 'cerah', title: 'Pagi berkabut', orb: true,   // v2.14: diam 10 s; orbit dipercepat mundur: gerhana usai, Saturnus ke sisi terang
       cap: 'Pagi: kabut tipis menempel di tanah dan burung kembali terbang.' },
-    { ext: 'out', hold: 12, hr: 7, wx: 'cerah', title: 'Meninggalkan stasiun',
-      cap: 'Kita keluar dan menjauh dari stasiun. Sampai jumpa di Copper Corn Station.' },
+    { fly: (K, t) => {                                                  // v2.14: naik dari danau ke langit pagi, menuju 400 m dari sumbu di depan kaca end cap B
+        const A = K.p0, u = t / K.hold;
+        if (K.sE === undefined) { K.sE = tourS0(clock.sim + K.hold - t); K.dS = wrapS(K.sE - A.s); }   // titik inersia (0, -400) saat tiba (= awal kamera luar)
+        const up = sstep(0, 0.6, u), mv = sstep(0.12, 1, u), sNow = A.s + (K.dS + wrapS(tourS0(clock.sim) - K.sE)) * mv;
+        return { s: modS(sNow), za: A.za + (HALF_L * 2 - 20 - A.za) * mv, hA: A.hA + (R - 400 - A.hA) * up,
+          hd: angLerp(A.hd, 0, sstep(0.08, 0.75, u)), pt: (A.pt + (-22 * DEG - A.pt) * sstep(0, 0.35, u)) * (1 - sstep(0.5, 0.95, u)) };   // menunduk melihat danau, lalu datar (= kamera luar)
+      },
+      hold: 13, hr: 6.8, wx: 'cerah', title: 'Langit pagi',
+      cap: 'Naik ke langit pagi di atas danau, menuju kaca end cap B.' },
+    { ext: 'away', hold: 16, hr: 7, wx: 'cerah', noFade: true, title: 'Meninggalkan stasiun',   // v2.14: keluar lewat kaca end cap B tanpa layar gelap, menjauh dengan Saturnus di belakang
+      cap: 'Kita keluar lewat kaca end cap B dan menjauh. Saturnus di belakang. Sampai jumpa di Copper Corn Station.' },
   ];
 }
 function tourPose() { return { s: player.theta * R, za: player.za, hA: player.h, hd: player.heading, pt: player.pitch }; }
@@ -16846,14 +16858,15 @@ function tourTravel(A, B) {                                           // durasi 
   const d = Math.hypot(wrapS(B.s - A.s), B.za - A.za, (B.hA - A.hA) * 0.7);
   return { dur: Math.max(3, Math.min(6, 2 + d / 400)), arc: Math.min(350, d * 0.15) };
 }
-function tourExtPose(yaw, pitch, dist, tz, ty = 0) {                  // kamera luar diatur langsung (tanpa lerp dan putar otomatis)
+function tourExtPose(yaw, pitch, dist, tz, ty = 0, tx = 0) {          // kamera luar diatur langsung (tanpa lerp dan putar otomatis)
   Object.assign(ext, { yaw, pitch, dist, distT: dist, auto: false, vyaw: 0, vpitch: 0 });
-  ext.target.set(0, ty, tz); ext.targetT.copy(ext.target);
+  ext.target.set(tx, ty, tz); ext.targetT.copy(ext.target);
 }
+const tourS0 = (t) => modS((-Math.PI / 2 - OMEGA * t) * R);          // v2.14: posisi keliling titik inersia (0, -400) di kerangka stasiun pada waktu t (atas lokal = +y)
 const TOUR_SKIN = { P0: [0, R_OUT + 260, -HALF_L + 850], L0: [0, R_OUT, -HALF_L + 1150] };   // v2.13: kamera dan titik bidik kulit luar (kerangka inersia)
-function tourExtCam(x, y, z, L) {                                     // v2.13: kamera luar dari posisi mata dan titik bidik (titik bidik di x = 0)
-  const dx = x, dy = y - L[1], dz = z - L[2], d = Math.hypot(dx, dy, dz);
-  tourExtPose(Math.atan2(dx, dz), Math.asin(dy / d), d, L[2], L[1]);
+function tourExtCam(x, y, z, L) {                                     // v2.13: kamera luar dari posisi mata dan titik bidik
+  const tx = L[0] || 0, dx = x - tx, dy = y - L[1], dz = z - L[2], d = Math.hypot(dx, dy, dz);
+  tourExtPose(Math.atan2(dx, dz), Math.asin(dy / d), d, L[2], L[1], tx);
 }
 function stepTourExt(K) {
   const T = K.hold;
@@ -16866,7 +16879,19 @@ function stepTourExt(K) {
     const qz = (a, b, c) => a * v * v + 2 * b * v * u + c * u * u;                                     // Bezier kuadrat titik bidik
     tourExtCam(0, bz(B.P0[1], B.P0[1], -400, -400), bz(B.P0[2], -HALF_L - 1600, -HALF_L - 1600, -HALF_L + 20),
       [0, qz(B.L0[1], 0, -400), qz(B.L0[2], -HALF_L, -HALF_L + 400)]);
-  } else if (K.ext === 'out') {                                       // penutup: menjauh dari stasiun
+  } else if (K.ext === 'away') {                                      // v2.14: dari 400 m di bawah sumbu menembus kaca end cap B, menjauh 22 km sambil berbalik: stasiun di depan Saturnus
+    if (!K.C) {
+      const S = saturnDirInertial(new THREE.Vector3()), Y = new THREE.Vector3(0, 1, 0).addScaledVector(S, -S.y).normalize();
+      K.C = S.clone().multiplyScalar(-22000).addScaledVector(Y, 22000 * Math.tan(9 * DEG));   // sedikit di atas garis stasiun-Saturnus: Saturnus tampak di atas stasiun
+      K.V1 = S.clone().add(K.C.clone().negate().normalize()).normalize();                     // arah akhir: di antara stasiun dan pusat Saturnus
+      K.P0 = new THREE.Vector3(0, -400, HALF_L - 20); K.P1 = new THREE.Vector3(0, -400, HALF_L + 2500);
+      K.P2 = K.P1.clone().lerp(K.C, 0.55); K.q0 = new THREE.Quaternion(); K.q1 = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), K.V1);
+    }
+    const u = sstep(0, 1, TOUR.t / T), v = 1 - u, w = sstep(0.1, 0.8, TOUR.t / T);
+    const P = K.P0.clone().multiplyScalar(v * v * v).addScaledVector(K.P1, 3 * v * v * u).addScaledVector(K.P2, 3 * v * u * u).addScaledVector(K.C, u * u * u);
+    const D = new THREE.Vector3(0, 0, 1).applyQuaternion(new THREE.Quaternion().slerpQuaternions(K.q0, K.q1, w)), L = P.clone().addScaledVector(D, 1000);
+    tourExtCam(P.x, P.y, P.z, [L.x, L.y, L.z]);
+  } else if (K.ext === 'out') {                                       // penutup lama (tidak dipakai sejak v2.14): menjauh dari stasiun
     if (K.z0 === undefined) K.z0 = TOUR.from.za - HALF_L;
     const u = sstep(0, 1, TOUR.t / T);
     tourExtPose(Math.PI / 2 + 2 * u, 0.15 + 0.3 * u, Math.exp(Math.log(1500) + (Math.log(45000) - Math.log(1500)) * u), K.z0 * (1 - u));
@@ -17034,14 +17059,16 @@ function stepTour(dt) {
   TOUR.t += dt;
   const isExt = tourIsExt(K);
   if (isExt) {                                                        // pembuka luar jernih: layar hampir hitam tidak menaikkan eksposur
-    const N = TOUR.keys[TOUR.i + 1], T1 = K.hold - 7, e = K.ext === 'in' ? sstep(T1, T1 + 5, TOUR.t) : 0;   // v2.9: 7 s terakhir pembuka = setelan titik 2 (atmosfer tidak patah)
-    tourLook(e > 0 && TOUR.saveW.adapt, 0.25 + (TOUR.saveW.bloom - 0.25) * e, TOUR.saveW.rays && !(K.ext === 'in' && N && N.wx === 'cerah'));
+    const N = TOUR.keys[TOUR.i + 1], T1 = K.hold - 7, aw = K.ext === 'away', e = K.ext === 'in' ? sstep(T1, T1 + 5, TOUR.t) : aw ? 1 - sstep(0, 6, TOUR.t) : 0;   // v2.9: 7 s terakhir pembuka = setelan titik 2 (atmosfer tidak patah); v2.14 penutup: kebalikannya di 6 s pertama
+    tourLook(aw ? TOUR.saveW.adapt : e > 0 && TOUR.saveW.adapt, 0.25 + (TOUR.saveW.bloom - 0.25) * e, TOUR.saveW.rays && !aw && !(K.ext === 'in' && N && N.wx === 'cerah'));   // penutup: adaptasi mata tetap seperti di dalam (tanpa lompatan eksposur)
+    if (aw && K.fog0 === undefined) K.fog0 = ext.active ? 0 : scene.fog.density;   // kabut udara terakhir di dalam stasiun
     if (K.ext === 'in' && ext.active) scene.fog.density = CONFIG.fogDensity * (1 + 0.25 * WEATHER.cover + 0.9 * WEATHER.ov) * e;   // v2.11 (rumus fogD0 updateLighting): kabut udara dalam stasiun (kamera luar = 0) naik di 7 s terakhir, tersambung ke titik 2
   }
   else tourLook(TOUR.saveW.adapt, TOUR.saveW.bloom, TOUR.saveW.rays && K.wx !== 'cerah');   // v2.5: cuaca cerah tanpa sunrays (berkas padat seperti kabut putih)
   if (isExt) {
     if (!ext.active) toggleExterior();
     stepTourExt(K);
+    if (K.ext === 'away') scene.fog.density = K.fog0 * (1 - sstep(0, 3, TOUR.t));   // v2.14: kabut menipis setelah menembus kaca (kamera luar = 0)
   } else if (K.moto) {                                                // motor berjalan dengan fisikanya sendiri (physicsStep -> stepMoto)
     if (ext.active) toggleExterior();
     if (!K.started) tourMotoStart(K);
@@ -17086,6 +17113,15 @@ function stepTour(dt) {
     if (K.ball && !K.landing && hold > 0.8) tourThrow(K);
     if (K.bb && K.bb.t > 0) tourChase(K);
     if (K.bb && K.bb.done && !K.shatter) { K.shatter = true; tourGlassSound(); }   // v2.9: bola mendarat = bunyi kaca pecah                            // posisi bola baru diisi physicsStep setelah lemparan; kamera bergerak sampai akhir titik
+    if (K.orb) {                                                      // v2.14 pagi: waktu orbit diatur (seperti tombol I dan T): mundur pelan keluar bayangan (Matahari muncul lagi), lalu cepat ke 120 derajat sebelum gerhana
+      if (K.oB === undefined) {                                       // (Saturnus di sisi terang, menjadi latar penutup)
+        const half = ECL.half / TAU * T_ORB, ps = (((orbitPhase() - ECL.phiC) % TAU) + TAU + Math.PI) % TAU - Math.PI, oC = clock.orbit - ps / TAU * T_ORB;
+        K.o0 = clock.orbit; K.oA = Math.min(clock.orbit, oC - half - 60); K.oB = oC - T_ORB / 3;
+      }
+      const Tk = K.dur + K.hold, tA = 3;
+      clock.orbit = TOUR.t < tA ? K.o0 + (K.oA - K.o0) * sstep(0, tA, TOUR.t) : K.oA + (K.oB - K.oA) * sstep(tA, Tk - 1.5, TOUR.t);
+      ECL.warned = true;                                              // tanpa notifikasi "gerhana dalam 1 menit" saat orbit mundur
+    }
     if (K.eclipse) {                                                  // gerhana: waktu orbit diatur (seperti tombol I), masuk bayangan 3,5 s setelah tiba
       if (K.o0 === undefined) { K.o0 = clock.orbit + eclipseIn() - 35; }
       clock.orbit = K.o0 + hold * 10;
@@ -17117,6 +17153,15 @@ function tourNext() {
   if (TOUR.i >= TOUR.keys.length) { stopTour(); return; }
   tourCaption();
 }
+function tourSkip() {                                                 // v2.14: Spasi = langsung ke titik berikutnya (terbang berikutnya mulai dari pose sekarang)
+  if (!TOUR.on) return;
+  const K = TOUR.keys[TOUR.i];
+  if (K.orb && K.oB !== undefined) clock.orbit = K.oB;                  // orbit pagi langsung di tujuan (penutup butuh Saturnus di sisi terang)
+  if (!tourIsExt(K)) TOUR.from = tourPose();
+  phEl('tourFade').style.opacity = 0;
+  tourNext();
+}
+on('tourSkip', () => tourSkip());
 on('tourStop', () => stopTour());
 on('labTour', () => startTour());
 on('btnTour', () => startTour());
