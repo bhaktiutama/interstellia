@@ -1,12 +1,12 @@
 # Rencana Tahap 28 Copper Corn Station: manusia tidak kotak-kotak
 
-Per 17 Oktober 2026 · disusun atas permintaan Bhakti ("enhance manusia biar tidak kotak-kotak seperti Roblox") · Status: rencana, belum dikerjakan
+Per 17 Oktober 2026 · disusun atas permintaan Bhakti ("enhance manusia biar tidak kotak-kotak seperti Roblox") · Status: 28a dan 28b selesai (17 Oktober 2026), menunggu persetujuan bentuk dari blokout sebelum 28c
 
 ## Ringkasan
 
 - Penyebab langsung: pejalan kaki Copper dibangun dari 17 `BoxGeometry` (204 segitiga, 408 titik) yang diputar kaku per bagian. Komentar kodenya sendiri: "model orang: kotak-kotak" (`experiences/cooper-station/index.html` baris 14389-14407). Tidak ada leher, bahu, pinggang, pergelangan, wajah, atau jari, dan kotak saling tembus atau bercelah di lutut dan siku.
 - Rencana: ganti dengan generator bentuk loft halus (cara yang sama dengan mobil tahap 26) dalam 3 tingkat detail (dekat ~1.460 segitiga, menengah ~390, jauh ~80), sendi dihaluskan dengan kulit dua tulang di vertex shader, tanpa atribut instance baru dan tanpa mengubah simulasi pejalan kaki. Saklar `?orang=lama` = model kotak sekarang persis.
-- Yang belum diketahui dan diukur dulu di 28a: berapa orang sebenarnya tergambar per jarak di tiap lokasi. Tanpa angka itu, biaya segitiga di bawah hanya contoh hipotesis.
+- Hasil ukur 28a mengubah asumsi biaya: orang yang benar-benar tergambar hanya 0 sampai 331 per lokasi di Ultra (bukan sampai 4.000), jadi model baru menambah sekitar 130 ribu segitiga (2-3% dari 3,3-5,9 juta segitiga adegan). Anggaran segitiga per tingkat boleh lebih longgar dari rencana awal (lihat Hasil 28a dan 28b di bawah).
 
 ## Asumsi yang perlu dikonfirmasi
 
@@ -53,7 +53,7 @@ Generator `PEDKIT.shape(level)` membangun tiap bagian dari loft penampang (irisa
 | Tas | kotak membulat + tali bahu, hanya bila `aJ.z >= 0,5` (cara lama `CLIP_AWAY`) | 60 | 20 | 0 |
 | Total | | sekitar 1.460 | sekitar 390 | sekitar 80 |
 
-Angka segitiga adalah anggaran desain, diukur di 28h. Nilai sekarang: 204 segitiga per orang.
+Angka segitiga di tabel adalah anggaran desain awal. Hasil 28b (diukur): L0 2.496, L1 746, L2 240 segitiga, anggaran dilonggarkan menjadi 2.500 / 750 / 250 karena hasil 28a (lihat di bawah). Nilai lama: 204 segitiga per orang.
 
 Sendi (kulit dua tulang di vertex shader): atribut per titik baru `aSk` (tulang A, tulang B, bobot) menggantikan pemilihan tulang dari `aPart`. Rantai tulang hanya `rotX` seperti sekarang: pinggul, lutut (paha lalu betis), bahu, siku, ditambah leher (kepala mengangguk dan menoleh). Posisi titik = campuran bobot dari transformasi dua tulang; normal diputar dengan transformasi yang sama (sudah dilakukan kode lama untuk `n`). Bobot halus di sekitar sendi (lutut 10 cm, siku 8 cm, pinggul 12 cm, bahu 10 cm), bobot 1 di tengah ruas. `aPart` tetap ada untuk warna (kulit, kemeja, celana, rambut, tas, sepatu).
 
@@ -116,15 +116,66 @@ Usulan radius per preset (disesuaikan setelah uji FPS Bhakti di GTX 1060 dan M1)
 
 Urutan: 28a, 28b (berhenti, minta persetujuan bentuk), 28c, 28d, lalu 28e dan 28f (bisa bersamaan), 28g, 28h. Rencana ini disusun oleh model satu tingkat di atas tahap terberat (High); pengerjaan tiap tahap memakai model pada kolom Model.
 
+## Hasil 28a (selesai 17 Oktober 2026)
+
+Alat: `tools/ukur_orang.py` (jumlah tergambar per band jarak, segitiga, biaya CPU, sidik jari geometri); acuan `tools/uji_orang_lama.json`; saklar `?orang=lama` (`PEDS.lama`, belum berpengaruh karena model baru belum dipasang).
+
+| Temuan | Nilai |
+| --- | --- |
+| Model lama | 204 segitiga, 408 titik; sidik jari FNV-1a posisi 76810e35, normal 79c6605, bagian a2d6de05, indeks e0652f65 |
+| Orang di dunia | 14.242 (spawn, sandbox); `PEDS.max` 4.000 tidak pernah mendekati |
+| Pass bayangan | orang ikut (layer 2, `castAlpha`) untuk semua instance, termasuk yang jauh |
+| Biaya CPU `updatePeds()` | 0,005-0,375 ms per panggilan (sandbox, tidak mewakili GPU asli) |
+
+Orang tergambar per lokasi, band [0-12 m, 12-30 m, 30-90 m, > 90 m] (Ultra, jam 15.00 simulasi):
+
+| Lokasi | Jumlah | Band |
+| --- | --- | --- |
+| Cooper (spawn) | 2 | 0 / 0 / 0 / 2 |
+| New York | 331 | 6 / 7 / 23 / 295 |
+| Pasar | 120 | 9 / 28 / 2 / 81 |
+| Air mancur | 324 | 4 / 8 / 23 / 289 |
+| Baseball | 283 | 3 / 11 / 28 / 241 |
+| Spaceport | 277 | 2 / 21 / 53 / 201 |
+
+Sedang: 0-113 orang; Hemat: 0-37 orang (radius 80 m). Segitiga adegan penuh Ultra 3,3-5,9 juta (diukur lewat `renderer.info`).
+
+Dampak ke rencana: dugaan "4.000 orang tergambar" salah; anggaran segitiga dilonggarkan, dan tingkat L0 sampai 30 m hampir selalu di bawah 40 orang. Pengukuran satu jam simulasi (15.00); jam ramai dan pasar belum dibandingkan.
+
+## Hasil 28b (selesai 17 Oktober 2026)
+
+| Item | Hasil |
+| --- | --- |
+| Generator | `shared/orang.js` (`window.PEDKIT`, tanpa three.js, jalan di Node dan browser): `shape(level)`, `pose()` kulit dua tulang, `poseOf()`, `edgeStats()`, `old` (model kotak lama untuk banding), palet sama dengan game |
+| Segitiga | L0 2.496 (1.321 titik), L1 746 (419), L2 240 (138) |
+| Bentuk | loft penampang elips / persegi membulat: badan dengan bahu, pinggang, pinggul dan kerah; kepala dengan rahang, hidung, dua telinga, rambut pendek (rambut panjang opsional); lengan atas dan bawah runcing dengan telapak, jari satu blok, ibu jari; paha, betis menonjol di belakang, lutut; sepatu dengan sol; tas samping opsional |
+| Kerangka | 11 tulang, pivot sama dengan model lama (pinggul 0,90, lutut 0,48, bahu 1,44); tinggi 1,786 m, setengah lebar 0,30 m (lama 0,30) |
+| Indeks kotak | lama 66,7%; L0 6,8%, L1 25,3%, L2 37% |
+| AO | dipanggang per titik (pangkal paha, ketiak, bawah dagu, belakang lutut, dasar sepatu) |
+| Uji | `tools/uji_orang_bentuk.cjs` (Node, tanpa browser): 19 pemeriksaan lulus (segitiga, nilai valid, bobot, ukuran, indeks kotak, 8 pose tanpa nilai tidak valid, sambungan rapat, tepi tidak robek) |
+| Blokout | `docs/cooper-station/orang/blokout-orang.html` (model lama + L0 + L1 + L2 berjajar, pose jalan / berdiri / duduk, fase, kamera depan / samping / belakang / atas / wajah / tangan / kaki, kerangka, lengan panjang, rambut panjang, tas, warna acak); tiga tangkapan: `blokout-depan.png`, `blokout-dekat.png`, `blokout-belakang.png` |
+
+Kelemahan yang saya lihat di blokout (tolong dinilai):
+
+- Tangan masih lonjong seperti sarung tangan tanpa jari terpisah (sesuai batasan rencana); dari jauh wajar, dari dekat terlihat polos.
+- Wajah polos (hidung dan telinga saja), tanpa mata atau mulut; siluet sudah manusia.
+- Bahu dan tangan: lengan agak menggantung terpisah dari badan di pose berdiri (celah 1-5 cm di pinggang); bahu masih sedikit miring tajam.
+- Pangkal badan bawah (panggul) tampak membulat seperti kantong dari depan; tersembunyi bila celana lebih longgar.
+- Kulit dua tulang meregang di depan lutut saat duduk (1,57x), tepi di garis lipat terlihat seperti lipatan; jalan dan berdiri tidak.
+- Warna rata per bagian dengan AO; kain, lipatan baju, dan kerah belum ada (28g).
+- Dinilai dari tangkapan SwiftShader; bentuk dan cahaya di GPU asli belum dilihat.
+
+Yang dipasang di game: belum ada. Berikutnya (28c) menunggu persetujuan Bhakti atas bentuk blokout ini.
+
 ## Uji dan ukuran keberhasilan
 
 | Pemeriksaan | Ambang (usulan, belum diukur) |
 | --- | --- |
-| Indeks kotak = persen tepi bersama yang sudut antar-normalnya > 50 derajat | model lama 100% (semua tepi 90 derajat); L0 <= 2%, L1 <= 10% |
-| Segitiga per orang | L0 <= 1.500, L1 <= 400, L2 <= 100 |
+| Indeks kotak = persen tepi bersama (tanpa tutup ujung tersembunyi) yang sudut antar-normalnya > 50 derajat | model lama 66,7% (diukur: 12 dari 18 tepi per kotak); hasil 28b L0 6,8%, L1 25,3%, L2 37%; batas uji L0 <= 8%, L1 <= 30%, L2 <= 45% (sisa tepi keras L0 adalah sol sepatu, ujung jari, hidung, telinga) |
+| Segitiga per orang | L0 <= 2.500, L1 <= 750, L2 <= 250 (dilonggarkan setelah 28a) |
 | Geometri valid | 0 NaN / Infinity, normal tidak nol, bobot tulang dijumlah 1, AO 0..1 |
 | Ukuran | tinggi 1,70-1,80 m, lebar bahu dalam +-15% model lama, telapak di y = 0 |
-| Kulit di sendi (pose lutut 90 derajat, siku 90 derajat, pinggul duduk) | tepi terpanjang <= 1,3x pose ikat, lingkar lutut >= 0,8x, tidak ada titik di luar kotak batas + 5 cm |
+| Kulit di sendi | jalan dan berdiri: tepi terpanjang <= 1,3x pose ikat; duduk (lutut 86 derajat): <= 1,7x, batas kulit dua tulang linear (hasil 28b: 1,27x dan 1,57x di L0); sambungan berimpit tetap rapat di semua pose |
 | `?orang=lama` | sidik jari geometri sama dengan 28a, piksel identik dengan sebelum tahap 28 |
 | Payung | titik tangan model baru dalam 3 cm dari titik `H` payung di jalan dan duduk |
 | Render | tanpa nilai tidak valid atau titik menyala di 5 preset x pagi / siang / malam |
@@ -135,11 +186,11 @@ Lembar kontak (`lembar-orang.png`, satu gambar untuk dibaca di ponsel): 12 orang
 
 ## Anggaran dan risiko
 
-Contoh hipotesis, bukan ukur: bila dari 4.000 orang tergambar 300 berada di L0, 1.500 di L1, dan 2.200 di L2, segitiga per frame = 300 x 1.460 + 1.500 x 390 + 2.200 x 80 = 1,20 juta, dibanding 4.000 x 204 = 0,82 juta sekarang (+47%). Angka sebenarnya bergantung distribusi jarak yang dicatat di 28a. Bila kenaikan terlalu besar, tuas yang tersedia: radius L0 dan maks L0 per preset, L2 lebih kasar, menurunkan jumlah irisan L1.
+Berdasarkan ukur 28a (Ultra, jam 15.00 simulasi, sandbox): orang tergambar per lokasi 2 sampai 331, di dalam 30 m paling banyak 37, di luar 90 m paling banyak 295. Perkiraan model baru di lokasi terpadat (New York): 13 x 2.496 + 23 x 746 + 295 x 240 = 0,12 juta segitiga, dibanding 331 x 204 = 0,07 juta sekarang. Tambahan sekitar 0,05 sampai 0,13 juta segitiga di semua lokasi ukur, 1-3% dari segitiga adegan (3,3-5,9 juta di Ultra). Ini turunan dari ukur, bukan ukur FPS: biaya vertex shader kulit dan `vegLight()` per titik tetap diuji pemilik di GTX 1060 dan M1.
 
 | Risiko | Tingkat | Penanganan |
 | --- | --- | --- |
-| Biaya vertex naik (kulit dua tulang + `vegLight()` per titik pada titik lebih banyak) | sedang | band LOD, maks L0 per preset, ukur `GPUT` di 28a dan 28d, Hemat tanpa L0 |
+| Biaya vertex naik (kulit dua tulang + `vegLight()` per titik pada titik lebih banyak) | rendah menurut hitungan segitiga, belum diuji FPS | band LOD, maks L0 per preset, ukur `GPUT` di 28a dan 28d, Hemat tanpa L0 |
 | Meletup saat berpindah band | sedang | histeresis 4 m, ukuran dan warna sama antar band, bila masih tampak: pita dither 6 m seperti mobil tahap 26 |
 | Bayangan tidak cocok dengan bentuk | rendah | bayangan dari L1 untuk dekat dan menengah |
 | Pivot atau tinggi berubah sehingga duduk, payung, bola baseball bergeser | sedang | prinsip 1 (kerangka lama tetap) dan uji titik tangan / duduk |
