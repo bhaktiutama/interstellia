@@ -169,16 +169,32 @@ function bakeAnimations(gltf, M) {
   const ULL = byName(sk, 'UpperLeg.L'), ULR = byName(sk, 'UpperLeg.R'), LLL = byName(sk, 'LowerLeg.L'), LLR = byName(sk, 'LowerLeg.R'), hips = byName(sk, 'Hips');
   const UAL = byName(sk, 'UpperArm.L'), UAR = byName(sk, 'UpperArm.R'), LAL = byName(sk, 'LowerArm.L'), LAR = byName(sk, 'LowerArm.R');
   let maxScaleErr = 0;
-  // pose diam semua tulang: dikembalikan sebelum tiap cuplikan (tulang tanpa trek animasi tidak boleh menyimpan timpaan frame sebelumnya)
-  const restPose = sk.bones.map((b) => ({ p: b.position.clone(), q: b.quaternion.clone(), s: b.scale.clone() }));
-  const restore = () => { sk.bones.forEach((b, i) => { b.position.copy(restPose[i].p); b.quaternion.copy(restPose[i].q); b.scale.copy(restPose[i].s); }); };
+  // JANGAN mengembalikan tulang ke pose diam sebelum tiap cuplikan: mixer three.js hanya menulis nilai yang berubah dari nilai terakhir yang ia terapkan,
+  // jadi tulang yang dikembalikan paksa tetap di pose diam (kepala menoleh, frame 'loncat'). Timpaan buatan sendiri dibatalkan dengan menyimpan
+  // dan memulihkan keadaan hasil mixer (snapshot / undo).
+  const snapshot = () => sk.bones.map((b) => ({ p: b.position.clone(), q: b.quaternion.clone(), s: b.scale.clone() }));
+  const undo = (sn) => { sk.bones.forEach((b, i) => { b.position.copy(sn[i].p); b.quaternion.copy(sn[i].q); b.scale.copy(sn[i].s); }); root.updateMatrixWorld(true); };
+  const skI = sm.geometry.attributes.skinIndex, skW = sm.geometry.attributes.skinWeight, pa0 = sm.geometry.attributes.position, vtmp = new THREE.Vector3();
+  const checkVerts = []; for (let k = 0; k < pa0.count; k += Math.max(1, Math.floor(pa0.count / 160))) checkVerts.push(k);
+  // galat kulit hasil bakar vs kulit three.js sendiri (hanya klip tanpa timpaan): harus < 0,5 cm di semua frame
+  function verifyFrame(fr) {
+    let mx = 0; const M3 = []; for (let j = 0; j < nb; j++) { const o = j * 7; M3.push(new THREE.Matrix4().compose(new THREE.Vector3(fr[o + 4], fr[o + 5], fr[o + 6]), new THREE.Quaternion(fr[o], fr[o + 1], fr[o + 2], fr[o + 3]), new THREE.Vector3(1, 1, 1))); }
+    for (const k of checkVerts) {
+      sm.getVertexPosition(k, vtmp); const ref = vtmp.clone().applyMatrix4(sm.matrixWorld), raw = new THREE.Vector3().fromBufferAttribute(pa0, k).applyMatrix4(W), mine = new THREE.Vector3();
+      for (let c = 0; c < 4; c++) { const w = [skW.getX, skW.getY, skW.getZ, skW.getW][c].call(skW, k); if (w > 0) mine.addScaledVector(raw.clone().applyMatrix4(M3[[skI.getX, skI.getY, skI.getZ, skI.getW][c].call(skI, k)]), w); }
+      mx = Math.max(mx, ref.distanceTo(mine));
+    }
+    return mx;
+  }
+  let maxVerifyErr = 0;
   const frames = [], hand = [];
   // sample: nama klip sumber, jumlah frame, modifikasi (sit, umb)
   function sample(src, mod, sitDy) {
     const c = clip(src), n = Math.max(2, Math.round(c.duration * FPS)), act = mixer.clipAction(c), out = [], h = [];
     act.reset().play();
     for (let i = 0; i < n; i++) {
-      restore(); mixer.setTime(i * c.duration / n); root.updateMatrixWorld(true);
+      mixer.setTime(i * c.duration / n); root.updateMatrixWorld(true);
+      const sn = mod ? snapshot() : null;
       if (mod) mod(sitDy);
       root.updateMatrixWorld(true); sk.update();
       const fr = new Float32Array(nb * 7);
@@ -190,7 +206,9 @@ function bakeAnimations(gltf, M) {
         if (qq.w < 0) qq.set(-qq.x, -qq.y, -qq.z, -qq.w);
         fr.set([qq.x, qq.y, qq.z, qq.w, pp.x, pp.y, pp.z], j * 7);
       }
+      if (!mod) { const e = verifyFrame(fr); maxVerifyErr = Math.max(maxVerifyErr, e); if (e > 0.005) throw new Error(`galat kulit ${(e * 100).toFixed(1)} cm: klip ${src} frame ${i}`); }
       out.push(fr); const wp = wristL.getWorldPosition(new THREE.Vector3()); h.push([wp.x, wp.y, wp.z]);
+      if (sn) undo(sn);
     }
     act.stop(); return { out, h, dur: c.duration, n };
   }
@@ -217,9 +235,9 @@ function bakeAnimations(gltf, M) {
   const lockArm = () => { UAL.quaternion.copy(armQ.ua); LAL.quaternion.copy(armQ.la); UAL.updateWorldMatrix(false, true); };
   const umbMod = () => { lockArm(); rotWorld(UAL, -UMB_A[0]); rotWorld(LAL, -UMB_A[1]); };
   // tinggi pinggul duduk: pergelangan menapak di tinggi yang sama dengan berdiri (Idle_Neutral frame 0)
-  restore(); mixer.clipAction(clip('Idle_Neutral')).reset().play(); mixer.setTime(0); root.updateMatrixWorld(true);
+  mixer.clipAction(clip('Idle_Neutral')).reset().play(); mixer.setTime(0); root.updateMatrixWorld(true);
   armQ.ua = UAL.quaternion.clone(); armQ.la = LAL.quaternion.clone();
-  const hipY0 = hips.getWorldPosition(new THREE.Vector3()).y, dy = sitMod.solve();
+  const hipY0 = hips.getWorldPosition(new THREE.Vector3()).y, snSolve = snapshot(), dy = sitMod.solve(); undo(snSolve);
   mixer.stopAllAction();
   const defs = [['Jalan', 'Walk', null], ['Diam', 'Idle_Neutral', null], ['Lambai', 'Wave', null], ['Interaksi', 'Interact', null], ['Duduk', 'Idle_Neutral', () => sitMod(dy)],
     ['Jalan_Payung', 'Walk', umbMod], ['Diam_Payung', 'Idle_Neutral', umbMod], ['Duduk_Payung', 'Idle_Neutral', () => { sitMod(dy); lockArm(); rotWorld(UAL, -UMB_A[0] * 0.8); rotWorld(LAL, -UMB_A[1] * 0.8); }]];
@@ -242,7 +260,7 @@ function bakeAnimations(gltf, M) {
   const data = new Int16Array(F.length * nb * 8);
   F.forEach((fr, f) => { for (let j = 0; j < nb; j++) { const o = (f * nb + j) * 8; for (let k = 0; k < 4; k++) data[o + k] = clamp(Math.round(fr[j * 7 + k] * 32767), -32767, 32767); for (let k = 0; k < 3; k++) data[o + 4 + k] = clamp(Math.round(fr[j * 7 + 4 + k] * 8192), -32767, 32767); } });
   const hd = new Int16Array(H.length * 4); H.forEach((p, i) => { for (let k = 0; k < 3; k++) hd[i * 4 + k] = clamp(Math.round(p[k] * 8192), -32767, 32767); });
-  return { clips, data, hand: hd, bones: sk.bones.map((b) => b.name), nb, fps: FPS, handStat, sitDy: +dy.toFixed(4), hipY0: +hipY0.toFixed(4), walkSpeed: +walkSpeed.toFixed(4), strideM: +(walkSpeed * walk.dur).toFixed(3), maxScaleErr: +maxScaleErr.toExponential(2), frames: F.length };
+  return { clips, data, hand: hd, bones: sk.bones.map((b) => b.name), nb, fps: FPS, handStat, verifyErrCm: +(maxVerifyErr * 100).toFixed(3), sitDy: +dy.toFixed(4), hipY0: +hipY0.toFixed(4), walkSpeed: +walkSpeed.toFixed(4), strideM: +(walkSpeed * walk.dur).toFixed(3), maxScaleErr: +maxScaleErr.toExponential(2), frames: F.length };
 }
 
 // ---------- jalan ----------
@@ -260,8 +278,8 @@ for (const cfg of CHARS) {
   meta.chars.push({ id: cfg.id, g: cfg.g, file: cfg.file, recolor: { top: !!cfg.recolor.top, bottom: !!cfg.recolor.bottom, skin: cfg.skin !== false, hair: cfg.hair !== false }, bbox: { min: bb.min.map((v) => +v.toFixed(5)), max: bb.max.map((v) => +v.toFixed(5)) }, height: +(bb.max[1] - bb.min[1]).toFixed(3), lum: lumAvg, src: { tris: M.index.length / 3, verts: M.pos.length / 3 }, lods: packed });
   report.push(`${cfg.id}: sumber ${M.index.length / 3} segitiga -> ${packed.map((p) => p.nt + '/' + p.nv).join(' | ')} (galat meshopt ${packed.map((p) => p.err).join(', ')}), tinggi ${(bb.max[1] - bb.min[1]).toFixed(2)} m`);
   if (!animDone[cfg.g]) { animDone[cfg.g] = true; const A = bakeAnimations(gltf, M);
-    meta.anim[cfg.g] = { handStat: A.handStat, bones: A.bones, nb: A.nb, fps: A.fps, clips: A.clips, frames: A.frames, sitDy: A.sitDy, hipY0: A.hipY0, walkSpeed: A.walkSpeed, strideM: A.strideM, maxScaleErr: A.maxScaleErr, data: blob.add(A.data), hand: blob.add(A.hand) };
-    report.push(`tangan payung ${cfg.g}: ${JSON.stringify(A.handStat)}`); report.push(`anim ${cfg.g}: ${A.clips.map((c) => c.name + ' ' + c.frames + 'f').join(', ')}; tinggi pinggul duduk ${A.sitDy} m (lama -0,38); langkah ${A.walkSpeed} m/s, ${A.strideM} m per siklus; galat skala tulang ${A.maxScaleErr}`);
+    meta.anim[cfg.g] = { verifyErrCm: A.verifyErrCm, handStat: A.handStat, bones: A.bones, nb: A.nb, fps: A.fps, clips: A.clips, frames: A.frames, sitDy: A.sitDy, hipY0: A.hipY0, walkSpeed: A.walkSpeed, strideM: A.strideM, maxScaleErr: A.maxScaleErr, data: blob.add(A.data), hand: blob.add(A.hand) };
+    report.push(`tangan payung ${cfg.g}: ${JSON.stringify(A.handStat)}`); report.push(`anim ${cfg.g}: ${A.clips.map((c) => c.name + ' ' + c.frames + 'f').join(', ')}; tinggi pinggul duduk ${A.sitDy} m (lama -0,38); langkah ${A.walkSpeed} m/s, ${A.strideM} m per siklus; galat skala tulang ${A.maxScaleErr}; galat kulit vs three.js maks ${A.verifyErrCm} cm`);
   }
   console.log(report[report.length - 1].startsWith('anim') ? report.slice(-2).join('\n') : report[report.length - 1]);
 }

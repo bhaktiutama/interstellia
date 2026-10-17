@@ -118,6 +118,8 @@ Temuan teknis yang mengubah rancangan:
 - Penyederhanaan meshoptimizer macet (hanya 2 segitiga dibuang) tanpa flag `Permissive`, karena model tersusun dari banyak titik terbelah; dengan flag itu target tercapai.
 - Matriks dunia mesh = skala 100 dan putaran -90 derajat di x, dibakar ke titik bind (meter y-atas); matriks tulang akhir = `meshWorld x bindInv x tulang x bind x meshWorld^-1`.
 
+Perbaikan setelah laporan Bhakti (kepala "noleh kanan kiri cepat", 17 Oktober 2026): gerak memang glitch di versi pertama. Penyebab: alat olah mengembalikan semua tulang ke pose diam sebelum tiap cuplikan, padahal mixer three.js hanya menulis nilai yang berubah dari nilai terakhir yang ia terapkan, sehingga tulang yang dikembalikan paksa tetap di pose diam (kepala menoleh sekitar 28 derajat pada frame pertama Diam dan Duduk, dan loncat 26-38 derajat di 2 frame tiap setengah siklus Jalan). Perbaikan: tidak ada pengembalian paksa; timpaan buatan (duduk, payung) dibatalkan dari snapshot hasil mixer. Pencegahan: alat olah membandingkan kulit hasil bakar dengan kulit three.js (galat maks 0 cm) dan uji baru memeriksa perubahan arah kepala per frame di 13 karakter x 8 klip (terbesar 3,3 derajat, batas 10); uji kini 54 dari 54. Tangan payung sekarang stabil (ayun 3-9 cm).
+
 Kelemahan dan hal yang perlu dinilai Bhakti di pratinjau:
 
 - L2 (160 segitiga) kasar (kepala runcing, tangan hilang); dimaksudkan untuk di atas 90 m.

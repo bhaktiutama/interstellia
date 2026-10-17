@@ -60,5 +60,22 @@ for (const c of D.chars) {
   const e1 = near(P[0], P[1], 11), e2 = near(P[0], P[2], 11);
   cek(c.id + ': bentuk L1 dan L2 mengikuti L0 (rata-rata titik L0 ke titik L1 <= 3 cm, L2 <= 6 cm)', e1.avg <= 0.03 && e2.avg <= 0.06, `L1 ${(e1.avg * 100).toFixed(1)} / maks ${(e1.max * 100).toFixed(1)} cm, L2 ${(e2.avg * 100).toFixed(1)} / maks ${(e2.max * 100).toFixed(1)} cm`);
 }
+// kepala tidak menoleh mendadak: arah telinga ke hidung (bidang xz) berubah <= 10 derajat per frame (termasuk penutup siklus), di semua klip dan karakter.
+// (regresi: pengembalian paksa pose diam sebelum cuplikan membuat kepala 'noleh kanan kiri cepat' sekitar 28 derajat)
+{
+  let worst = 0, wname = '', spike = 0;
+  for (const c of D.chars) {
+    const A = D.anim[c.g], L = c.lods[0]; let nose = -1, ear = -1;
+    for (let i = 0; i < L.nv; i++) { const y = L.pos[3 * i + 1]; if (y > 1.6 && (nose < 0 || L.pos[3 * i + 2] > L.pos[3 * nose + 2])) nose = i; }
+    for (let i = 0; i < L.nv; i++) { const y = L.pos[3 * i + 1]; if (y > 1.6 && y < 1.78 && (ear < 0 || L.pos[3 * i] > L.pos[3 * ear])) ear = i; }
+    const P = new Float32Array(L.nv * 3), N = new Float32Array(L.nv * 3);
+    for (const cl of A.clips) {
+      const ang = [];
+      for (let f = 0; f < cl.frames; f++) { K.skin(L, A, cl.start + f, cl.start + f, 0, P, N); ang.push(Math.atan2(P[3 * nose] - P[3 * ear], P[3 * nose + 2] - P[3 * ear + 2]) * 180 / Math.PI); }
+      for (let f = 0; f < cl.frames; f++) { let d = Math.abs(ang[(f + 1) % cl.frames] - ang[f]); if (d > 180) d = 360 - d; if (d > worst) { worst = d; wname = c.id + ' ' + cl.name + ' f' + f; } if (d > 10) spike++; }
+    }
+  }
+  cek('kepala tidak menoleh mendadak: perubahan arah <= 10 derajat per frame di 13 karakter x 8 klip', spike === 0, 'terbesar ' + worst.toFixed(1) + ' derajat (' + wname + '), melebihi batas ' + spike);
+}
 console.log('\n' + (out.every(Boolean) ? 'HASIL: LOLOS' : 'HASIL: GAGAL'), out.filter(Boolean).length + '/' + out.length);
 process.exit(out.every(Boolean) ? 0 : 1);
