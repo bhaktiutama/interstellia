@@ -1,5 +1,5 @@
 """Uji tahap 12d (Copper Corn Station): siklus tanam gandum dan mesin ladang, mode foto (FOV, blur, simpan PNG,
-semua dikembalikan saat keluar), tur sinematik v2.9 (20 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
+semua dikembalikan saat keluar), tur sinematik v2.13 (21 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
 lempar bola melawan putaran, gerhana dari dalam, pembuka dan penutup kamera luar, tanpa NaN, semua dikembalikan).
 Pakai: python tools/uji_ladang_foto_tur.py   (butuh: pip install playwright && playwright install chromium; CHROMIUM opsional)"""
 import asyncio, os, pathlib
@@ -112,7 +112,7 @@ UJI = r"""
   }
   const T = steps * 0.05, get = (n) => K[n] || {}, eye = st.TOUR.keys.filter((q) => q.h === 0).length;
   const ball = st.TOUR.keys.find((q) => q.ball), L = ball && ball.landing, deg = 180 / Math.PI;
-  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 260-360 s), tanpa NaN`] = !bad && idx.size === N && N === 20 && T > 260 && T < 360;
+  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 260-360 s), tanpa NaN`] = !bad && idx.size === N && N === 21 && T > 260 && T < 360;
   out[`tur: ${eye} titik setinggi mata (>= 9)`] = eye >= 9;
   out[`tur: tinggi maksimum ${maxH.toFixed(0)} m (tidak melewati sumbu)`] = maxH < st.R - 30;
   out[`tur: jam mulai ${hour0.toFixed(2)}, akhir ${(get('Meninggalkan stasiun').hour || 0).toFixed(2)}`] = hour0 === 12 && Math.abs(get('Meninggalkan stasiun').hour - 7) < 0.05;
@@ -139,8 +139,8 @@ UJI = r"""
   out[`tur: hujan di kota tempat naik motor (${Hj.d || (st.districtAt(Hj.anyLast.s, Hj.anyLast.za) || {}).name}, motor mulai di titik yang sama, lompat ${rmJ.toFixed(1)} m), motor berhenti ${(M.v1 * 3.6).toFixed(1)} km/h lalu jalan kaki dari situ (lompat ${mwJ.toFixed(1)} m)`] =
     rmJ < 3 && mwJ < 3;
   const Gw1 = Gw0.last; out[`tur: jalan kaki sejajar sumbu (arah akhir ${(Gw1.hd * deg0).toFixed(0)} derajat)`] = Math.abs(Gw1.hd * deg0) < 15;
-  const ord = st.TOUR.keys.slice(0, 5).map((q) => q.title).join(' > ');
-  out[`tur: urutan pembuka ${ord}`] = ord === 'Menuju Copper Corn Station > Ukuran stasiun > Dekat sumbu: gravitasi mengecil > Gravitasi dari putaran > Menara ikon New York';
+  const ord = st.TOUR.keys.slice(0, 6).map((q) => q.title).join(' > ');
+  out[`tur: urutan pembuka ${ord}`] = ord === 'Kulit luar Copper > Menuju Copper Corn Station > Ukuran stasiun > Dekat sumbu: gravitasi mengecil > Gravitasi dari putaran > Menara ikon New York';
   out[`tur: pembuka masuk menembus kaca end cap A (kamera z ${(get('Menuju Copper Corn Station').camZ + 4000).toFixed(0)} m dari kaca)`] = get('Menuju Copper Corn Station').camZ > -4000 && get('Menuju Copper Corn Station').camZ < -3900;
   out[`tur: melihat sekitar saat diam pelan ke satu arah: menoleh maks ${glance.y.toFixed(1)} derajat, naik-turun maks ${glance.p.toFixed(1)} derajat (<= 10), kembali ${glance.rev || 0} kali`] = glance.n > 0 && glance.y > 0.5 && glance.y <= 10 && glance.p <= 10 && !glance.rev;
   for (const n of ['Air mancur Coriolis', 'Hutan lebat', 'Genangan di jalan kota']) {

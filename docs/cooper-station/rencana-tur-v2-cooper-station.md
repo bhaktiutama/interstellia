@@ -1,5 +1,15 @@
 # Rencana: Tur sinematik Y Copper Corn Station versi 2 (fly demo)
 
+## Revisi v2.13: titik baru kulit luar dari dekat sebelum pembuka
+
+| Bagian | Isi |
+| --- | --- |
+| Titik 1 baru: Kulit luar Copper (9 s) | Kamera luar 260 m di atas sisi atas lambung (sisi yang kena Matahari), dekat end cap A (za 850), menghadap lambung ke arah end cap B; lambung X1 berputar 107 m/s lewat di bawah kamera; kamera bergeser pelan 70 m ke samping. Teks: lambung 80 m, 107 m/s, 63,4 s |
+| Titik 2 (pembuka) diubah, 16 s | Bukan lagi dari 40 km: satu lintasan Bezier kubik dari posisi akhir titik 1, mundur melewati end cap A (1,6 km di luar), turun ke 400 m di bawah sumbu, lalu masuk perlahan lewat kaca end cap A sampai 20 m di dalam (`tourExtCam()` = kamera luar dari posisi mata dan titik bidik, `TOUR_SKIN`). Titik bidik bergeser dari kulit ke pusat end cap lalu ke arah masuk. Sisanya sama (tanpa layar gelap ke Ukuran stasiun, kabut dan adaptasi mata naik di 7 s terakhir) |
+
+Tur 21 titik, 325 s. Tangkapan sandbox: lambung dekat jelas, lintasan tidak menembus lambung (jarak kamera ke sumbu >= 1.191 m selama masih di sisi silinder).
+
+
 ## Revisi v2.12: kartu teks ringkas, tawaran tur pertama kali
 
 | Masukan | Perubahan |

@@ -877,6 +877,8 @@ Object.assign(I18N.en, {
   "Di sini \"atas\" selalu ke arah sumbu, jadi rumah dan pohon berdiri tegak ke pusat silinder.": "Here \"up\" always points to the axis, so houses and trees stand toward the centre of the cylinder.",
   "Lihat ke end cap B: Saturnus menutup Matahari sekitar {eH} jam tiap orbit {oH} jam. Sinar Matahari di dalam stasiun padam.": "Look at end cap B: Saturn hides the Sun for about {eH} hours of every {oH} hour orbit. The sunlight inside the station goes out.",
   "Menuju Copper Corn Station": "Approaching Copper Corn Station",
+  "Kulit luar Copper": "Copper's outer hull",
+  "Lambung setebal 80 m berputar 107 m/s, sekali tiap 63,4 detik. Di dalamnya ada gravitasi 1 g.": "The 80 m thick hull spins at 107 m/s, once every 63.4 seconds. Inside, that makes 1 g.",
   "Silinder 8 km mengorbit Saturnus dan berputar sekali tiap 63,4 detik. Kita masuk perlahan lewat kaca end cap A.": "An 8 km cylinder orbiting Saturn, spinning once every 63.4 seconds. We slowly enter through the glass of end cap A.",
   "Putaran memberi 1 g: lantai terus mendorong kita ke arah sumbu. Tanah melengkung naik di kiri dan kanan.": "Spin gives 1 g: the floor keeps pushing us toward the axis. The ground curves up to the left and right.",
   "Radius 1 km, panjang 8 km. Tanah di seberang ada 2 km di atas kepala.": "Radius 1 km, length 8 km. The ground on the far side is 2 km overhead.",
@@ -16659,7 +16661,9 @@ function tourKeys() {
   if (wF) w.heading = Math.atan2(wrapS(H0.s - w.s), H0.za - w.za) / DEG;
   const rows = [...new Set(fieldList.filter(band).map((f) => f.z0 - 3))];   // jalan di antara baris petak
   return [
-    { ext: 'in', hold: 18, hr: 12, wx: 'cerah', title: 'Menuju Copper Corn Station',   // 40 km mengitari stasiun, lalu masuk perlahan lewat kaca end cap A
+    { ext: 'skin', hold: 9, hr: 12, wx: 'cerah', title: 'Kulit luar Copper',   // tur v2.13: lambung luar X1 dari 260 m, terlihat berputar
+      cap: 'Lambung setebal 80 m berputar 107 m/s, sekali tiap 63,4 detik. Di dalamnya ada gravitasi 1 g.' },
+    { ext: 'in', hold: 16, hr: 12, wx: 'cerah', title: 'Menuju Copper Corn Station',   // 40 km mengitari stasiun, lalu masuk perlahan lewat kaca end cap A
       cap: 'Silinder 8 km mengorbit Saturnus dan berputar sekali tiap 63,4 detik. Kita masuk perlahan lewat kaca end cap A.' },
     { at: () => {                                                      // tanpa layar gelap: mulai tepat di posisi kamera luar (0, -400) yang sudah menembus kaca end cap A
         const s0 = modS((-Math.PI / 2 - OMEGA * clock.sim) * R);        // titik inersia (0, -400) dalam kerangka stasiun; atas kamera = +y = atas lokal di sini
@@ -16846,17 +16850,22 @@ function tourExtPose(yaw, pitch, dist, tz, ty = 0) {                  // kamera 
   Object.assign(ext, { yaw, pitch, dist, distT: dist, auto: false, vyaw: 0, vpitch: 0 });
   ext.target.set(0, ty, tz); ext.targetT.copy(ext.target);
 }
+const TOUR_SKIN = { P0: [0, R_OUT + 260, -HALF_L + 850], L0: [0, R_OUT, -HALF_L + 1150] };   // v2.13: kamera dan titik bidik kulit luar (kerangka inersia)
+function tourExtCam(x, y, z, L) {                                     // v2.13: kamera luar dari posisi mata dan titik bidik (titik bidik di x = 0)
+  const dx = x, dy = y - L[1], dz = z - L[2], d = Math.hypot(dx, dy, dz);
+  tourExtPose(Math.atan2(dx, dz), Math.asin(dy / d), d, L[2], L[1]);
+}
 function stepTourExt(K) {
   const T = K.hold;
-  if (K.ext === 'in') {                                               // pembuka: dari 40 km mengitari stasiun, lalu masuk perlahan lewat kaca end cap A, 400 m dari sumbu
-    const T2 = 7, T1 = T - T2, tz = -HALF_L + 400, ty = -400;         // kamera di (0, -400, tz - dist): lantai di bawah, menghadap +z
-    if (TOUR.t < T1) {
-      const u = sstep(0, 1, TOUR.t / T1);
-      tourExtPose(Math.PI - 2.4 * (1 - u), 0.5 * (1 - u), Math.exp(Math.log(40000) + (Math.log(1600) - Math.log(40000)) * u), tz * u, ty * u);
-    } else {                                                          // 1.600 m -> 380 m dari titik bidik: menembus kaca (dist 400) lalu 20 m di dalam
-      const u = sstep(0, 1, (TOUR.t - T1) / (T2 - 0.3));
-      tourExtPose(Math.PI, 0, 1600 + (380 - 1600) * u, tz, ty);
-    }
+  if (K.ext === 'skin') {                                             // v2.13: kulit luar dari dekat (sisi atas, kena Matahari), lambung berputar lewat di bawah kamera
+    const u = sstep(0, 1, TOUR.t / T);
+    tourExtCam(-70 * (1 - u), TOUR_SKIN.P0[1], TOUR_SKIN.P0[2], TOUR_SKIN.L0);
+  } else if (K.ext === 'in') {                                        // v2.13: dari kulit luar mundur melewati end cap A, turun ke 400 m di bawah sumbu, masuk perlahan lewat kaca
+    const u = sstep(0, 1, TOUR.t / (T - 0.3)), B = TOUR_SKIN, v = 1 - u;
+    const bz = (a, b, c, d) => a * v * v * v + 3 * b * v * v * u + 3 * c * v * u * u + d * u * u * u;   // Bezier kubik kamera
+    const qz = (a, b, c) => a * v * v + 2 * b * v * u + c * u * u;                                     // Bezier kuadrat titik bidik
+    tourExtCam(0, bz(B.P0[1], B.P0[1], -400, -400), bz(B.P0[2], -HALF_L - 1600, -HALF_L - 1600, -HALF_L + 20),
+      [0, qz(B.L0[1], 0, -400), qz(B.L0[2], -HALF_L, -HALF_L + 400)]);
   } else if (K.ext === 'out') {                                       // penutup: menjauh dari stasiun
     if (K.z0 === undefined) K.z0 = TOUR.from.za - HALF_L;
     const u = sstep(0, 1, TOUR.t / T);
