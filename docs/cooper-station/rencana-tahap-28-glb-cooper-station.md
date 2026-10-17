@@ -6,7 +6,7 @@ Per 17 Oktober 2026 · disusun atas permintaan Bhakti (hasil generator prosedura
 
 - Kedua paket cocok dipakai: 21 berkas GLB (11 pria, 10 wanita; satu karakter wanita ganda), tiap karakter 5.200-11.100 segitiga, tanpa tekstur (warna bahan datar + warna titik), kerangka 62 tulang yang identik untuk semua pria dan identik untuk semua wanita, 24 animasi per berkas (Walk, Idle, Wave, Interact, Run, dll.; tidak ada animasi duduk). Karena kerangka dibagi, satu tekstur animasi per jenis kelamin cukup untuk semua karakter.
 - Pendekatan: karakter diolah offline menjadi data ringkas (cara yang sama dengan motor `tools/siapkan_motor.py`), diturunkan ke 3 tingkat detail (sekitar 3.000 / 700 / 160 segitiga), animasi dibakar ke tekstur, dan dikulit di vertex shader pejalan kaki yang sudah ada. Tanpa GLTFLoader (aturan proyek), simulasi dan atribut instance pejalan kaki tidak berubah.
-- Syarat sebelum aset masuk repo: lisensi belum terverifikasi. Berkas zip dan metadata GLB tidak memuat lisensi atau nama pembuat (hanya "FBX2glTF"). Yang saya ketahui dari ingatan, bukan dari berkas: paket ini umumnya dibagikan sebagai CC0, tetapi harus dikonfirmasi Bhakti dari halaman unduhannya (pertanyaan 1).
+- Lisensi terkonfirmasi (17 Oktober 2026, dari halaman unduhan via Poly Pizza): CC-BY atau CC0, boleh dipakai di proyek pribadi maupun komersial dengan atribusi wajib: "Ultimate Modular Women Pack by Quaternius [CC-BY] via Poly Pizza" dan "Ultimate Modular Men Pack by Quaternius via Poly Pizza". Kredit sudah ditambahkan di `experiences/cooper-station/assets/KREDIT.md`; tab Tentang menyusul di 28G6.
 
 ## Isi paket (diukur dari berkas)
 
@@ -85,7 +85,7 @@ Tambahan 0,03-0,11 juta segitiga, di bawah 3% dari adegan. Biaya vertex lebih pe
 
 | Tahap | Isi | Effort | Model | Thinking | File dan fungsi yang disentuh |
 | --- | --- | --- | --- | --- | --- |
-| 28G0 | Lisensi dan seleksi: konfirmasi lisensi dan sumber, pilih karakter, putuskan lokasi berkas sumber (di luar repo), `assets/KREDIT.md` | Low | Haiku 4.5 | low | `assets/KREDIT.md`, dokumen |
+| 28G0 | (selesai 17 Oktober 2026: lisensi dan KREDIT.md; seleksi karakter pakai usulan sampai Bhakti mengubahnya) Lisensi dan seleksi: konfirmasi lisensi dan sumber, pilih karakter, putuskan lokasi berkas sumber (di luar repo), `assets/KREDIT.md` | Low | Haiku 4.5 | low | `assets/KREDIT.md`, dokumen |
 | 28G1 | Alat olah `tools/siapkan_orang.mjs` (gabung, bakar satuan, kelas warna, LOD dengan `meshoptimizer`, kuantisasi, tekstur animasi, klip duduk dan payung), `orang.data.js`, uji Node `tools/uji_orang_data.cjs`, halaman pratinjau yang memutar data hasil olahan (karakter, LOD, klip, palet) untuk persetujuan; ukur ukuran berkas dan panjang langkah | High | Opus 5.5 | high | `tools/siapkan_orang.mjs` baru, `experiences/cooper-station/assets/orang.data.js` baru, `docs/cooper-station/orang/pratinjau-orang.html` baru |
 | 28G2 | Pasang di game: `ORANG.load()`, geometri dan tekstur animasi, vertex shader kulit, ember (model, LOD), ganti model kotak, `?orang=lama` penuh, `warmFrame()` | High | Opus 5.5 | high (shader rawan NaN di M1) | blok model orang `index.html` (sekitar 14389-14471), `updatePeds()`, `applyPedsPreset()`, `PEDS` |
 | 28G3 | Perilaku: klip per keadaan (jalan, berdiri, duduk, payung, Wave untuk pengunjung, Interact untuk pasar), sinkron langkah, payung dari tulang tangan, baseball, anak | Medium | Sonnet 5.5 | high | `VS`, `PEDS.umbMesh`, `BASEBALL.people`, `VIS` |
