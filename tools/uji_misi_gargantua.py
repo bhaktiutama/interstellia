@@ -907,9 +907,13 @@ async def kelompokMK(pg):
     await pg.evaluate("() => { const G = window.__gargantua; G.MILLAR.rad = 0.06; G.setPreset('film'); }")
 
     # --- N, bantuan bertab ---
+    pgd = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()   # MK9: bawaan Klasik (Kelam lewat N)
+    await pgd.goto(PAGE.as_uri() + '?lang=id', timeout=120000); await pgd.wait_for_function('window.__gargantua !== undefined', timeout=120000)
+    dm = await pgd.evaluate("() => { localStorage.setItem('gargantua.mood', 'kelam'); return window.__gargantua.MOOD.on; }"); await pgd.close()
+    cek('MK9 bawaan Klasik tanpa debu (Kelam hanya lewat N)', dm is False, str(dm))
     await pg.evaluate("() => window.__gargantua.setMood(true)")
-    await pg.keyboard.press('KeyN'); n1 = await pg.evaluate("() => [window.__gargantua.MOOD.on, localStorage.getItem('gargantua.mood')]")
-    await pg.keyboard.press('KeyN'); n2 = await pg.evaluate("() => [window.__gargantua.MOOD.on, localStorage.getItem('gargantua.mood')]")
+    await pg.keyboard.press('KeyN'); n1 = await pg.evaluate("() => [window.__gargantua.MOOD.on, localStorage.getItem('gargantua.mood2')]")
+    await pg.keyboard.press('KeyN'); n2 = await pg.evaluate("() => [window.__gargantua.MOOD.on, localStorage.getItem('gargantua.mood2')]")
     cek('MK N: Kelam -> Klasik -> Kelam, tersimpan di localStorage', n1 == [False, 'klasik'] and n2 == [True, 'kelam'], f'{n1} {n2}')
     h = await pg.evaluate('''() => { const G = window.__gargantua; G.toggleHelp(true); const tabs = [...document.querySelectorAll('#helpTabs button')];
       tabs[1].click(); const vis = [...document.querySelectorAll('#help [data-pane]')].filter((t) => getComputedStyle(t).display !== 'none').map((t) => t.dataset.pane);

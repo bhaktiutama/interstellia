@@ -171,11 +171,11 @@ const CONFIG = {
   quality: 'medium',
   presets: {
     //        max RK steps | step factor (dt = k*r) | fbm octaves | max render scale | G3: volume samples, disk particles
-    // MK4b: dust = jumlah lembar debu suasana Kelam, berpasangan atas-bawah (2 = dekat, 4 = + tengah, 6 = + jauh)
-    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, parts: 400, dust: 2 },
-    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, parts: 900, dust: 4 },
-    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, parts: 1600, dust: 4 },
-    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500, dust: 4 },   // MK4h: 6 -> 4 (lembar jauh berlapis dibuang)
+    // MK9: dust = sampel volume debu suasana Kelam per langkah sinar penuh di dalam lempeng
+    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, parts: 400, dust: 1 },
+    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, parts: 900, dust: 2 },
+    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, parts: 1600, dust: 2 },
+    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500, dust: 3 },
   },
   adaptive: true,          // adaptive resolution
   renderScale: 0.8,        // current internal resolution factor
@@ -244,9 +244,9 @@ uniform vec3 uObsV;
 uniform float uPlOn;
 uniform vec4  uPl;
 uniform vec3  uPlR, uPlN;
-// MK3-MK5 suasana Kelam (foto contoh 2): uMood 0 = perilaku lama persis; uDust = jumlah lembar debu (0-4, per kualitas)
+// MK3-MK9 suasana Kelam (foto contoh 2): uMood 0 = perilaku lama persis; uDust = sampel debu per langkah (per kualitas)
 uniform float uMood;
-uniform int   uDust;                 // MK4b: 0-6 lembar (sepasang per tingkat: dekat, tengah, jauh)
+uniform int   uDust;                 // MK9: sampel volume debu per langkah sinar penuh di dalam lempeng (0 = tanpa debu)
 float gObsK = 1.0;                   // G2: frekuensi teramati / frekuensi di tak hingga untuk sinar piksel ini
 
 // Geometric units: G = c = 1, Schwarzschild radius rs = 1  =>  M = 0.5
@@ -344,64 +344,54 @@ vec3 moodRamp(float t) {
   return c;
 }
 
-// MK4: lembar debu gelap. Tiap lembar = kerucut tipis y = k_i |xz|: dekat lubang hitam hampir di bidang piringan, makin jauh
-// makin tinggi, jadi piringan tampak tebal dan berasap di luar. MK4b (revisi tangkapan layar Bhakti: debu tampak melayang
-// terpisah dari piringan): lembar dirapatkan k +-0,02 / +-0,05 / +-0,10 (dekat dulu); lembar dekat bercahaya seperti piringan
-// di r yang sama (Tn), lembar jauh gelap berasap, sehingga terang -> gelap menyambung tanpa celah. Kerapatan fbm skala besar ikut rotasi Kepler
-// setempat dengan dua fase saling memudar (seperti diskDensity, agar tidak tergulung jadi spiral tipis). Jendela radial halus
-// 4-6 rs sampai 17-25 rs: tidak ada batas tajam (pelajaran G3a: tepi lempeng tebal tampak sebagai lingkaran).
-float dustK(int i) { return i == 0 ? 0.02 : i == 1 ? -0.02 : i == 2 ? 0.05 : i == 3 ? -0.05 : i == 4 ? 0.10 : -0.10; }
-float dustG(vec3 p, float k) { return p.y - k * length(p.xz); }
-// MK4d (revisi tangkapan layar Bhakti: pola blok bergaris menyebar dan FPS sangat rendah): kerapatan debu tidak lagi dihitung
-// di tiap titik sinar. DUSTMAP_FS memanggangnya sekali per frame ke tekstur kutub uDustTex (u = phi, v = r 3-26 rs; r g b =
-// tingkat dekat / tengah / jauh, sudah termasuk rotasi Kepler dua fase dan jendela radial); di sini hanya 2 baca tekstur.
-// Lembar bawah tiap tingkat membaca tekstur yang sama di phi + 2,3 rad (pola berbeda tanpa kanal tambahan).
+// MK9 (revisi Bhakti: debu jadi volume bergejolak; aksen kuning tepi piringan tampak di tempat debu menipis, tertutup di tempat
+// debu menebal, berubah dengan waktu). Lembar kerucut MK4 diganti lempeng volume mengembang |y| < DH r di sekitar piringan. Tiap
+// langkah sinar yang menembus lempeng diambil sampelnya (uDust sampel per langkah penuh, digeser derau per piksel), serapan
+// Beer-Lambert, digabung depan ke belakang bersama piringan (debu di atas dan di bawah bidang piringan: membaur dengan piringan).
+// Kerapatan: tekstur kutub uDustTex (r g = dua pola billow ikut rotasi Kepler dua fase, b = tutupan skala besar yang berubah
+// pelan dengan waktu) + derau 3D uNoise ikut rotasi Kepler dua fase (gumpalan, permukaan atas lempeng bergejolak).
 uniform sampler2D uDustTex;
-float dustRaw(vec2 uv, int lv) { vec4 t = textureLod(uDustTex, uv, 0.0); return lv == 0 ? t.r : lv == 1 ? t.g : t.b; }
-// kerapatan dari derau mentah: makin jauh dari piringan makin tipis; lembar dekat lebih banyak tertutup, lembar jauh gumpalan terpisah
-float dustTex(vec2 uv, int lv, float r) {
-  float n = dustRaw(uv, lv);
-  // MK4h (revisi Bhakti: debu berlapis jauh di luar piringan): debu hanya di sekitar piringan, pudar di rOut - 1 .. rOut + 3
-  float w = (lv == 0 ? smoothstep(uRin + 0.3, uRin + 2.0, r) : smoothstep(4.0, 6.0, r)) * (1.0 - smoothstep(uRout - 1.0, uRout + 3.0, r));
-  // MK4g: ambang lebih lebar (gradasi halus) dan kerapatan lebih tipis (aksen kuning piringan tetap tampak)
-  return (lv == 0 ? smoothstep(0.42, 0.80, n) * 0.40 : lv == 1 ? smoothstep(0.48, 0.80, n) * 0.55 : smoothstep(0.54, 0.82, n) * 0.50) * w;
-}
-// MK4g: detail halus prosedural di titik silang (2 oktaf, ikut rotasi Kepler dua fase) agar texel tekstur kutub tidak tampak
-// sebagai blok saat dilihat dekat
-float dustFine(float r, float phi) {
+precision mediump sampler3D;
+uniform sampler3D uNoise;
+const float DH = 0.12;                                               // batas lempeng / r (skala tinggi 0,045 r)
+const float DSIG = 2.6;                                              // serapan per rs pada kerapatan 1
+float dustDen(vec3 p, out float vz, out float lit) {
+  float r = length(p.xz);
+  vz = 0.0; lit = 1.0;
+  if (r < uRin || r > uRout + 3.0) return 0.0;
+  // jendela radial halus (tidak ada batas tajam: pelajaran G3a), debu hanya sampai rOut + 3 (MK4h)
+  float w = smoothstep(uRin, uRin + 1.6, r) * (1.0 - smoothstep(uRout - 1.0, uRout + 3.0, r));
+  float h = 0.045 * r, phi = atan(p.z, p.x);
+  float tv = (r - 3.0) / 23.0;
+  vec4 t = textureLod(uDustTex, vec2(phi / 6.2831853 + 0.5, tv), 0.0);
   float om = sqrt(M / (r * r * r)), P = uFlowPeriod * 2.0;
   float c1 = fract(uTime / P), c2 = fract(uTime / P + 0.5), w1 = 1.0 - abs(2.0 * c1 - 1.0);
   float a1 = phi - om * c1 * P, a2 = phi - om * c2 * P;
-  // MK4h: satu oktaf per fase (FPS)
-  float f1 = vnoise(vec3(r * 3.1, cos(a1) * r * 2.2, sin(a1) * r * 2.2)), f2 = vnoise(vec3(r * 3.1, cos(a2) * r * 2.2, sin(a2) * r * 2.2) + 19.0);
-  return mix(f2, f1, w1) - 0.5;
+  float d3 = mix(texture(uNoise, vec3(cos(a2) * r, p.y * 2.6, sin(a2) * r) * 0.19 + 0.37).r,
+                 texture(uNoise, vec3(cos(a1) * r, p.y * 2.6, sin(a1) * r) * 0.19).r, w1);
+  float yh = p.y / h;
+  float n = mix(t.r, t.g, smoothstep(-1.6, 1.6, yh));               // pola berbeda di atas dan di bawah bidang
+  float F = 0.55 * n + 0.45 * d3;
+  float yy = yh * (1.0 + 1.8 * (0.5 - d3));                          // permukaan bergejolak: bagian padat menjulang lebih tinggi
+  float prof = exp(-0.5 * yy * yy);
+  float cov = smoothstep(0.36, 0.64, t.b);                           // tutupan: 0 debu tipis (piringan tampak), 1 tebal
+  float dens = smoothstep(0.52 - 0.24 * cov, 0.74 - 0.24 * cov, F * (0.45 + 0.65 * prof)) * prof * (0.08 + 1.1 * cov) * w;
+  if (uFall > 0.5) dens *= smoothstep(0.5, 2.0, distance(p, uCamPos));   // MK6: saat misi debu memudar dalam 2 rs dari wahana
+  vz = exp(-yy * yy);
+  // bayangan sendiri murah: tutupan dan pola 0,4 rs ke arah lubang hitam (sumber cahaya)
+  vec4 ts = textureLod(uDustTex, vec2(phi / 6.2831853 + 0.5, tv - 0.4 / 23.0), 0.0);
+  lit = exp(-3.0 * smoothstep(0.36, 0.64, ts.b) * ts.r * prof);
+  return dens;
 }
-vec4 shadeDust(vec3 hp, int i, vec3 vel) {                                    // rgb = cahaya hamburan, a = serapan
-  float r = length(hp.xz);
-  if (r < 3.0 || r > 26.0) return vec4(0.0);
-  int lv = i / 2;                                                    // 0 dekat piringan, 1 tengah, 2 jauh
-  float phi = atan(hp.z, hp.x) + (i - lv * 2 == 1 ? 2.3 : 0.0);
-  vec2 uv = vec2(phi / 6.2831853 + 0.5, (r - 3.0) / 23.0);
-  float dens = dustTex(uv, lv, r);
-  if (dens <= 0.002) return vec4(0.0);
-  dens *= 1.0 + 1.1 * dustFine(r, phi);
-  // MK4h: lembar tipis dilihat menyamping tampak sebagai garis berlapis: dipudarkan saat sinar hampir sejajar lembar
-  dens *= smoothstep(0.03, 0.25, abs(vel.y) / max(length(vel), 1e-6));
-  if (uFall > 0.5) dens *= smoothstep(0.5, 2.0, distance(hp, uCamPos));   // MK6: saat misi debu memudar dalam 2 rs dari wahana
-  if (dens <= 0.002) return vec4(0.0);
-  // bayangan sendiri: kerapatan 0,35 rs ke arah lubang hitam (sumber cahaya); sisi gumpalan yang menghadap piringan dalam
-  // terang, sisi baliknya gelap -> tampak bervolume
-  float lit = exp(-4.5 * dustTex(vec2(uv.x, (r - 3.35) / 23.0), lv, r - 0.35));
-  // cahaya piringan dalam yang dihamburkan debu: turun dengan r, tepi gumpalan (kerapatan rendah) lebih terang
+vec3 dustEm(float r, float dens, float vz, float lit) {               // cahaya hamburan + pendar piringan per satuan serapan
   float x = max(r / uRin, 1.0);
   float E = uDiskBright * 0.55 / (x * sqrt(x));
-  vec3 em = vec3(0.62, 0.30, 0.15) * E * (1.35 - dens) * (0.25 + 1.1 * lit);
-  // MK4b: pendar piringan di r yang sama (suhu Tn seperti shadeDisk), kuat di lembar dekat, lemah di lembar jauh
+  vec3 em = vec3(0.50, 0.24, 0.12) * E * (1.3 - 0.6 * min(dens, 1.0)) * (0.08 + 1.1 * lit * lit);
+  // dekat bidang debu berpendar seperti piringan di r yang sama (suhu Tn seperti shadeDisk): debu menyatu dengan piringan kuning
   float Tn = pow(x, -0.75) * pow(max(1.0 - 0.85 * inversesqrt(x), 0.0), 0.25) / 0.62233;
   vec3 lc = uFilm > 0.5 ? moodRamp(Tn) : blackbody(max(7500.0 * Tn, 800.0));
-  float gk = lv == 0 ? 0.42 : lv == 1 ? 0.16 : 0.04;
-  em += lc * uDiskBright * (0.05 + 2.2 * Tn * Tn * Tn) * gk * (1.0 - smoothstep(uRout - 2.0, uRout + 4.0, r) * 0.8) * (0.35 + 0.9 * lit);
-  return vec4(em, clamp(dens * 0.9, 0.0, 0.92));
+  em += lc * uDiskBright * (0.05 + 2.2 * Tn * Tn * Tn) * 0.32 * vz * vz * (1.0 - 0.8 * smoothstep(uRout - 2.0, uRout + 3.0, r)) * (0.3 + 0.9 * lit);
+  return em;
 }
 
 vec4 shadeDisk(vec3 hit, vec3 vel, float r) {
@@ -587,6 +577,7 @@ void main() {
   vec3 L = cross(pos, vel);
   float h2 = dot(L, L);              // conserved (specific angular momentum)^2
   float om0 = length(cross(dFdx(vel), dFdy(vel)));   // V4 G2: sudut ruang per piksel sebelum lensa (setelah aberasi bila jatuh)
+  float jit0 = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));   // MK9: geser sampel debu per piksel
 
   vec3 col = vec3(0.0);
   float trans = 1.0;
@@ -616,32 +607,33 @@ void main() {
       if (qa > 1e-12 && qd >= 0.0) { float tt = (-qb - sqrt(qd)) / qa; if (tt >= 0.0 && tt <= 1.0) tP = tt; }
     }
 
-    // MK4: lembar debu dan piringan dalam langkah ini, digabung depan ke belakang MENURUT JARAK di sepanjang langkah (MK4e: dulu
-    // menurut nomor lembar; bila dua lembar jatuh di langkah yang sama urutannya terbalik dan batasnya tampak sebagai goresan lurus).
-    // MK4f (FPS turun ke 30 setelah MK4e): uji silang 6 lembar dengan vec3 (2 length per langkah), pengurutan hanya bila langkah ini
-    // memang menembus lembar debu; langkah tanpa debu = jalur lama (sama dengan Klasik). Tanpa array berindeks dinamis.
+    // MK9: bagian langkah di dalam lempeng debu |y| < DH L (L = |xz| linear antar ujung): a = y - DH L < 0 dan b = y + DH L > 0.
+    // Sampel debu dan piringan digabung depan ke belakang menurut jarak di sepanjang langkah; langkah tanpa debu = jalur lama.
     float tD = prev.y * pos.y < 0.0 ? prev.y / (prev.y - pos.y) : 2.0;
     bool diskDone = !(tD < tP), opaque = false;
-    vec3 tu = vec3(2.0), tl = vec3(2.0);                              // parameter silang lembar atas / bawah per tingkat (2 = tidak)
+    int ns = 0; float t0 = 0.0, t1 = 0.0;
     if (uMood > 0.5 && uDust > 0) {
-      const vec3 KD = vec3(0.02, 0.05, 0.10);
       float L0 = length(prev.xz), L1 = length(pos.xz);
-      vec3 on = vec3(1.0, uDust > 2 ? 1.0 : 0.0, uDust > 4 ? 1.0 : 0.0);
-      vec3 a0 = prev.y - KD * L0, a1 = pos.y - KD * L1, b0 = prev.y + KD * L0, b1 = pos.y + KD * L1;
-      vec3 da = a0 - a1, db = b0 - b1;                                 // penyebut aman (tidak dipakai bila tidak ada silang)
-      da = mix(da, vec3(1.0), step(abs(da), vec3(1e-20))); db = mix(db, vec3(1.0), step(abs(db), vec3(1e-20)));
-      vec3 ca = on * (1.0 - step(0.0, a0 * a1)), cb = on * (1.0 - step(0.0, b0 * b1));   // 1 = berganti tanda di langkah ini
-      tu = mix(vec3(2.0), a0 / da, ca); tl = mix(vec3(2.0), b0 / db, cb);
-      tu = mix(tu, vec3(2.0), step(vec3(tP), tu)); tl = mix(tl, vec3(2.0), step(vec3(tP), tl));   // di belakang planet: lewati
+      if (min(L0, L1) < uRout + 3.0 && max(L0, L1) > uRin) {
+        float a0 = prev.y - DH * L0, a1 = pos.y - DH * L1, b0 = prev.y + DH * L0, b1 = pos.y + DH * L1;
+        float lo = 0.0, hi = min(tP, 1.0);
+        if (a0 >= 0.0 && a1 >= 0.0) hi = -1.0;
+        else if (a0 >= 0.0) lo = max(lo, a0 / (a0 - a1));
+        else if (a1 >= 0.0) hi = min(hi, a0 / (a0 - a1));
+        if (b0 <= 0.0 && b1 <= 0.0) hi = -1.0;
+        else if (b0 <= 0.0) lo = max(lo, b0 / (b0 - b1));
+        else if (b1 <= 0.0) hi = min(hi, b0 / (b0 - b1));
+        if (hi > lo) { t0 = lo; t1 = hi; ns = max(1, int(ceil(float(uDust) * (hi - lo) - 0.01))); }
+      }
     }
-    // Perf muat: shadeDisk dan shadeDust cukup satu kali dimasukkan ke program. Dulu cabang piringan tipis (else) menyalin shadeDisk
-    // sekali lagi, dan batas konstan 7 membuat kompilator HLSL (ANGLE / D3D) membuka loop jadi 7 salinan shadeDisk + shadeDust
-    // (layar kosong sekitar 30 detik saat muat). Batas memakai uniform (uMaxSteps) agar tetap loop; paling banyak 7 kejadian
-    // (1 piringan + 6 lembar) karena tiap putaran menghabiskan satu kejadian atau keluar lewat best > 1.5.
-    if (min(min(min(tu.x, tu.y), tu.z), min(min(tl.x, tl.y), tl.z)) < 1.5 || !diskDone) {
-      for (int n = 0; n < uMaxSteps; n++) {
-        float mu = min(tu.x, min(tu.y, tu.z)), ml = min(tl.x, min(tl.y, tl.z)), best = min(mu, ml);
-        if (!diskDone && tD <= best) {
+    // Perf muat: shadeDisk cukup satu kali dimasukkan ke program (dulu salinan ganda + batas konstan membuat ANGLE / D3D membuka
+    // loop, layar kosong sekitar 30 detik saat muat). Putaran terakhir (k = ns) hanya untuk piringan di belakang semua sampel.
+    if (ns > 0 || !diskDone) {
+      float seg = length(pos - prev) * (t1 - t0) / float(max(ns, 1));
+      float jit = fract(jit0 + float(i) * 0.6180340);
+      for (int k = 0; k <= ns; k++) {
+        float ts = k < ns ? t0 + (float(k) + jit) / float(ns) * (t1 - t0) : 2.0;
+        if (!diskDone && tD <= ts) {
           diskDone = true;
           vec3 hit = mix(prev, pos, tD);
           float rh = length(hit.xz);
@@ -652,13 +644,15 @@ void main() {
             if (trans < 0.01) { opaque = true; break; }
           }
         }
-        if (best > 1.5) break;
-        int bi;
-        if (mu <= ml) { int lv = tu.x == mu ? 0 : tu.y == mu ? 1 : 2; bi = lv * 2; if (lv == 0) tu.x = 2.0; else if (lv == 1) tu.y = 2.0; else tu.z = 2.0; }
-        else { int lv = tl.x == ml ? 0 : tl.y == ml ? 1 : 2; bi = lv * 2 + 1; if (lv == 0) tl.x = 2.0; else if (lv == 1) tl.y = 2.0; else tl.z = 2.0; }
-        vec4 dc = shadeDust(mix(prev, pos, best), bi, vel);
-        col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
-        if (trans < 0.01) { opaque = true; break; }
+        if (k >= ns) break;
+        vec3 sp = mix(prev, pos, ts);
+        float vz, lt;
+        float dn = dustDen(sp, vz, lt);
+        if (dn > 0.002) {
+          float a = 1.0 - exp(-DSIG * dn * seg);
+          col += trans * dustEm(length(sp.xz), dn, vz, lt) * a; trans *= 1.0 - a;
+          if (trans < 0.01) { opaque = true; break; }
+        }
       }
     }
     if (opaque) { state = 3; break; }
@@ -985,7 +979,7 @@ void main() {
 }`;
 // G3b: awan debu (layar penuh, dicampur di atas ray tracing sebelum wahana): derau dalam koordinat terowongan di sekitar arah
 // datang partikel (uSrc, ruang pandang), jadi tampak memancar dan melesat dari titik hilang. Abu-kebiruan, menyerap cahaya piringan.
-// MK4d: panggang kerapatan debu suasana Kelam ke tekstur kutub (dibaca shadeDust() di SCENE_FS). Awan bergejolak = derau billow
+// MK4d: panggang kerapatan debu suasana Kelam ke tekstur kutub (dibaca dustDen() di SCENE_FS; MK9: r g pola, b tutupan). Awan bergejolak = derau billow
 // (1 - |2n - 1|) di domain yang dibelokkan; tiap oktaf diputar matriks ortonormal ROT agar kisi derau tidak sejajar arah radial
 // dan cincin (penyebab pola blok bergaris yang menyebar). Rotasi Kepler setempat dua fase saling memudar (seperti diskDensity).
 const DUSTMAP_FS = COMMON + `
@@ -1021,13 +1015,18 @@ void main() {
   float phi = (uv.x - 0.5) * 6.2831853, r = 3.0 + uv.y * 23.0;
   float om = sqrt(0.5 / (r * r * r)), P = uFlowPeriod * 2.0;
   float c1 = fract(uTime / P), c2 = fract(uTime / P + 0.5), w1 = 1.0 - abs(2.0 * c1 - 1.0);
-  // MK4e: derau mentah per tingkat (bukan kerapatan berambang): ambang tajam diterapkan setelah baca tekstur di shadeDust(), jadi
+  // MK4e: derau mentah per tingkat (bukan kerapatan berambang): ambang tajam diterapkan setelah baca tekstur di dustDen(), jadi
   // interpolasi bilinear terjadi pada medan halus dan tepi gumpalan tidak bertangga mengikuti kisi kutub (goresan / baji radial)
   vec3 d = vec3(0.0);
-  for (int lv = 0; lv < 3; lv++) {
+  for (int lv = 0; lv < 2; lv++) {
     float sd = float(lv) * 27.4;
     d[lv] = mix(pat(r, phi - om * c2 * P, sd + 41.0), pat(r, phi - om * c1 * P, sd), w1);
   }
+  // MK9: tutupan skala besar (b) yang berubah pelan: dua derau bergerak ke arah berbeda (tanpa rotasi Kepler: tidak tergulung),
+  // jadi debu menebal di satu tempat dan menipis di tempat lain, dan aksen kuning piringan muncul dan hilang
+  float ph = phi - 0.012 * uTime;
+  vec3 qa = vec3(cos(ph) * 1.5, sin(ph) * 1.5, r * 0.20), qb = vec3(cos(ph + 1.7) * 3.1, sin(ph + 1.7) * 3.1, r * 0.42);
+  d.b = 0.62 * vn(qa + vec3(0.0, 0.0, 0.018) * uTime + 5.0) + 0.38 * vn(qb - vec3(0.021, 0.0, 0.026) * uTime + 9.0);
   o = vec4(d, 1.0);
 }`;
 
@@ -1579,12 +1578,13 @@ function main() {
     if (isFinite(o.rad2)) MILLAR.rad = Math.min(0.3, Math.max(0.02, o.rad2));   // rad2: radius bawaan diperkecil 0,2 -> 0,06 (nilai lama diabaikan)
   } catch (e) { /* abaikan */ }
   if (new URLSearchParams(location.search).get('millar') === '0') MILLAR.on = false;
-  // MK3-MK5: suasana Kelam (palet krem-karat, lembar debu, langit gelap, grade) atau Klasik (tampilan lama persis).
-  // localStorage gargantua.mood, ?mood=klasik; tombol N (cuaca / suasana, docs/app/tombol.md)
-  const MOOD = { on: true };
-  try { if (localStorage.getItem('gargantua.mood') === 'klasik') MOOD.on = false; } catch (e) { /* abaikan */ }
+  // MK3-MK9: suasana Kelam (palet krem-karat, volume debu, langit gelap, grade) atau Klasik (tampilan lama persis).
+  // MK9 (permintaan Bhakti): bawaan Klasik, Kelam lewat N. Kunci localStorage baru gargantua.mood2 (nilai lama 'kelam' di
+  // gargantua.mood diabaikan agar bawaan baru berlaku), ?mood=klasik|kelam; tombol N (cuaca / suasana, docs/app/tombol.md)
+  const MOOD = { on: false };
+  try { if (localStorage.getItem('gargantua.mood2') === 'kelam') MOOD.on = true; } catch (e) { /* abaikan */ }
   { const m = new URLSearchParams(location.search).get('mood'); if (m === 'klasik') MOOD.on = false; else if (m === 'kelam') MOOD.on = true; }
-  function setMood(on) { MOOD.on = on; try { localStorage.setItem('gargantua.mood', on ? 'kelam' : 'klasik'); } catch (e) { /* abaikan */ } }
+  function setMood(on) { MOOD.on = on; try { localStorage.setItem('gargantua.mood2', on ? 'kelam' : 'klasik'); } catch (e) { /* abaikan */ } }
   function cycleMood() { setMood(!MOOD.on); syncUI(); toast(txt(MOOD.on ? 'Mood: dark (dust clouds)' : 'Mood: classic')); }
   const moodK = () => (MOOD.on ? 1 : 0);                             // MK6: juga saat misi (debu memudar dekat wahana di shader)
   function millarSave() { try { localStorage.setItem('gargantua.millar', JSON.stringify({ on: MILLAR.on, orbit: MILLAR.orbit, rad2: MILLAR.rad })); } catch (e) { /* abaikan */ } }
@@ -4170,7 +4170,7 @@ function main() {
       const pl = MILLAR.on && !MIS.on;                                 // MK2: planet Millar (mati saat misi)
       gl.uniform1f(p.u('uPlOn'), pl ? 1 : 0);
       gl.uniform1f(p.u('uMood'), moodK()); gl.uniform1i(p.u('uDust'), q.dust || 0);
-      tex(p, 'uDustTex', DMAP.tex, 7); gl.activeTexture(gl.TEXTURE0);   // MK4d: selalu terikat (sampler tidak boleh menunjuk target render)
+      tex(p, 'uDustTex', DMAP.tex, 7); gl.activeTexture(gl.TEXTURE0); gl.uniform1i(p.u('uNoise'), 6);   // MK9: derau 3D (unit 6, sama dengan DUST_FS)   // MK4d: selalu terikat (sampler tidak boleh menunjuk target render)
       if (pl) {
         const Ms = millarState(state.simTime);
         gl.uniform4f(p.u('uPl'), Ms.pos[0], Ms.pos[1], Ms.pos[2], MILLAR.rad);
