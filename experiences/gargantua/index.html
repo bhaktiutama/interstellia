@@ -166,16 +166,18 @@
 /* =====================================================================
    CONFIG: every tunable parameter lives here
    ===================================================================== */
-const V4OFF = new URLSearchParams(location.search).get('v4') === '0';   // V4: ?v4=0 = tampilan sebelum V4 (banding)
+const V4OFF = new URLSearchParams(location.search).get('v4') === '0';
+const AAOFF = new URLSearchParams(location.search).get('aa') === '0';   // AA1: ?aa=0 = tepi bayangan tanpa sampel tambahan (banding)   // V4: ?v4=0 = tampilan sebelum V4 (banding)
 const CONFIG = {
   quality: 'medium',
   presets: {
     //        max RK steps | step factor (dt = k*r) | fbm octaves | max render scale | G3: volume samples, disk particles
     // MK9: dust = sampel volume debu suasana Kelam per langkah sinar penuh di dalam lempeng
-    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, parts: 400, dust: 1 },
-    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, parts: 900, dust: 2 },
-    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, parts: 1600, dust: 2 },
-    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500, dust: 3 },
+    // AA1: aa = sampel tambahan per piksel di tepi bayangan / cincin foton (0 = mati)
+    low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, parts: 400, dust: 1, aa: 0 },
+    medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, parts: 900, dust: 2, aa: 2 },
+    high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, parts: 1600, dust: 2, aa: 4 },
+    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500, dust: 3, aa: 4 },
   },
   adaptive: true,          // adaptive resolution
   renderScale: 0.8,        // current internal resolution factor
@@ -227,6 +229,7 @@ uniform float uTanHalf, uPixAngle;
 uniform float uVR; uniform vec2 uTanC, uTanS;   // VR2: frustum mata tidak simetris (tangen pusat dan setengah lebar), 0 = desktop
 uniform float uTime;
 uniform int   uMaxSteps, uOct;
+uniform int   uAA;                   // AA1: sampel tambahan di tepi bayangan (0 = lama persis)
 uniform float uStepK, uEscape;
 uniform float uRin, uRout, uDiskBright, uTurb, uOpacity, uFlowPeriod;
 uniform float uFilm, uDoppler, uRedshift, uSpin;
@@ -551,17 +554,20 @@ vec3 sky(vec3 d) {
   return c * uStars;
 }
 
-void main() {
-  vec2 uv = (2.0 * gl_FragCoord.xy - uRes) / uRes.y;
+// AA1: arah sinar piksel (fc = koordinat layar, boleh digeser sub-piksel)
+vec3 rayDir(vec2 fc) {
+  vec2 uv = (2.0 * fc - uRes) / uRes.y;
   vec3 dir = normalize(uCamFwd + (uv.x * uCamRight + uv.y * uCamUp) * uTanHalf);
-  if (uVR > 0.5) { vec2 tn = uTanC + (2.0 * gl_FragCoord.xy / uRes - 1.0) * uTanS; dir = normalize(uCamFwd + tn.x * uCamRight + tn.y * uCamUp); }
-
-  vec3 pos = uCamPos;
-  vec3 vel = dir;
+  if (uVR > 0.5) { vec2 tn = uTanC + (2.0 * fc / uRes - 1.0) * uTanS; dir = normalize(uCamFwd + tn.x * uCamRight + tn.y * uCamUp); }
+  return dir;
+}
+// G2: wahana jatuh. Foton tiba merambat ke arah -dir di kerangka wahana; aberasi ke kerangka rain (bentuk tanpa bagi v^2).
+// Di kerangka rain (koordinat Painleve-Gullstrand) p^r = eps (cos a - beta), jadi jejak mundur datar = -n + beta r_hat.
+// Berlaku juga di dalam horizon (beta > 1): semua jejak mundur menuju r lebih besar. false = E <= 0 (datang dari cakrawala
+// masa lalu, gelap). Mengisi gObsK.
+bool obsVel(vec3 dir, vec3 pos, out vec3 vel) {
+  vel = dir;
   if (uFall > 0.5) {
-    // G2: wahana jatuh. Foton tiba merambat ke arah -dir di kerangka wahana; aberasi ke kerangka rain (bentuk tanpa bagi v^2).
-    // Di kerangka rain (koordinat Painleve-Gullstrand) p^r = eps (cos a - beta), jadi jejak mundur datar = -n + beta r_hat.
-    // Berlaku juga di dalam horizon (beta > 1): semua jejak mundur menuju r lebih besar.
     vec3 np = -dir;
     float vn = dot(uObsV, np);
     vec3 pr = np + uObsV * (uObsG + uObsG * uObsG / (uObsG + 1.0) * vn);   // |pr| = gamma (1 + v.n') > 0
@@ -569,22 +575,43 @@ void main() {
     vec3 nr = pr / pl;
     vec3 rh = pos / max(length(pos), 1e-6);
     float ek = 1.0 - uBeta * dot(nr, rh);                                    // E / eps_rain
-    if (ek < 1e-3) { outColor = vec4(0.0, 0.0, 0.0, 1.0); return; }          // E <= 0: datang dari cakrawala masa lalu, gelap
+    if (ek < 1e-3) return false;
     gObsK = 1.0 / (pl * ek);
     vel = -nr + uBeta * rh;
     vel /= max(length(vel), 1e-6);
   }
+  return true;
+}
+
+void main() {
+  vec3 vel0;
+  bool ok0 = obsVel(rayDir(gl_FragCoord.xy), uCamPos, vel0);
+  float om0 = length(cross(dFdx(vel0), dFdy(vel0)));   // V4 G2: sudut ruang per piksel sebelum lensa (setelah aberasi bila jatuh)
+  float jit0 = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));   // MK9: geser sampel debu per piksel
+  // AA1 (revisi Bhakti: tepi bayangan dan cincin foton bergerigi): piksel yang parameter tumbukannya b = |r x v| dekat b kritis
+  // 3 akar(3) / 2 rs (tepi bayangan + cincin foton tipis, dalam 3 piksel) dijejak ulang uAA kali dengan geser sub-piksel (grid
+  // putar) lalu dirata-rata. uAA = 0 = perilaku lama persis. Turunan layar hanya di sampel 0 (alur kendali seragam).
+  float hb = length(cross(uCamPos, vel0)), fwb = fwidth(hb);
+  int nAA = uAA > 0 && ok0 && abs(hb - 2.5980762) < max(3.0 * fwb, 0.03) + 1.2 * uSpin ? uAA : 0;
+  vec3 acc = vec3(0.0);
+  for (int s = 0; s <= uAA; s++) {
+  if (s > nAA) break;
+  vec3 pos = uCamPos;
+  vec3 vel = vel0;
+  bool ok = ok0;
+  if (s > 0) {
+    vec2 o = s == 1 ? vec2(0.375, 0.125) : s == 2 ? vec2(-0.375, -0.125) : s == 3 ? vec2(-0.125, 0.375) : vec2(0.125, -0.375);
+    ok = obsVel(rayDir(gl_FragCoord.xy + o), uCamPos, vel);
+  }
   vec3 L = cross(pos, vel);
   float h2 = dot(L, L);              // conserved (specific angular momentum)^2
-  float om0 = length(cross(dFdx(vel), dFdy(vel)));   // V4 G2: sudut ruang per piksel sebelum lensa (setelah aberasi bila jatuh)
-  float jit0 = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));   // MK9: geser sampel debu per piksel
 
   vec3 col = vec3(0.0);
   float trans = 1.0;
-  int state = 0;                     // 0 running, 1 absorbed, 2 escaped, 3 opaque
+  int state = ok ? 0 : 1;            // 0 running, 1 absorbed, 2 escaped, 3 opaque
 
   for (int i = 0; i < MAX_ITER; i++) {
-    if (i >= uMaxSteps) break;
+    if (i >= uMaxSteps || state != 0) break;
     float r = length(pos);
     // adaptive step: proportional to r, extra refinement around the photon sphere (r = 1.5 rs)
     float dt = uStepK * r * mix(0.4, 1.0, clamp(abs(r - 1.5) / 1.5, 0.0, 1.0));
@@ -663,7 +690,7 @@ void main() {
 
     if (rn > uEscape && dot(pos, vel) > 0.0) { state = 2; break; }  // escaped to infinity
   }
-  { // V4 G2: sudut ruang langit yang tercakup satu piksel setelah lensa; pembesaran = sebelum / sesudah (dijepit: kaustik)
+  if (s == 0) { // V4 G2: sudut ruang langit yang tercakup satu piksel setelah lensa; pembesaran = sebelum / sesudah (dijepit: kaustik)
     vec3 nd = vel / max(length(vel), 1e-6);
     float om = max(length(cross(dFdx(nd), dFdy(nd))), 1e-14);
     gSkyPix = sqrt(om); gMu = clamp(om0 / om, 0.05, 30.0); gDx = dFdx(nd); gDy = dFdy(nd);
@@ -678,8 +705,10 @@ void main() {
     }
     col += trans * sc;
   }
+  acc += col;
+  }
 
-  outColor = vec4(col * uEnc, 1.0);
+  outColor = vec4(acc / float(nAA + 1) * uEnc, 1.0);
 }`;
 
 const BRIGHT_FS = COMMON + `
@@ -4146,6 +4175,7 @@ function main() {
       gl.uniform1f(p.u('uVR'), GV.tan ? 1 : 0);                        // VR2: tanHalf = setengah tinggi frustum mata
       if (GV.tan) { gl.uniform2f(p.u('uTanC'), GV.tan[0], GV.tan[1]); gl.uniform2f(p.u('uTanS'), GV.tan[2], GV.tan[3]); }
       gl.uniform1f(p.u('uTime'), state.simTime);
+      gl.uniform1i(p.u('uAA'), AAOFF ? 0 : q.aa || 0);
       gl.uniform1i(p.u('uMaxSteps'), b.obs ? Math.min(600, Math.round(q.steps * 1.6)) : q.steps);   // G2: sinar dari dalam horizon butuh lebih banyak langkah
       gl.uniform1f(p.u('uFall'), b.obs ? 1 : 0);
       gl.uniform3fv(p.u('uObsV'), b.obs ? b.obs.v : [0, 0, 0]); gl.uniform1f(p.u('uObsG'), b.obs ? b.obs.g : 1); gl.uniform1f(p.u('uBeta'), b.obs ? b.obs.beta : 0);
