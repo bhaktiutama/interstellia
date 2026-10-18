@@ -175,7 +175,7 @@ const CONFIG = {
     low:    { steps: 120, stepK: 0.085, octaves: 3, scale: 0.6, parts: 400, dust: 2 },
     medium: { steps: 200, stepK: 0.060, octaves: 4, scale: 0.8, parts: 900, dust: 4 },
     high:   { steps: 320, stepK: 0.040, octaves: 5, scale: 1.0, parts: 1600, dust: 4 },
-    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500, dust: 6 },
+    ultra:  { steps: 500, stepK: 0.025, octaves: 5, scale: 1.0, parts: 2500, dust: 4 },   // MK4h: 6 -> 4 (lembar jauh berlapis dibuang)
   },
   adaptive: true,          // adaptive resolution
   renderScale: 0.8,        // current internal resolution factor
@@ -361,7 +361,8 @@ float dustRaw(vec2 uv, int lv) { vec4 t = textureLod(uDustTex, uv, 0.0); return 
 // kerapatan dari derau mentah: makin jauh dari piringan makin tipis; lembar dekat lebih banyak tertutup, lembar jauh gumpalan terpisah
 float dustTex(vec2 uv, int lv, float r) {
   float n = dustRaw(uv, lv);
-  float w = (lv == 0 ? smoothstep(uRin + 0.3, uRin + 2.0, r) : smoothstep(4.0, 6.0, r)) * (1.0 - smoothstep(17.0, 25.0, r));
+  // MK4h (revisi Bhakti: debu berlapis jauh di luar piringan): debu hanya di sekitar piringan, pudar di rOut - 1 .. rOut + 3
+  float w = (lv == 0 ? smoothstep(uRin + 0.3, uRin + 2.0, r) : smoothstep(4.0, 6.0, r)) * (1.0 - smoothstep(uRout - 1.0, uRout + 3.0, r));
   // MK4g: ambang lebih lebar (gradasi halus) dan kerapatan lebih tipis (aksen kuning piringan tetap tampak)
   return (lv == 0 ? smoothstep(0.42, 0.80, n) * 0.40 : lv == 1 ? smoothstep(0.48, 0.80, n) * 0.55 : smoothstep(0.54, 0.82, n) * 0.50) * w;
 }
@@ -371,17 +372,21 @@ float dustFine(float r, float phi) {
   float om = sqrt(M / (r * r * r)), P = uFlowPeriod * 2.0;
   float c1 = fract(uTime / P), c2 = fract(uTime / P + 0.5), w1 = 1.0 - abs(2.0 * c1 - 1.0);
   float a1 = phi - om * c1 * P, a2 = phi - om * c2 * P;
-  vec3 q1 = vec3(r * 3.1, cos(a1) * r * 2.2, sin(a1) * r * 2.2), q2 = vec3(r * 3.1, cos(a2) * r * 2.2, sin(a2) * r * 2.2) + 19.0;
-  float f1 = 0.65 * vnoise(q1) + 0.35 * vnoise(q1 * 2.3 + 7.0), f2 = 0.65 * vnoise(q2) + 0.35 * vnoise(q2 * 2.3 + 7.0);
+  // MK4h: satu oktaf per fase (FPS)
+  float f1 = vnoise(vec3(r * 3.1, cos(a1) * r * 2.2, sin(a1) * r * 2.2)), f2 = vnoise(vec3(r * 3.1, cos(a2) * r * 2.2, sin(a2) * r * 2.2) + 19.0);
   return mix(f2, f1, w1) - 0.5;
 }
-vec4 shadeDust(vec3 hp, int i) {                                    // rgb = cahaya hamburan, a = serapan
+vec4 shadeDust(vec3 hp, int i, vec3 vel) {                                    // rgb = cahaya hamburan, a = serapan
   float r = length(hp.xz);
   if (r < 3.0 || r > 26.0) return vec4(0.0);
   int lv = i / 2;                                                    // 0 dekat piringan, 1 tengah, 2 jauh
   float phi = atan(hp.z, hp.x) + (i - lv * 2 == 1 ? 2.3 : 0.0);
   vec2 uv = vec2(phi / 6.2831853 + 0.5, (r - 3.0) / 23.0);
-  float dens = dustTex(uv, lv, r) * (1.0 + 1.1 * dustFine(r, phi));
+  float dens = dustTex(uv, lv, r);
+  if (dens <= 0.002) return vec4(0.0);
+  dens *= 1.0 + 1.1 * dustFine(r, phi);
+  // MK4h: lembar tipis dilihat menyamping tampak sebagai garis berlapis: dipudarkan saat sinar hampir sejajar lembar
+  dens *= smoothstep(0.03, 0.25, abs(vel.y) / max(length(vel), 1e-6));
   if (uFall > 0.5) dens *= smoothstep(0.5, 2.0, distance(hp, uCamPos));   // MK6: saat misi debu memudar dalam 2 rs dari wahana
   if (dens <= 0.002) return vec4(0.0);
   // bayangan sendiri: kerapatan 0,35 rs ke arah lubang hitam (sumber cahaya); sisi gumpalan yang menghadap piringan dalam
@@ -651,7 +656,7 @@ void main() {
         int bi;
         if (mu <= ml) { int lv = tu.x == mu ? 0 : tu.y == mu ? 1 : 2; bi = lv * 2; if (lv == 0) tu.x = 2.0; else if (lv == 1) tu.y = 2.0; else tu.z = 2.0; }
         else { int lv = tl.x == ml ? 0 : tl.y == ml ? 1 : 2; bi = lv * 2 + 1; if (lv == 0) tl.x = 2.0; else if (lv == 1) tl.y = 2.0; else tl.z = 2.0; }
-        vec4 dc = shadeDust(mix(prev, pos, best), bi);
+        vec4 dc = shadeDust(mix(prev, pos, best), bi, vel);
         col += trans * dc.rgb * dc.a; trans *= 1.0 - dc.a;
         if (trans < 0.01) { opaque = true; break; }
       }
