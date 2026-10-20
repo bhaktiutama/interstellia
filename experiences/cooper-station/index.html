@@ -8326,9 +8326,10 @@ const BRIDGE_G = new THREE.Group(); BRIDGE_G.name = 'BRIDGE_G'; scene.add(BRIDGE
     // 2) badan beton per ruas 5 m, 3) pilar, 4) kolider
     const list = [];                                                    // [u, v, du, dy, dv, h, warna] (du sepanjang, dv melintang)
     const n = Math.max(1, Math.round(B.len / 5)), seg = B.len / n;
-    const deep = (u, e) => {                                            // alur dalam di bawah tepi luar dalam +-6 m sepanjang
-      for (let du = -6; du <= 6; du += 3) { const [s, za] = SZ(Math.min(B.len, Math.max(0, u + du)), e * (B.hw + 1)); if (groundH0(s, za) < -0.2) return true; }
-      return false;
+    const edgeLow = (u, e) => {                                         // 29d: titik terendah tanah di luar tepi (0,5 / 3 / 6 m dari tepi, +-6 m sepanjang)
+      let g = 0;
+      for (let du = -6; du <= 6; du += 3) for (const o of [0.5, 3, 6]) { const [s, za] = SZ(Math.min(B.len, Math.max(0, u + du)), e * (B.hw + o)); g = Math.min(g, groundH0(s, za)); }
+      return g;
     };
     for (let i = 0; i < n; i++) {
       const u = (i + 0.5) * seg;
@@ -8336,9 +8337,11 @@ const BRIDGE_G = new THREE.Group(); BRIDGE_G.name = 'BRIDGE_G'; scene.add(BRIDGE
       for (const e of [-1, 1]) {
         if (mouth(B, SZ, u, e, seg)) continue;                                       // 24a: persilangan dengan dek lain atau jalan: terbuka
         list.push([u, e * (B.hw - 0.75), seg + 0.03, 0.2, 1.5, 0, C.walk]);          // trotoar beton
-        if (!deep(u, e)) continue;
+        const gE = edgeLow(u, e), D = Math.min(6, 0.3 - gE);
+        if (D > 1.15) list.push([u, e * (B.hw - 0.15), seg + 0.03, D, 0.3, -D, C.slab]);   // 29d: dinding tepi turun sampai air, air tidak lagi tampak menyatu dengan trotoar dari samping
+        if (gE >= -0.2) continue;
         const ve = e * (B.hw - 0.15);
-        list.push([u, ve, seg + 0.03, 0.35, 0.3, 0.2, C.para]);                      // sandaran beton
+        list.push([u, ve, seg + 0.03, 0.5, 0.3, 0.2, C.para]);                       // sandaran beton (29d: 0,5 m, dulu 0,35)
         list.push([u, ve, seg + 0.03, 0.07, 0.07, 1.05, C.steel]);                   // pegangan baja
         list.push([u, ve, seg + 0.03, 0.04, 0.04, 0.8, C.steel]);                    // palang tengah
         for (let p = 0; p < 2; p++) list.push([u - seg / 2 + (p + 0.5) * seg / 2, ve, 0.07, 0.5, 0.07, 0.55, C.steel]);   // tiang tiap 2,5 m
