@@ -14484,6 +14484,25 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     for (let m = 1; m < sCuts.length - 1; m++) lane(true, sCuts[m], c.z0 + ROAD.art / 2 + 5, c.z0 + ART_Z - ROAD.art / 2 - 5);
     for (let m = 1; m < zCuts.length - 1; m++) lane(false, zCuts[m], c.s0 + ROAD.art / 2 + 5, c.s0 + ART - ROAD.art / 2 - 5);
   }
+  // 29c: trotoar yang tidak lurus. Dulu satu `fix` per ruas dipakai semua pejalan (satu barisan), kini tiap pejalan punya lajur
+  // menurut arah, goyang lateral halus, kecepatan berubah pelan, berhenti sesekali, dan 10% berjalan berpasangan. Generator acak
+  // sendiri: urutan acak setup di atas tidak berubah. Parameter dipakai di stepPeds().
+  {
+    let psd = 290729; const pr = () => ((psd = (psd * 16807) % 2147483647) / 2147483647);
+    const mates = [];
+    for (const p of PEDS.walk) {
+      if (p.kind !== 'z' && p.kind !== 's') continue;
+      const A = p.kind === 'z' ? ART : ART_Z;
+      p.ax = Math.round(p.fix / A) * A; p.sg = Math.sign(p.fix - p.ax) || 1;
+      p.lp = pr(); p.la = 0.12 + 0.2 * pr(); p.lk = 7 + 14 * pr(); p.lat = p.fix; p.stT = 0; p.ho = 0; p.hf = (pr() < 0.5 ? -1 : 1) * (0.9 + 0.5 * pr()); p.blk = 0;
+      p.vm = pr() * TAU; p.v0 *= 0.9 + 0.2 * pr();
+      if (pr() < 0.1) {
+        const q = Object.assign({ kind: 'mate', lead: p, v0: p.v0, dir: 1, ph: p.ph + 0.9, wait: false, elev: 0, zone: p.zone, mb: 0.2 + 0.4 * pr(), ms: (pr() < 0.5 ? -1 : 1) * (0.7 + 0.2 * pr()) }, look(pr() < 0.12, pr));
+        q.thr = p.thr; p.mate = q; mates.push(q);
+      }
+    }
+    for (const q of mates) PEDS.list.push(q);
+  }
   for (const p of PEDS.list) { p.lt = -20; p.isNear = false; if (p.kind === 'z') p.s = p.fix; if (p.kind === 's') p.za = p.fix; p.s = p.s ?? 0; p.za = p.za ?? 0; p.hd = p.hd ?? 0; p.pose = p.pose ?? 0; }
   // 23f: payung dan berteduh. Generator acak sendiri (urutan acak setup di atas tidak berubah). umb = membawa payung (75%),
   // uc = warna (PEDS_UMB_COL), ud = tunda buka 0..1 (payung terbuka bergiliran), wk = pejalan (ikut turun kepadatan saat hujan deras)
@@ -14856,6 +14875,7 @@ function rainBench(p, dt) {                                           // orang d
   }
 }
 // orang dekat (PEDS.near, radius + 60 m) dilangkahkan tiap frame; orang jauh bergiliran 1 dari 10 per frame dengan dt terkumpul
+let _pedSd = 7771; const pedRnd = () => ((_pedSd = (_pedSd * 16807) % 2147483647) / 2147483647);   // 29c: acak berhenti / jeda (runtime, terpisah dari acak setup)
 function stepPeds(dt, t = clock.sim) {
   if (dt <= 0) return;
   const fr = ++PEDS.frame % 10;
@@ -14872,15 +14892,35 @@ function stepPeds(dt, t = clock.sim) {
     if (p.kind === 'visit') { stepVisit(p, dt); continue; }         // 21a-1: pengunjung plaza (pose dan langkah diatur sendiri)
     let v = PEDS.rk > 0.15 ? p.v0 * pedRainV(p) : p.v0;             // 23f: lebih cepat saat hujan tanpa payung
     if (p.kind === 'z' || p.kind === 's') {
-      const onRoad = p.cross.some((c) => Math.abs(p.u - c.c) < 12.6);
+      const onRoad = p.cross.some((c) => Math.abs(p.u - c.c) < 12.6), nearX = onRoad || p.cross.some((c) => Math.abs(p.u - c.c) < 18);
+      if (!onRoad) {                                                   // 29c: kecepatan berubah pelan, berhenti sesekali (etalase, ponsel)
+        v *= 0.88 + 0.24 * Math.sin(t * 0.13 + p.vm);
+        if (p.stT > 0) { p.stT -= dt; v = 0; }
+        else if (!nearX && pedRnd() < dt / 40) p.stT = 3 + 9 * pedRnd();
+      }
       if (onRoad) v = Math.max(p.v0, 1.5);                             // menyeberang lebih cepat
       else for (const c of p.cross) {                                  // di tepi zebra: tunggu lampu "jalan"
         const d = (c.c - p.u) * p.dir;
         if (d > 12.6 && d < 13.2 + v * dt) { if (sigQ(c.k, c.m, c.axis, t) >= 12) { p.u = c.c - p.dir * 13.1; v = 0; } break; }
       }
       p.u += p.dir * v * dt;
-      if (p.u > p.b) { p.u = p.b; p.dir = -1; } else if (p.u < p.a) { p.u = p.a; p.dir = 1; }
-      if (p.kind === 'z') { p.za = p.u; p.hd = p.dir > 0 ? 0 : Math.PI; } else { p.s = p.u; p.hd = p.dir > 0 ? Math.PI / 2 : -Math.PI / 2; }
+      if (p.u > p.b) { p.u = p.b; p.dir = -1; p.stT = 2 + 4 * pedRnd(); } else if (p.u < p.a) { p.u = p.a; p.dir = 1; p.stT = 2 + 4 * pedRnd(); }
+      // lajur menurut arah + goyang lateral; dekat zebra kembali ke garis awal (fix), terhalang benda = tahan posisi dan tarik ke fix
+      const lane = p.ax + p.sg * ((p.dir > 0 ? 15.2 : 13.8) + (p.lp - 0.5) * 1.4);
+      const sway = (Math.sin(p.u / p.lk * TAU + p.ph) + 0.5 * Math.sin(p.u / (p.lk * 0.41) * TAU + p.ph * 2.3)) * p.la;
+      const tgt = nearX || p.blk > 0 ? p.fix : lane + p.sg * sway;
+      if (p.blk > 0) p.blk -= dt;
+      const prev = p.lat, step = Math.min(1, dt * 1.5) * (tgt - p.lat), mx = 0.8 * dt;
+      p.lat += Math.max(-mx, Math.min(mx, step));
+      const sx = p.kind === 'z' ? p.lat : p.u, zx = p.kind === 'z' ? p.u : p.lat;
+      if (p.lat !== p.fix && colAt(sx, zx, 0.35)) { p.lat = prev; p.blk = 1.5; }
+      const lv = dt > 0 ? Math.max(-0.7, Math.min(0.7, (p.lat - prev) / dt)) : 0, fw = p.dir * Math.max(v, 0.4);
+      const ho = v > 0 ? 0 : p.hf; p.ho += Math.max(-3 * dt, Math.min(3 * dt, ho - p.ho));   // berhenti: menoleh ke samping (etalase)
+      if (p.kind === 'z') { p.s = p.lat; p.za = p.u; p.hd = Math.atan2(lv, fw) + p.ho; } else { p.s = p.u; p.za = p.lat; p.hd = Math.atan2(fw, lv) + p.ho; }
+      if (p.mate) {                                                    // pasangan berjalan di samping dan sedikit di belakang
+        const q = p.mate, fs = Math.sin(p.hd), fz = Math.cos(p.hd);
+        q.s = p.s - fs * q.mb + fz * q.ms; q.za = p.za - fz * q.mb - fs * q.ms; q.hd = p.hd + 0.05 * q.ms; q.pose = v > 0 ? 0 : 1; q.ph = p.ph + 0.9; q.elev = 0;
+      }
     } else if (p.kind === 'seg') {
       p.u += p.dir * v * dt / p.L;
       if (p.u > 1) { p.u = 1; p.dir = -1; } else if (p.u < 0) { p.u = 0; p.dir = 1; }
