@@ -1,5 +1,17 @@
 # Rencana tahap 29: rumput fluffy, jalur taman, jalur trotoar, jembatan, kaca trem, gandum
 
+## Status: semua 6 butir dikerjakan (belum diuji FPS di GTX 1060 dan M1, menunggu uji Bhakti)
+
+| Tahap | Hasil | Catatan |
+| --- | --- | --- |
+| 29d | Selesai. Penyebab sebenarnya (terbukti lewat render): dek jembatan memakai shader tanah, dan peta lahan di bawah dek berisi sungai, jadi tepi dek (di luar cat jalan) tergambar sebagai air. Perbaikan: define `DECK` di `roadMat` memaksa warna aspal bila peta bluish / jenuh; rumput tidak tumbuh di atas dek (`onDeck()`, uniform `uDeckZ` / `uDeckS`); sandaran beton 0,5 m, dinding tepi sampai air. | Dugaan K1-K4 di bawah ternyata bukan penyebab utama |
+| 29e | Selesai. `glass = 3` di `SPEC_GLSL`: alpha dari luar <= 0,6 dan dari dalam <= 0,3, normal keluar di tiap sisi (sisi kiri dicerminkan), SSR dari luar. | |
+| 29c | Selesai. Lajur menurut arah, goyang lateral, kecepatan berubah, berhenti 3-12 s, 10% berpasangan (`kind: 'mate'`). Penyebab utama barisan lurus: satu `fix` per ruas dipakai semua pejalan. | Penghindaran antar orang (peta sel) tidak dibuat: lajur arah sudah memisahkan |
+| 29b | Selesai. Kurva Catmull-Rom-like berkelok + cabang + jalur setapak sempit, PATHSDF R8 2 m per piksel (5,2 MB), jalur digambar di shader tanah, rumput menghindar, pejalan `kind: 'path'`. `?jalur=lama` = pita lurus lama. | |
+| 29a | Selesai. Kartu rumpun fluffy (3 kartu bersilang, atlas alfa prosedural 3 varian, tepi alfa dipertajam `fwidth`, warna ujung bercak noise): `FLUFF.lawn` (2,5 - 38 m), padang bukit `MEADOW.mid`; rumput dekat tetap helai (lebih lebat). `?rumput=lama` = sebelum 29a. | |
+| 29f | Selesai. `FLUFF.wheat` (kartu batang + bulir, menengah) dan `FLUFF.wheatNear` (batang + 2 daun + bulir meruncing berspikelet dan sekam, 5 batang per rumpun) hanya digambar bila ada petak gandum dalam jangkauan (`wheatGate()`). | Siklus 96 jam, panen, tunggul tetap |
+
+
 Sumber: 5 foto uji Bhakti + permintaan mempelajari FluffyGrass. Analisa ini disusun dari pembacaan kode `experiences/cooper-station/index.html` (17.759 baris) dan render headless (Playwright + SwiftShader, pemuatan lokal three.js 0.186.1) yang mereproduksi 4 dari 6 masalah.
 
 ## Ringkasan
