@@ -3054,28 +3054,10 @@ function sfxBubble() {
   g.gain.setValueAtTime(0.07, t); g.gain.exponentialRampToValueAtTime(1e-4, t + 0.08); p.pan.value = Math.random() * 1.6 - 0.8;
   o.connect(g).connect(p).connect(A.world); o.start(t); o.stop(t + 0.1);
 }
-// Detik jam peringatan (revisi Bhakti): setelah mendarat, makin dekat gelombang makin cepat. Selang 3 s (>= 300 s sebelum tiba) turun mulus
-// (skala logaritma) lewat 2,5 / 2 / 1,5 / 1 s sampai 0,5 s (<= 15 s sebelum tiba). Lewat master langsung (tidak diredam bawah air), bersama musik.
-function tickInterval(eta) { return Math.max(0.5, Math.min(3, 0.5 + 2.5 * Math.log(Math.max(eta, 1) / 15) / Math.log(300 / 15))); }
-function sfxTick(tock, urgency) {
-  const A = AUDIO, c = A.ctx; if (!c || !A.on) return;
-  const t = c.currentTime, f0 = (tock ? 1500 : 1900) * (1 + 0.3 * urgency), o = c.createOscillator(), bp = c.createBiquadFilter(), g = c.createGain();
-  o.type = 'square'; o.frequency.value = f0; bp.type = 'bandpass'; bp.frequency.value = f0; bp.Q.value = 5;
-  g.gain.setValueAtTime(1e-4, t); g.gain.linearRampToValueAtTime(0.32, t + 0.002); g.gain.exponentialRampToValueAtTime(1e-4, t + 0.055);
-  o.connect(bp).connect(g).connect(A.master); o.start(t); o.stop(t + 0.07);
-  const n = c.createBufferSource(), hp = c.createBiquadFilter(), gn = c.createGain();                       // klik kayu halus di awal
-  n.buffer = A.white; hp.type = 'highpass'; hp.frequency.value = 3200;
-  gn.gain.setValueAtTime(0.22, t); gn.gain.exponentialRampToValueAtTime(1e-4, t + 0.018);
-  n.connect(hp).connect(gn).connect(A.master); n.start(t, Math.random() * 2, 0.03); A.sfx++;
-}
 function updateAudio(dt, dist) {
   const A = AUDIO, speed = Math.hypot(P.vx, P.vz);
   const M = A.mix = audioMix(dist, U.uChopK.value, currentAt(P.x, P.z), P.view === 0 ? speed : 0, P.view === 0 ? P.depth : 0, SWEEP.under);
   const c = A.ctx; if (!c) return M;
-  if (STATE.started && !CINE.on && !SWEEP.on && dist > 0 && !MIS.result) {   // detik jam: hanya setelah mendarat dan sebelum gelombang tiba
-    const eta = dist / W.v / CONFIG.speeds[P.speed];
-    if ((A.tickT = (A.tickT ?? 0) - dt) <= 0) { A.tickT += tickInterval(eta); if (A.tickT < 0) A.tickT = 0.1; A.tickN = (A.tickN || 0) + 1; sfxTick(A.tickN % 2 === 0, 1 - (tickInterval(eta) - 0.5) / 2.5); }
-  } else A.tickT = 0;
   const t = c.currentTime, set = (prm, v, tc = 0.25) => prm.setTargetAtTime(v, t, tc);
   const gust = 0.7 + 0.3 * Math.sin(STATE.visT * 0.65) * Math.sin(STATE.visT * 0.27 + 1.1);   // hembusan 6-12 s
   set(A.windG.gain, M.wind * gust, 0.6); set(A.windF.frequency, 600 + 300 * gust, 0.6);
@@ -4251,7 +4233,7 @@ function warmPresets(force) {
 }
 setTimeout(() => warmPresets(), 1500);
 requestAnimationFrame(frame);
-window.__millar = { tickInterval, sfxTick, THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
+window.__millar = { THREE, scene, camera, renderer, CONFIG, PRESETS, PRESET, applyPreset, MOODS, MOOD, setMood, U, SKYU, P, CLK, STATE, POST, GPUT,
   frontX, waveTop, waterAt, drawdown, seabed, chopAt, CHOP, stepPlayer, simStep, start: () => start(true), startWithCine: start, t, I18N, keys, seaNear, seaFar, wave, spray, mist, SKYCUBE, GCUBE, LENS, updateGCube, gScene, gMat, GU_, OCEAN, makeOcean, updateOcean,
   RIP, updateRipple, ripSource, SPL, spawnSplash, stepSplash, CROWN, spawnCrown, stepCrown, BOB, footstep, headBob, seaStateTarget, waterHere, probeOcean,
   DYN, SWEEP, currentAt, SPRAY, US, ZS, ARC, M_COMP, waveG, waveHz, COMMON,

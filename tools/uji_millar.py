@@ -22,9 +22,6 @@ UJI = r"""
   for (const v of M.CONFIG.views) if (!(v.key in EN)) hilang.push(v.key);
   out[`teks tanpa entri English: ${hilang.length}${hilang.length ? ' (' + hilang.slice(0, 5).join(' | ') + ')' : ''}`] = hilang.length === 0;
 
-  // detik jam peringatan: selang 3 s jauh, 0,5 s dekat, menurun mulus
-  const ti = [600, 300, 100, 15, 5].map((e) => M.tickInterval(e)), mono = ti.every((v, i) => i === 0 || v <= ti[i - 1] + 1e-9);
-  out[`detik jam: selang ${ti.map((v) => v.toFixed(2)).join(' / ')} s untuk sisa 600 / 300 / 100 / 15 / 5 s`] = ti[0] === 3 && ti[1] === 3 && ti[3] === 0.5 && ti[4] === 0.5 && mono && ti[2] > 1 && ti[2] < 2.5;
   // 2. tidak ada daratan: dasar laut tertinggi < air terendah (surut penuh dikurangi lembah ombak terdalam)
   let bedMax = -9;
   for (let i = 0; i < 40000; i++) { const x = (Math.random() - 0.5) * 20000, z = (Math.random() - 0.5) * 20000; bedMax = Math.max(bedMax, M.seabed(x, z)); }
