@@ -1503,6 +1503,7 @@ const CABIN_LIGHT = { uCabin: { value: new THREE.Color(0, 0, 0) } };   // 15a: l
 // 17b: kilap dan Fresnel untuk material dasar yang ditandai specMat() (cat, logam, kaca, air). uSpec = (kekasaran, F0, logam).
 // Pantulan = farEnv (daratan seberang, sunline, end cap, Matahari) dikali Fresnel Schlick; logam mewarnai pantulan dengan warna
 // dasarnya dan mengurangi difus. Kaca bening: alpha naik mengikuti Fresnel agar pantulan tidak ikut transparan.
+// 29e: glass = 3 (kaca trem): seperti 2, tetapi dari luar alpha paling tinggi 0,6 dan dari dalam 0,3, jadi kabin tetap tembus pandang.
 // 21b: glass = 2 (jendela rumah, satu bidang dengan normal menghadap keluar). Dilihat dari dalam: yang terpantul ruangan yang
 // redup (plester x cahaya setempat x 0,35), bukan seluruh silinder, dan alpha paling tinggi 0,35, jadi luar tetap jelas.
 // Sisi penonton dari arah kamera terhadap normal, bukan gl_FrontFacing: lintasan BackSide three.js (transparan DoubleSide)
@@ -1510,24 +1511,24 @@ const CABIN_LIGHT = { uCabin: { value: new THREE.Color(0, 0, 0) } };   // 15a: l
 const SPEC_GLSL = (glass, ssr) => `{
   float rS = clamp(uSpec.x * (1.0 + 0.45 * mdD.x) + 0.15 * mdD.y, 0.02, 1.0);   // V1: kekasaran bervariasi (mdD = 0: sama dengan uSpec.x)
   vec3 Vv = cameraPosition - vLitWorld; Vv *= inversesqrt(max(dot(Vv, Vv), 1e-8));
-  ${glass === 2 ? 'bool inS = dot(litN, Vv) < 0.0; vec3 nS = inS ? -litN : litN;' : 'vec3 nS = litN;'}
+  ${glass >= 2 ? 'bool inS = dot(litN, Vv) < 0.0; vec3 nS = inS ? -litN : litN;' : 'vec3 nS = litN;'}
   float cosV = clamp(dot(nS, Vv), 0.0, 1.0), om = 1.0 - cosV;
   float Fr = uSpec.y + (1.0 - uSpec.y) * om * om * om * om * om * (1.0 - 0.7 * rS);
   vec3 envS;
-  ${glass === 2 ? 'if (inS) envS = vec3(0.89, 0.85, 0.74) * (stationLight(vLitWorld, nS) + nightLight(vLitWorld, nS)) * 0.35; else' : ''}
+  ${glass >= 2 ? 'if (inS) envS = vec3(0.89, 0.85, 0.74) * (stationLight(vLitWorld, nS) + nightLight(vLitWorld, nS)) * 0.35; else' : ''}
   { vec3 RdS = reflect(-Vv, nS); envS = farEnv(vLitWorld, RdS, rS, 1.0 - rS);${ssr ? ' envS = ssrRefl(vLitWorld, RdS, envS);' : ''} }   // 23a: ssr = air (kolam air mancur)
   float mx = max(diffuseColor.r, max(diffuseColor.g, diffuseColor.b));
   vec3 tintS = mix(vec3(1.0), diffuseColor.rgb / max(mx, 1e-3), uSpec.z);
   float kS = mix(Fr, 0.5 + 0.5 * Fr, uSpec.z);
   outgoingLight = outgoingLight * (1.0 - kS * mix(1.0, 0.7, uSpec.z)) + envS * tintS * kS;
-  ${glass === 2 ? 'diffuseColor.a = inS ? max(diffuseColor.a, min(mix(diffuseColor.a, 1.0, Fr), 0.35)) : mix(diffuseColor.a, 1.0, Fr);' : glass ? 'diffuseColor.a = mix(diffuseColor.a, 1.0, Fr);' : ''}
+  ${glass === 3 ? 'diffuseColor.a = inS ? max(diffuseColor.a, min(mix(diffuseColor.a, 1.0, Fr), 0.3)) : max(diffuseColor.a, min(mix(diffuseColor.a, 1.0, Fr), 0.6));' : glass === 2 ? 'diffuseColor.a = inS ? max(diffuseColor.a, min(mix(diffuseColor.a, 1.0, Fr), 0.35)) : mix(diffuseColor.a, 1.0, Fr);' : glass ? 'diffuseColor.a = mix(diffuseColor.a, 1.0, Fr);' : ''}
 }
 `;
 function specMat(m, r, f0 = 0.04, metal = 0, glass = false, noDetail = false) { m.userData.spec = { r, f0, metal, glass, noDetail }; return m; }   // 26a: noDetail = tanpa matDetail (cat mobil clearcoat)
 function patchLit(mat) {
   if (mat.userData.lit) return;
   mat.userData.lit = true;
-  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = sp && sp.glass ? (sp.glass === 2 ? 2 : 1) : 0, noTram = !!mat.userData.noTramLight, ssr = !!(sp && sp.ssr), noDet = !!(sp && sp.noDetail);   // 26a: noDet = tanpa matDetail (kunci cache program ikut membedakan); 20a: trem tidak disinari cahayanya sendiri
+  const cabin = !!mat.userData.cabin, sp = mat.userData.spec, glass = sp && sp.glass ? (sp.glass === 3 ? 3 : sp.glass === 2 ? 2 : 1) : 0, noTram = !!mat.userData.noTramLight, ssr = !!(sp && sp.ssr), noDet = !!(sp && sp.noDetail);   // 26a: noDet = tanpa matDetail (kunci cache program ikut membedakan); 20a: trem tidak disinari cahayanya sendiri
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, LIGHT.uniforms);
     if (cabin) Object.assign(sh.uniforms, CABIN_LIGHT);
@@ -1547,7 +1548,7 @@ function patchLit(mat) {
     if (cabin) sh.fragmentShader = 'uniform vec3 uCabin;\n' + sh.fragmentShader;
     if (sp) sh.fragmentShader = 'uniform vec3 uSpec;\n' + sh.fragmentShader;
   };
-  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass === 2 ? 'Win' : glass ? 'Glass' : 'Spec') : '') + (ssr ? 'Ssr' : '') + (noDet ? 'NoDet' : '') + (noTram ? 'NoTram' : '');
+  mat.customProgramCacheKey = () => 'stationLit' + (cabin ? 'Cabin' : '') + (sp ? (glass === 3 ? 'WinT' : glass === 2 ? 'Win' : glass ? 'Glass' : 'Spec') : '') + (ssr ? 'Ssr' : '') + (noDet ? 'NoDet' : '') + (noTram ? 'NoTram' : '');
   mat.needsUpdate = true;
 }
 
@@ -5607,10 +5608,11 @@ const TRAM_PARTS = {};
     inner: new THREE.MeshBasicMaterial({ color: 0xd9dadb }), floor: new THREE.MeshBasicMaterial({ map: floorTex }),
     seat: new THREE.MeshBasicMaterial({ map: seatTex }), seatFrame: specMat(new THREE.MeshBasicMaterial({ color: 0x8d9298 }), 0.3, 0.6, 1),
     pole: specMat(new THREE.MeshBasicMaterial({ color: 0xe0b020 }), 0.25, 0.7, 1), steel: specMat(new THREE.MeshBasicMaterial({ color: 0x6d7278 }), 0.35, 0.6, 1),
-    glass: specMat(new THREE.MeshBasicMaterial({ color: 0x8fa6b3, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }), 0.03, 0.06, 0, true),
+    glass: specMat(new THREE.MeshBasicMaterial({ color: 0x8fa6b3, transparent: true, opacity: 0.16, depthWrite: false, side: THREE.DoubleSide }), 0.03, 0.04, 0, 3),   // 29e: glass 3, normal menghadap keluar di tiap sisi, pantulan SSR dari luar
     lamp: new THREE.MeshBasicMaterial({ color: 0xfff4e0 }),
   };
   for (const k of ['inner', 'floor', 'seat', 'seatFrame', 'pole']) M[k].userData.cabin = true;   // 15a: diterangi lampu kabin saat malam
+  M.glass.userData.spec.ssr = true;                                   // 29e: dari luar kaca memantulkan gedung dan pohon sekitar (ssrRefl), dari dalam hanya kabin
   for (const m of Object.values(M)) m.userData.noTramLight = true;   // 20a: kolam cahaya trem (17e) untuk objek sekitar, bukan untuk trem sendiri
   const staticG = new THREE.Group();
   const box = (sx, sy, sz, mat, x, y, z, parent = staticG, tile = 1) => {
@@ -5638,7 +5640,7 @@ const TRAM_PARTS = {};
     }
     box(0.06, 0.42, T.doorW, M.body, sx * hw, T.roof - 0.21, T.doors[0]); box(0.06, 0.42, T.doorW, M.body, sx * hw, T.roof - 0.21, T.doors[1]);
     // kaca samping (satu bidang) + tiang jendela tiap 1,9 m
-    const gl = new THREE.Mesh(new THREE.PlaneGeometry(2 * L - 0.6, T.roof - 0.42 - (F + 0.7)).rotateY(Math.PI / 2), M.glass);
+    const gl = new THREE.Mesh(new THREE.PlaneGeometry(2 * L - 0.6, T.roof - 0.42 - (F + 0.7)).rotateY(sx * Math.PI / 2), M.glass);   // 29e: normal keluar di sisi kiri dan kanan
     gl.position.set(sx * hw, (F + 0.7 + T.roof - 0.42) / 2, 0); gl.userData.noShadow = true; tramMesh.add(gl);
     for (let z = -L + 0.3; z <= L - 0.3; z += 1.9) if (!inDoor(z)) box(0.08, T.roof - 0.42 - (F + 0.7), 0.1, M.body, sx * hw, (F + 0.7 + T.roof - 0.42) / 2, z);
     for (const d of T.doors) for (const e of [-1, 1]) box(0.09, T.roof - 0.42 - F, 0.08, M.dark, sx * hw, F + (T.roof - 0.42 - F) / 2, d + e * (T.doorW / 2 + 0.04));   // kusen pintu
@@ -5651,7 +5653,7 @@ const TRAM_PARTS = {};
   for (const ez of [-1, 1]) {
     const z = ez * L;
     box(2 * hw, 0.8, 0.08, M.body, 0, F + 0.35, z); box(2 * hw + 0.01, 0.12, 0.09, M.stripe, 0, F + 0.62, z);
-    const ws = new THREE.Mesh(new THREE.PlaneGeometry(2 * hw - 0.1, 1.45), M.glass); ws.position.set(0, F + 1.5, z + ez * 0.02); ws.rotation.x = ez * 0.12; ws.userData.noShadow = true; tramMesh.add(ws);
+    const ws = new THREE.Mesh(new THREE.PlaneGeometry(2 * hw - 0.1, 1.45), M.glass); ws.position.set(0, F + 1.5, z + ez * 0.02); ws.rotation.set(ez * 0.12, ez < 0 ? Math.PI : 0, 0);   // 29e: ujung belakang menghadap keluar (-z) ws.userData.noShadow = true; tramMesh.add(ws);
     box(2 * hw, 0.5, 0.1, M.body, 0, T.roof - 0.2, z);
     const cv = document.createElement('canvas'); cv.width = 512; cv.height = 64;
     const dt = new THREE.CanvasTexture(cv); dt.colorSpace = THREE.SRGBColorSpace; destTex.push({ cv, dt });
@@ -5708,7 +5710,7 @@ const TRAM_PARTS = {};
       const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); mg.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
       const im = new THREE.InstancedMesh(mg, mat, TRAM_PARTS.doors.length);
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      if (mat === M.glass) im.userData.noShadow = true;
+      if (mat === M.glass) { im.userData.noShadow = true; im.userData.mirror = true; }   // 29e: sisi kiri dicerminkan agar normal kaca menghadap keluar
       tramMesh.add(im); TRAM_PARTS.doorInst.push(im);
     }
   }
@@ -5727,13 +5729,14 @@ const TRAM_PARTS = {};
 }
 scene.add(tramMesh);
 const tram = { za: TRAM.stops[1].za, v: 0, target: 2, dir: 1, dwell: TRAM.dwell, from: TRAM.stops[1].za, shownTarget: -1 };
-const _tdM = new THREE.Matrix4();
+const _tdM = new THREE.Matrix4(), _tdG = new THREE.Matrix4(), _tdS = new THREE.Vector3();
 function tramDoors(open) {                                          // D2: matriks tiap daun pintu (instance); hanya sisi peron (+x) yang membuka
   const T = TRAM_CAR;
   TRAM_PARTS.doors.forEach(({ sx, d, e }, i) => {
     const o = sx > 0 ? open : 0;
     _tdM.makeTranslation(sx * (T.halfW + 0.01 + 0.07 * Math.min(1, o * 4)), 0, d + e * (T.doorW / 4 + o * (T.doorW / 2 - 0.05)));
-    for (const im of TRAM_PARTS.doorInst) im.setMatrixAt(i, _tdM);
+    _tdG.copy(_tdM).scale(_tdS.set(sx, 1, 1));
+    for (const im of TRAM_PARTS.doorInst) im.setMatrixAt(i, im.userData.mirror ? _tdG : _tdM);
   });
   for (const im of TRAM_PARTS.doorInst) im.instanceMatrix.needsUpdate = true;
 }
