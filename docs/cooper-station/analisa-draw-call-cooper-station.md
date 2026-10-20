@@ -89,6 +89,14 @@ Label effort mengikuti `CLAUDE.md`. Penghematan = draw nyata per frame (angka HU
 | D7 | Air akuaduk Skyway: 7 `Mesh` bidang terpisah, `frustumCulled = false` (L3634); 7 draw di setiap lokasi walau di luar pandangan (terbukti di Rumah Cooper) | Satu `InstancedMesh` (7 matriks) dengan culling normal; tekstur alir `SKYX.flow` tetap | 7 di semua lokasi dan preset | Low | Sonnet 5.5 | low | sangat rendah |
 | D8 | Mesh kecil yang tidak ikut `mergeByMaterial` / `enableCull`: lobi menara lift (L3156 x12, L3183 x14, bahan tembus pandang yang dilewati karena `transparent`), bangku dan papan terminal (L13620 x8, L13634 x4), lampu dan strobo wahana (L13361, L13389) | Gabung per bahan termasuk bahan tembus pandang yang sama (kaca lobi, tidak saling tumpang), lalu `enableCull(G, pad)` (pola 20b) | bukit 30; New York 35 (Hemat sama) | Low | Sonnet 5.5 | low | rendah-sedang (urutan gambar kaca tembus pandang) |
 
+### 4.0 Status
+
+| No | Status |
+| --- | --- |
+| D1 | Dikerjakan: `updateFurniture()` mengatur `K.mesh.visible = c > 0`. Belum diuji pemilik |
+| D7 | Dikerjakan: 7 bidang air Skyway jadi satu `InstancedMesh` (culling normal). Belum diuji pemilik |
+| D8 | Dikerjakan sebagian: `mergeByMaterial` kini menggabung kaca transparan (`depthWrite` mati) bahan sama: kaca lobi menara lift dan kabin lift (sekitar 20 draw). Bangku dan papan terminal tidak digabung: tiap papan punya tekstur sendiri. Belum diuji pemilik |
+
 ### 4.1 Perkiraan hasil (draw nyata per frame)
 
 | Preset | Lokasi | Sekarang | Perkiraan setelah D2-D8 | Turun |

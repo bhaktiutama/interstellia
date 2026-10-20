@@ -3630,10 +3630,10 @@ const SKYX = { riverZ: riverZ(SKY_S), flow: null };
   const tx = new THREE.CanvasTexture(cv); tx.wrapS = tx.wrapT = THREE.RepeatWrapping; tx.colorSpace = THREE.SRGBColorSpace; tx.repeat.set(rw / 16, seg / 32);
   const wm = new THREE.MeshBasicMaterial({ map: tx, transparent: true, opacity: 0.72, depthWrite: false });
   const wg = new THREE.PlaneGeometry(rw, seg + 0.03).rotateX(-Math.PI / 2).rotateY(Math.PI / 2);   // lebar sungai searah za, ruas 5 m searah s; alur tekstur searah s
-  for (let i = 0; i < n; i++) {
-    const w = new THREE.Mesh(wg, wm); w.matrixAutoUpdate = false; surfaceMatrix(w.matrix, (SKY_S - half + (i + 0.5) * seg) / R, rz, 0.03);
-    w.userData.noShadow = true; w.renderOrder = 11; w.frustumCulled = false; scene.add(w);
-  }
+  // D7: n bidang ruas 5 m jadi satu InstancedMesh (dulu n mesh, n draw call per frame, frustumCulled = false)
+  const wi = new THREE.InstancedMesh(wg, wm, n);
+  for (let i = 0; i < n; i++) { surfaceMatrix(m4, (SKY_S - half + (i + 0.5) * seg) / R, rz, 0.03); wi.setMatrixAt(i, m4); }
+  wi.instanceMatrix.needsUpdate = true; wi.userData.noShadow = true; wi.renderOrder = 11; scene.add(wi);
   SKYX.flow = tx;
 }
 
@@ -3750,11 +3750,12 @@ function mergeSimple(parts) {
 }
 // 20b: gabung anak langsung sebuah grup per material (satu draw call per material), seperti yang sudah dilakukan rumah Cooper.
 // Hanya mesh buram tanpa anak dengan atribut position, normal, uv; ember dibedakan juga oleh noShadow, noLight, renderOrder.
-// Mesh transparan, InstancedMesh, dan mesh yang dirujuk kode lain (userData.keep) tidak disentuh. Geometri tetap sama.
+// InstancedMesh dan mesh yang dirujuk kode lain (userData.keep) tidak disentuh. D8: mesh transparan ikut digabung bila depthWrite mati
+// (kaca): bahan sama berarti warna dan opasitas sama, jadi urutan gambar antar panel tidak mengubah hasil. Geometri tetap sama.
 function mergeByMaterial(G) {
   const buckets = new Map();
   for (const o of G.children) {
-    if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || o.material.transparent || o.children.length || o.userData.keep || !o.visible) continue;
+    if (!o.isMesh || o.isInstancedMesh || Array.isArray(o.material) || (o.material.transparent && o.material.depthWrite) || o.children.length || o.userData.keep || !o.visible) continue;
     const at = Object.keys(o.geometry.attributes).sort().join(',');
     if (at !== 'normal,position,uv') continue;
     const key = `${o.material.uuid}|${!!o.userData.noShadow}|${!!o.userData.noLight}|${o.renderOrder}`;
@@ -13243,7 +13244,8 @@ function updateFurniture() {
         if (K.cols) K.mesh.instanceColor.array.set(K.cols.subarray(i * 3, i * 3 + 3), c * 3);   // 22c: warna kanopi / papan nama
         c++;
       }
-      K.mesh.count = c; K.mesh.instanceMatrix.needsUpdate = true; if (K.cols) K.mesh.instanceColor.needsUpdate = true;
+      K.mesh.count = c; K.mesh.visible = c > 0;                          // D1: jenis tanpa instance tidak diproses three.js sama sekali (dulu 130-165 mesh kosong per frame di semua pass)
+      K.mesh.instanceMatrix.needsUpdate = true; if (K.cols) K.mesh.instanceColor.needsUpdate = true;
     }
     if (CAR_NEAR.mat) CAR_NEAR.end();                                   // 26c
   }
