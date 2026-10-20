@@ -8,7 +8,7 @@
 | 29e | Selesai. `glass = 3` di `SPEC_GLSL`: alpha dari luar <= 0,6 dan dari dalam <= 0,3, normal keluar di tiap sisi (sisi kiri dicerminkan), SSR dari luar. | |
 | 29c | Selesai. Lajur menurut arah, goyang lateral, kecepatan berubah, berhenti 3-12 s, 10% berpasangan (`kind: 'mate'`). Penyebab utama barisan lurus: satu `fix` per ruas dipakai semua pejalan. | Penghindaran antar orang (peta sel) tidak dibuat: lajur arah sudah memisahkan |
 | 29b | Selesai. Kurva Catmull-Rom-like berkelok + cabang + jalur setapak sempit, PATHSDF R8 2 m per piksel (5,2 MB), jalur digambar di shader tanah, rumput menghindar, pejalan `kind: 'path'`. `?jalur=lama` = pita lurus lama. | |
-| 29a | Selesai. Kartu rumpun fluffy (3 kartu bersilang, atlas alfa prosedural 3 varian, tepi alfa dipertajam `fwidth`, warna ujung bercak noise): `FLUFF.lawn` (2,5 - 38 m), padang bukit `MEADOW.mid`; rumput dekat tetap helai (lebih lebat). `?rumput=lama` = sebelum 29a. | |
+| 29a | Selesai, diulang atas revisi Bhakti: versi pertama (kartu buatan sendiri) dinilai tidak sesuai, kini port langsung FluffyGrass: mesh, tekstur alfa, noise, dan shader `GrassMaterial.ts` disalin (MIT, atribusi di `assets/KREDIT.md`), dipakai untuk rumput pendek taman, padang bukit, dan gandum (`FG_VS` / `FG_FS`). `?rumput=lama` = sebelum 29a. | Rumpun sumber lebar 1,6 x tinggi 0,65 satuan (diskalakan per jenis: taman 0,34 m x 0,26 m per satuan) |
 | 29f | Selesai. `FLUFF.wheat` (kartu batang + bulir, menengah) dan `FLUFF.wheatNear` (batang + 2 daun + bulir meruncing berspikelet dan sekam, 5 batang per rumpun) hanya digambar bila ada petak gandum dalam jangkauan (`wheatGate()`). | Siklus 96 jam, panen, tunggul tetap |
 
 
