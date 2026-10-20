@@ -583,26 +583,10 @@ bool obsVel(vec3 dir, vec3 pos, out vec3 vel) {
   return true;
 }
 
-void main() {
-  vec3 vel0;
-  bool ok0 = obsVel(rayDir(gl_FragCoord.xy), uCamPos, vel0);
-  float om0 = length(cross(dFdx(vel0), dFdy(vel0)));   // V4 G2: sudut ruang per piksel sebelum lensa (setelah aberasi bila jatuh)
-  float jit0 = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));   // MK9: geser sampel debu per piksel
-  // AA1 (revisi Bhakti: tepi bayangan dan cincin foton bergerigi): piksel yang parameter tumbukannya b = |r x v| dekat b kritis
-  // 3 akar(3) / 2 rs (tepi bayangan + cincin foton tipis, dalam 3 piksel) dijejak ulang uAA kali dengan geser sub-piksel (grid
-  // putar) lalu dirata-rata. uAA = 0 = perilaku lama persis. Turunan layar hanya di sampel 0 (alur kendali seragam).
-  float hb = length(cross(uCamPos, vel0)), fwb = fwidth(hb);
-  int nAA = uAA > 0 && ok0 && abs(hb - 2.5980762) < max(3.0 * fwb, 0.03) + 1.2 * uSpin ? uAA : 0;
-  vec3 acc = vec3(0.0);
-  for (int s = 0; s <= uAA; s++) {
-  if (s > nAA) break;
+// AA1: satu sinar penuh dari kamera dengan arah awal vel. first = sampel utama: hanya ia yang mengisi gSkyPix / gMu / gDx / gDy
+// (turunan layar harus dihitung di alur kendali seragam, jadi sampel utama dipanggil dari main tanpa percabangan per piksel)
+vec3 traceRay(vec3 vel, bool ok, bool first, float om0, float jit0) {
   vec3 pos = uCamPos;
-  vec3 vel = vel0;
-  bool ok = ok0;
-  if (s > 0) {
-    vec2 o = s == 1 ? vec2(0.375, 0.125) : s == 2 ? vec2(-0.375, -0.125) : s == 3 ? vec2(-0.125, 0.375) : vec2(0.125, -0.375);
-    ok = obsVel(rayDir(gl_FragCoord.xy + o), uCamPos, vel);
-  }
   vec3 L = cross(pos, vel);
   float h2 = dot(L, L);              // conserved (specific angular momentum)^2
 
@@ -690,7 +674,7 @@ void main() {
 
     if (rn > uEscape && dot(pos, vel) > 0.0) { state = 2; break; }  // escaped to infinity
   }
-  if (s == 0) { // V4 G2: sudut ruang langit yang tercakup satu piksel setelah lensa; pembesaran = sebelum / sesudah (dijepit: kaustik)
+  if (first) { // V4 G2: sudut ruang langit yang tercakup satu piksel setelah lensa; pembesaran = sebelum / sesudah (dijepit: kaustik)
     vec3 nd = vel / max(length(vel), 1e-6);
     float om = max(length(cross(dFdx(nd), dFdy(nd))), 1e-14);
     gSkyPix = sqrt(om); gMu = clamp(om0 / om, 0.05, 30.0); gDx = dFdx(nd); gDy = dFdy(nd);
@@ -705,9 +689,26 @@ void main() {
     }
     col += trans * sc;
   }
-  acc += col;
-  }
+  return col;
+}
 
+void main() {
+  vec3 vel0;
+  bool ok0 = obsVel(rayDir(gl_FragCoord.xy), uCamPos, vel0);
+  float om0 = length(cross(dFdx(vel0), dFdy(vel0)));   // V4 G2: sudut ruang per piksel sebelum lensa (setelah aberasi bila jatuh)
+  float jit0 = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));   // MK9: geser sampel debu per piksel
+  float hb = length(cross(uCamPos, vel0)), fwb = fwidth(hb);
+  vec3 acc = traceRay(vel0, ok0, true, om0, jit0);
+  // AA1 (revisi Bhakti: tepi bayangan dan cincin foton bergerigi): piksel yang parameter tumbukannya b = |r x v| dekat b kritis
+  // 3 akar(3) / 2 rs (tepi bayangan + cincin foton tipis, dalam 3 piksel) dijejak ulang uAA kali dengan geser sub-piksel (grid
+  // putar) lalu dirata-rata. uAA = 0 = perilaku lama persis.
+  int nAA = uAA > 0 && ok0 && abs(hb - 2.5980762) < max(3.0 * fwb, 0.03) + 1.2 * uSpin ? uAA : 0;
+  for (int s = 1; s <= uAA; s++) {
+    if (s > nAA) break;
+    vec2 o = s == 1 ? vec2(0.375, 0.125) : s == 2 ? vec2(-0.375, -0.125) : s == 3 ? vec2(-0.125, 0.375) : vec2(0.125, -0.375);
+    vec3 v1; bool ok1 = obsVel(rayDir(gl_FragCoord.xy + o), uCamPos, v1);
+    acc += traceRay(v1, ok1, false, om0, jit0);
+  }
   outColor = vec4(acc / float(nAA + 1) * uEnc, 1.0);
 }`;
 

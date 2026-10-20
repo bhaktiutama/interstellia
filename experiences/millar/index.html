@@ -1696,7 +1696,9 @@ const M_FINAL = pmat(`uniform sampler2D tSrc; uniform vec2 uPx; uniform float uT
     c += (h12(gl_FragCoord.xy + fract(uTime * 7.13) * 517.0) - 0.5) * 0.028 * uGrain;
     gl_FragColor = vec4(c, 1.0);
   }`, { tSrc: { value: null }, uPx: { value: new THREE.Vector2() }, uTime: { value: 0 }, uGrain: { value: 1 }, uVig: { value: 1 }, uTaa: { value: 0 } });
-const M_TAA = pmat(POSTKIT.TAA_FS, { tCur: { value: null }, tHist: { value: null }, tDepth: { value: null }, uProjInv: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
+// Revisi Bhakti: bayangan tubuh dan wahana tertinggal (hantu) di laut saat berlari di Ultra. Bayangan bergeser terhadap permukaan, jadi riwayat
+// hasil proyeksi ulang (yang hanya mengikuti geometri) menyimpan bayangan lama. Bobot frame baru dasar dinaikkan dari 0,09 saat bergerak (uA0).
+const M_TAA = pmat(POSTKIT.TAA_FS.replace('uniform vec2 uTexel;', 'uniform vec2 uTexel; uniform float uA0;').replace('mix(0.09, 0.3,', 'mix(uA0, 0.45,'), { uA0: { value: 0.09 },  tCur: { value: null }, tHist: { value: null }, tDepth: { value: null }, uProjInv: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
   uPrevVP: { value: new THREE.Matrix4() }, uTexel: { value: new THREE.Vector2() }, uValid: { value: 0 } });
 function taaBegin() {                                                // sebelum render dunia: geser proyeksi sub-piksel (Halton 2,3)
   const act = !TAA.off && PRESET.idx === 0 && !!POST.hdr.depthTexture;
@@ -1751,6 +1753,7 @@ function postRender(time) {
     T.tCur.value = POST.ldr.texture; T.tHist.value = hr.texture; T.tDepth.value = POST.hdr.depthTexture;
     T.uProjInv.value.copy(camera.projectionMatrixInverse); T.uCamWorld.value.copy(camera.matrixWorld); T.uPrevVP.value.copy(TAA.prevVP);
     T.uTexel.value.set(1 / POST.w, 1 / POST.h); T.uValid.value = TAA.valid ? 1 : 0;
+    T.uA0.value = 0.09 + 0.26 * Math.min(1, BOB.amp / 0.03 + (FLY.on ? 1 : 0));   // diam = riwayat panjang (halus), berjalan / lari = pendek (tanpa hantu bayangan)
     pass(M_TAA, hw); TAA.valid = true; TAA.cur = 1 - TAA.cur; fin = hw;
   }
   M_FINAL.uniforms.uTaa.value = TAA.act || CAMX.final ? 1 : 0;      // K: foto akumulasi = pertajam ringan, bukan FXAA
