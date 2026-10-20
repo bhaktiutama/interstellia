@@ -5661,17 +5661,33 @@ const TRAM_PARTS = {};
     const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 2 * L - 1.2), M.lamp); lamp.position.set(sx * 0.55, T.roof - 0.13, 0); lamp.userData.noLight = true; tramMesh.add(lamp); TRAM_PARTS.cabinLamp = M.lamp;
   }
   // pintu geser: 2 daun per pintu per sisi (hanya sisi peron +x yang membuka)
+  // D2: 8 daun pintu x 5 mesh (48 draw per pass) jadi satu InstancedMesh per bahan (body, dark, kaca: 4 draw), 8 instance, matriks
+  // geser diisi di updateTramVisual(). Satu daun dibangun di lokal (tanpa posisi) lalu dipecah per bahan.
   TRAM_PARTS.doors = [];
-  for (const sx of [-1, 1]) for (const d of T.doors) for (const e of [-1, 1]) {
+  {
     const leaf = new THREE.Group();
     box(0.05, 0.75, T.doorW / 2 - 0.02, M.body, 0, F + 0.4, 0, leaf);
     box(0.05, 0.28, T.doorW / 2 - 0.02, M.body, 0, T.roof - 0.58, 0, leaf);
     const g = new THREE.Mesh(new THREE.PlaneGeometry(T.doorW / 2 - 0.1, T.roof - 0.72 - (F + 0.8)).rotateY(Math.PI / 2), M.glass);
-    g.position.set(0, (F + 0.8 + T.roof - 0.72) / 2, 0); g.userData.noShadow = true; leaf.add(g);
+    g.position.set(0, (F + 0.8 + T.roof - 0.72) / 2, 0); leaf.add(g);
     for (const ee of [-1, 1]) box(0.06, T.roof - 0.45 - F, 0.05, M.dark, 0, F + (T.roof - 0.45 - F) / 2, ee * (T.doorW / 4 - 0.03), leaf);
-    leaf.position.set(sx * (hw + 0.01), 0, d + e * T.doorW / 4);
-    leaf.userData = { sx, d, e };
-    tramMesh.add(leaf); TRAM_PARTS.doors.push(leaf);
+    const byM = new Map();
+    for (const o of leaf.children) {
+      o.updateMatrix();
+      const gg = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrix);
+      if (!byM.has(o.material)) byM.set(o.material, []); byM.get(o.material).push(gg);
+    }
+    for (const sx of [-1, 1]) for (const d of T.doors) for (const e of [-1, 1]) TRAM_PARTS.doors.push({ sx, d, e });
+    TRAM_PARTS.doorInst = [];
+    for (const [mat, geos] of byM) {
+      const n = geos.reduce((a, q) => a + q.attributes.position.count, 0), pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), uv = new Float32Array(n * 2);
+      let k = 0; for (const q of geos) { pos.set(q.attributes.position.array, k * 3); nrm.set(q.attributes.normal.array, k * 3); if (q.attributes.uv) uv.set(q.attributes.uv.array, k * 2); k += q.attributes.position.count; }
+      const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); mg.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+      const im = new THREE.InstancedMesh(mg, mat, TRAM_PARTS.doors.length);
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      if (mat === M.glass) im.userData.noShadow = true;
+      tramMesh.add(im); TRAM_PARTS.doorInst.push(im);
+    }
   }
   // gabungkan bagian statis per material (sekitar 250 mesh jadi belasan)
   staticG.updateMatrixWorld(true);
@@ -5688,13 +5704,22 @@ const TRAM_PARTS = {};
 }
 scene.add(tramMesh);
 const tram = { za: TRAM.stops[1].za, v: 0, target: 2, dir: 1, dwell: TRAM.dwell, from: TRAM.stops[1].za, shownTarget: -1 };
+const _tdM = new THREE.Matrix4();
+function tramDoors(open) {                                          // D2: matriks tiap daun pintu (instance); hanya sisi peron (+x) yang membuka
+  const T = TRAM_CAR;
+  TRAM_PARTS.doors.forEach(({ sx, d, e }, i) => {
+    const o = sx > 0 ? open : 0;
+    _tdM.makeTranslation(sx * (T.halfW + 0.01 + 0.07 * Math.min(1, o * 4)), 0, d + e * (T.doorW / 4 + o * (T.doorW / 2 - 0.05)));
+    for (const im of TRAM_PARTS.doorInst) im.setMatrixAt(i, _tdM);
+  });
+  for (const im of TRAM_PARTS.doorInst) im.instanceMatrix.needsUpdate = true;
+}
+tramDoors(0);
+let _tramOpen = 0;
 function updateTramVisual() {
   const T = TRAM_CAR, dw = tram.dwell;
   const open = dw > 0 ? sstep(0, 1, Math.min(TRAM.dwell - dw, dw - 0.6) / 1.2) : 0;   // buka setelah berhenti, tutup sebelum berangkat
-  for (const leaf of TRAM_PARTS.doors) {
-    const { sx, d, e } = leaf.userData, o = sx > 0 ? open : 0;
-    leaf.position.set(sx * (T.halfW + 0.01 + 0.07 * Math.min(1, o * 4)), 0, d + e * (T.doorW / 4 + o * (T.doorW / 2 - 0.05)));
-  }
+  if (open !== _tramOpen) { _tramOpen = open; tramDoors(open); }
   const night = BUILD_U.uNight.value;
   for (const lm of TRAM_PARTS.lights) {
     const front = lm.userData.end === tram.dir;
@@ -8243,8 +8268,12 @@ const BRIDGE_G = new THREE.Group(); BRIDGE_G.name = 'BRIDGE_G'; scene.add(BRIDGE
   const m4 = new THREE.Matrix4(), sv = new THREE.Vector3(), col = new THREE.Color();
   let nInst = 0, nPier = 0;
   BRIDGE_G.userData.decks = [];
+  // D6: dek digabung per pita za 1.000 m (jalan satu mesh, badan beton satu InstancedMesh per pita), bukan 2 draw per dek:
+  // dulu 16 dek terlihat = 32 draw. Culling per pita tetap jalan lewat enableCull di bawah.
+  const bands = new Map(), bandOf = (B) => Math.floor((B.dir === 'z' ? B.a0 + B.len / 2 : B.c) / 1000);
+  const bandData = (B) => { const k = bandOf(B); if (!bands.has(k)) bands.set(k, { roads: [], mats: [], cols: [], decks: [] }); return bands.get(k); };
   for (const B of BRIDGES) {
-    const zd = B.dir === 'z', rw = B.hw - 1.5;
+    const zd = B.dir === 'z', rw = B.hw - 1.5, BD = bandData(B);
     // (u sepanjang dek dari a0, v melintang dari as) -> (s, za)
     const SZ = (u, v) => zd ? [modS(B.c + v), B.a0 + u] : [modS(B.a0 + u), B.c + v];
     // 1) pita jalan: vertex tiap 4 m sepanjang, kolom melintang tiap <= 4 m
@@ -8263,12 +8292,7 @@ const BRIDGE_G = new THREE.Group(); BRIDGE_G.name = 'BRIDGE_G'; scene.add(BRIDGE
         const a = y * nx + x, b = a + 1, c2 = a + nx, d = c2 + 1;
         idx[q++] = a; idx[q++] = c2; idx[q++] = b; idx[q++] = b; idx[q++] = c2; idx[q++] = d;
       }
-      const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
-      g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeBoundingSphere();
-      const m = new THREE.Mesh(g, roadMat);
-      m.userData.noLight = true; m.layers.enable(1);
-      BRIDGE_G.add(m);
+      BD.roads.push({ pos, nrm, idx });
     }
     // 2) badan beton per ruas 5 m, 3) pilar, 4) kolider
     const list = [];                                                    // [u, v, du, dy, dv, h, warna] (du sepanjang, dv melintang)
@@ -8303,14 +8327,32 @@ const BRIDGE_G = new THREE.Group(); BRIDGE_G.name = 'BRIDGE_G'; scene.add(BRIDGE
       }
       if (any) list.push([u, 0, 1.3, 0.5, 2 * B.hw - 1.5, -1.6, C.pier]);          // balok kepala pilar
     }
-    const im = new THREE.InstancedMesh(unit, boxMat, list.length);
-    list.forEach(([u, v, du, dy, dv, h, c], i) => {
+    list.forEach(([u, v, du, dy, dv, h, c]) => {
       const [s, za] = SZ(u, v);
       surfaceMatrix(m4, s / R, za, h); m4.scale(zd ? sv.set(dv, dy, du) : sv.set(du, dy, dv));
-      im.setMatrixAt(i, m4); im.setColorAt(i, col.setHex(c));
+      BD.mats.push(m4.clone()); BD.cols.push(c);
     });
-    BRIDGE_G.add(im); nInst += list.length;
-    BRIDGE_G.userData.decks.push({ B, road: BRIDGE_G.children[BRIDGE_G.children.length - 2], body: im });
+    nInst += list.length; BD.decks.push(B);
+  }
+  for (const BD of bands.values()) {                                    // satu mesh jalan + satu InstancedMesh per pita
+    let nv = 0, ni = 0;
+    for (const r of BD.roads) { nv += r.pos.length / 3; ni += r.idx.length; }
+    const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), idx = new Uint32Array(ni);
+    let vo = 0, io = 0;
+    for (const r of BD.roads) {
+      pos.set(r.pos, vo * 3); nrm.set(r.nrm, vo * 3);
+      for (let i = 0; i < r.idx.length; i++) idx[io + i] = r.idx[i] + vo;
+      vo += r.pos.length / 3; io += r.idx.length;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+    g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeBoundingSphere();
+    const road = new THREE.Mesh(g, roadMat);
+    road.userData.noLight = true; road.layers.enable(1);
+    const im = new THREE.InstancedMesh(unit, boxMat, BD.mats.length);
+    BD.mats.forEach((mx, i) => { im.setMatrixAt(i, mx); im.setColorAt(i, col.setHex(BD.cols[i])); });
+    BRIDGE_G.add(road, im);
+    for (const B of BD.decks) BRIDGE_G.userData.decks.push({ B, road, body: im });
   }
   enableCull(BRIDGE_G, 120);                                            // pad 120 m untuk pass bayangan (shUnroll), sama dengan grup kecil 20b
   BRIDGE_G.userData.instances = nInst; BRIDGE_G.userData.piers = nPier;

@@ -95,6 +95,8 @@ Label effort mengikuti `CLAUDE.md`. Penghematan = draw nyata per frame (angka HU
 | --- | --- |
 | D1 | Dikerjakan: `updateFurniture()` mengatur `K.mesh.visible = c > 0`. Belum diuji pemilik |
 | D7 | Dikerjakan: 7 bidang air Skyway jadi satu `InstancedMesh` (culling normal). Belum diuji pemilik |
+| D6 | Dikerjakan: dek jembatan digabung per pita za 1.000 m (satu mesh jalan + satu `InstancedMesh` beton per pita; `BRIDGE_G.userData.decks` tetap berisi `{ B, road, body }`). Culling per pita lewat `enableCull`. Belum diuji pemilik |
+| D2 | Dikerjakan sebagian: 8 daun pintu trem (48 draw) jadi 3 `InstancedMesh` per bahan (4 draw), matriks geser di `tramDoors()` dipanggil dari `updateTramVisual()` hanya saat bukaan berubah. Bagian (b) culling tidak perlu: `enableCull(tramMesh, 120)` sudah mengaktifkan frustum culling trem (bola batas + 120 m, jadi trem tetap digambar bila dalam 120 m dari kerucut pandang). Belum diuji pemilik |
 | D8 | Dikerjakan sebagian: `mergeByMaterial` kini menggabung kaca transparan (`depthWrite` mati) bahan sama: kaca lobi menara lift dan kabin lift (sekitar 20 draw). Bangku dan papan terminal tidak digabung: tiap papan punya tekstur sendiri. Belum diuji pemilik |
 
 ### 4.1 Perkiraan hasil (draw nyata per frame)
