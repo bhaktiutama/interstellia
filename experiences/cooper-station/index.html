@@ -2005,6 +2005,22 @@ const MEADOW_GLSL = /* glsl */`
     return smoothstep(0.42, 0.8, g);
   }
 `;
+// 29b: medan jarak jalur taman (R8, 2 m per piksel, za 0 sampai 3.300 m): 0,5 = tepi jalur, nilai kecil = di dalam, 1 = 3 m atau lebih di luar.
+// Dibangun di blok PARK_PATHS; dipakai shader tanah (gambar jalur) dan rumput (tidak tumbuh di jalur). `?jalur=lama` = tanpa medan (255 = jauh).
+const PATHLAMA = new URLSearchParams(location.search).get('jalur') === 'lama';
+const PATHSDF = { W: Math.ceil(TAU * CONFIG.R / 2), H: 1650, zMax: 3300, step: 2, range: 6 };
+PATHSDF.data = new Uint8Array(PATHSDF.W * PATHSDF.H).fill(255);
+PATHSDF.tex = new THREE.DataTexture(PATHSDF.data, PATHSDF.W, PATHSDF.H, THREE.RedFormat, THREE.UnsignedByteType);
+Object.assign(PATHSDF.tex, { magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter, wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping, unpackAlignment: 1, generateMipmaps: false });
+PATHSDF.tex.needsUpdate = true;
+const PATH_GLSL = /* glsl */`
+  uniform sampler2D uPathTex;
+  // jarak bertanda ke tepi jalur taman (m): negatif di dalam jalur, 6 = jauh. Sama dengan PATHSDF di JS.
+  float pathD(vec2 P) {
+    if (P.y < 0.0 || P.y >= ${PATHSDF.zMax.toFixed(1)}) return ${PATHSDF.range.toFixed(1)};
+    vec2 uv = vec2(fract(P.x / (2.0 * PI * uR)), P.y / ${PATHSDF.zMax.toFixed(1)});
+    return (textureLod(uPathTex, uv, 0.0).r - 0.5) * ${(2 * PATHSDF.range).toFixed(1)};
+  }`;
 const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
   fog: true,
   side: THREE.BackSide,
@@ -2013,7 +2029,7 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
     uFieldTex: { value: null }, uCloudTex: { value: null }, uTime: { value: 0 }, uArt: { value: TAU * CONFIG.R / 26 },
     uCloudK: { value: 0.2 }, uFieldZ: { value: new THREE.Vector2(3200, 7850) }, uCityZ: { value: new THREE.Vector2(250, 2500) },
     uReal: { value: new THREE.Vector4(-1e9, -1e9, -1e9, -1e9) }, uShadeTex: { value: null }, uGrassR: { value: 0 }, uCornR: { value: 0 }, uGapHalf: { value: 0 }, uNight: { value: 0 },
-    uWet: { value: 0 }, uRainNow: { value: 0 }, uCropT: { value: 0 },
+    uWet: { value: 0 }, uRainNow: { value: 0 }, uCropT: { value: 0 }, uPathTex: { value: PATHSDF.tex },
     uTram: LIGHT.uniforms.uL_Tram,                                     // 15a: (s, za, arah, malam) trem untuk kolam cahaya (17e: dibagi dengan LIGHT)
   }, LIGHT.uniforms]),
   vertexShader: /* glsl */`
@@ -2074,6 +2090,7 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
     }
     ${MEADOW_GLSL}
     ${SIDEWALK_GLSL}
+    ${PATH_GLSL}
     // garis dengan anti-alias: pusat c, setengah lebar hw, jejak piksel fp
     float lineAA(float d, float hw, float fp) {
       float cov = 1.0 - smoothstep(hw - fp, hw + fp, abs(d));
@@ -2161,6 +2178,21 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
         vec3 pav = vec3(0.60, 0.59, 0.56) * (0.94 + 0.12 * vnoise(P / 7.0)) * (swd > 0.3 && swd < 1.8 ? 0.88 : 1.0);
         col = mix(pav, vec3(0.74, 0.73, 0.70), curbM);
         concM = 1.0; asphM = 0.0; vegM = 0.0; grayM = 1.0;
+      }
+      // 29b: jalur taman dari medan jarak (tepi bergelombang, kerikil berbutir, tanah aus di tepi, rumput tidak tumbuh di dalamnya)
+      if (waterM < 0.5) {
+        float pdr = pathD(P);
+        if (pdr < 1.2) {
+          float pdn = pdr + (vnoise(P * 1.3) - 0.5) * 0.4 + (vnoise(P * 5.3 + 2.0) - 0.5) * 0.14;
+          float pm = 1.0 - smoothstep(-0.04, 0.14, pdn);
+          float rim = (1.0 - smoothstep(0.14, 1.1, pdn)) * (1.0 - pm);
+          float gr = grainN(P * 13.0), pb = smoothstep(0.78, 0.86, grainN(P * 6.5 + 3.0));
+          vec3 pc = vec3(0.50, 0.44, 0.34) * (0.86 + 0.26 * gr) * (0.94 + 0.12 * vnoise(P / 2.7));
+          pc = mix(pc, vec3(0.64, 0.58, 0.48), pb * 0.6);
+          col = mix(col, col * vec3(1.12, 1.0, 0.78), rim * 0.45 * vegM);
+          col = mix(col, pc, pm);
+          vegM *= 1.0 - max(pm, rim * 0.5);
+        }
       }
 
       // ---- ladang: data per petak (arah baris, jarak baris, jenis) ----
@@ -8655,7 +8687,7 @@ const VU = {
   uMeadowOn: { value: 1 },                                           // 14b: 1 = rumput tinggi bukit aktif (rumput pendek disembunyikan di bukit)
   uLodF: { value: 70 }, uForest: { value: new THREE.Vector4(FOREST.s0, FOREST.z0, FOREST.s1, FOREST.z1) },   // 14a: radius mesh penuh pohon hutan
   uWind: { value: new THREE.Vector3(1.2, 0.4, 0.4) },
-  uCropT: groundMat.uniforms.uCropT,
+  uCropT: groundMat.uniforms.uCropT, uPathTex: groundMat.uniforms.uPathTex,
 };
 groundMat.uniforms.uSwimP = { value: new THREE.Vector4(0, 0, 0, 0) };   // 23e
 groundMat.uniforms.uWind = VU.uWind; groundMat.uniforms.uGustOff = VU.uGustOff; groundMat.uniforms.uMeadowOn = VU.uMeadowOn; groundMat.uniforms.uMeadowR = { value: 70 };   // 14b
@@ -8722,6 +8754,7 @@ ${GROUND_FRAME_GLSL}  vec2 landUV(vec2 P) { return vec2(fract(P.x / (2.0 * PI * 
   float windAt(vec2 P) { return vnoise(P / 14.0 + vec2(uTime * 0.35, uTime * 0.12)); }
   ${MEADOW_GLSL}
   ${SIDEWALK_GLSL}
+  ${PATH_GLSL}
   #ifndef DEPTH_ONLY
   #define SUNSH_CHEAP
   ${LIGHT_GLSL}
@@ -8814,7 +8847,7 @@ const GRASS_VS = /* glsl */`
     // jenis: 0 rumput, 1 gandum, 2 kedelai, 3 sorgum (dari kode petak ladang)
     vec3 land = textureLod(uLand, landUV(P), 0.0).rgb;
     vec4 fdat = fieldData(P); float code = fdat.b;
-    int kind = 0;
+    int kind = 0; float pe = 1.0;                                    // 29b: pe = pangkas rumput di tepi jalur taman
     if (code > 0.2) {
       if (abs(code - 0.627) < 0.03) kind = 1; else if (abs(code - 0.690) < 0.03) kind = 2; else if (abs(code - 0.878) < 0.03) kind = 3;
       else { ${CLIP_AWAY} }
@@ -8825,6 +8858,8 @@ const GRASS_VS = /* glsl */`
       float kS = floor(P.x / uArt + 0.5);
       if (P.y > uFieldZ.x && mod(kS, 2.0) < 0.5 && abs(P.x - kS * uArt) < 3.8) veg = 0.0;   // jalan tanah ladang
       if (veg < 0.5 || sidewalkD(P, uArt) >= 0.0) { ${CLIP_AWAY} }   // 15c: tidak ada rumput di trotoar
+      float pdG = pathD(P); pe = smoothstep(0.2, 1.1, pdG);
+      if (pdG < 0.2) { ${CLIP_AWAY} }                                // 29b: tidak ada rumput di jalur taman
       if (uMeadowOn > 0.5 && meadowMask(terrainH(P)) > 0.55) { ${CLIP_AWAY} }   // 14b: diganti rumput tinggi
     }
     bool yard = kind == 0 && inRect(P, uYard);
@@ -8838,7 +8873,7 @@ const GRASS_VS = /* glsl */`
     float hgt = kind == 1 ? mix(0.8, 1.0, h3) : kind == 2 ? mix(0.42, 0.56, h3) : kind == 3 ? mix(1.2, 1.5, h3)
       : yard ? mix(0.07, 0.16, h3) : mix(uHmin, uHmax, 0.7 * vnoise(P / 5.0) + 0.3 * h3);
     vec3 wst = kind == 1 ? wheatStage(fdat.g) : vec3(1.0, 1.0, 0.0);
-    hgt *= k * wst.x;
+    hgt *= k * wst.x * pe;
     float wmul = kind == 2 ? 2.4 : kind == 1 ? 0.8 : kind == 3 ? 1.3 : 1.0;
     bool headOn = kind == 3 || (kind == 1 && wst.z < 0.5 && wst.y > 0.15);
     vec3 lp = position;
@@ -8920,7 +8955,9 @@ const MEADOW_VS = /* glsl */`
     float mx = max(sb.r, max(sb.g, sb.b)), mn = min(sb.r, min(sb.g, sb.b));
     float veg = smoothstep(0.15, 0.2, (mx - mn) / max(mx, 1e-3)) * step(sb.r, sb.g * 1.02) * (1.0 - smoothstep(0.04, 0.1, sb.b - max(sb.r, sb.g)));
     if (veg < 0.5) { ${CLIP_AWAY} }
-    float hgt = mix(0.6, 1.1, 0.65 * vnoise(P / 6.0) + 0.35 * h3) * mm * k;
+    float pdM = pathD(P);                                            // 29b: jalur taman
+    if (pdM < 0.2) { ${CLIP_AWAY} }
+    float hgt = mix(0.6, 1.1, 0.65 * vnoise(P / 6.0) + 0.35 * h3) * mm * k * smoothstep(0.2, 1.1, pdM);
     vec3 up, tS; vec3 base = groundFrame(P, 0.0, up, tS);
     float ang = h3 * 6.2832, ca = cos(ang), sa = sin(ang);
     vec2 xz = vec2(ca * position.x - sa * position.z, sa * position.x + ca * position.z);
@@ -14228,7 +14265,7 @@ function colAt(s, za, m) {                                          // 15c: ada 
   for (const i of arr) { const [a, b, hs, hz] = COL.items[i]; if (Math.abs(wrapS(s - a)) < hs + m && Math.abs(za - b) < hz + m) return true; }
   return false;
 }
-const PARK_PATHS = { runs: [], w: 2.6, mesh: null };
+const PARK_PATHS = { runs: [], w: 2.6, mesh: null, curves: [], loops: new Map() };   // 29b: curves = jalur melengkung (kurva), loops = keliling taman per blok
 {
   const treeAt = (s, za) => colAt(s, za, 1.2);                      // batang pohon atau benda lain dalam 1,2 m
   const good = (s, za) => za > PARKZ.za0 + 4 && za < PARKZ.za1 - 6 && !inWater(s, za, 3) && !inRiver(s, za, 4) && !inBallpark(s, za, 4)
@@ -14244,10 +14281,12 @@ const PARK_PATHS = { runs: [], w: 2.6, mesh: null };
   for (const z of [2700, 2880, 3060]) trace(0, z, 1, 0, Math.floor(CIRC / 3), 3);
   for (let k = 0; k < 52; k++) trace(k * ART / 2 + ART / 4, PARKZ.za0 + 6, 0, 1, Math.floor((PARKZ.za1 - PARKZ.za0 - 12) / 3), 3);
   const cityLoops = [];
-  for (const [s0, z0, s1, z1, plaza, cross] of parkBlocks) if (!plaza && !inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) {
-    cityLoops.push([s0 + 4, z0 + 4, s1 - 4, z1 - 4]);
+  for (const B of parkBlocks) if (!B[4] && !inBallpark((B[0] + B[2]) / 2, (B[1] + B[3]) / 2)) {
+    const [s0, z0, s1, z1, , cross] = B;
+    cityLoops.push([s0 + 4, z0 + 4, s1 - 4, z1 - 4, B]);
     if (cross) { const cs = (s0 + s1) / 2, cz = (z0 + z1) / 2; PARK_PATHS.runs.push([s0 + 4, s1 - 4, cz, cz], [cs, cs, z0 + 4, z1 - 4]); }   // 16e: jalur silang taman distrik
   }
+  if (PATHLAMA) {                                                   // 29b: ?jalur=lama = pita lurus lama
   // pita: titik tiap 3 m di tinggi tanah + 5 cm
   const pos = [], m4 = new THREE.Matrix4(), v = new THREE.Vector3(), hw = PARK_PATHS.w / 2;
   const ribbon = (a0, a1, b0, b1) => {
@@ -14268,6 +14307,115 @@ const PARK_PATHS = { runs: [], w: 2.6, mesh: null };
     for (let i = 0; i < N.length; i += 3) if (N[i] * -P[i] + N[i + 1] * -P[i + 1] < 0) { N[i] = -N[i]; N[i + 1] = -N[i + 1]; N[i + 2] = -N[i + 2]; } }
   const mesh = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: 0xb8ad94, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4, side: THREE.DoubleSide }));
   mesh.frustumCulled = false; mesh.userData.noShadow = true; scene.add(mesh); PARK_PATHS.mesh = mesh;
+  } else {
+  // 29b: jalur melengkung. Ruas lurus bersih (runs) dan keliling blok jadi kurva dengan lebar berubah, percabangan, dan jalur setapak sempit;
+  // titik yang menabrak benda ditarik kembali. Hasilnya dirasterisasi ke PATHSDF (shader tanah menggambar jalur, rumput menghindar)
+  // dan disimpan sebagai kurva (pejalan kaki kind 'path'). Generator acak sendiri.
+  let psd = 60613; const pr = () => ((psd = (psd * 16807) % 2147483647) / 2147483647);
+  const sn = (x, a, b, c) => 0.6 * Math.sin(x * 0.071 + a) + 0.3 * Math.sin(x * 0.173 + b) + 0.1 * Math.sin(x * 0.39 + c);
+  const goodC = (s, za) => good0(s, za) && !colAt(s, za, 1.9);
+  function good0(s, za) { return za > PARKZ.za0 + 4 && za < PARKZ.za1 - 6 && !inWater(s, za, 3) && !inRiver(s, za, 4) && !inBallpark(s, za, 4) && Math.abs(wrapS(s - SKY_S)) > 32 && Math.abs(wrapS(s - TRAM.s)) > ROAD.boulevard / 2 + 6; }
+  const mkCurve = (P, hw, closed) => {                              // P = [[s, za], ...]; closed: titik pertama diulang di akhir
+    const n = P.length, pts = new Float32Array(n * 2), cum = new Float32Array(n), hwa = new Float32Array(n);
+    for (let i = 0; i < n; i++) { pts[i * 2] = P[i][0]; pts[i * 2 + 1] = P[i][1]; hwa[i] = hw[i]; if (i) cum[i] = cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]); }
+    return { pts, hw: hwa, cum, n, L: cum[n - 1], closed };
+  };
+  const relax = (P, nrm, off, ok, ends) => {                        // geser titik sepanjang normal; titik buruk dikecilkan, lalu dihaluskan
+    for (let it = 0; it < 8; it++) {
+      for (let i = 0; i < P.length; i++) { if (!ok(P[i][0] + nrm[i][0] * off[i], P[i][1] + nrm[i][1] * off[i])) off[i] *= 0.5; if (Math.abs(off[i]) < 0.1) off[i] = 0; }
+      const o2 = off.slice();
+      for (let i = 1; i < P.length - 1; i++) off[i] = 0.25 * o2[i - 1] + 0.5 * o2[i] + 0.25 * o2[i + 1];
+      if (ends) off[0] = off[P.length - 1] = 0;
+    }
+    for (let i = 0; i < P.length; i++) if (!ok(P[i][0] + nrm[i][0] * off[i], P[i][1] + nrm[i][1] * off[i])) off[i] = 0;
+    return P.map((q, i) => [q[0] + nrm[i][0] * off[i], q[1] + nrm[i][1] * off[i]]);
+  };
+  const widths = (n, w0, w1, ph) => Array.from({ length: n }, (_, i) => (w0 + (w1 - w0) * (0.5 + 0.5 * Math.sin(i * 3 * 0.05 + ph))) / 2);
+  const curves = PARK_PATHS.curves;
+  const branch = (P, i0, ok) => {                                   // cabang dari titik i0 pada kurva P: lengkung ke satu sisi, berhenti di rintangan
+    const a = P[i0], b = P[Math.min(P.length - 1, i0 + 1)], base = Math.atan2(b[0] - a[0], b[1] - a[1]);   // sudut dari +za ke +s
+    let h = base + (pr() < 0.5 ? -1 : 1) * (0.5 + 0.4 * pr()), turn = (pr() < 0.5 ? -1 : 1) * (0.004 + 0.008 * pr()), x = a[0], z = a[1];
+    const Lt = 30 + 50 * pr(), pts = [[x, z]];
+    for (let d = 3; d <= Lt; d += 3) { h += turn * 3; x += Math.sin(h) * 3; z += Math.cos(h) * 3; if (!ok(x, z)) break; pts.push([x, z]); }
+    if (pts.length < 8) return;
+    const w = 0.8 + 0.5 * pr(); curves.push(mkCurve(pts, pts.map((_, i) => w * (1 - 0.35 * i / pts.length)), false));
+  };
+  const spur = (P, i0, ok) => {                                     // jalur setapak sempit memotong rumput
+    const a = P[i0], b = P[Math.min(P.length - 1, i0 + 1)], base = Math.atan2(b[0] - a[0], b[1] - a[1]) + (pr() < 0.5 ? -1 : 1) * (1.2 + 0.3 * pr());
+    let h = base, x = a[0], z = a[1]; const pts = [[x, z]], Lt = 25 + 35 * pr(), turn = (pr() - 0.5) * 0.02;
+    for (let d = 3; d <= Lt; d += 3) { h += turn * 3; x += Math.sin(h) * 3; z += Math.cos(h) * 3; if (!ok(x, z)) break; pts.push([x, z]); }
+    if (pts.length >= 6) curves.push(mkCurve(pts, pts.map((_, i) => 0.42 * (1 - 0.25 * i / pts.length)), false));
+  };
+  // 1) taman besar: tiap ruas lurus jadi kurva berkelok
+  for (const [a0, a1, b0, b1] of PARK_PATHS.runs) {
+    if (b0 < PARKZ.za0 || b1 < PARKZ.za0) continue;                 // jalur silang taman distrik ditangani di bawah
+    const RL = Math.hypot(a1 - a0, b1 - b0), n = Math.max(2, Math.ceil(RL / 3)) + 1, ds = (a1 - a0) / RL, dz = (b1 - b0) / RL;
+    const ph = [pr() * TAU, pr() * TAU, pr() * TAU], A = Math.min(3 + 5 * pr(), RL / 8);
+    const P = [], nrm = [], off = [];
+    for (let i = 0; i < n; i++) {
+      const u = RL * i / (n - 1), tp = Math.min(1, u / 14, (RL - u) / 14);
+      P.push([a0 + ds * u, b0 + dz * u]); nrm.push([dz, -ds]); off.push(A * tp * sn(u, ph[0], ph[1], ph[2]));
+    }
+    const Q = relax(P, nrm, off, goodC, true);
+    curves.push(mkCurve(Q, widths(n, 1.9, 3.0, pr() * TAU), false));
+    for (let i = 20; i < n - 20; i += 45 + Math.floor(pr() * 30)) { if (pr() < 0.7) branch(Q, i, goodC); if (pr() < 0.35) spur(Q, i + 10, goodC); }
+  }
+  // 2) taman distrik: keliling membulat bergelombang + jalur silang berkelok
+  for (const [s0, z0, s1, z1, B] of cityLoops) {
+    const w = s1 - s0, d = z1 - z0, rr = Math.min(10, Math.min(w, d) / 4), per = 2 * (w + d - 4 * rr) + TAU * rr, n = Math.ceil(per / 3);
+    const P = [], nrm = [], off = [], ph = [pr() * TAU, pr() * TAU, pr() * TAU];
+    // titik persegi membulat (searah jarum jam dari sudut kiri bawah) dan normal ke dalam
+    const rrect = (u) => {
+      const L1 = w - 2 * rr, L2 = d - 2 * rr, Ca = (Math.PI / 2) * rr; let k = 0, x = u;
+      const seg = [L1, Ca, L2, Ca, L1, Ca, L2, Ca];
+      while (k < 7 && x > seg[k]) { x -= seg[k]; k++; }
+      const f = seg[k] > 0 ? x / seg[k] : 0;
+      if (k === 0) return [s0 + rr + f * L1, z0, 0, 1];                       // sisi bawah, normal ke dalam +za
+      if (k === 1) { const a = f * Math.PI / 2; return [s1 - rr + Math.sin(a) * rr, z0 + rr - Math.cos(a) * rr, -Math.sin(a), Math.cos(a)]; }
+      if (k === 2) return [s1, z0 + rr + f * L2, -1, 0];
+      if (k === 3) { const a = f * Math.PI / 2; return [s1 - rr + Math.cos(a) * rr, z1 - rr + Math.sin(a) * rr, -Math.cos(a), -Math.sin(a)]; }
+      if (k === 4) return [s1 - rr - f * L1, z1, 0, -1];
+      if (k === 5) { const a = f * Math.PI / 2; return [s0 + rr - Math.sin(a) * rr, z1 - rr + Math.cos(a) * rr, Math.sin(a), -Math.cos(a)]; }
+      if (k === 6) return [s0, z1 - rr - f * L2, 1, 0];
+      const a = f * Math.PI / 2; return [s0 + rr - Math.cos(a) * rr, z0 + rr - Math.sin(a) * rr, Math.cos(a), Math.sin(a)];
+    };
+    for (let i = 0; i < n; i++) { const u = per * i / n, q = rrect(u); P.push([q[0], q[1]]); nrm.push([q[2], q[3]]); off.push(1.3 + 0.9 * sn(u, ph[0], ph[1], ph[2])); }
+    P.push(P[0].slice()); nrm.push(nrm[0]); off.push(off[0]);
+    const Q = relax(P, nrm, off, (s, za) => !colAt(s, za, 1.9), false);
+    Q[Q.length - 1] = Q[0].slice();
+    const lp = mkCurve(Q, widths(Q.length, 1.9, 2.8, pr() * TAU), true);
+    curves.push(lp); PARK_PATHS.loops.set(B, lp);
+    if (B[5]) {                                                       // jalur silang: dua kurva berkelok dari tengah sisi ke tengah sisi
+      const cs = (s0 + s1) / 2, cz = (z0 + z1) / 2;
+      for (const horiz of [true, false]) {
+        const len = horiz ? w : d, m = Math.ceil(len / 3) + 1, P2 = [], n2 = [], o2 = [], p3 = [pr() * TAU, pr() * TAU, pr() * TAU], A2 = Math.min(2 + 4 * pr(), len / 10);
+        for (let i = 0; i < m; i++) {
+          const u = len * i / (m - 1), tp = Math.min(1, u / 10, (len - u) / 10);
+          P2.push(horiz ? [s0 + 1.3 + u * (w - 2.6) / len, cz] : [cs, z0 + 1.3 + u * (d - 2.6) / len]); n2.push(horiz ? [0, 1] : [1, 0]); o2.push(A2 * tp * sn(u, p3[0], p3[1], p3[2]));
+        }
+        const Q2 = relax(P2, n2, o2, (s, za) => !colAt(s, za, 1.9), true);
+        curves.push(mkCurve(Q2, widths(m, 1.8, 2.6, pr() * TAU), false));
+      }
+    }
+  }
+  // 3) rasterisasi ke PATHSDF
+  {
+    const { W, H, zMax, range } = PATHSDF, cs = CIRC / W, cz = zMax / H, data = PATHSDF.data, enc = (d) => Math.max(0, Math.min(255, Math.round((0.5 + d / (2 * range)) * 255)));
+    for (const cv of curves) {
+      for (let i = 0; i < cv.n - 1; i++) {
+        const ax = cv.pts[i * 2], az = cv.pts[i * 2 + 1], bx = cv.pts[i * 2 + 2], bz = cv.pts[i * 2 + 3], ha = cv.hw[i], hb = cv.hw[i + 1];
+        const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz || 1e-6, m = range + 3;
+        const i0 = Math.floor((Math.min(ax, bx) - m) / cs), i1 = Math.ceil((Math.max(ax, bx) + m) / cs), j0 = Math.max(0, Math.floor((Math.min(az, bz) - m) / cz)), j1 = Math.min(H - 1, Math.ceil((Math.max(az, bz) + m) / cz));
+        for (let j = j0; j <= j1; j++) for (let ix = i0; ix <= i1; ix++) {
+          const x = (ix + 0.5) * cs, z = (j + 0.5) * cz, t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / l2));
+          const d = Math.hypot(x - (ax + dx * t), z - (az + dz * t)) - (ha + (hb - ha) * t), e = enc(d), k = j * W + (((ix % W) + W) % W);
+          if (e < data[k]) data[k] = e;
+        }
+      }
+    }
+    PATHSDF.tex.needsUpdate = true; PATHSDF.on = true;
+  }
+  }
 }
 // 28a: lama = ?orang=lama: model orang persis seperti sebelum tahap 28 (17 kotak, geometri dan shader lama)
 const PEDS = { lodR: [30, 90], lama: new URLSearchParams(location.search).get('orang') === 'lama', newModel: false, rainList: [], rk: 0, uk: 0, uOn: false, hk: 0, shelter: false, calm: 0, busy: 0, list: [], walk: [], near: [], nearAt: 0, nearS: 1e9, nearZ: 1e9, frame: 0, max: 4000, n: 0, radius: 300, dens: 1, user: 1, users: [1, 0.4, 0], names: ['nyala', 'sedikit', 'mati'] };
@@ -14381,6 +14529,11 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
   const look = (kid, rr = r) => ({ shirt: Math.floor(rr() * 14), pants: Math.floor(rr() * 8), skin: Math.floor(rr() * 6), scale: kid ? 0.55 + 0.1 * rr() : 0.9 + 0.17 * rr(), bag: !kid && rr() < 0.25 ? 1 : 0, thr: rr() });
   const walker = (o) => { const p = Object.assign({ dir: r() < 0.5 ? 1 : -1, v0: 1.1 + 0.5 * r(), ph: r() * TAU, wait: false, elev: 0, zone: 0 }, look(o.kid), o); PEDS.list.push(p); PEDS.walk.push(p); return p; };
   const still = (o) => { const p = Object.assign({ elev: 0, zone: 0, ph: r() * TAU }, look(o.kid), o); PEDS.list.push(p); return p; };
+  const pathWalker = (p, cv, a, b, u) => {                          // 29b: jadikan pejalan berjalan menyusuri kurva jalur taman (parameter panjang busur)
+    let sd2 = Math.floor(p.ph * 1e4) + 17; const rn = () => ((sd2 = (sd2 * 16807) % 2147483647) / 2147483647);   // tanpa memakai r() setup
+    Object.assign(p, { kind: 'path', cv, a, b, u, si: 0, lat: 0, ph2: rn() * TAU, lk: 9 + 14 * rn(), la: 0.1 + 0.25 * rn(), stT: 0, ho: 0, hf: (rn() < 0.5 ? -1 : 1) * (0.9 + 0.5 * rn()), vm: rn() * TAU });
+    pathPoint(cv, p);
+  };
   const LAT = SIDEWALK.in + 2.3;                                    // 15c: lajur jalan trotoar: 14,3-16,3 m dari as jalan (trotoar 12-17 m)
   const ringM = []; for (let m = 1; m <= 10; m++) if (!nearRing(m * ART_Z, 1)) ringM.push(m);
   // 1) trotoar arteri keliling (berjalan sepanjang za), menyeberangi arteri melingkar
@@ -14418,7 +14571,11 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     const [s0, z0, s1, z1, plaza] = B;
     if (inBallpark((s0 + s1) / 2, (z0 + z1) / 2)) continue;
     const w = s1 - s0 - 8, d = z1 - z0 - 8, n = Math.min(24, Math.round(w * d / (plaza ? 220 : 350))), rect = [s0 + 4, z0 + 4, w, d];
-    for (let q = 0; q < n; q++) walker({ kind: 'loop', rect, u: r() * 2 * (w + d), zone: plaza ? 0 : 1, kid: !plaza && r() < 0.12 });
+    for (let q = 0; q < n; q++) {
+      const wk = walker({ kind: 'loop', rect, u: r() * 2 * (w + d), zone: plaza ? 0 : 1, kid: !plaza && r() < 0.12 });
+      const lp = plaza || PATHLAMA ? null : PARK_PATHS.loops.get(B);   // 29b: keliling taman = kurva, bukan persegi
+      if (lp) pathWalker(wk, lp, 0, lp.L, wk.u / (2 * (w + d)) * lp.L);
+    }
     if (plaza) for (let g = 0; g < 2; g++) {                        // 21a-1: kelompok mengobrol bubar dan berkumpul lagi (VIS.groups)
       let cs = (s0 + s1) / 2 + (r() - 0.5) * w * 0.5, cz = (z0 + z1) / 2 + (r() - 0.5) * d * 0.5; const nn = 2 + Math.floor(r() * 2);
       [cs, cz] = fountPush(cs, cz, 8.5);                             // tidak di kolam air mancur
@@ -14432,7 +14589,13 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     if (B === FOUNT.block) VIS.rect = rect;
   }
   // 4) taman besar (za 2.600-3.200), 15c: berjalan di jalan setapak (PARK_PATHS), tidak lagi di rumput acak
-  for (let q = 0, tries = 0; q < 1000 && tries < 5000 && PARK_PATHS.runs.length; tries++) {
+  const bigC = PARK_PATHS.curves.filter((cv) => !cv.closed && cv.pts[1] >= PARKZ.za0 && cv.L > 40), useC = !PATHLAMA && bigC.length > 0;   // 29b
+  for (let q = 0, tries = 0; q < 1000 && tries < 5000 && (useC ? bigC.length : PARK_PATHS.runs.length); tries++) {
+    if (useC) {                                                       // jumlah panggilan r() sama dengan cabang lama
+      const cv = bigC[Math.floor(r() * bigC.length)], L = Math.min(cv.L, 40 + r() * 90), a = r() * (cv.L - L) / cv.L * cv.L; r();
+      const wk = walker({ kind: 'seg', p0: [0, 0], p1: [0, 0], L, u: r(), zone: 1, kid: r() < 0.2 }); q++;
+      pathWalker(wk, cv, a, a + L, a + wk.u * L); continue;
+    }
     const [a0, a1, b0, b1] = PARK_PATHS.runs[Math.floor(r() * PARK_PATHS.runs.length)], RL = Math.hypot(a1 - a0, b1 - b0);
     const L = Math.min(RL, 40 + r() * 90), t0 = r() * (RL - L) / RL, t1 = t0 + L / RL, off = (r() - 0.5) * 1.6;
     const ns = (b1 - b0) / RL * off, nz = -(a1 - a0) / RL * off;         // sedikit ke kiri/kanan di lebar jalur
@@ -14875,6 +15038,18 @@ function rainBench(p, dt) {                                           // orang d
   }
 }
 // orang dekat (PEDS.near, radius + 60 m) dilangkahkan tiap frame; orang jauh bergiliran 1 dari 10 per frame dengan dt terkumpul
+// 29b: posisi pada kurva jalur (cv) di panjang busur p.u (p.si = indeks ruas terakhir), dengan geseran samping lat; isi p.s, p.za, p.tx, p.tz, p.hw
+function pathPoint(cv, p) {
+  let u = p.u; if (cv.closed) u = ((u % cv.L) + cv.L) % cv.L; else u = Math.max(0, Math.min(cv.L, u));
+  let i = Math.min(p.si | 0, cv.n - 2);
+  while (i < cv.n - 2 && cv.cum[i + 1] < u) i++;
+  while (i > 0 && cv.cum[i] > u) i--;
+  p.si = i;
+  const seg = cv.cum[i + 1] - cv.cum[i] || 1e-6, t = Math.max(0, Math.min(1, (u - cv.cum[i]) / seg));
+  const ax = cv.pts[i * 2], az = cv.pts[i * 2 + 1], dx = cv.pts[i * 2 + 2] - ax, dz = cv.pts[i * 2 + 3] - az, l = Math.hypot(dx, dz) || 1e-6;
+  p.tx = dx / l; p.tz = dz / l; p.hw = cv.hw[i] + (cv.hw[i + 1] - cv.hw[i]) * t;
+  p.s = ax + dx * t + p.tz * p.lat; p.za = az + dz * t - p.tx * p.lat;
+}
 let _pedSd = 7771; const pedRnd = () => ((_pedSd = (_pedSd * 16807) % 2147483647) / 2147483647);   // 29c: acak berhenti / jeda (runtime, terpisah dari acak setup)
 function stepPeds(dt, t = clock.sim) {
   if (dt <= 0) return;
@@ -14921,6 +15096,18 @@ function stepPeds(dt, t = clock.sim) {
         const q = p.mate, fs = Math.sin(p.hd), fz = Math.cos(p.hd);
         q.s = p.s - fs * q.mb + fz * q.ms; q.za = p.za - fz * q.mb - fs * q.ms; q.hd = p.hd + 0.05 * q.ms; q.pose = v > 0 ? 0 : 1; q.ph = p.ph + 0.9; q.elev = 0;
       }
+    } else if (p.kind === 'path') {                                  // 29b: menyusuri kurva jalur taman
+      const cv = p.cv;
+      v *= 0.88 + 0.24 * Math.sin(t * 0.13 + p.vm);
+      if (p.stT > 0) { p.stT -= dt; v = 0; } else if (pedRnd() < dt / 50) p.stT = 3 + 9 * pedRnd();
+      p.u += p.dir * v * dt;
+      if (cv.closed) p.u = ((p.u % cv.L) + cv.L) % cv.L;
+      else if (p.u > p.b) { p.u = p.b; p.dir = -1; p.stT = 2 + 4 * pedRnd(); } else if (p.u < p.a) { p.u = p.a; p.dir = 1; p.stT = 2 + 4 * pedRnd(); }
+      const lim = Math.max(0, p.hw - 0.45), tgt = Math.max(-lim, Math.min(lim, p.dir * 0.4 + 0.35 * Math.sin(p.u / p.lk * TAU + p.ph2)));
+      p.lat += Math.max(-0.6 * dt, Math.min(0.6 * dt, (tgt - p.lat) * Math.min(1, dt * 1.5)));
+      pathPoint(cv, p);
+      const ho = v > 0 ? 0 : p.hf; p.ho += Math.max(-3 * dt, Math.min(3 * dt, ho - p.ho));
+      p.hd = Math.atan2(p.tx * p.dir, p.tz * p.dir) + p.ho;
     } else if (p.kind === 'seg') {
       p.u += p.dir * v * dt / p.L;
       if (p.u > 1) { p.u = 1; p.dir = -1; } else if (p.u < 0) { p.u = 0; p.dir = 1; }
