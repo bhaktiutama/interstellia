@@ -1706,6 +1706,9 @@ function taaBegin() {                                                // sebelum 
   TAA.P.copy(camera.projectionMatrix); TAA.PI.copy(camera.projectionMatrixInverse);
   if (!act) return;
   TAA.i = (TAA.i + 1) % 8;
+  // Gemuruh gelombang (TAA.sh > 0,1): tanpa jitter sub-piksel. Pola derau bayangan di laut (sampel cakram diputar acak per sel 1 cm) berganti
+  // tiap frame bila kamera digeser setengah piksel; dengan bobot frame baru 1 hasilnya berkedip. Tanpa jitter + bobot 1 = gambar tanpa TAA (stabil).
+  if (TAA.sh > 0.1) return;
   const e = camera.projectionMatrix.elements;
   e[8] += 2 * (POSTKIT.halton(TAA.i + 1, 2) - 0.5) / POST.w; e[9] += 2 * (POSTKIT.halton(TAA.i + 1, 3) - 0.5) / POST.h;
   camera.projectionMatrixInverse.copy(camera.projectionMatrix).invert();
@@ -1756,7 +1759,7 @@ function postRender(time) {
     // Gerak kamera frame ke frame (posisi, sudut) mencakup langkah, getaran gemuruh gelombang, putaran, terbang; meluruh 0,9 per frame agar tidak berkedip
     { const dp = TAA.pp.distanceTo(camera.position), da = TAA.pq.angleTo(camera.quaternion);
       TAA.mv = Math.max(Math.min(1, dp / 0.015 + da / 0.008 + BOB.amp / 0.03 + (FLY.on ? 1 : 0)), TAA.mv * 0.9); TAA.pp.copy(camera.position); TAA.pq.copy(camera.quaternion); }
-    T.uA0.value = Math.max(0.09 + 0.26 * TAA.mv, TAA.sh);   // diam = riwayat panjang (halus), bergerak atau bergetar = pendek (tanpa hantu bayangan)
+    T.uA0.value = Math.max(0.09 + 0.26 * TAA.mv, Math.min(1, TAA.sh * 10));   // sh > 0,1 = jitter mati dan riwayat dibuang   // diam = riwayat panjang (halus), bergerak atau bergetar = pendek (tanpa hantu bayangan)
     pass(M_TAA, hw); TAA.valid = true; TAA.cur = 1 - TAA.cur; fin = hw;
   }
   M_FINAL.uniforms.uTaa.value = TAA.act || CAMX.final ? 1 : 0;      // K: foto akumulasi = pertajam ringan, bukan FXAA
@@ -3967,7 +3970,7 @@ function worldStep(dt, now) {                         // K: simulasi + kamera (f
   }
   // Getaran tanah (R5): gemuruh gelombang raksasa terasa di kaki, ikut tingkat gerak kepala (B)
   const shk = onFoot && !SWEEP.on ? AM.shake * BOB_LEVELS[BOB.level][1] : 0, tv = now / 1000;
-  TAA.sh = Math.min(1, AM.shake / 0.01);                // gemuruh gelombang: TAA hampir dimatikan (bayangan berkedip), lihat postRender
+  TAA.sh = Math.min(1, AM.shake / 0.003);                // gemuruh gelombang: TAA hampir dimatikan (bayangan berkedip), lihat postRender
   BOB.shY = shk * (Math.sin(tv * 81.7) + 0.6 * Math.sin(tv * 107.3 + 1.3)); BOB.shX = shk * 0.5 * Math.sin(tv * 94.2 + 0.7);
   fpCamera();
   if (FLY.on) flyCamera();

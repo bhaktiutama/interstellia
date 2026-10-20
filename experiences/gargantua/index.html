@@ -67,6 +67,14 @@
   #err { position: fixed; inset: 16px; overflow: auto; background: rgba(20,0,0,0.92); color: #ffb4a8; border: 1px solid #6b2a22;
     border-radius: 8px; padding: 16px; white-space: pre-wrap; font-size: 12px; z-index: 10; }
   #err[hidden] { display: none; }
+  /* layar muat: bilah kemajuan seperti Millar / Copper (kompilasi shader sempat membuat halaman tidak merespons) */
+  #boot { position: fixed; inset: 0; z-index: 40; background: #050506; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: #cfd3da; }
+  #boot[hidden] { display: none; }
+  #boot .bt { color: #e8b765; letter-spacing: .3em; font-size: 14px; }
+  #boot .bar { width: min(320px, 70vw); height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+  #boot .bar i { display: block; height: 100%; width: 0; background: #e8b765; transition: width .25s; }
+  #boot .bootRow { width: min(320px, 70vw); display: flex; justify-content: space-between; color: #8b929c; }
 
   body.photo #ui, body.photo .overlay-text:not(#toast), body.photo #menuLink { opacity: 0; pointer-events: none; }
   /* tombol kembali ke menu utama: sama dengan #menuBtn Copper (24f) */
@@ -152,6 +160,7 @@
 <button type="button" id="mendShow" hidden></button>
 <div id="mend" hidden><div class="card"><div class="hh"><span id="mendTitle"></span><span class="mv" id="mendMove"></span><button type="button" id="mendClose" aria-label="Close">&times;</button></div><div id="mendBody"></div><canvas id="mendRelay"></canvas>
   <div class="btns"><button type="button" id="mendAgain">Fly again</button><button type="button" id="mendExit">Exit mission</button></div></div></div>
+<div id="boot"><div class="bt">GARGANTUA</div><div class="bar"><i></i></div><div class="bootRow"><span id="bootTxt">Loading...</span><span id="bootPct"></span></div></div>
 <pre id="err" hidden></pre>
 <script src="../../shared/prof.js"></script>
 <script src="assets/gx01.data.js"></script>
@@ -1381,6 +1390,7 @@ const ID = {
   'End the mission': 'Akhiri misi', 'Tesseract scenario: W/S angle, A/D plane, Enter locks the aim': 'Skenario tesseract: W/S sudut, A/D bidang, Enter mengunci bidikan',
   'Cursor locked: move the mouse to look around, right button = nose, double-click = forward, click or Esc releases': 'Kursor terkunci: gerakkan mouse untuk menoleh, tombol kanan = hidung, klik ganda = depan, klik atau Esc melepas',
   // MK3-MK5: suasana Kelam
+  'Starting...': 'Memulai...', 'Compiling shaders...': 'Mengompilasi shader...', 'Building the scene...': 'Menyiapkan adegan...', 'Ready': 'Siap', 'Loading...': 'Memuat...',
   'Mood': 'Suasana', 'Dust thickness (thin to thick)': 'Kepekatan debu (tipis sampai tebal)', 'Dark mood (dust clouds) (N)': 'Suasana Kelam (awan debu) (N)',
   'Mood: dark (dust clouds)': 'Suasana: Kelam (awan debu)', 'Mood: classic': 'Suasana: Klasik', 'Mood: dark (dust clouds) or classic': 'Suasana: Kelam (awan debu) atau Klasik',
   // MK2: planet Millar
@@ -1439,8 +1449,16 @@ document.addEventListener('DOMContentLoaded', applyStaticLang);   // tautan menu
 const errBox = $('#err');
 function showError(msg) { errBox.hidden = false; errBox.textContent = msg; }
 
-function main() {
-  PROFKIT.mark('Mulai main()');                                      // P0: alat ukur (?prof=1)
+// Layar muat: setiap langkah menyerahkan satu frame ke peramban supaya bilah benar-benar tergambar sebelum pekerjaan berat berikutnya
+const GBOOT = { el: $('#boot'), bar: document.querySelector('#boot .bar i'), pct: $('#bootPct'), txt: $('#bootTxt') };
+function gBoot(frac, label) {
+  const p = `${Math.round(frac * 100)}%`; GBOOT.bar.style.width = p; GBOOT.pct.textContent = p;
+  if (label) GBOOT.txt.textContent = txt(label);
+  return new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+}
+async function main() {
+  PROFKIT.mark('Mulai main()');
+  await gBoot(0.03, 'Starting...');                                      // P0: alat ukur (?prof=1)
   const canvas = $('#c');
   const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false,
     premultipliedAlpha: false, powerPreference: 'high-performance' });
@@ -1699,7 +1717,18 @@ function main() {
   // G3: program partikel, tumbukan kaca, awan debu; derau 3D 64^3 berulang (3 oktaf derau nilai halus berperiode, unit tekstur 6)
   const PART_P = program(PART_FS, 'particles', PART_VS), IMP_P = program(IMP_FS, 'impacts', IMP_VS);
   P.dust = program(DUST_FS, 'dust'); P.lum = program(LUM_FS, 'lum');
+  // Tunggu kompilasi paralel sambil memperbarui bilah (tanpa ekstensi: checkPrograms() menunggu sekaligus, bilah sudah tergambar)
+  await gBoot(0.1, 'Compiling shaders...');
+  if (gl.getExtension('KHR_parallel_shader_compile')) {
+    const ps = GLPEND.pr.map((x) => x[0]);
+    for (;;) {
+      const done = ps.filter((p) => gl.getProgramParameter(p, 0x91B1)).length;       // COMPLETION_STATUS_KHR
+      await gBoot(0.1 + 0.8 * done / ps.length, 'Compiling shaders...');
+      if (done >= ps.length) break;
+    }
+  }
   checkPrograms();                                                   // P3: all 13 programs submitted, now wait once
+  await gBoot(0.92, 'Building the scene...');
   // G3a: target 16 x 9 RGBA8 + PBO untuk eksposur otomatis misi
   const AE = { k: 1, kt: 1, fence: null, t: 0, L: null, skip: false, tgt: null, pbo: gl.createBuffer() };
   {
@@ -4401,11 +4430,13 @@ function main() {
     REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,
     TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound, MUSIC, setMusic, loadMusicFile, relImage, imageDir, rayPhi, relViewInit, drawRelayView, relUpdate, relPlace,
     FUN, funZ, funL, drawFunnel, drawDash, bhRadiant, misGas, GV, vrFrame, tickWorld };   // debugging hook
+  await gBoot(1, 'Ready');
+  GBOOT.el.hidden = true;
   PROFKIT.mark('Siap'); PROFKIT.ready();                             // P0: alat ukur (?prof=1)
   requestAnimationFrame(frame);
 }
 
-try { main(); } catch (e) { showError(String(e && e.message || e)); }
+main().catch((e) => { GBOOT.el.hidden = true; showError(String(e && e.message || e)); });
 </script>
 <a id="menuLink" href="../../index.html" title="Back to the main menu">← Menu</a>
 </body>
