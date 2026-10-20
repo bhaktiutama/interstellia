@@ -249,6 +249,7 @@ uniform vec4  uPl;
 uniform vec3  uPlR, uPlN;
 // MK3-MK9 suasana Kelam (foto contoh 2): uMood 0 = perilaku lama persis; uDust = sampel debu per langkah (per kualitas)
 uniform float uMood;
+uniform float uDustK;                // MK10: kepekatan debu 0,2 (tipis) .. 1,5 (tebal), pengali kerapatan
 uniform int   uDust;                 // MK9: sampel volume debu per langkah sinar penuh di dalam lempeng (0 = tanpa debu)
 float gObsK = 1.0;                   // G2: frekuensi teramati / frekuensi di tak hingga untuk sinar piksel ini
 
@@ -378,7 +379,7 @@ float dustDen(vec3 p, out float vz, out float lit) {
   float yy = yh * (1.0 + 1.8 * (0.5 - d3));                          // permukaan bergejolak: bagian padat menjulang lebih tinggi
   float prof = exp(-0.5 * yy * yy);
   float cov = smoothstep(0.36, 0.64, t.b);                           // tutupan: 0 debu tipis (piringan tampak), 1 tebal
-  float dens = smoothstep(0.52 - 0.24 * cov, 0.74 - 0.24 * cov, F * (0.45 + 0.65 * prof)) * prof * (0.08 + 1.1 * cov) * w;
+  float dens = smoothstep(0.52 - 0.24 * cov, 0.74 - 0.24 * cov, F * (0.45 + 0.65 * prof)) * prof * (0.08 + 1.1 * cov) * w * uDustK;
   if (uFall > 0.5) dens *= smoothstep(0.5, 2.0, distance(p, uCamPos));   // MK6: saat misi debu memudar dalam 2 rs dari wahana
   vz = exp(-yy * yy);
   // bayangan sendiri murah: tutupan dan pola 0,4 rs ke arah lubang hitam (sumber cahaya)
@@ -1380,7 +1381,7 @@ const ID = {
   'End the mission': 'Akhiri misi', 'Tesseract scenario: W/S angle, A/D plane, Enter locks the aim': 'Skenario tesseract: W/S sudut, A/D bidang, Enter mengunci bidikan',
   'Cursor locked: move the mouse to look around, right button = nose, double-click = forward, click or Esc releases': 'Kursor terkunci: gerakkan mouse untuk menoleh, tombol kanan = hidung, klik ganda = depan, klik atau Esc melepas',
   // MK3-MK5: suasana Kelam
-  'Mood': 'Suasana', 'Dark mood (dust clouds) (N)': 'Suasana Kelam (awan debu) (N)',
+  'Mood': 'Suasana', 'Dust thickness (thin to thick)': 'Kepekatan debu (tipis sampai tebal)', 'Dark mood (dust clouds) (N)': 'Suasana Kelam (awan debu) (N)',
   'Mood: dark (dust clouds)': 'Suasana: Kelam (awan debu)', 'Mood: classic': 'Suasana: Klasik', 'Mood: dark (dust clouds) or classic': 'Suasana: Kelam (awan debu) atau Klasik',
   // MK2: planet Millar
   'Planet Millar': 'Planet Millar', 'Show Millar': 'Tampilkan Millar', 'Orbit': 'Orbit', 'Shown radius (rs)': 'Radius tampil (rs)',
@@ -1614,6 +1615,10 @@ function main() {
   const MOOD = { on: false };
   try { if (localStorage.getItem('gargantua.mood2') === 'kelam') MOOD.on = true; } catch (e) { /* abaikan */ }
   { const m = new URLSearchParams(location.search).get('mood'); if (m === 'klasik') MOOD.on = false; else if (m === 'kelam') MOOD.on = true; }
+  // MK10 (revisi Bhakti: debu terlalu tebal): kepekatan debu dari tipis sampai tebal, bawaan 0,6; localStorage gargantua.dustK
+  const DUSTK = { v: 0.6 };
+  try { const d = parseFloat(localStorage.getItem('gargantua.dustK')); if (isFinite(d)) DUSTK.v = Math.min(1.5, Math.max(0.2, d)); } catch (e) { /* abaikan */ }
+  function setDustK(v) { DUSTK.v = v; try { localStorage.setItem('gargantua.dustK', String(v)); } catch (e) { /* abaikan */ } }
   function setMood(on) { MOOD.on = on; try { localStorage.setItem('gargantua.mood2', on ? 'kelam' : 'klasik'); } catch (e) { /* abaikan */ } }
   function cycleMood() { setMood(!MOOD.on); syncUI(); toast(txt(MOOD.on ? 'Mood: dark (dust clouds)' : 'Mood: classic')); }
   const moodK = () => (MOOD.on ? 1 : 0);                             // MK6: juga saat misi (debu memudar dekat wahana di shader)
@@ -3932,6 +3937,7 @@ function main() {
     { tab: 'graphics', label: 'Graphics' },
     { sec: 'Mood' },
     { type: 'check', label: 'Dark mood (dust clouds) (N)', get: () => MOOD.on, set: setMood },
+    { type: 'range', label: 'Dust thickness (thin to thick)', get: () => DUSTK.v, set: setDustK, min: 0.2, max: 1.5, step: 0.05 },
     { sec: 'Quality' },
     { type: 'select', label: 'Preset', options: ['low', 'medium', 'high', 'ultra'], get: () => CONFIG.quality, set: applyQuality },
     { type: 'check', label: 'Adaptive resolution', obj: CONFIG, key: 'adaptive' },
@@ -4200,7 +4206,7 @@ function main() {
       gl.uniform1f(p.u('uEnc'), enc);
       const pl = MILLAR.on && !MIS.on;                                 // MK2: planet Millar (mati saat misi)
       gl.uniform1f(p.u('uPlOn'), pl ? 1 : 0);
-      gl.uniform1f(p.u('uMood'), moodK()); gl.uniform1i(p.u('uDust'), q.dust || 0);
+      gl.uniform1f(p.u('uMood'), moodK()); gl.uniform1i(p.u('uDust'), q.dust || 0); gl.uniform1f(p.u('uDustK'), DUSTK.v);
       tex(p, 'uDustTex', DMAP.tex, 7); gl.activeTexture(gl.TEXTURE0); gl.uniform1i(p.u('uNoise'), 6);   // MK9: derau 3D (unit 6, sama dengan DUST_FS)   // MK4d: selalu terikat (sampler tidak boleh menunjuk target render)
       if (pl) {
         const Ms = millarState(state.simTime);
@@ -4389,7 +4395,7 @@ function main() {
       { label: () => txt('Sound: {s}').replace('{s}', txt(AUDIO.on ? 'on' : 'off')), act: () => setSound() },
     ] });
 
-  window.__gargantua = { MILLAR, millarState, MOOD, setMood, cycleMood, CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
+  window.__gargantua = { DUSTK, setDustK, MILLAR, millarState, MOOD, setMood, cycleMood, CONFIG, state, cam, setPreset, fmt: FMT.name, POST_MODES, togglePhoto, cycleQuality, cyclePost, toggleHelp,
     SHIP, setShip, cycleShipView, viewBasis, CKP, ckpLook, ckpStep, ckpReset, ckpOn, MIS, SCEN, startMission, stopMission, misAdvance, rainOf, skyShift, misThrust, misData, MIS_T,
     misFly, gasRel, apVel, toggleAP, GLASS, VOL_H, AE, stepMission,
     REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,

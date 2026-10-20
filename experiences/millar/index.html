@@ -430,7 +430,7 @@ const V5 = { off: new URLSearchParams(location.search).get('v5') === '0' };
 // ruang acuan headset, yaw = belok rig (stik kanan), rs = skala target efek layar terhadap viewport mata (adaptif). on false =
 // semua jalur layar biasa sama persis seperti sebelum VR3.
 const XRV = { on: false, out: null, rig: null, yaw: 0, rs: 0.7, w: 0, h: 0, held: new Set(), idle: false, ft: 0, slow: 0, fast: 0, prev: null, hands: [null, null] };
-const TAA = { mv: 0, pp: new THREE.Vector3(), pq: new THREE.Quaternion(), off: V5.off || new URLSearchParams(location.search).get('taa') === '0', act: false, valid: false, i: 0, hist: [], cur: 0,
+const TAA = { mv: 0, sh: 0, pp: new THREE.Vector3(), pq: new THREE.Quaternion(), off: V5.off || new URLSearchParams(location.search).get('taa') === '0', act: false, valid: false, i: 0, hist: [], cur: 0,
   prevVP: new THREE.Matrix4(), P: new THREE.Matrix4(), PI: new THREE.Matrix4() };
 
 /* ---------------- Ombak angin (Gerstner): data gelombang, dinormalisasi per preset ---------------- */
@@ -1756,7 +1756,7 @@ function postRender(time) {
     // Gerak kamera frame ke frame (posisi, sudut) mencakup langkah, getaran gemuruh gelombang, putaran, terbang; meluruh 0,9 per frame agar tidak berkedip
     { const dp = TAA.pp.distanceTo(camera.position), da = TAA.pq.angleTo(camera.quaternion);
       TAA.mv = Math.max(Math.min(1, dp / 0.015 + da / 0.008 + BOB.amp / 0.03 + (FLY.on ? 1 : 0)), TAA.mv * 0.9); TAA.pp.copy(camera.position); TAA.pq.copy(camera.quaternion); }
-    T.uA0.value = 0.09 + 0.26 * TAA.mv;   // diam = riwayat panjang (halus), bergerak atau bergetar = pendek (tanpa hantu bayangan)
+    T.uA0.value = Math.max(0.09 + 0.26 * TAA.mv, TAA.sh);   // diam = riwayat panjang (halus), bergerak atau bergetar = pendek (tanpa hantu bayangan)
     pass(M_TAA, hw); TAA.valid = true; TAA.cur = 1 - TAA.cur; fin = hw;
   }
   M_FINAL.uniforms.uTaa.value = TAA.act || CAMX.final ? 1 : 0;      // K: foto akumulasi = pertajam ringan, bukan FXAA
@@ -3967,6 +3967,7 @@ function worldStep(dt, now) {                         // K: simulasi + kamera (f
   }
   // Getaran tanah (R5): gemuruh gelombang raksasa terasa di kaki, ikut tingkat gerak kepala (B)
   const shk = onFoot && !SWEEP.on ? AM.shake * BOB_LEVELS[BOB.level][1] : 0, tv = now / 1000;
+  TAA.sh = Math.min(1, AM.shake / 0.01);                // gemuruh gelombang: TAA hampir dimatikan (bayangan berkedip), lihat postRender
   BOB.shY = shk * (Math.sin(tv * 81.7) + 0.6 * Math.sin(tv * 107.3 + 1.3)); BOB.shX = shk * 0.5 * Math.sin(tv * 94.2 + 0.7);
   fpCamera();
   if (FLY.on) flyCamera();
