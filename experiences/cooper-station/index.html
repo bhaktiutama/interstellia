@@ -3791,6 +3791,29 @@ function enableCull(G, pad) {
     o.frustumCulled = true;
   });
 }
+// D3: setelah mergeByMaterial sebuah grup masih terdiri dari satu mesh per bahan, dan tiap mesh digambar lagi di setiap pass bayangan
+// (rumah Cooper: 13 draw x 3 pass) padahal bahan pengganti kedalaman (depthMat) sama untuk semuanya. Di sini semua mesh peneduh
+// (buram, bukan InstancedMesh, bukan noShadow) digabung jadi satu geometri khusus bayangan (hanya posisi, layer 1); mesh aslinya
+// ditandai userData.proxied supaya tidak ikut layer 1 (lihat traverse layer bayangan). Panggil sebelum enableCull(G).
+function shadowProxy(G) {
+  const geos = [], from = [];
+  for (const o of G.children) {
+    if (!o.isMesh || o.isInstancedMesh || o.userData.noShadow || o.children.length || !o.visible || Array.isArray(o.material)) continue;
+    if (!o.geometry.attributes.position) continue;
+    if (o.matrixAutoUpdate) o.updateMatrix();
+    const g = (o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone()).applyMatrix4(o.matrix);
+    geos.push(g); from.push(o);
+  }
+  if (geos.length < 2) return 0;
+  const n = geos.reduce((a, g) => a + g.attributes.position.count, 0), pos = new Float32Array(n * 3);
+  let k = 0; for (const g of geos) { pos.set(g.attributes.position.array, k * 3); k += g.attributes.position.count; }
+  const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const m = new THREE.Mesh(mg, depthMat);                            // bahan hanya formalitas: pass bayangan memakai overrideMaterial
+  m.userData.shadowProxy = true; m.userData.noLight = true; m.layers.set(1);
+  for (const o of from) { o.userData.proxied = true; o.layers.disable(1); }
+  G.add(m);
+  return from.length;
+}
 function shadeFaces(g, base = 0.55, step = 0.25) {              // variasi terang per segitiga (atap)
   const n = g.toNonIndexed(); const pp = n.attributes.position.array, cc = [];
   for (let i = 0; i < pp.length; i += 9) { const sh = base + step * ((i / 9) % 2); cc.push(sh, sh, sh, sh, sh, sh, sh, sh, sh); }
@@ -7820,6 +7843,7 @@ function sunShadowNear() {
   sunShNCam.up.set(0, 0, 1); sunShNCam.lookAt(_sspN); sunShNCam.updateMatrixWorld();
   U.uL_SunShNMat.value.multiplyMatrices(sunShNCam.projectionMatrix, sunShNCam.matrixWorldInverse);
   U.uL_SunShNTh.value = th; SHU.uShU.value.set(th, 1, R, 0); SHU.uShViewInv.value.copy(sunShNCam.matrixWorld);   // 18b-3: unroll di sudut peta dekat
+  treeShadowSet(sS, zS, N.ext);                                    // D4: peta dekat hanya memuat template dalam kotak 40 m
   scene.overrideMaterial = depthMat;
   renderer.setRenderTarget(sunShNRT); renderer.clear(); renderer.render(scene, sunShNCam);
   scene.overrideMaterial = null;
@@ -7844,6 +7868,7 @@ function sunShadowPass() {
   U.uL_SunShOn.value = 1;
   U.uL_SunShTh.value = th; SHU.uShU.value.set(th, 1, R, 0); SHU.uShViewInv.value.copy(sunShCam.matrixWorld);   // 18b-3
   shpBegin(1, sunShCam, th, zS, 0);                                // 20d
+  treeShadowSet(sS, zS, SUNSH.ext);                                // D4: template pohon di luar kotak peta jauh tidak digambar
   scene.overrideMaterial = depthMat;
   renderer.setRenderTarget(sunShRT); renderer.clear(); renderer.render(scene, sunShCam);
   scene.overrideMaterial = null;
@@ -7853,6 +7878,7 @@ function sunShadowPass() {
     for (const m of ALPHA_CASTERS) m.material = m.userData.mainMat;
   }
   sunShadowNear();                                                 // revisi V1: peta dekat 40 m
+  treeShadowEnd();                                                 // D4
   shpEnd();
   renderer.setRenderTarget(null);
 }
@@ -9988,6 +10014,7 @@ function updateTreeLOD(eyeS, eyeZ, eyeH) {
   lodCenterWorld(L0, VU.uLodC.value);
   const lod = L0.r, lod2 = lod * lod, lodF = Math.min(lod, lodShift(Math.min(TREES.lodD, TREES.forestLod)).r), lodF2 = lodF * lodF, cnt = TREES.templates.map(() => 0), nCS = Math.ceil(CIRC / TREES.cell);
   const cs = Math.floor(eyeS / TREES.cell), cz = Math.floor(eyeZ / TREES.cell), n = Math.ceil(lod / TREES.cell);
+  for (const T of TREES.templates) T.bnd = [1e9, -1e9, 1e9, -1e9]; TREES.bndS = eyeS;   // D4
   if (eyeH < 400) for (let a = -n; a <= n; a++) for (let b = -n; b <= n; b++) {
     const arr = TREES.grid.get((((cs + a) % nCS) + nCS) % nCS * 1000 + cz + b);
     if (!arr) continue;
@@ -9995,6 +10022,8 @@ function updateTreeLOD(eyeS, eyeZ, eyeH) {
       const ds = wrapS(t.s - eyeS), dz = t.za - eyeZ, dh = t.h - eyeH;
       if (ds * ds + dz * dz + dh * dh >= (t.forest ? lodF2 : lod2)) continue;   // 14a: hutan memakai radius lebih kecil
       const T = TREES.templates[t.tpl], k = cnt[t.tpl]++;
+      { const b = T.bnd, rr = T.halfW * t.sc;                        // D4: batas (s relatif mata, za) pohon dekat per template, untuk pemilihan di pass bayangan sunline
+        if (ds - rr < b[0]) b[0] = ds - rr; if (ds + rr > b[1]) b[1] = ds + rr; if (t.za - rr < b[2]) b[2] = t.za - rr; if (t.za + rr > b[3]) b[3] = t.za + rr; }
       surfaceMatrix(_tm, t.s / R, t.za, t.h);
       _tm.multiply(_tr.makeRotationY(t.rot)).scale(_ts.set(t.sc, t.sc, t.sc));
       T.bark.setMatrixAt(k, _tm); T.leaf.setMatrixAt(k, _tm);
@@ -10008,6 +10037,25 @@ function updateTreeLOD(eyeS, eyeZ, eyeH) {
     T.leafGeo.attributes.aLeafC.needsUpdate = true;
   });
   VU.uLodD.value = eyeH < 400 ? lod : 0; VU.uLodF.value = eyeH < 400 ? lodF : 0;
+}
+// D4: pass bayangan sunline (kamera ortografik tegak lurus ke lantai) hanya butuh template yang punya pohon di dalam kotaknya di bidang
+// (s, za). Dulu semua template pohon dekat (bukit: 26) digambar di kedua peta, padahal kotak dekat 40 m hanya memuat sebagian (9).
+// Margin 16 m seperti SHP.margin, ditambah jari-jari tajuk per pohon (sudah di T.bnd). Pass cincin cap (arah cahaya miring) tidak disaring.
+function treeShadowSet(sc, zc, half) {
+  const ts = TREES.templates;
+  if (!TREES.shSnap) TREES.shSnap = ts.map((T) => T.bark.visible);
+  const rs = wrapS(sc - TREES.bndS), m = half + 16;
+  for (let i = 0; i < ts.length; i++) {
+    const T = ts[i], b = T.bnd;
+    let v = TREES.shSnap[i];
+    if (v && b && b[0] <= b[1]) v = !(b[1] < rs - m || b[0] > rs + m || b[3] < zc - m || b[2] > zc + m);
+    T.bark.visible = T.leaf.visible = v;
+  }
+}
+function treeShadowEnd() {
+  if (!TREES.shSnap) return;
+  TREES.templates.forEach((T, i) => { T.bark.visible = T.leaf.visible = TREES.shSnap[i]; });
+  TREES.shSnap = null;
 }
 
 await bootStep(BOOT_W[14], 'Daun dan angin...');
@@ -16396,6 +16444,7 @@ motoLabel(); bobLabel();
 // 20b: grup kecil (lapangan baseball 173 mesh, kabin lift, hub, lobi menara lift) digabung per material, lalu semua grup kecil
 // (juga rumah Cooper dan trem) memakai frustum culling. Terukur sebelumnya: 784 dari 1.114 draw call per frame di spawn.
 for (const G of [BALLPARK_G, cabin, hub, liftTower]) mergeByMaterial(G);
+for (const G of [BALLPARK_G, cabin, liftTower, COOPER_HOUSE, tramMesh]) shadowProxy(G);   // D3: satu draw bayangan per grup, bukan satu per bahan
 for (const G of [BALLPARK_G, cabin, hub, liftTower, COOPER_HOUSE, tramMesh]) enableCull(G, 120);
 // --- terapkan model cahaya ke semua material dasar di dalam stasiun --------
 hub.userData.noLight = true;
@@ -16404,7 +16453,7 @@ scene.traverse((o) => {
   if (!o.isMesh || !o.material || !o.material.isMeshBasicMaterial || o.userData.noLight) return;
   for (let p = o; p; p = p.parent) if (p === exteriorGroup) return;
   patchLit(o.material);
-  if (!o.userData.noShadow) o.layers.enable(1);
+  if (!o.userData.noShadow && !o.userData.proxied) o.layers.enable(1);   // D3: mesh yang bayangannya diwakili shadowProxy tidak ikut
 });
 
 // 20d (O3): pass bayangan hanya menggambar instance yang jatuh di kotak kamera bayangan. Dulu gedung kota, peralatan atap,
