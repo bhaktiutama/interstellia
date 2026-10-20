@@ -9497,7 +9497,12 @@ const LEAF_RECOLOR = /* glsl */`
   }`;
 const LEAF_GRADE_GLSL = /* glsl */`
   #ifdef LEAF_GRADE
-  uniform vec4 uLeafG, uLeafSp;
+  uniform vec4 uLeafG;
+  #ifdef LEAF_SP_VAR
+  vec4 uLeafSp;                                                    // D5: impostor gabungan mengisinya per instance dari uLeafSpA[jenis template]
+  #else
+  uniform vec4 uLeafSp;
+  #endif
   // 27c: kurangi saturasi ke luminans (rona tetap, kanal biru naik), albedo sedikit turun, geser hangat / sejuk per jenis.
   // Daun berwarna musim (autumn = vLeafC.a) tetap lebih hidup (saturasi paling rendah 0,85). Hanya mix / dot / max (aman M1).
   vec3 leafGrade(vec3 c, float autumn) {
@@ -9602,12 +9607,21 @@ const LEAF_FS = /* glsl */`
     #endif
   }`;
 const IMP_VS = /* glsl */`
+  #ifdef MERGED
+  uniform float uImpSz[TPL_N];                                     // D5: satu draw untuk semua template; ukuran quad per template, template per instance (aTpl)
+  attribute float aTpl;
+  flat varying float vTpl;
+  #else
   uniform vec2 uSize;                                              // lebar, tinggi quad impostor (m, sebelum skala instance)
+  #endif
   attribute vec4 aLeafC;
   varying vec4 vLeafC;
   varying vec2 vUv;
   varying vec3 vLight;
   void main() {
+    #ifdef MERGED
+    vec2 uSize = vec2(uImpSz[int(aTpl + 0.5)]); vTpl = aTpl;
+    #endif
     vec3 C = vec3(modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0));
     float cs = atan(C.y, C.x) * uR; if (cs < 0.0) cs += 6.28318530718 * uR;
     float cz = C.z + uHalfL, lodHere = (cs > uForest.x && cs < uForest.z && cz > uForest.y && cz < uForest.w) ? min(uLodD, uLodF) : uLodD;   // 14a: pohon hutan
@@ -9630,14 +9644,27 @@ const IMP_VS = /* glsl */`
     #endif
   }`;
 const IMP_FS = /* glsl */`
+  #ifdef MERGED
+  uniform sampler2DArray uImpTexA;
+  uniform vec4 uLeafSpA[TPL_N];
+  flat varying float vTpl;
+  #else
   uniform sampler2D uImpTex;
+  #endif
   varying vec4 vLeafC;
   ${LEAF_RECOLOR}
   ${LEAF_GRADE_GLSL}
   varying vec2 vUv;
   varying vec3 vLight;
   void main() {
+    #ifdef MERGED
+    vec4 tx = texture(uImpTexA, vec3(vUv, vTpl));
+    #ifdef LEAF_GRADE
+    uLeafSp = uLeafSpA[int(vTpl + 0.5)];
+    #endif
+    #else
     vec4 tx = texture2D(uImpTex, vUv);
+    #endif
     if (tx.a < 0.5) discard;
     vec3 ic = leafRecolor(tx.rgb / max(tx.a, 0.5), vLeafC);
     #ifdef LEAF_GRADE
@@ -9647,6 +9674,18 @@ const IMP_FS = /* glsl */`
     #include <colorspace_fragment>
     #include <fog_fragment>
   }`;
+// D5: impostor semua template digambar dalam satu draw (analisa-draw-call D5): tekstur impostor 42 template = satu tekstur array
+// (lapisan = indeks template), atribut aTpl per instance; ukuran quad, parameter oktahedral, dan nada daun per jenis = array uniform.
+// ?impgabung=0 = satu mesh per template seperti sebelum D5.
+const IMPM = { on: new URLSearchParams(location.search).get('impgabung') !== '0', off: [], tot: 0 };
+function copyQuad(src) {                                           // layar penuh yang menyalin satu tekstur 2D (target sama ukuran: 1 piksel = 1 texel)
+  const u = { tSrc: { value: src } }, scene = new THREE.Scene(), cam = new THREE.Camera();
+  const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: u, depthTest: false, depthWrite: false, toneMapped: false,
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'uniform sampler2D tSrc; varying vec2 vUv; void main() { gl_FragColor = texture2D(tSrc, vUv); }' }));
+  q.frustumCulled = false; scene.add(q);
+  return { scene, cam, u };
+}
 const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, lastZ: 1e9, lastD: 0, cell: 64, grid: new Map() };
 {
   // 25a: saklar ?pohon=lama. Jenis baru (25b ke atas) hanya boleh masuk bila !POHON.lama.
@@ -9837,6 +9876,11 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
   shadeTex.minFilter = THREE.LinearMipmapLinearFilter; shadeTex.magFilter = THREE.LinearFilter; shadeTex.needsUpdate = true;
   groundMat.uniforms.uShadeTex.value = shadeTex;
   // mesh per template: kulit kayu (MeshBasic + model cahaya) + daun (shader) + impostor (semua pohon, statis)
+  if (IMPM.on) {                                                    // D5: satu tekstur array untuk impostor semua template, lapisan = indeks template
+    IMPM.arr = new THREE.WebGLArrayRenderTarget(256, 256, TREES.templates.length, { depthBuffer: false });
+    IMPM.arr.texture.generateMipmaps = true; IMPM.arr.texture.minFilter = THREE.LinearMipmapLinearFilter; IMPM.arr.texture.magFilter = THREE.LinearFilter;
+    IMPM.cp = copyQuad(null);
+  }
   TREES.templates.forEach((T, ti) => {
     const mine = TREES.list.filter((t) => t.tpl === ti), n = Math.max(1, mine.length);
     const leafU = { uLeafTex: { value: TREE_SPECIES[T.kind].atlas >= 4 ? leafTex2 : leafTex } };   // 25c: jenis 25b memakai atlas kedua
@@ -9867,6 +9911,11 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
     cam.position.set(0, 0, 60); cam.lookAt(0, 0, 0);
     renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(bs, cam);
     renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 1);
+    T.impSize = size;
+    if (IMPM.on) {                                                  // D5: salin ke lapisan template ini, target per template dibuang
+      IMPM.cp.u.tSrc.value = rt.texture; renderer.setRenderTarget(IMPM.arr, ti); renderer.render(IMPM.cp.scene, IMPM.cp.cam);
+      renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 1); rt.dispose();
+    }
     const impGeo = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
     impGeo.setAttribute('aLeafC', new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4));
     T.imp = new THREE.InstancedMesh(impGeo, vegMaterial({ vertex: IMP_VS, fragment: IMP_FS, defines: gradeD,
@@ -9880,10 +9929,26 @@ const TREES = { forestLod: 70, templates: [], list: [], lodD: 130, lastS: 1e9, l
     });
     T.imp.count = mine.length; T.imp.instanceMatrix.needsUpdate = true;
     for (const m of [T.bark, T.leaf]) m.count = 0;
-    for (const m of [T.bark, T.leaf, T.imp]) { m.frustumCulled = false; realGroup.add(m); }
+    for (const m of [T.bark, T.leaf, T.imp]) { m.frustumCulled = false; if (!IMPM.on || m !== T.imp) realGroup.add(m); }
     T.bark.layers.enable(1);
     T.leaf.userData.noLight = true; T.imp.userData.noLight = true;
   });
+  if (IMPM.on) {                                                    // D5: satu InstancedMesh impostor untuk semua template (matriks dan warna daun digabung per template)
+    const Ts = TREES.templates, NT = Ts.length;
+    let tot = 0; IMPM.off = Ts.map((T) => { const o = tot; tot += T.imp.count; return o; }); IMPM.tot = tot;
+    const tpl = new Float32Array(Math.max(1, tot)), sz = new Float32Array(NT);
+    IMPM.tplA = new THREE.InstancedBufferAttribute(tpl, 1); IMPM.leafC = new THREE.InstancedBufferAttribute(new Float32Array(Math.max(1, tot) * 4), 4);
+    const geo = new THREE.PlaneGeometry(1, 1).translate(0, 0.5, 0);
+    geo.setAttribute('aTpl', IMPM.tplA); geo.setAttribute('aLeafC', IMPM.leafC);
+    Ts.forEach((T, i) => { sz[i] = T.impSize; tpl.fill(i, IMPM.off[i], IMPM.off[i] + T.imp.count); });
+    IMPM.leafSpA = { value: Ts.map((T) => T.leafSp.value) };         // objek yang sama dengan T.leafSp: LEAFG.set() ikut mengubahnya
+    const im = new THREE.InstancedMesh(geo, vegMaterial({ vertex: IMP_VS, fragment: IMP_FS,
+      defines: Object.assign({ MERGED: '', TPL_N: String(NT), LEAF_SP_VAR: '' }, DAUN.lama ? {} : { LEAF_GRADE: '' }),
+      uniforms: { uImpTexA: { value: IMPM.arr.texture }, uImpSz: { value: sz }, uLeafSpA: IMPM.leafSpA, uLeafG: LEAFG.u } }), Math.max(1, tot));
+    Ts.forEach((T, i) => im.instanceMatrix.array.set(T.imp.instanceMatrix.array.subarray(0, T.imp.count * 16), IMPM.off[i] * 16));
+    im.count = tot; im.instanceMatrix.needsUpdate = true; im.frustumCulled = false; im.userData.noLight = true; realGroup.add(im);
+    IMPM.imp = im;
+  }
 }
 /* V5: impostor pohon oktahedral (hanya Ultra). Impostor lama = satu gambar dari samping yang berputar di sumbu batang: dari atas
    (pohon di seberang silinder, dari dek menara, dari bukit) tampak sebagai lembaran tipis. Kini tiap template dipanggang dari 8 x 8
@@ -9897,35 +9962,46 @@ const OCT_GLSL = /* glsl */`
   vec2 octEnc(vec3 d) { d.y = max(d.y, 0.0); d /= abs(d.x) + abs(d.y) + abs(d.z); return vec2(d.x + d.z, d.x - d.z); }
   void octBasis(vec3 d, out vec3 r, out vec3 u) { vec3 up = abs(d.y) > 0.999 ? vec3(0.0, 0.0, -1.0) : vec3(0.0, 1.0, 0.0); r = normalize(cross(up, d)); u = cross(d, r); }`;
 const OCT_VS = /* glsl */`
+  #ifdef MERGED
+  uniform vec2 uOctT[TPL_N];                                       // D5: (tinggi pusat, sisi gambar) per template; template per instance (aTpl)
+  attribute float aTpl;
+  flat varying float vTpl;
+  vec3 oc;                                                         // diisi di awal main
+  #else
   uniform vec3 uOct;                                               // N, tinggi pusat (m lokal), sisi gambar (m lokal)
+  #define oc uOct
+  #endif
   attribute vec4 aLeafC;
   varying vec4 vLeafC, vF0, vF1, vF2;
   varying vec3 vWt, vLight;
   ${OCT_GLSL}
   vec4 frameUV(vec2 ck, vec3 P, vec3 dl) {                         // titik quad P -> uv di gambar arah ck (sinar pandang memotong bidangnya)
-    vec3 dk = octDec(ck / (uOct.x - 1.0) * 2.0 - 1.0), rk, uk; octBasis(dk, rk, uk);
+    vec3 dk = octDec(ck / (oc.x - 1.0) * 2.0 - 1.0), rk, uk; octBasis(dk, rk, uk);
     vec3 hit = P - dl * dot(P, dk) / max(dot(dl, dk), 0.2);
-    return vec4(dot(hit, rk) / uOct.z + 0.5, dot(hit, uk) / uOct.z + 0.5, ck);
+    return vec4(dot(hit, rk) / oc.z + 0.5, dot(hit, uk) / oc.z + 0.5, ck);
   }
   void main() {
+    #ifdef MERGED
+    oc = vec3(${OCT.N}.0, uOctT[int(aTpl + 0.5)]); vTpl = aTpl;
+    #endif
     mat4 M = modelMatrix * instanceMatrix;
     vec3 C = vec3(M * vec4(0.0, 0.0, 0.0, 1.0));
     float cs = atan(C.y, C.x) * uR; if (cs < 0.0) cs += 6.28318530718 * uR;
     float cz = C.z + uHalfL, lodHere = (cs > uForest.x && cs < uForest.z && cz > uForest.y && cz < uForest.w) ? min(uLodD, uLodF) : uLodD;
     if (distance(C, uLodC) < lodHere - 2.0) { ${CLIP_AWAY} }
     mat3 R3 = mat3(M); float sc = length(R3[1]); R3 /= sc;
-    vec3 Cc = C + R3[1] * uOct.y * sc, toE = uEye - Cc;
+    vec3 Cc = C + R3[1] * oc.y * sc, toE = uEye - Cc;
     vec3 dl = transpose(R3) * toE; dl.y = max(dl.y, 0.0);
     dl = dot(dl, dl) > 1e-8 ? normalize(dl) : vec3(1.0, 0.0, 0.0);
     vec3 r, u; octBasis(dl, r, u);
-    vec3 P = (r * position.x + u * position.y) * uOct.z;
-    vec2 g = (octEnc(dl) * 0.5 + 0.5) * (uOct.x - 1.0), f = clamp(floor(g), 0.0, uOct.x - 2.0), t = g - f;
+    vec3 P = (r * position.x + u * position.y) * oc.z;
+    vec2 g = (octEnc(dl) * 0.5 + 0.5) * (oc.x - 1.0), f = clamp(floor(g), 0.0, oc.x - 2.0), t = g - f;
     if (t.x + t.y < 1.0) { vF0 = frameUV(f, P, dl); vF1 = frameUV(f + vec2(1.0, 0.0), P, dl); vF2 = frameUV(f + vec2(0.0, 1.0), P, dl); vWt = vec3(1.0 - t.x - t.y, t.x, t.y); }
     else { vF0 = frameUV(f + 1.0, P, dl); vF1 = frameUV(f + vec2(1.0, 0.0), P, dl); vF2 = frameUV(f + vec2(0.0, 1.0), P, dl); vWt = vec3(t.x + t.y - 1.0, 1.0 - t.y, 1.0 - t.x); }
     vec3 p = Cc + R3 * P * sc;
     #ifndef DEPTH_ONLY
     float a = atan(C.y, C.x); vec3 Y = R3[1], toC = toE - Y * dot(toE, Y);
-    vLight = vegLight(C + Y * uOct.y * 1.2 * sc, normalize(Y + (dot(toC, toC) > 1e-6 ? normalize(toC) : vec3(0.0)) * 0.6), vec2(a * uR, C.z + uHalfL), 0.0);
+    vLight = vegLight(C + Y * oc.y * 1.2 * sc, normalize(Y + (dot(toC, toC) > 1e-6 ? normalize(toC) : vec3(0.0)) * 0.6), vec2(a * uR, C.z + uHalfL), 0.0);
     #endif
     vLeafC = aLeafC;
     vec4 mvPosition = viewMatrix * vec4(p, 1.0);
@@ -9935,7 +10011,13 @@ const OCT_VS = /* glsl */`
     #endif
   }`;
 const OCT_FS = /* glsl */`
+  #ifdef MERGED
+  uniform sampler2DArray uImpTexA;
+  uniform vec4 uLeafSpA[TPL_N];
+  flat varying float vTpl;
+  #else
   uniform sampler2D uImpTex;
+  #endif
   uniform vec3 uOct;
   varying vec4 vLeafC, vF0, vF1, vF2;
   varying vec3 vWt, vLight;
@@ -9944,9 +10026,16 @@ const OCT_FS = /* glsl */`
   vec4 octSamp(vec4 f) {
     if (f.x < 0.0 || f.y < 0.0 || f.x > 1.0 || f.y > 1.0) return vec4(0.0);
     float e = 0.5 / ${OCT.cell}.0;
+    #ifdef MERGED
+    return texture(uImpTexA, vec3((f.zw + clamp(f.xy, e, 1.0 - e)) / uOct.x, vTpl));
+    #else
     return texture2D(uImpTex, (f.zw + clamp(f.xy, e, 1.0 - e)) / uOct.x);
+    #endif
   }
   void main() {
+    #if defined(MERGED) && defined(LEAF_GRADE)
+    uLeafSp = uLeafSpA[int(vTpl + 0.5)];
+    #endif
     vec4 tx = octSamp(vF0) * vWt.x + octSamp(vF1) * vWt.y + octSamp(vF2) * vWt.z;
     if (tx.a < 0.5) discard;
     vec3 ic = leafRecolor(tx.rgb / max(tx.a, 0.5), vLeafC);
@@ -9957,14 +10046,32 @@ const OCT_FS = /* glsl */`
     #include <colorspace_fragment>
     #include <fog_fragment>
   }`;
+function octMergedInit() {                                         // D5: satu mesh oktahedral untuk semua template (disembunyikan sampai semua template terpanggang)
+  const NT = TREES.templates.length, geo = new THREE.PlaneGeometry(1, 1);
+  geo.setAttribute('aTpl', IMPM.tplA); geo.setAttribute('aLeafC', IMPM.leafC);
+  IMPM.octT = new Float32Array(NT * 2);
+  const m = new THREE.InstancedMesh(geo, vegMaterial({ vertex: OCT_VS, fragment: OCT_FS,
+    defines: Object.assign({ MERGED: '', TPL_N: String(NT), LEAF_SP_VAR: '' }, DAUN.lama ? {} : { LEAF_GRADE: '' }),
+    uniforms: { uImpTexA: { value: OCT.arr.texture }, uOct: { value: new THREE.Vector3(OCT.N, 0, 0) }, uOctT: { value: IMPM.octT }, uLeafSpA: IMPM.leafSpA, uLeafG: LEAFG.u } }), Math.max(1, IMPM.tot));
+  m.count = IMPM.tot; m.frustumCulled = false; m.userData.noLight = true; m.visible = false; realGroup.add(m);
+  IMPM.oct = m;
+}
 function octBake(T, ti) {                                          // panggang 8 x 8 arah satu template, lalu buat mesh instance-nya
   const N = OCT.N, C = OCT.cell, W = N * C;
   const Rb = Math.hypot(T.height * 0.5, T.halfW) + 0.4, S = 2 * Rb, cy = T.height * 0.5;
   // 25i: target per template tanpa depth buffer; gambar dibuat di OCT.bake (satu, ber-depth, filter nearest) lalu disalin
   // piksel per piksel. ?octkopi=0 = cara lama (target per template ber-depth) untuk banding.
-  const copy = !OCT.copyOff;
-  const rt = new THREE.WebGLRenderTarget(W, W, { depthBuffer: !copy });
-  rt.texture.generateMipmaps = false; rt.texture.minFilter = THREE.LinearMipmapLinearFilter; T.octRT = rt;
+  const merged = IMPM.on, NT = TREES.templates.length, copy = merged || !OCT.copyOff;   // D5: gabungan = selalu lewat OCT.bake lalu salin ke lapisan ti tekstur array
+  let rt = null;
+  if (merged) {
+    if (!OCT.arr) {
+      OCT.arr = new THREE.WebGLArrayRenderTarget(W, W, NT, { depthBuffer: false });
+      OCT.arr.texture.generateMipmaps = true; OCT.arr.texture.minFilter = THREE.LinearMipmapLinearFilter; OCT.arr.texture.magFilter = THREE.LinearFilter;
+    }
+  } else {
+    rt = new THREE.WebGLRenderTarget(W, W, { depthBuffer: !copy });
+    rt.texture.generateMipmaps = false; rt.texture.minFilter = THREE.LinearMipmapLinearFilter; T.octRT = rt;
+  }
   if (copy && !OCT.bake) {
     OCT.bake = new THREE.WebGLRenderTarget(W, W, { depthBuffer: true, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
     OCT.bake.texture.generateMipmaps = false;
@@ -9988,8 +10095,21 @@ function octBake(T, ti) {                                          // panggang 8
     renderer.setRenderTarget(tgt); renderer.render(T.bakeS, cam);
   }
   tgt.viewport.set(0, 0, W, W);
-  if (copy) { rt.texture.generateMipmaps = true; renderer.setRenderTarget(rt); renderer.render(OCT.copyS, OCT.copyC); }   // salin + mip
+  if (merged) {                                                    // mip seluruh array hanya di lapisan pertama (alokasi) dan terakhir, bukan tiap template
+    OCT.arr.texture.generateMipmaps = ti === 0 || ti === NT - 1;
+    renderer.setRenderTarget(OCT.arr, ti); renderer.render(OCT.copyS, OCT.copyC);
+  } else if (copy) { rt.texture.generateMipmaps = true; renderer.setRenderTarget(rt); renderer.render(OCT.copyS, OCT.copyC); }   // salin + mip
   renderer.setRenderTarget(null); renderer.setClearColor(cc0, ca0);
+  if (merged) {                                                    // D5: matriks template ini ke mesh gabungan
+    if (!IMPM.oct) octMergedInit();
+    const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), sv = new THREE.Vector3();
+    for (const t of TREES.list) if (t.tpl === ti) {
+      surfaceMatrix(m4, t.s / R, t.za, t.h); m4.multiply(rot.makeRotationY(t.rot)).scale(sv.set(t.sc, t.sc, t.sc));
+      IMPM.oct.setMatrixAt(IMPM.off[ti] + t.imp, m4);
+    }
+    IMPM.octT[ti * 2] = cy; IMPM.octT[ti * 2 + 1] = S; IMPM.oct.instanceMatrix.needsUpdate = true;
+    return;
+  }
   const geo = new THREE.PlaneGeometry(1, 1);
   geo.setAttribute('aLeafC', T.imp.geometry.attributes.aLeafC);    // warna daun per pohon sama dengan impostor lama (applyLeafMode)
   const n = T.imp.count;
@@ -10006,6 +10126,11 @@ function octBake(T, ti) {                                          // panggang 8
 function octStep() {                                               // tiap frame: panggang bertahap, tukar impostor lama / baru
   OCT.want = !OCT.off && PRESET.idx === 0;
   if (OCT.want && OCT.next < TREES.templates.length) { const ti = OCT.next++; octBake(TREES.templates[ti], ti); }
+  if (IMPM.on) {                                                   // D5: oktahedral tampil setelah semua template terpanggang, sebelumnya impostor biasa
+    if (IMPM.oct) IMPM.oct.visible = OCT.want && (OCT.next >= TREES.templates.length || IMPM.warmup);
+    IMPM.imp.visible = !(IMPM.oct && IMPM.oct.visible && !IMPM.warmup);
+    return;
+  }
   for (const T of TREES.templates) if (T.oct) { T.oct.visible = OCT.want; T.imp.visible = !OCT.want; }
 }
 const _tm = new THREE.Matrix4(), _tr = new THREE.Matrix4(), _ts = new THREE.Vector3(), NO_TINT = [0, 0, 0, 0];
@@ -10095,12 +10220,13 @@ function leafColorFor(t, mode) {                                     // [r, g, b
 }
 function applyLeafMode() {
   let colored = 0;
-  for (const T of TREES.templates) T.imp.geometry.attributes.aLeafC.array.fill(0);
+  const MC = IMPM.on ? IMPM.leafC : null;                            // D5: satu atribut warna daun untuk semua template
+  if (MC) MC.array.fill(0); else for (const T of TREES.templates) T.imp.geometry.attributes.aLeafC.array.fill(0);
   for (const t of TREES.list) {
     t.c = leafColorFor(t, LEAF.mode);
-    if (t.c) { colored++; TREES.templates[t.tpl].imp.geometry.attributes.aLeafC.array.set(t.c, t.imp * 4); }
+    if (t.c) { colored++; if (MC) MC.array.set(t.c, (IMPM.off[t.tpl] + t.imp) * 4); else TREES.templates[t.tpl].imp.geometry.attributes.aLeafC.array.set(t.c, t.imp * 4); }
   }
-  for (const T of TREES.templates) T.imp.geometry.attributes.aLeafC.needsUpdate = true;
+  if (MC) MC.needsUpdate = true; else for (const T of TREES.templates) T.imp.geometry.attributes.aLeafC.needsUpdate = true;
   TREES.lastS = 1e9; LEAF.colored = colored; FALL.nextSrc = 0;
   // revisi 20d: serakan daun tekstur di tanah dihapus (tampak mozaik, tercampur bayangan, menyala di bawah lampu malam);
   // daun jatuh 3D (FALL) tetap mendarat dan diam di tanah dengan warna pohonnya.
@@ -17587,7 +17713,7 @@ async function warmShaders(f0, f1, label) {
 function warmFrame() {
   const A = { cur: ADAPT.cur, init: ADAPT.init, t: ADAPT.t }, T = { act: TAA.act, valid: TAA.valid, cur: TAA.cur, i: TAA.i, jx: TAA.jx, jy: TAA.jy, prev: TAA.prevVP.clone() }, ssr = SSR.ready;
   try {
-    octStep();
+    IMPM.warmup = true; octStep(); IMPM.warmup = false;            // D5: kedua mesh impostor tergambar sekali agar programnya terkompilasi
     shadowPass(); sunShadowPass();
     const post = postBegin();
     if (post) taaBegin(); else TAA.act = false;
@@ -17640,7 +17766,7 @@ diagApply();
 // Kini hanya sekali, ketika efek layar tinggal satu langkah dari mode Mati (target kanvas): warmNext() dipanggil dari cyclePost() dan applyPreset().
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
-window.__station = { warmLater, LEAFG, LEAF_SP, DAUN, HX, EXT_LIGHT, extLightUpdate, toggleExterior, ext, exteriorGroup, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
+window.__station = { warmLater, IMPM, LEAFG, LEAF_SP, DAUN, HX, EXT_LIGHT, extLightUpdate, toggleExterior, ext, exteriorGroup, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
   jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
 /* =====================================================================
    VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).

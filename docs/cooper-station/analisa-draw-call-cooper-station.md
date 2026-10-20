@@ -100,6 +100,7 @@ Label effort mengikuti `CLAUDE.md`. Penghematan = draw nyata per frame (angka HU
 | D3 | Dikerjakan: `shadowProxy(G)` (setelah `mergeByMaterial`) menggabung semua mesh peneduh sebuah grup jadi satu geometri khusus bayangan (layer 1); mesh per bahan hanya di layer 0 (`userData.proxied`). Berlaku untuk rumah Cooper, kabin lift, menara lift, lapangan baseball, trem. Belum diuji pemilik |
 | D4 | Dikerjakan: `updateTreeLOD()` menyimpan batas (s relatif, za) pohon dekat per template (`T.bnd`, termasuk jari-jari tajuk); `treeShadowSet()` / `treeShadowEnd()` di `sunShadowPass()` dan `sunShadowNear()` menyembunyikan template di luar kotak peta (+ margin 16 m). Pass cincin cap tidak disaring. Belum diuji pemilik |
 | D8 | Dikerjakan sebagian: `mergeByMaterial` kini menggabung kaca transparan (`depthWrite` mati) bahan sama: kaca lobi menara lift dan kabin lift (sekitar 20 draw). Bangku dan papan terminal tidak digabung: tiap papan punya tekstur sendiri. Belum diuji pemilik |
+| D5 | Dikerjakan: impostor biasa dan oktahedral masing-masing satu `InstancedMesh` (`IMPM.imp`, `IMPM.oct`) dengan atribut `aTpl` per instance; tekstur impostor = `WebGLArrayRenderTarget` (256 x 256 x 42; oktahedral 1024 x 1024 x 42, lapisan = indeks template, disalin dari target bake lewat `copyQuad`); `uSize`, `uOct`, `uLeafSp` jadi array uniform (`uImpSz`, `uOctT`, `uLeafSpA`, define `MERGED` / `TPL_N` / `LEAF_SP_VAR`). Oktahedral tampil setelah ke-42 template terpanggang (sebelumnya impostor biasa); mip array dibuat di lapisan pertama dan terakhir saja. Saklar `?impgabung=0` = satu mesh per template seperti sebelum D5. Terukur di sandbox: bukit 644 -> 603 draw (-41). Gambar sama dalam derau antar-run (taa=0, semua pohon dipaksa impostor: baru vs lama 6,0 sampai 6,9%, baru vs baru 2,9%, lama vs lama 6,9%). Belum diuji pemilik (terutama M1: NaN, mip array) |
 
 ### 4.1 Perkiraan hasil (draw nyata per frame)
 
@@ -123,7 +124,7 @@ Ini hitungan, bukan hasil implementasi. D2 di bukit dihitung konservatif (trem t
 | 1 | D1, D7, D8 | Effort Low, hampir tanpa risiko visual, dapat diverifikasi dengan `ukur_draw_call.py` |
 | 2 | D6, D2 | Gabungan statis dan pintu trem; uji trem dan lalu lintas yang sudah ada |
 | 3 | D3, D4 | Menyentuh pass bayangan (`shpBegin` / `shpEnd`); bandingkan gambar bayangan sebelum dan sesudah di 3 lokasi |
-| 4 | D5 | Satu sesi tersendiri, menyentuh shader dan memori; uji pemilik di M1 sebelum digabung |
+| 4 | D5 | Dikerjakan di cabang kerja, belum digabung ke main: uji pemilik di M1 dan GTX 1060 dulu |
 
 Setiap langkah: `tools/ukur_draw_call.py` sebelum dan sesudah, `tools/qc_load.py`, uji yang relevan (`uji_pohon.py`, `uji_rel_trem.py`, `uji_lalu_lintas.py`, `uji_orang.py`), lalu uji visual pemilik di GTX 1060 dan M1 (HUD: draw call, ms GPU).
 
