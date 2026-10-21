@@ -27,22 +27,38 @@ UJI = r"""
   S.input.auto = true;
   for (const hd of [Math.PI, 0.3, 1.9, -1.2]) { P.heading = hd; for (let i = 0; i < 120; i++) S.physicsStep(0.1); }
   S.input.auto = false;
-  const ds = wrap(P.theta * R - D.s), dz = P.za - D.za;
+  const K = (R - D.h) / R;                                          // 23j: busur lantai -> meter sebenarnya di ketinggian dek
+  const ds = wrap(P.theta * R - D.s) * K, dz = P.za - D.za;
   out[`jalan 48 s di dek: posisi (${ds.toFixed(1)}, ${dz.toFixed(1)}) m dari pusat, h ${P.h.toFixed(1)}`] =
     Math.abs(ds) <= D.half - 0.49 && Math.abs(dz) <= D.half - 0.49 && Math.max(Math.abs(ds), Math.abs(dz)) >= D.inner + 0.34 && Math.abs(P.h - D.h) < 0.01;
-  // jatuhkan bola ke luar pagar
-  P.heading = Math.PI / 2;
+  // 23j: sisi yang menghadap lengkungan (+-s) bisa mepet pagar seperti sisi end cap (+-za)
+  const reach = [];
+  for (const [hd, ax] of [[Math.PI / 2, 's'], [-Math.PI / 2, 's'], [0, 'z'], [Math.PI, 'z']]) {
+    S.goDeck(); P.za = D.za + (hd === 0 ? 1 : -1) * (D.half + D.inner) / 2; P.theta = D.s / R; for (let i = 0; i < 5; i++) S.physicsStep(0.1);
+    P.heading = hd; S.input.auto = true; for (let i = 0; i < 60; i++) S.physicsStep(0.1); S.input.auto = false;
+    reach.push(D.half - (ax === 's' ? Math.abs(wrap(P.theta * R - D.s) * K) : Math.abs(P.za - D.za)));
+  }
+  out[`jarak ke pagar di 4 sisi (+s, -s, +za, -za): ${reach.map((x) => x.toFixed(2)).join(', ')} m`] = reach.every((x) => x > 0.45 && x < 0.6);
+  // jatuhkan bola ke luar pagar, melawan arah putaran (melenceng menjauhi menara)
+  S.goDeck(); P.za = D.za - (D.half + D.inner) / 2; await wait(100);
+  P.heading = -Math.PI / 2;
   S.dropBall(); const b = S.getLastBall(), p0 = b.pos.clone();
-  for (let i = 0; i < 300 && !b.done; i++) await wait(100);
+  for (let i = 0; i < 400 && !b.done; i++) S.physicsStep(0.05);   // langkah fisika langsung (sandbox lambat)
+  out[`titik lepas ${S.LAB.dropOut.toFixed(1)} m di luar pagar, bola tidak menabrak menara`] = S.LAB.dropOut > 10 && !b.hitTower;
   const r0 = Math.hypot(p0.x, p0.y), h0 = R - r0, th0 = Math.atan2(p0.y, p0.x), th1 = Math.atan2(b.pos.y, b.pos.x);
   const simS = wrap((th1 - th0) * R), L = Math.sqrt(R * R - r0 * r0), tf = L / (OM * r0), anaS = R * (Math.atan(L / r0) - OM * tf);
+  // searah putaran: bola melenceng ke belakang dan menabrak menara (tidak lagi menembus)
+  S.goDeck(); P.za = D.za - (D.half + D.inner) / 2; P.heading = Math.PI / 2; await wait(100);
+  S.dropBall(); const bw = S.getLastBall();
+  for (let i = 0; i < 400 && !bw.done; i++) S.physicsStep(0.05);
+  out[`searah putaran: bola ${bw.hitTower ? 'menabrak menara' : 'tidak menabrak menara'}`] = bw.done && bw.hitTower;
   out[`jatuh dari ${h0.toFixed(1)} m: belok ${simS.toFixed(2)} m (analitik ${anaS.toFixed(2)} m, waktu jatuh ${tf.toFixed(2)} s), bola ${b.done ? 'mendarat' : 'belum mendarat'}`] =
     b.done && Math.abs(Math.abs(simS) - Math.abs(anaS)) < 0.05 * Math.abs(anaS) && Math.abs(anaS) > 20;
   // pembanding di tanah: jatuh dari 20 m
   S.teleport('cooper'); await wait(300);
   const keep = S.LAB.drop; S.LAB.drop = 20; S.dropBall(); S.LAB.drop = keep;
   const g0 = S.getLastBall(), q0 = g0.pos.clone();
-  for (let i = 0; i < 100 && !g0.done; i++) await wait(100);
+  for (let i = 0; i < 400 && !g0.done; i++) S.physicsStep(0.05);
   const gS = wrap((Math.atan2(g0.pos.y, g0.pos.x) - Math.atan2(q0.y, q0.x)) * R);
   out[`pembanding di tanah (20 m): belok ${gS.toFixed(3)} m; dari dek ${(Math.abs(simS) / Math.max(Math.abs(gS), 1e-3)).toFixed(0)}x lebih besar`] = g0.done && Math.abs(simS) > 10 * Math.abs(gS);
   // turun: E dari sisi belakang dek (bukan titik datang)

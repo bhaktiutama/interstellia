@@ -265,8 +265,10 @@ UJI = r"""
 
   // 5h. tombol standar (patokan Copper Corn Station, docs/app/tombol.md)
   {
-    const key = (code) => dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
-    const up = (code) => dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
+    // tombol dikirim ke document.body seperti keyboard asli: bila dikirim ke window, window jadi target dan penangan fase tangkap
+    // CAMKIT (didaftarkan belakangan) berjalan sesudah penangan Millar, sehingga F langsung dianggap "keluar kamera"
+    const key = (code) => document.body.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true }));
+    const up = (code) => document.body.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true }));
     const r = {}, p0 = M.PRESET.idx, s0 = M.AUDIO.on, b0 = M.BOB.level;
     key('KeyQ'); up('KeyQ'); r.Q = M.PRESET.idx === (p0 + 1) % M.PRESETS.length;
     key('KeyP'); up('KeyP'); r.P = M.POST.mode === 1; key('KeyP'); up('KeyP'); key('KeyP'); up('KeyP'); r.P3 = M.POST.mode === 0;
@@ -280,9 +282,17 @@ UJI = r"""
     key('Escape'); up('Escape'); r.helpTutup = document.getElementById('help').hidden;
     key('KeyF'); up('KeyF'); r.F = M.PHOTO.on && document.body.classList.contains('photo');
     key('Escape'); up('Escape'); r.Fkeluar = !M.PHOTO.on;
+    // J = musik dari file sendiri (seperti Copper): tanpa file hanya pesan; setelah dimuat diputar berulang, J jeda lalu putar
+    key('KeyJ'); up('KeyJ'); r.Jkosong = !M.MUSIC.el && !M.MUSIC.on;
+    { const n = 4800, b = new ArrayBuffer(44 + n * 2), v = new DataView(b), w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, 48000, true); v.setUint32(28, 96000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+      M.loadMusicFile(new File([b], 'uji.wav', { type: 'audio/wav' })); }
+    r.Jmuat = !M.AUDIO.ctx || (M.MUSIC.on && M.MUSIC.el.loop && !!M.MUSIC.gain);
+    if (M.MUSIC.el) { key('KeyJ'); up('KeyJ'); r.Jjeda = !M.MUSIC.on; key('KeyJ'); up('KeyJ'); r.Jputar = M.MUSIC.on; M.MUSIC.el.pause(); M.MUSIC.on = false; }
     M.PRESET.idx !== p0 && M.applyPreset(p0); while (M.BOB.level !== b0) M.cycleBob();
     const gagal = Object.keys(r).filter((k) => !r[k]);
-    out[`tombol: Q grafik, P efek layar (3 mode), U suara, \` panel (gerak kepala), ? bantuan, F foto, M radar; B kosong; gagal: ${gagal.join(', ') || 'tidak ada'}`] = gagal.length === 0;
+    out[`tombol: Q grafik, P efek layar (3 mode), U suara, \` panel (gerak kepala), ? bantuan, F foto, M radar, J musik dari file; B kosong; gagal: ${gagal.join(', ') || 'tidak ada'}`] = gagal.length === 0;
   }
 
   // 5j. M3c: misi radar (lokasi, gelombang tepat waktu, radar, rute bisa ditempuh sebelum gelombang, gagal bila tersapu)

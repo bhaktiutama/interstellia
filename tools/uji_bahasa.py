@@ -1,7 +1,7 @@
 """Uji M3 (Copper Corn Station): kamus English lengkap untuk semua teks statis dan semua t('...') di kode,
 label tombol ikut berganti bahasa tanpa muat ulang, kembali ke Indonesia utuh.
 Pakai: python tools/uji_bahasa.py   (butuh: pip install playwright && playwright install chromium)"""
-import asyncio, pathlib
+import asyncio, os, pathlib
 from playwright.async_api import async_playwright
 
 UJI = r"""
@@ -13,7 +13,7 @@ UJI = r"""
   const sisa = [], asing = [];
   const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   for (let n = w.nextNode(); n; n = w.nextNode()) {
-    if (/^(SCRIPT|STYLE)$/.test(n.parentNode.nodeName) || n.parentNode.closest('#hud .v, #prompt, #toast, #labResult')) continue;
+    if (/^(SCRIPT|STYLE)$/.test(n.parentNode.nodeName) || n.parentNode.closest('#hud .v, #prompt, #toast, #labResult, #camHelpRows')) continue;   // #camHelpRows: diisi CAMKIT dari kamus STR sendiri (shared/camera.js)
     const k = n.nodeValue.trim(); if (!/[A-Za-z]{2}/.test(k) || nama.has(k) || vals.has(k)) continue;
     if (keys.has(k) && EN[k] !== k) sisa.push(k); else if (!keys.has(k) && !S.LANG.labels.has(n.parentNode.id)) asing.push(k);
   }
@@ -35,7 +35,7 @@ UJI = r"""
 async def main():
     page_url = pathlib.Path(__file__).resolve().parent.parent.joinpath('experiences/cooper-station/index.html').as_uri()
     async with async_playwright() as p:
-        b = await p.chromium.launch(args=['--use-angle=swiftshader', '--enable-unsafe-swiftshader'])
+        b = await p.chromium.launch(args=['--use-angle=swiftshader', '--enable-unsafe-swiftshader'], **({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
         pg = await b.new_page(viewport={'width': 320, 'height': 200})
         errs = []
         pg.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))

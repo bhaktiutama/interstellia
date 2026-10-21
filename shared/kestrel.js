@@ -575,5 +575,78 @@
     return { geo, stick, throttle, stickAt: [0.8, 0.04, -1.5], throttleAt: [-0.8, 0.04, -1.45], screens, eye: [0, 0.68, -1.15] };
   }
 
-  window.KESTREL = { build, buildV3, buildV5, buildCockpitV5, v5At, gear, mergeColored, GEAR, L, W, HT, HB };
+  /* ---------- V2: detail panel prosedural (normal tanpa tekstur) ----------
+     Dipakai shader lambung dan kokpit di Copper dan Millar. Ruang = koordinat wahana (meter, hidung -z, atas +y).
+     Panel dipetakan ke bidang sumbu dominan normal (muka badan v5 datar, jadi satu muka = satu bidang tanpa garis campuran):
+     alur sambungan 11 mm (dalam 2,5 mm, tepinya kotor) dengan baris panel bergeser setengah, paku keling 1 cm tiap 7,5 cm di sepanjang alur,
+     sebagian panel berisi tutup akses, dan tiap panel sedikit miring (lembaran tidak rata). Alur diperlebar ke jejak piksel
+     dan didangkalkan (anti alias: dari jauh tinggal sedikit gelap rata, tidak berkilau). Hasil ksPanel: xyz = normal baru
+     (ruang wahana, satuan), w = rongga 0..1 (untuk gelap dan kotor). Aman untuk M1: tanpa normalize vektor nol, tanpa pow negatif.
+     ksCanopy(p, L): 0..1 cahaya arah L (ruang wahana) yang sampai ke titik p di dalam kokpit lewat kaca kanopi
+     (pelapis disederhanakan: dinding samping, atap miring, lantai, sekat belakang, penutup silau; palang kaca membayangi). */
+  const PANEL_GLSL = /* glsl */`
+float ksH(vec2 c) { return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453); }
+// alur di jarak d dari garis (m), arah turunan sg: menambah gradien ke g (searah sumbu ax), kembali rongga
+float ksGroove(float d, float sg, float w, float dep, inout float g) {
+  float t = clamp(d / w, 0.0, 1.0);
+  g += dep * 6.0 * t * (1.0 - t) / w * sg;
+  return 1.0 - t * t * (3.0 - 2.0 * t);
+}
+// satu bidang: uv (m), ukuran panel sz. Hasil xy = gradien tinggi, z = rongga
+vec3 ksPlane(vec2 uv, vec2 sz, float pw, float seed) {
+  float row = floor(uv.y / sz.y);
+  uv.x += sz.x * 0.5 * mod(row, 2.0);
+  vec2 cell = floor(uv / sz), f = uv - cell * sz;
+  float h = ksH(cell + seed);
+  vec2 g = (vec2(ksH(cell + seed + 3.1), ksH(cell + seed + 7.7)) - 0.5) * 0.024;   // lembaran sedikit miring
+  float w = max(0.011, 1.5 * pw), fade = sqrt(0.011 / w), dep = 0.0025 * fade * 0.011 / w;   // alur 11 mm; dari jauh rongga memudar lebih lambat dari tonjolan
+  vec2 dd = min(f, sz - f), sg = vec2(f.x < sz.x * 0.5 ? 1.0 : -1.0, f.y < sz.y * 0.5 ? 1.0 : -1.0);
+  float cav = max(ksGroove(dd.x, sg.x, w, dep, g.x), ksGroove(dd.y, sg.y, w, dep, g.y)) * fade;
+  // tutup akses: alur kedua 12 cm di dalam tepi
+  if (h < 0.2) {
+    vec2 e = dd - 0.12;
+    if (e.y > -0.004) cav = max(cav, 0.7 * fade * ksGroove(abs(e.x), sg.x * sign(e.x), w, dep * 0.7, g.x));
+    if (e.x > -0.004) cav = max(cav, 0.7 * fade * ksGroove(abs(e.y), sg.y * sign(e.y), w, dep * 0.7, g.y));
+  }
+  // paku keling di sepanjang alur (hanya dari dekat)
+  float rk = 1.0 - smoothstep(0.0015, 0.005, pw);
+  if (rk > 0.0) {
+    const float RR = 0.005, OFF = 0.022, SP = 0.075;
+    vec2 q = vec2(dd.x - OFF, mod(f.y, SP) - SP * 0.5);               // alur tegak (sepanjang v)
+    float r2 = dot(q, q);
+    if (r2 < RR * RR) { g.x += -0.0024 * q.x / (RR * RR) * sg.x * rk; g.y += -0.0024 * q.y / (RR * RR) * rk; }
+    q = vec2(mod(f.x, SP) - SP * 0.5, dd.y - OFF);                    // alur mendatar (sepanjang u)
+    r2 = dot(q, q);
+    if (r2 < RR * RR) { g.x += -0.0024 * q.x / (RR * RR) * rk; g.y += -0.0024 * q.y / (RR * RR) * sg.y * rk; }
+  }
+  return vec3(g, cav);
+}
+vec4 ksPanel(vec3 p, vec3 n, float pw, float ps) {
+  vec3 a = abs(n), G;
+  float cav;
+  if (a.y >= a.x && a.y >= a.z) { vec3 r = ksPlane(p.xz, vec2(0.62, 0.95) * ps, pw, 1.0); G = vec3(r.x, 0.0, r.y); cav = r.z; }
+  else if (a.x >= a.z) { vec3 r = ksPlane(p.zy, vec2(0.95, 0.5) * ps, pw, 2.0); G = vec3(0.0, r.y, r.x); cav = r.z; }
+  else { vec3 r = ksPlane(p.xy, vec2(0.55, 0.5) * ps, pw, 3.0); G = vec3(r.x, r.y, 0.0); cav = r.z; }
+  G -= n * dot(G, n);
+  vec3 nn = n - G;
+  return vec4(nn * inversesqrt(max(dot(nn, nn), 1e-8)), cav);
+}
+float ksCanopy(vec3 p, vec3 L) {
+  const float K = 0.158;                                              // atap pelapis naik 0,158 m per m ke belakang
+  float zc = clamp(p.z, -3.55, -0.6), aa = 0.976 + 0.047 * (zc + 3.55);
+  float tS = abs(L.x) > 1e-4 ? (sign(L.x) * aa - p.x) / L.x : 1e3;
+  float den = L.y - K * L.z, tT = den > 1e-4 ? (0.503 + K * (p.z + 3.55) - p.y) / den : 1e3;
+  float tB = L.z > 1e-4 ? (-0.15 - p.z) / L.z : 1e3, tF = L.z < -1e-4 ? (-3.6 - p.z) / L.z : 1e3, tY = L.y < -1e-4 ? (-0.44 - p.y) / L.y : 1e3;
+  float t = max(min(min(tS, tT), min(tB, min(tF, tY))), 0.0);
+  vec3 q = p + L * t;
+  float top = 0.503 + K * (q.z + 3.55);
+  float o = smoothstep(top - 0.34, top - 0.26, q.y) * smoothstep(-3.62, -3.5, q.z) * (1.0 - smoothstep(-0.7, -0.56, q.z));
+  o *= 1.0 - 0.85 * (1.0 - smoothstep(0.015, 0.04, abs(q.z + 1.6))) * step(top - 0.12, q.y);   // palang kaca tengah
+  o *= 1.0 - 0.85 * (1.0 - smoothstep(0.015, 0.04, abs(q.z + 2.6)));                           // lengkung rangka
+  o *= 1.0 - step(p.z, -2.48) * step(p.y, 0.36);                                                 // di bawah penutup silau dasbor
+  return o * 0.85;                                                                               // kaca bernada menyerap sedikit
+}
+`;
+
+  window.KESTREL = { build, buildV3, buildV5, buildCockpitV5, v5At, gear, mergeColored, GEAR, L, W, HT, HB, PANEL_GLSL };
 })();

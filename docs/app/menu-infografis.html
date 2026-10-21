@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Interstellia: Menu Utama</title>
+<style>
+  /* Prototipe konsep menu infografis (docs/app/konsep-menu-infografis.md). Tidak menggantikan index.html sebelum disetujui. */
+  :root { --ink: #e4e8ef; --muted: #8f97a3; --line: rgba(255,255,255,0.10); --card: rgba(12,14,20,0.74);
+    --cu: #c9b25a; --cu2: #6fae5f; --ga: #f0a45a; --ga2: #ffd9a0; --mi: #4fc2d0; --mi2: #2a7fa8; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  html, body { margin: 0; background: #000; color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  canvas#sky { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; }
+  main { position: relative; z-index: 1; max-width: 1120px; margin: 0 auto; padding: 0 16px 40px; }
+  .lang { position: fixed; top: 14px; right: 14px; display: flex; gap: 6px; z-index: 5; }
+  .lang button { font: inherit; font-size: 12px; color: var(--ink); background: rgba(10,12,18,0.8); border: 1px solid var(--line); border-radius: 99px; padding: 5px 12px; cursor: pointer; }
+  .lang button.on { border-color: rgba(240,164,90,0.7); color: #fff; }
+
+  /* Hero + peta perjalanan */
+  .hero { min-height: 92vh; display: flex; flex-direction: column; justify-content: center; padding-top: 40px; }
+  .hero h1 { margin: 0; font-weight: 200; letter-spacing: 0.42em; text-transform: uppercase; font-size: clamp(30px, 8vw, 68px); }
+  .hero p.tag { margin: 6px 0 28px; color: var(--muted); letter-spacing: 0.1em; }
+  .route { width: 100%; height: auto; overflow: visible; }
+  .route a { cursor: pointer; }
+  .route a:hover .halo, .route a:focus .halo { opacity: 0.9; }
+  .route .halo { opacity: 0.35; transition: opacity .2s; }
+  .route text { font-size: 13px; fill: var(--ink); text-anchor: middle; letter-spacing: 0.06em; }
+  .route text.sub { font-size: 11px; fill: var(--muted); }
+  .dash { stroke-dasharray: 4 7; animation: flow 3s linear infinite; }
+  @keyframes flow { to { stroke-dashoffset: -44; } }
+  .scroll { margin-top: 22px; color: var(--muted); font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; }
+
+  /* Bagian experience */
+  section.xp { margin: 70px 0; padding: 26px; border: 1px solid var(--line); border-radius: 18px; background: var(--card);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border-top: 3px solid var(--a); }
+  .xp header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+  .xp .no { color: var(--a); font-size: 12px; letter-spacing: 0.25em; text-transform: uppercase; }
+  .xp h2 { margin: 0; font-size: clamp(24px, 4vw, 34px); font-weight: 600; width: 100%; }
+  .xp .lead { margin: 6px 0 0; color: #c3c9d2; max-width: 62ch; }
+  .top { display: grid; grid-template-columns: 1.15fr 1fr; gap: 22px; margin-top: 22px; align-items: center; }
+  .xp.flip .top { grid-template-columns: 1fr 1.15fr; }
+  .xp.flip .diagram { order: 2; }
+  .diagram svg { width: 100%; height: auto; display: block; }
+  .diagram text { font-size: 12px; fill: var(--ink); }
+  .diagram text.m { fill: var(--muted); font-size: 11px; }
+  .shot { position: relative; border-radius: 12px; overflow: hidden; aspect-ratio: 16/9; background: #07080b center/cover; border: 1px solid var(--line); }
+  .shot a.go { position: absolute; right: 12px; bottom: 12px; background: var(--a); color: #111; font-weight: 700; text-decoration: none;
+    padding: 9px 18px; border-radius: 99px; letter-spacing: 0.04em; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+  .shot a.go:hover { filter: brightness(1.12); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 18px; }
+  .stat { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: rgba(255,255,255,0.025); }
+  .stat b { display: block; font-size: 24px; font-weight: 650; color: var(--a); font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  .feats { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 18px; }
+  .feat { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; background: rgba(255,255,255,0.03); }
+  .feat i { flex: 0 0 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; font-style: normal; font-size: 18px;
+    background: color-mix(in srgb, var(--a) 18%, transparent); }
+  .feat b { display: block; font-size: 14px; }
+  .feat span { font-size: 12.5px; color: var(--muted); }
+  .keys { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+  kbd { display: inline-block; min-width: 22px; text-align: center; padding: 1px 6px; margin-right: 4px; border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.25); border-bottom-width: 2px; color: var(--ink); font: 600 11px/1.5 ui-monospace, monospace; }
+
+  .soon { display: flex; gap: 16px; align-items: center; padding: 18px 22px; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); }
+  .soon b { color: var(--ink); }
+  footer { margin-top: 40px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); padding-top: 14px; }
+
+  /* animasi diagram */
+  .spin { animation: spin 18s linear infinite; transform-origin: center; transform-box: fill-box; }
+  .spinF { animation: spin 7s linear infinite; transform-origin: center; transform-box: fill-box; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pulse { animation: pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.35; } }
+  .wave { animation: wave 6s ease-in-out infinite; }
+  @keyframes wave { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-26px); } }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; } html { scroll-behavior: auto; } }
+
+  @media (max-width: 760px) {
+    .top, .xp.flip .top { grid-template-columns: 1fr; }
+    .xp.flip .diagram { order: 0; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    section.xp { padding: 18px; }
+    .hero { min-height: auto; padding-top: 70px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="sky"></canvas>
+<div class="lang" id="lang"></div>
+<main>
+  <div class="hero">
+    <h1>Interstellia</h1>
+    <p class="tag" data-t="tagline"></p>
+    <!-- peta perjalanan: Saturnus -> lubang hitam -> planet air -->
+    <svg class="route" viewBox="0 0 900 220" role="img" aria-labelledby="routeT">
+      <title id="routeT">Peta perjalanan</title>
+      <defs>
+        <radialGradient id="gSat" cx="40%" cy="35%"><stop offset="0" stop-color="#f2dca0"/><stop offset="1" stop-color="#9a7a3c"/></radialGradient>
+        <radialGradient id="gDisk" cx="50%" cy="50%"><stop offset="0.35" stop-color="#000"/><stop offset="0.5" stop-color="#ffe2b0"/><stop offset="1" stop-color="#f0a45a" stop-opacity="0"/></radialGradient>
+        <radialGradient id="gSea" cx="40%" cy="35%"><stop offset="0" stop-color="#9fe6ef"/><stop offset="1" stop-color="#1c5470"/></radialGradient>
+      </defs>
+      <path d="M150 110 C 300 30, 360 190, 450 110 S 620 30, 750 110" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.6" class="dash"/>
+      <a href="#cooper-station" aria-label="Copper Corn Station">
+        <circle class="halo" cx="150" cy="110" r="64" fill="var(--cu)" opacity="0.35" filter="blur(18px)" style="filter:blur(18px)"/>
+        <circle cx="150" cy="110" r="38" fill="url(#gSat)"/>
+        <ellipse cx="150" cy="110" rx="66" ry="14" fill="none" stroke="#e8d7a6" stroke-width="3" opacity="0.8" transform="rotate(-14 150 110)"/>
+        <rect x="196" y="72" width="22" height="7" rx="3" fill="#cfd6df"/>
+        <text x="150" y="182">COPPER CORN STATION</text><text class="sub" x="150" y="198" data-t="r1"></text>
+      </a>
+      <a href="#gargantua" aria-label="Gargantua">
+        <circle class="halo" cx="450" cy="110" r="70" fill="var(--ga)" style="filter:blur(20px)"/>
+        <ellipse cx="450" cy="110" rx="78" ry="18" fill="url(#gDisk)"/>
+        <circle cx="450" cy="110" r="26" fill="#000" stroke="#ffd9a0" stroke-width="2"/>
+        <path d="M424 104 A 30 34 0 0 1 476 104" fill="none" stroke="#ffe2b0" stroke-width="3" opacity="0.8"/>
+        <text x="450" y="182">GARGANTUA</text><text class="sub" x="450" y="198" data-t="r2"></text>
+      </a>
+      <a href="#millar" aria-label="Millar's World">
+        <circle class="halo" cx="750" cy="110" r="60" fill="var(--mi)" style="filter:blur(18px)"/>
+        <circle cx="750" cy="110" r="36" fill="url(#gSea)"/>
+        <path d="M716 118 q 17 -8 34 0 t 34 0" fill="none" stroke="#dff7fa" stroke-width="2" opacity="0.7"/>
+        <text x="750" y="182">MILLAR'S WORLD</text><text class="sub" x="750" y="198" data-t="r3"></text>
+      </a>
+    </svg>
+    <div class="scroll" data-t="scroll"></div>
+  </div>
+
+  <!-- ============ COPPER CORN STATION ============ -->
+  <section class="xp" id="cooper-station" style="--a: var(--cu)">
+    <header><span class="no">01 · <span data-t="c_kind"></span></span><h2>Copper Corn Station</h2>
+      <p class="lead" data-t="c_lead"></p></header>
+    <div class="top">
+      <div class="diagram">
+        <svg viewBox="0 0 440 300" role="img" aria-label="Penampang silinder berputar">
+          <defs><marker id="arC" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="var(--cu)"/></marker>
+            <marker id="arW" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10z" fill="#cfd6df"/></marker></defs>
+          <!-- penampang lingkaran -->
+          <g transform="translate(150 150)">
+            <circle r="118" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="12"/>
+            <g class="spin">
+              <circle r="112" fill="none" stroke="var(--cu2)" stroke-width="6" stroke-dasharray="40 14"/>
+              <rect x="-6" y="-112" width="12" height="16" fill="#cfd6df"/><rect x="40" y="-106" width="10" height="20" fill="#cfd6df" transform="rotate(28)"/>
+              <rect x="-5" y="96" width="10" height="16" fill="#cfd6df"/><rect x="-5" y="96" width="10" height="22" fill="#cfd6df" transform="rotate(130)"/>
+            </g>
+            <circle r="4" fill="#fff"/><text x="8" y="-6" class="m" data-t="c_axis"></text>
+            <line x1="0" y1="0" x2="0" y2="104" stroke="var(--cu)" stroke-width="2" stroke-dasharray="3 3"/>
+            <text x="6" y="60">R 1.000 m</text>
+            <!-- orang dan gaya -->
+            <circle cx="-80" cy="76" r="5" fill="#fff"/><line x1="-80" y1="81" x2="-80" y2="94" stroke="#fff" stroke-width="2"/>
+            <line x1="-62" y1="56" x2="-74" y2="68" stroke="var(--cu)" stroke-width="2.5" marker-end="url(#arC)"/>
+            <path d="M -40 -150 A 150 150 0 0 1 60 -138" transform="scale(0.88)" fill="none" stroke="#cfd6df" stroke-width="1.5" marker-end="url(#arW)"/>
+          </g>
+          <text x="302" y="52" data-t="c_d1"></text>
+          <text x="302" y="68" class="m">63,4 s / 99,05 m/s</text>
+          <text x="302" y="108" data-t="c_d2"></text>
+          <text x="302" y="124" class="m" data-t="c_d2m"></text>
+          <!-- bola Coriolis -->
+          <path d="M310 230 q 30 -70 80 -10" fill="none" stroke="var(--cu)" stroke-width="2" stroke-dasharray="3 4"/>
+          <circle cx="390" cy="220" r="5" fill="var(--cu)" class="pulse"/>
+          <text x="302" y="258" data-t="c_d3"></text>
+          <text x="302" y="274" class="m" data-t="c_d3m"></text>
+        </svg>
+      </div>
+      <div class="shot" style="background-image:url('../../experiences/cooper-station/preview.jpg')"><a class="go" data-x="cooper-station" data-t="play"></a></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>8 km</b><span data-t="c_s1"></span></div>
+      <div class="stat"><b>1 g</b><span data-t="c_s2"></span></div>
+      <div class="stat"><b>14</b><span data-t="c_s3"></span></div>
+      <div class="stat"><b>2,78 h</b><span data-t="c_s4"></span></div>
+    </div>
+    <div class="feats" data-f="c"></div>
+    <div class="keys" data-k="c"></div>
+  </section>
+
+  <!-- ============ GARGANTUA ============ -->
+  <section class="xp flip" id="gargantua" style="--a: var(--ga)">
+    <header><span class="no">02 · <span data-t="g_kind"></span></span><h2>Gargantua</h2>
+      <p class="lead" data-t="g_lead"></p></header>
+    <div class="top">
+      <div class="diagram">
+        <svg viewBox="0 0 440 300" role="img" aria-label="Zona lubang hitam">
+          <g transform="translate(200 150)">
+            <circle r="132" fill="none" stroke="rgba(255,255,255,0.12)" stroke-dasharray="2 5"/>
+            <circle r="78" fill="none" stroke="var(--ga2)" stroke-width="1.2" stroke-dasharray="6 4"/>
+            <g class="spinF"><ellipse rx="64" ry="64" fill="none" stroke="var(--ga)" stroke-width="10" stroke-dasharray="20 9" opacity="0.75"/></g>
+            <circle r="34" fill="#000" stroke="#ffe2b0" stroke-width="2"/>
+            <!-- lintasan wahana -->
+            <path d="M 150 -120 C 90 -60, 40 -90, 0 -40" fill="none" stroke="#fff" stroke-width="1.6" stroke-dasharray="4 4"/>
+            <circle cx="150" cy="-120" r="5" fill="#fff" class="pulse"/>
+          </g>
+          <text x="290" y="22" data-t="g_d0"></text>
+          <text x="200" y="154" class="m" text-anchor="middle" data-t="g_h"></text>
+          <text x="282" y="86" class="m">ISCO · 0,8 c</text>
+          <text x="338" y="166" class="m" data-t="g_rel"></text>
+          <text x="10" y="270" data-t="g_d1"></text>
+          <text x="10" y="288" class="m" data-t="g_d1m"></text>
+        </svg>
+      </div>
+      <div class="shot" style="background-image:url('../../experiences/gargantua/preview.jpg')"><a class="go" data-x="gargantua" data-t="play"></a></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>5</b><span data-t="g_s1"></span></div>
+      <div class="stat"><b>0,8 c</b><span data-t="g_s2"></span></div>
+      <div class="stat"><b>24,62°</b><span data-t="g_s3"></span></div>
+      <div class="stat"><b>22 rs</b><span data-t="g_s4"></span></div>
+    </div>
+    <div class="feats" data-f="g"></div>
+    <div class="keys" data-k="g"></div>
+  </section>
+
+  <!-- ============ MILLAR ============ -->
+  <section class="xp" id="millar" style="--a: var(--mi)">
+    <header><span class="no">03 · <span data-t="m_kind"></span></span><h2>Millar's World</h2>
+      <p class="lead" data-t="m_lead"></p></header>
+    <div class="top">
+      <div class="diagram">
+        <svg viewBox="0 0 440 300" role="img" aria-label="Gelombang raksasa dan dilatasi waktu">
+          <defs><linearGradient id="gW" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bff1f6"/><stop offset="1" stop-color="#1b5a78"/></linearGradient></defs>
+          <!-- skala tinggi -->
+          <line x1="40" y1="40" x2="40" y2="220" stroke="rgba(255,255,255,0.3)"/>
+          <text x="46" y="44" class="m">1,2 km</text><text x="46" y="224" class="m">0 m</text>
+          <g class="wave"><path d="M60 220 L 60 210 C 160 210, 200 40, 260 40 C 300 40, 310 120, 330 210 L 460 212 L 460 230 L 60 230 Z" fill="url(#gW)" opacity="0.92"/></g>
+          <rect x="0" y="220" width="440" height="14" fill="#123f55"/>
+          <!-- wahana KS-07 -->
+          <g transform="translate(370 120)"><path d="M -18 0 L 14 -4 L 20 0 L 14 4 Z" fill="#cfd6df"/><path d="M -10 0 L -4 -9 L 2 0 Z" fill="#9aa3ad"/>
+            <line x1="-18" y1="0" x2="-34" y2="6" stroke="var(--mi)" stroke-width="2" class="pulse"/></g>
+          <text x="300" y="102">KS-07</text>
+          <text x="150" y="30" data-t="m_wv"></text>
+          <!-- jam dilatasi -->
+          <g transform="translate(110 268)"><circle r="18" fill="none" stroke="var(--mi)" stroke-width="2"/><line y2="-12" stroke="var(--mi)" stroke-width="2" class="spin" style="transform-origin:0 0"/></g>
+          <text x="138" y="264" data-t="m_t1"></text>
+          <text x="138" y="282" class="m" data-t="m_t2"></text>
+        </svg>
+      </div>
+      <div class="shot" style="background-image:url('../../experiences/millar/preview.jpg')"><a class="go" data-x="millar" data-t="play"></a></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><b>1,3 g</b><span data-t="m_s1"></span></div>
+      <div class="stat"><b>1,2 km</b><span data-t="m_s2"></span></div>
+      <div class="stat"><b>125 m/s</b><span data-t="m_s3"></span></div>
+      <div class="stat"><b data-t="m_s4v"></b><span data-t="m_s4"></span></div>
+    </div>
+    <div class="feats" data-f="m"></div>
+    <div class="keys" data-k="m"></div>
+  </section>
+
+  <div class="soon"><span style="font-size:28px">🛰</span><div><b data-t="k_t"></b><br><span data-t="k_d"></span></div></div>
+  <footer data-t="footer"></footer>
+</main>
+<script>
+  // Teks Indonesia = sumber; English di en. Pola sama dengan index.html (lazarus.lang, ?lang=).
+  const TXT = {
+    id: {
+      tagline: 'Perjalanan dari Saturnus sampai tepi lubang hitam', scroll: 'Gulir untuk menjelajah', play: 'Mulai ▸',
+      r1: 'kota berputar di orbit Saturnus', r2: 'lubang hitam berputar', r3: 'planet air, waktu melambat',
+      c_kind: 'Silinder O\'Neill', c_lead: 'Kota utuh di dalam silinder 8 km yang berputar. Tanah di bawah kakimu adalah sisi dalam silinder, dan putaran itulah yang menjadi gravitasi.',
+      c_axis: 'sumbu (nol-g)', c_d1: 'Satu putaran', c_d2: 'Gaya sentrifugal', c_d2m: '= terasa 1 g di tanah', c_d3: 'Coriolis', c_d3m: 'bola dan hujan berbelok',
+      c_s1: 'panjang silinder, radius 1 km', c_s2: 'gravitasi dari putaran', c_s3: 'distrik kota bernama', c_s4: 'gerhana Saturnus per orbit',
+      g_kind: 'Lubang hitam supermasif', g_lead: 'Cahaya dibelokkan menjadi cincin di sekitar bayangan hitam. Terbangkan wahana GX-01 dari jauh sampai melewati horizon peristiwa.',
+      g_d0: 'GX-01', g_h: 'horizon', g_rel: 'relai 22 rs', g_d1: 'Melewati horizon, sinyal tidak pernah keluar', g_d1m: 'relai melihat jam wahana membeku',
+      g_s1: 'misi: jatuh, susur, relai, tesseract', g_s2: 'gas piringan di ISCO', g_s3: 'sudut kritis tangkap / lolos', g_s4: 'jarak stasiun relai',
+      m_kind: 'Dunia air', m_lead: 'Planet laut dangkal di dekat Gargantua. Cari pecahan dengan radar, lalu lepas landas sebelum gelombang raksasa tiba.',
+      m_wv: 'Gelombang raksasa', m_t1: '1 jam di sini', m_t2: '= 7 tahun di luar',
+      m_s1: 'gravitasi permukaan', m_s2: 'tinggi gelombang', m_s3: 'kecepatan gelombang', m_s4: 'dilatasi waktu', m_s4v: '1 jam = 7 th',
+      k_t: 'Penerbangan Kestrel (segera)', k_d: 'Terbangkan shuttle KS-07 dari dermaga ke cincin Saturnus.',
+      footer: 'Proyek penggemar untuk belajar fisika dan grafis 3D. Tidak berafiliasi dengan studio film mana pun. Semua model, musik, dan desain dibuat sendiri.',
+    },
+    en: {
+      tagline: 'A journey from Saturn to the edge of a black hole', scroll: 'Scroll to explore', play: 'Play ▸',
+      r1: 'a spinning city orbiting Saturn', r2: 'a spinning black hole', r3: 'water world, time slows down',
+      c_kind: 'O\'Neill cylinder', c_lead: 'A whole city inside a spinning 8 km cylinder. The ground under your feet is the inside wall, and the spin is your gravity.',
+      c_axis: 'axis (zero-g)', c_d1: 'One turn', c_d2: 'Centrifugal force', c_d2m: '= feels like 1 g on the ground', c_d3: 'Coriolis', c_d3m: 'balls and rain curve',
+      c_s1: 'cylinder length, 1 km radius', c_s2: 'gravity from spin', c_s3: 'named city districts', c_s4: 'Saturn eclipse per orbit',
+      g_kind: 'Supermassive black hole', g_lead: 'Light bends into a ring around a black shadow. Fly the GX-01 craft from far away to past the event horizon.',
+      g_d0: 'GX-01', g_h: 'horizon', g_rel: 'relay 22 rs', g_d1: 'Past the horizon, no signal gets out', g_d1m: 'the relay sees the craft clock freeze',
+      g_s1: 'missions: fall, skim, relay, tesseract', g_s2: 'disk gas at the ISCO', g_s3: 'critical capture / escape angle', g_s4: 'relay station distance',
+      m_kind: 'Water world', m_lead: 'A shallow ocean planet near Gargantua. Find wreck pieces by radar, then lift off before the giant wave arrives.',
+      m_wv: 'Giant wave', m_t1: '1 hour here', m_t2: '= 7 years outside',
+      m_s1: 'surface gravity', m_s2: 'wave height', m_s3: 'wave speed', m_s4: 'time dilation', m_s4v: '1 h = 7 yr',
+      k_t: 'Kestrel Flight (coming soon)', k_d: 'Fly shuttle KS-07 from the dock to the rings of Saturn.',
+      footer: 'A fan project for learning physics and 3D graphics. Not affiliated with any film studio. All models, music and designs are original.',
+    },
+  };
+  // Fitur utama: [ikon, judul, keterangan] per bahasa
+  const FEATS = {
+    c: [['🚋', 'Trem dan lalu lintas', 'Tram & traffic', 'Trem berinterior, mobil antre di lampu merah', 'Tram with interior, cars queue at lights'],
+        ['🛗', 'Lift ke sumbu nol-g', 'Lift to zero-g axis', 'Naik lift dan melayang di hub', 'Ride up and float at the hub'],
+        ['🚀', 'Shuttle KS-07', 'KS-07 shuttle', 'Terbang dan sandar di spaceport', 'Fly and dock at the spaceport'],
+        ['🏍', 'Motor 150 km/h', '150 km/h motorbike', 'Rasakan berat berubah searah putaran', 'Feel weight change with the spin'],
+        ['🌦', 'Cuaca dan hari', 'Weather & day', 'Awan, hujan miring, malam berlampu', 'Clouds, slanted rain, lit nights'],
+        ['🌑', 'Gerhana Saturnus', 'Saturn eclipse', 'Sinar padam, cahaya tepi atmosfer', 'Sunline fades, glowing limb']],
+    g: [['🛸', 'Jatuh ke horizon', 'Fall to the horizon', 'Geodesik nyata, langit bergeser warna', 'Real geodesics, sky shifts colour'],
+        ['🔥', 'Susur piringan', 'Skim the disk', 'Autopilot rendah, bara menabrak kaca', 'Low autopilot, embers hit the glass'],
+        ['📡', 'Relai sinyal', 'Signal relay', 'Diagram ruang-waktu, suar, jam membeku', 'Spacetime diagram, flares, frozen clock'],
+        ['🧊', 'Tesseract (fiksi)', 'Tesseract (fiction)', 'Bidik sudut masuk ke gerbang', 'Aim the entry angle to the gate'],
+        ['🔊', 'Suara disintesis', 'Synthesized sound', 'Gemuruh piringan, gaya pasang surut', 'Disk roar, tidal stress'],
+        ['📷', 'Mode foto', 'Photo mode', 'Simpan gambar lensa gravitasi', 'Save gravitational lensing shots']],
+    m: [['📍', 'Misi radar', 'Radar mission', 'Temukan 3 pecahan sebelum gelombang', 'Find 3 wreck pieces before the wave'],
+        ['🌊', 'Laut FFT', 'FFT ocean', 'Ombak, buih, kaustik, arus surut', 'Waves, foam, caustics, backwash'],
+        ['✈', 'Terbangkan KS-07', 'Fly the KS-07', 'Kokpit berlayar, lolos dari gelombang', 'Cockpit with screens, outrun the wave'],
+        ['🪐', 'Orbit dan sinematik', 'Orbit & cinematics', 'Turun dari orbit, pergi lewat plasma', 'Descend from orbit, leave through plasma'],
+        ['🧑‍🚀', 'Tubuh astronaut', 'Astronaut body', 'Kaki, tangan, visor berembun', 'Legs, hands, fogging visor'],
+        ['🎧', 'Suara laut', 'Ocean sound', 'Angin, ombak, gemuruh mendekat', 'Wind, surf, approaching rumble']],
+  };
+  // Tombol penting (docs/app/tombol.md)
+  const KEYS = {
+    c: [['WASD', 'jalan', 'walk'], ['E', 'aksi', 'action'], ['M', 'peta', 'map'], ['C', 'motor', 'bike'], ['8', 'kokpit', 'cockpit']],
+    g: [['V', 'wahana', 'craft'], ['O', 'autopilot', 'autopilot'], ['E', 'suar', 'flare'], ['M', 'relai', 'relay'], ['F', 'foto', 'photo']],
+    m: [['WASD', 'jalan', 'walk'], ['M', 'radar', 'radar'], ['E', 'ambil / naik', 'pick / board'], ['V', 'kamera', 'camera'], ['U', 'suara', 'sound']],
+  };
+  const LANGS = [['id', 'Bahasa Indonesia'], ['en', 'English']];
+  let LANG = 'id';
+  {
+    const ok = (c) => LANGS.some((x) => x[0] === c); let c = null;
+    try { c = new URLSearchParams(location.search).get('lang'); } catch (e) { /* abaikan */ }
+    if (!ok(c)) try { c = localStorage.getItem('lazarus.lang'); } catch (e) { c = null; }
+    if (!ok(c)) c = (navigator.language || 'id').slice(0, 2).toLowerCase();
+    LANG = ok(c) ? c : 'id';
+  }
+  const langBox = document.getElementById('lang');
+  function render() {
+    const X = TXT[LANG], en = LANG === 'en';
+    document.documentElement.lang = LANG;
+    document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = X[el.dataset.t] ?? ''; });
+    document.querySelectorAll('a.go').forEach((a) => { a.href = `../../experiences/${a.dataset.x}/index.html?lang=${LANG}`; });
+    document.querySelectorAll('[data-f]').forEach((box) => {
+      box.textContent = '';
+      for (const f of FEATS[box.dataset.f]) {
+        const d = document.createElement('div'); d.className = 'feat';
+        d.innerHTML = '<i></i><div><b></b><span></span></div>';
+        d.querySelector('i').textContent = f[0]; d.querySelector('b').textContent = f[en ? 2 : 1]; d.querySelector('span').textContent = f[en ? 4 : 3];
+        box.appendChild(d);
+      }
+    });
+    document.querySelectorAll('[data-k]').forEach((box) => {
+      box.textContent = '';
+      for (const k of KEYS[box.dataset.k]) {
+        const s = document.createElement('span'); const kb = document.createElement('kbd'); kb.textContent = k[0];
+        s.append(kb, k[en ? 2 : 1]); box.appendChild(s);
+      }
+    });
+    langBox.querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
+  }
+  for (const [c, name] of LANGS) {
+    const b = document.createElement('button'); b.type = 'button'; b.dataset.lang = c; b.textContent = name;
+    b.addEventListener('click', () => { LANG = c; try { localStorage.setItem('lazarus.lang', c); } catch (e) { /* abaikan */ } render(); });
+    langBox.appendChild(b);
+  }
+  render();
+  // latar bintang (sama dengan index.html)
+  const cv = document.getElementById('sky'), g = cv.getContext('2d');
+  let W = 0, H = 0, stars = [];
+  function resize() {
+    const d = Math.min(2, window.devicePixelRatio || 1);
+    W = cv.width = Math.floor(innerWidth * d); H = cv.height = Math.floor(innerHeight * d);
+    stars = Array.from({ length: Math.floor(W * H / 5000) }, () => ({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 1.2 * d + 0.2, a: Math.random(), s: 0.2 + Math.random() }));
+  }
+  function draw(t) {
+    const grd = g.createRadialGradient(W * 0.75, H * 0.2, 0, W * 0.75, H * 0.2, Math.max(W, H) * 0.8);
+    grd.addColorStop(0, '#1a1410'); grd.addColorStop(0.4, '#07080c'); grd.addColorStop(1, '#000');
+    g.fillStyle = grd; g.fillRect(0, 0, W, H);
+    for (const s of stars) {
+      const tw = 0.55 + 0.45 * Math.sin(t * 0.001 * s.s + s.a * 6.28);
+      g.globalAlpha = tw; g.fillStyle = '#fff'; g.beginPath(); g.arc((s.x + t * 0.004 * s.s) % W, s.y, s.r, 0, 6.2832); g.fill();
+    }
+    g.globalAlpha = 1;
+    requestAnimationFrame(draw);
+  }
+  addEventListener('resize', resize); resize(); requestAnimationFrame(draw);
+</script>
+</body>
+</html>

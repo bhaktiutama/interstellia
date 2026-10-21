@@ -20,7 +20,7 @@ Kelompok 3 (G3, susur piringan, lempeng tebal, partikel):
 - autopilot susur (melawan dan searah arus) sampai ISCO tanpa menembus piringan, tinggi terjaga, delta-v di bawah anggaran,
   dilepas di dalam ISCO lalu berakhir di singularitas; tanpa autopilot / delta-v habis = menabrak piringan,
 - kecepatan gas relatif: orbit melingkar melawan arus di r 6 = 2v/(1 + v^2) = 0,575 c, di r 3 = 0,8 c, searah arus = 0,
-- render lempeng tebal (kamera di atas dan di dalam lempeng, kokpit dan kamera luar) tanpa nilai tidak valid,
+- render dekat piringan (kokpit dan kamera luar) tanpa nilai tidak valid (lempeng tebal G3a dihapus),
 - garis bara tergambar dekat piringan dan tidak ada di jalur kutub, tumbukan kaca terjadi (kokpit), kaca pecah = akhir misi,
 - eksposur otomatis hanya saat misi (k = 1 di luar misi), menggelap di atas piringan terang,
 - kamus ID untuk teks baru.
@@ -31,7 +31,7 @@ Kelompok 4 (G4, informasi tidak bisa keluar) + kamera luar mengitari wahana:
   pulsa dari dalam horizon tidak pernah tiba, semua pulsa dari luar akhirnya tiba,
 - suar keluar dari dalam horizon tetap turun sampai r = 0, suar dari luar tiba di relai, pesan relai tetap sampai ke wahana di dalam horizon,
 - jendela relai dan diagram tergambar (M), E menembak suar, layar akhir memuat pulsa dan jendela relai hidup,
-- seret di kamera luar memutar kamera mengitari wahana tanpa mengubah sikap, seret kanan / kokpit = arah hidung, klik ganda kembali.
+- seret di kamera luar memutar kamera mengitari wahana tanpa mengubah sikap, seret kanan (juga di kokpit) = arah hidung, klik ganda kembali.
 Kelompok 5 (G5, sudut masuk tesseract, fiksi):
 - sudut tangkap kritis 24,62 derajat = asin(2 sqrt(21) / 22), integrator: sedikit di bawah kritis tertangkap, sedikit di atas lolos,
 - zoom-whirl: sapuan sudut bertambah ln(10) / sqrt(1/2) = 186,6 derajat tiap delta 10 kali lebih kecil (eksponen ketidakstabilan orbit 2 rs),
@@ -41,6 +41,31 @@ Kelompok 5 (G5, sudut masuk tesseract, fiksi):
 Kelompok 7 (G7, suara disintesis):
 - campuran audioMix(): gemuruh piringan dekat piringan (lebih terang melawan arus), nol di jalur kutub, nada pasang surut hanya di dalam
   horizon, pendorong saat W/S (tidak saat membidik), akord tesseract; AudioContext dibuat setelah tombol, U bisu / nyala + localStorage, panel.
+Kelompok 8 (G8, peta corong dan arah partikel susur searah arus; docs/gargantua/rumus-peta-corong.md):
+- z(r) = 2 sqrt(r) dan l(r) = sqrt(r (r + 1)) + asinh(sqrt r) = integral sqrt(1 + 1/r) dr (irisan Eddington-Finkelstein),
+- riwayat dan prakiraan menyimpan posisi, peta corong tergambar untuk semua skenario tanpa error, tesseract: peta orbit saat membidik,
+  corong setelah Enter (HUD hidup),
+- susur searah arus: titik pancar partikel = arah tampak pusat lubang hitam (dicek lewat rumus aberasi shader, arah sebaliknya),
+  melawan arus: arah gas relatif tidak berubah.
+Kelompok 9 (G9, pandangan relai 22 rs; docs/gargantua/rumus-pandangan-relai.md):
+- V di misi: kamera luar -> kokpit -> relai -> kamera luar; kamera relai di |pos| = 22 tanpa wahana (eye null),
+- citra lensa: sinar shader dari arah hasil (balik aberasi diperiksa dengan rumus shader) melewati titik pancar (< 1e-4 rs),
+  titik segaris relai-pusat = arah ke pusat; titik di balik piringan ditandai,
+- render pandangan relai tanpa nilai tidak valid, titik wahana tergambar,
+- suar dari 10 rs diterima relai saat waktu relai >= waktu tiba; suar dari dalam horizon tidak pernah diterima.
+- revisi 3: relai 4,6 derajat di atas piringan, susur dua arah: lompatan antar titik jejak <= 1 derajat; kartu akhir bawaan di kanan.
+Kelompok 10 (K1, menoleh di kokpit; docs/gargantua/rencana-kokpit-gx01.md):
+- kepala nol = render kokpit dan kamera luar identik dengan commit sebelum K1,
+- basis kepala ortonormal, depan = hidung diputar yaw / pitch, mata berputar di titik leher, batas yaw 140 / pitch +80 / -60 derajat,
+- menoleh tidak mengubah sikap, posisi, kecepatan, sikap X, prakiraan; pegas mencapai sasaran tanpa lewat,
+- mouse: seret kiri (atau kursor terkunci) = kepala, seret kanan = hidung, klik ganda = depan, roda = FOV 50-95; VR mengabaikan kepala mouse,
+- render kokpit menoleh jauh dekat piringan tanpa nilai tidak valid, kamus ID.
+Kelompok MK (planet Millar dan suasana Kelam; docs/gargantua/rencana-millar-dan-suasana-kelam.md):
+- ?mood=klasik&millar=0&aa=0 = render identik dengan commit rencana sebelum MK1 (luar misi dan kokpit),
+- Kelam: render tanpa nilai tidak valid di 4 kualitas x 4 kamera preset dan di misi dekat piringan; Kelam mengubah tampilan,
+- planet: menutup piringan (piksel berubah saat dinyalakan), orbit Kepler omega = akar(M / r^3), dilatasi 1 / akar(1 - 1,5 / r),
+- N mengganti Kelam / Klasik + localStorage; bantuan bertab (5 tab, satu tabel tampil, tab diingat); klik saat kursor terkunci = lepas,
+- kamus ID untuk teks baru.
 Pakai: python tools/uji_misi_gargantua.py   (butuh: pip install playwright; CHROMIUM=<jalur> opsional, default /opt/pw-browsers/chromium
 bila ada). Tanpa GPU dipakai SwiftShader."""
 import asyncio, os, pathlib, sys
@@ -69,7 +94,7 @@ async def main():
         errs = []
         pg.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))
         pg.on('console', lambda m: errs.append(m.type + ': ' + m.text[:200]) if m.type in ('error', 'warning') else None)
-        await pg.goto(PAGE.as_uri() + '?lang=id')
+        await pg.goto(PAGE.as_uri() + '?lang=id&mood=klasik&millar=0&aa=0', timeout=120000)   # MK: uji lama memakai tampilan Klasik tanpa planet (Kelam diuji di kelompok MK)
         await pg.wait_for_function('window.__gargantua !== undefined', timeout=60000)
         await pg.wait_for_timeout(1500)
 
@@ -202,12 +227,15 @@ async def kelompok2(p, exe, pg):
         tmp = pathlib.Path(tempfile.mkdtemp()) / 'lama.html'; tmp.write_text(old, encoding='utf-8')
         setup = '() => { const G = window.__gargantua; G.state.paused = true; G.state.simTime = 7.5; G.state.postMode = 2; G.CONFIG.adaptive = false; G.CONFIG.renderScale = 0.8; }'
         await pg.evaluate('() => { window.__gargantua.stopMission(); }')
-        await pg.evaluate(setup); await pg.wait_for_timeout(500); baru = await pixels(pg)
+        # V4 (turbulensi piringan, bintang HDR) sengaja mengubah tampilan: pembanding G1 memakai ?v4=0 (= sebelum V4) di halaman sekarang
+        pg3 = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
+        await pg3.goto(PAGE.as_uri() + '?lang=id&v4=0&mood=klasik&millar=0&aa=0', timeout=120000); await pg3.wait_for_function('window.__gargantua !== undefined', timeout=120000); await pg3.wait_for_timeout(1000)
+        await pg3.evaluate(setup); await pg3.wait_for_timeout(500); baru = await pixels(pg3); await pg3.close()
         pg2 = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
-        await pg2.goto(tmp.as_uri() + '?lang=id'); await pg2.wait_for_function('window.__gargantua !== undefined'); await pg2.wait_for_timeout(1000)
+        await pg2.goto(tmp.as_uri() + '?lang=id', timeout=120000); await pg2.wait_for_function('window.__gargantua !== undefined', timeout=120000); await pg2.wait_for_timeout(1000)
         await pg2.evaluate(setup); await pg2.wait_for_timeout(500); lama = await pixels(pg2)
         d = beda(baru, lama)
-        cek('misi mati: render identik dengan versi sebelum G2 (uFall = 0)', d == 0, f'{d * 100:.3f}% piksel berbeda')
+        cek('misi mati: render identik dengan versi sebelum G2 (uFall = 0, ?v4=0, ?mood=klasik, ?millar=0)', d == 0, f'{d * 100:.3f}% piksel berbeda')
 
     # --- alur misi lewat UI ---
     await pg.evaluate("() => { const s = [...document.querySelectorAll('#uiBody select')].find((x) => [...x.options].some((o) => o.value === 'fast')); s.value = 'fast'; s.dispatchEvent(new Event('change')); }")
@@ -277,23 +305,23 @@ async def kelompok3(pg):
     cek('gas relatif melawan arus r 3 (ISCO) = 0,8 c', abs(g['retro3'] - 0.8) < 1e-3, f"{g['retro3']:.5f} c")
     cek('gas relatif searah arus = 0', g['pro6'] < 1e-6, f"{g['pro6']:.2e} c")
 
-    # --- render lempeng tebal, partikel, tumbukan ---
+    # --- render dekat piringan (lempeng tebal G3a dihapus), partikel, tumbukan ---
     await pg.evaluate('() => { const G = window.__gargantua; G.CONFIG.adaptive = false; G.state.postMode = 0; }')
     for rT, view, h in [(6, 'chase', 0.05), (6, 'cockpit', 0.05), (3.5, 'cockpit', 0.05), (8, 'chase', 0.01)]:
         await pg.evaluate('''([rT, view, h]) => { const G = window.__gargantua, M = G.MIS; G.startMission('skim'); G.SHIP.view = view; M.ap.h = h;
           G.state.paused = true; while (Math.hypot(...M.x) > rT) if (G.misFly(0.1)) break; G.state.paused = false; M.warp = 3; }''', [rT, view, h])
         await pg.wait_for_timeout(1500)
         st = await pg.evaluate('() => new Promise((r) => { window.__gargantua.state.readCb = r; })')
-        info = await pg.evaluate('() => { const G = window.__gargantua, M = G.MIS; return { vol: !!G.volParams(M.x), parts: G.state.partsDrawn, hits: M.hits, imps: M.imps.length }; }')
-        cek(f'lempeng tebal r {rT} tinggi {h} r ({view}) tanpa nilai tidak valid', info['vol'] and st['bad'] == 0 and st['max'] < 1e4,
-            f"tidak valid {st['bad']}, maks {st['max']:.1f}, rata {st['mean']:.3f}, lempeng {info['vol']}")
+        info = await pg.evaluate('() => { const G = window.__gargantua, M = G.MIS; return { parts: G.state.partsDrawn, hits: M.hits, imps: M.imps.length }; }')
+        cek(f'dekat piringan r {rT} tinggi {h} r ({view}) tanpa nilai tidak valid', st['bad'] == 0 and st['max'] < 1e4,
+            f"tidak valid {st['bad']}, maks {st['max']:.1f}, rata {st['mean']:.3f}")
         if view == 'cockpit' and rT == 6:
             cek('garis bara tergambar dan debu menabrak kaca (kokpit, dekat piringan)', info['parts'] > 0 and info['hits'] > 0 and info['imps'] > 0, str(info))
     await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS; G.startMission('polar'); G.state.paused = true;
       while (Math.hypot(...M.x) > 15) G.misAdvance(M, 0.1); G.state.paused = false; }''')
     await pg.wait_for_timeout(1500)
-    pol = await pg.evaluate('() => { const G = window.__gargantua, M = G.MIS; return { parts: G.state.partsDrawn, hits: M.hits, vol: !!G.volParams(M.x), k: G.AE.k }; }')
-    cek('jalur kutub: tanpa garis bara, tumbukan, dan lempeng tebal', not pol['parts'] and pol['hits'] == 0 and not pol['vol'], str(pol))
+    pol = await pg.evaluate('() => { const G = window.__gargantua, M = G.MIS; return { parts: G.state.partsDrawn, hits: M.hits, k: G.AE.k }; }')
+    cek('jalur kutub: tanpa garis bara dan tumbukan', not pol['parts'] and pol['hits'] == 0, str(pol))
     await pg.evaluate("() => { const G = window.__gargantua, M = G.MIS; G.startMission('skim'); G.state.paused = false; M.glass = 99.999; M.hitAcc = 5; }")
     await pg.wait_for_function('window.__gargantua.MIS.end !== null', timeout=30000)
     e = await pg.evaluate('() => ({ kind: window.__gargantua.MIS.end.kind, title: document.getElementById("mendTitle").textContent })')
@@ -379,9 +407,9 @@ async def kelompok4(pg):
     await pg.mouse.dblclick(160, 100)
     d3 = await pg.evaluate('() => window.__gargantua.MIS.orb')
     await pg.evaluate("() => { const G = window.__gargantua; G.SHIP.view = 'cockpit'; G.MIS.lock = 'centre'; G.misData(); }")
-    await pg.mouse.move(160, 100); await pg.mouse.down(); await pg.mouse.move(200, 100, steps=4); await pg.mouse.up()
-    d4 = await pg.evaluate('() => ({ lock: window.__gargantua.MIS.lock, orb: window.__gargantua.MIS.orb })')
-    cek('klik ganda = kamera kembali; di kokpit seret tetap arah hidung', d3['yaw'] == 0 and d3['pitch'] == 0 and d4['lock'] == 'free' and d4['orb']['yaw'] == 0, f"{d3} {d4}")
+    await pg.mouse.move(160, 100); await pg.mouse.down(button='right'); await pg.mouse.move(200, 100, steps=4); await pg.mouse.up(button='right')
+    d4 = await pg.evaluate('() => { if (document.pointerLockElement) document.exitPointerLock(); return { lock: window.__gargantua.MIS.lock, orb: window.__gargantua.MIS.orb }; }')
+    cek('klik ganda = kamera kembali; di kokpit seret kanan = arah hidung (K1: seret kiri = menoleh)', d3['yaw'] == 0 and d3['pitch'] == 0 and d4['lock'] == 'free' and d4['orb']['yaw'] == 0, f"{d3} {d4}")
 
     # --- jendela relai, suar (E), M, layar akhir ---
     await pg.set_viewport_size({'width': 900, 'height': 700})
@@ -498,6 +526,416 @@ async def kelompok7(pg):
       [...document.querySelectorAll('#uiBody .btns button')].find((b) => b.textContent === 'Bahasa Indonesia').click();
       return { tabs: tabs.map((b) => b.textContent), n, vis, after, lbl, ls: localStorage.getItem('gargantua.panelTab') }; }''')
     cek('panel bertab: 7 tab, hanya satu pane tampil, tab diingat setelah ganti bahasa, semua kontrol tetap ada',
-        len(t['tabs']) == 7 and t['vis'] == ['disk'] and t['after'] == 'disk' and t['lbl'] == 'Disk' and t['ls'] == 'disk' and t['n'] == 38, str(t))
+        len(t['tabs']) == 7 and t['vis'] == ['disk'] and t['after'] == 'disk' and t['lbl'] == 'Disk' and t['ls'] == 'disk' and t['n'] == 47, str(t))   # 38 + musik: putar / jeda, pilih file, input file, volume + MK: Millar (centang, orbit, radius), Kelam
+    # --- musik dari file sendiri (seperti Copper): J putar / jeda, volume tersimpan ---
+    mu = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MUSIC, n = 4800, b = new ArrayBuffer(44 + n * 2), v = new DataView(b);
+      const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVEfmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+      v.setUint32(24, 48000, true); v.setUint32(28, 96000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+      const none = !M.el; G.loadMusicFile(new File([b], 'uji.wav', { type: 'audio/wav' }));
+      const on1 = M.on, el = !!M.el && M.el.loop, gain = !!M.gain;
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' })); const on2 = M.on;
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyJ' })); const on3 = M.on;
+      const lbl = [...document.querySelectorAll('#uiBody .btns button')].some((x) => x.textContent.includes('Musik: diputar'));
+      M.el.pause(); M.on = false;
+      return { none, on1, el, gain, on2, on3, lbl, name: M.name }; }''')
+    cek('musik dari file: dimuat dan diputar berulang lewat master, J jeda lalu putar, label panel ikut',
+        mu['none'] and mu['on1'] and mu['el'] and mu['gain'] and not mu['on2'] and mu['on3'] and mu['lbl'] and mu['name'] == 'uji.wav', str(mu))
+    await kelompok8(pg)
+
+async def kelompok8(pg):
+    m = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, out = {}; G.state.paused = true;
+      // l(r) vs integral numerik (r = u^2: dl = 2 sqrt(u^2 + 1) du, Simpson), z di titik penting
+      const L = (R) => { const n = 2000, b = Math.sqrt(R), h = b / n, f = (u) => 2 * Math.sqrt(u * u + 1); let s = f(0) + f(b);
+        for (let i = 1; i < n; i++) s += (i % 2 ? 4 : 2) * f(i * h); return s * h / 3; };
+      out.lerr = Math.max(...[0.6, 1, 3, 22].map((r) => Math.abs(G.funL(r) - L(r))));
+      out.z = [G.funZ(1), G.funZ(3), G.funZ(22)];
+      // semua skenario: riwayat dan prakiraan berisi posisi, peta corong tergambar ke kanvas uji
+      const cv = document.createElement('canvas'); cv.width = 290; cv.height = 313; const g = cv.getContext('2d', { willReadFrequently: true });
+      out.sc = {};
+      for (const sc of Object.keys(G.SCEN)) {
+        G.startMission(sc); if (M.tes) G.tesLaunch(); else G.misFly(2);
+        M.hist.push([M.tau, Math.hypot(...M.x), ...M.x]);
+        g.clearRect(0, 0, 290, 313); const d0 = G.FUN.drawn; let err = null;
+        try { G.drawFunnel(g, 0, 0, 290, 313, 1); } catch (e) { err = String(e); }
+        const px = g.getImageData(0, 0, 290, 313).data; let lit = 0; for (let i = 0; i < px.length; i += 4) if (px[i] + px[i + 1] + px[i + 2] > 150) lit++;   // garis terang (latar gelap)
+        out.sc[sc] = { err, drawn: G.FUN.drawn - d0, hist: M.hist.every((q) => q.length === 5), pred: !!M.pred && M.pred.pts.every((q) => q.length === 5), lit,
+          plane: Math.abs(G.FUN.n[1]) };
+      }
+      // arah partikel: searah arus = titik pancar di citra lubang hitam; melawan arus = gas relatif apa adanya
+      const ab = (R, d) => { const np = d.map((v) => -v), vn = np[0] * R.v[0] + np[1] * R.v[1] + np[2] * R.v[2];   // rumus skyShift: foton ke kerangka rain
+        const pr = np.map((v, i) => v + R.v[i] * (R.g + R.g * R.g / (R.g + 1) * vn)), l = Math.hypot(...pr); return pr.map((v) => v / l); };
+      const deg = (a, b) => Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) * 180 / Math.PI;
+      out.pro = []; out.retro = [];
+      for (const r of [11, 8, 4]) {                              // > 12,6 rs tanpa debu (di luar piringan)
+        G.startMission('skimPro'); while (Math.hypot(...M.x) > r) if (G.misFly(0.1)) break;
+        let Gs = G.misGas(); const R = G.rainOf(M.x, M.xd), src = Gs.dir.map((v) => -v);
+        out.pro.push({ r: Math.hypot(...M.x), dens: Gs.dens, v: Gs.v, vRaw: G.gasRel().v, dev: deg(ab(R, src), R.rh), oldDev: deg(ab(R, G.gasRel().dir.map((v) => -v)), R.rh) });
+        G.startMission('skim'); while (Math.hypot(...M.x) > r) if (G.misFly(0.1)) break;
+        Gs = G.misGas(); const Gr = G.gasRel();
+        out.retro.push({ r: Math.hypot(...M.x), same: Gs.dir.every((v, i) => v === Gr.dir[i]) && Gs.v === Gr.v });
+      }
+      G.stopMission(); return out; }''')
+    cek('peta corong: l(r) = integral sqrt(1 + 1/r) dr, z = 2 sqrt(r) (2 di horizon, 3,464 di ISCO, 9,381 di 22 rs)',
+        m['lerr'] < 1e-6 and abs(m['z'][0] - 2) < 1e-12 and abs(m['z'][1] - 3.4641016) < 1e-6 and abs(m['z'][2] - 9.3808315) < 1e-6,
+        f"galat l {m['lerr']:.1e}, z {[round(v, 4) for v in m['z']]}")
+    sc = m['sc']
+    ok = all(v['err'] is None and v['drawn'] == 1 and v['hist'] and v['pred'] and v['lit'] > 300 for v in sc.values())
+    cek('peta corong: semua skenario tergambar tanpa error, riwayat dan prakiraan berisi posisi',
+        ok and len(sc) == 10, '; '.join(f"{k} {v['lit']}" + (f" {v['err']}" if v['err'] else '') for k, v in sc.items()))
+    cek('peta corong: susur di bidang piringan (cincin), jatuh kutub di bidang tegak (garis potong)',
+        sc['skim']['plane'] > 0.95 and sc['skimPro']['plane'] > 0.95 and sc['polar']['plane'] < 0.05, f"skim {sc['skim']['plane']:.3f}, kutub {sc['polar']['plane']:.3f}")
+    pro, retro = m['pro'], m['retro']
+    cek('susur searah arus: partikel datang dari citra lubang hitam (aberasi), laju tetap fisika',
+        all(q['dens'] > 0 and q['dev'] < 0.5 and q['oldDev'] > 5 and q['v'] == q['vRaw'] for q in pro),
+        '; '.join(f"r {q['r']:.1f}: {q['dev']:.2f} derajat (dulu {q['oldDev']:.1f})" for q in pro))
+    cek('susur melawan arus: arah dan laju gas relatif tidak berubah', all(q['same'] for q in retro), str(retro))
+    # HUD hidup: tesseract = peta orbit saat membidik, corong setelah Enter (layar cukup besar)
+    await pg.set_viewport_size({'width': 1280, 'height': 720})
+    a, b, c, d, box = await pg.evaluate('''() => { const G = window.__gargantua, F = G.FUN, n = []; let t = 1e12;
+      const dash = () => G.drawDash(t += 1000);                   // langsung (render SwiftShader 1280 x 720 lambat)
+      G.state.paused = true; G.startMission('tesseract'); n.push(F.drawn); dash(); dash(); n.push(F.drawn);
+      G.tesLaunch(); dash(); n.push(F.drawn); G.startMission('polar'); dash(); n.push(F.drawn); n.push(F.box.slice()); G.stopMission(); return n; }''')
+    await pg.set_viewport_size({'width': 320, 'height': 200})
+    cek('HUD: panel corong seukuran jendela relai (lebar 340, tinggi sampai 380, rata bawah 44 px dari tepi)',
+        abs(box[2] - 340) < 0.01 and 190 < box[3] <= 380 and abs(box[1] + box[3] - (720 - 44)) < 0.01, str([round(v, 1) for v in box]))
+    cek('HUD: tesseract membidik = peta orbit (corong tidak), setelah Enter dan misi lain = peta corong', a == b and c == b + 1 and d == c + 1, f"{a} {b} {c} {d}")
+    await kelompok9(pg)
+
+async def kelompok9(pg):
+    m = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, out = {}; G.state.paused = true;
+      G.startMission('polar'); G.setShip(true, 'chase'); const seq = [];
+      for (let i = 0; i < 3; i++) { G.cycleShipView(); seq.push(G.SHIP.view); }
+      G.setShip(true, 'relay'); const b = G.viewBasis(); out.seq = seq; out.r = Math.hypot(...b.pos); out.eye = b.eye; out.relay = !!b.relay;
+      // sinar seperti shader: arah layar -> vel (aberasi ke kerangka rain) lalu x'' = -1,5 h^2 x / r^5, jarak terdekat ke titik pancar
+      const V = G.REL.view, vv = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], add = (a, b, k = 1) => a.map((x, i) => x + k * b[i]);
+      const shaderVel = (dir) => { const np = dir.map((x) => -x), o = V.obs, vn = vv(o.v, np), pr = add(np, o.v, o.g + o.g * o.g / (o.g + 1) * vn);
+        const pl = Math.hypot(...pr), nr = pr.map((x) => x / pl), rh = V.pos.map((x) => x / Math.hypot(...V.pos)), vel = add(nr.map((x) => -x), rh, o.beta), l = Math.hypot(...vel); return vel.map((x) => x / l); };
+      const miss = (vel, xe) => { let p = V.pos.slice(), v = vel.slice(); const L = [p[1] * v[2] - p[2] * v[1], p[2] * v[0] - p[0] * v[2], p[0] * v[1] - p[1] * v[0]], h2 = vv(L, L); let best = 1e9;
+        const acc = (p) => { const r2 = vv(p, p); return p.map((x) => -1.5 * h2 * x / (r2 * r2 * Math.sqrt(r2))); };
+        for (let i = 0; i < 300000; i++) { const r = Math.hypot(...p), ds = Math.min(0.002 * r, 0.05), q = p;
+          const a1 = acc(p), p2 = add(p, v, ds / 2), v2 = add(v, a1, ds / 2), a2 = acc(p2), p3 = add(p, v2, ds / 2), v3_ = add(v, a2, ds / 2), a3 = acc(p3), p4 = add(p, v3_, ds), v4 = add(v, a3, ds), a4 = acc(p4);
+          p = p.map((x, k) => x + ds / 6 * (v[k] + 2 * v2[k] + 2 * v3_[k] + v4[k])); v = v.map((x, k) => x + ds / 6 * (a1[k] + 2 * a2[k] + 2 * a3[k] + a4[k]));
+          const d = add(p, q, -1), t = Math.max(0, Math.min(1, vv(add(xe, q, -1), d) / Math.max(vv(d, d), 1e-30))); best = Math.min(best, Math.hypot(...add(add(q, d, t), xe, -1)));
+          if (Math.hypot(...p) < 1 || Math.hypot(...p) > 120) break; }
+        return best; };
+      const er = V.pos.map((x) => x / 22), side = (() => { const c = [er[1] * 0 - er[2] * 1, er[2] * 0 - er[0] * 0, er[0] * 1 - er[1] * 0], l = Math.hypot(...c); return c.map((x) => x / l); })();
+      const t0 = (() => { const c = [side[1] * er[2] - side[2] * er[1], side[2] * er[0] - side[0] * er[2], side[0] * er[1] - side[1] * er[0]], l = Math.hypot(...c); return c.map((x) => x / l); })();
+      out.pts = [[10, 0.4], [5, 1.3], [2, 2.9], [8, Math.PI - 1e-3], [1.05, 2.4], [40, 1.0]].map(([re, a]) => {
+        const xe = add(er.map((x) => x * Math.cos(a) * re), t0, Math.sin(a) * re), t = performance.now(), I = G.relImage(xe), ms = performance.now() - t;
+        const vel = shaderVel(I.d); return { re, a, miss: miss(vel, xe), dv: Math.hypot(...add(vel, I.vel0, -1)), ms }; });
+      const c = G.relImage(er.map((x) => x * 6)), cd = Math.hypot(...add(shaderVel(c.d), er, 1));
+      out.centre = cd; out.inside = G.relImage(er.map((x) => x * 0.8)) === null;
+      // titik di bawah piringan dilihat dari relai di atas piringan: tertutup piringan
+      const above = V.pos[1] > 0, xe = [6 * Math.cos(1), above ? -0.3 : 0.3, 6 * Math.sin(1)];
+      out.occ = G.relImage(xe).occ; out.free = G.relImage([0, above ? 8 : -8, 0]).occ;
+      // lapisan HUD: titik wahana tergambar
+      const cv = document.createElement('canvas'); cv.width = 1280; cv.height = 720; G.REL.view.cur = null; G.drawRelayView(cv.getContext('2d'), 1280, 720, 1, 1e12);
+      out.drawn = G.REL.view.drawn || 0;
+      // suar: dari 10 rs diterima saat waktu relai >= waktu tiba; dari dalam horizon tidak pernah
+      G.startMission('polar'); while (Math.hypot(...M.x) > 10) G.misFly(0.2);
+      G.fireFlare(); const F = G.REL.flares[G.REL.flares.length - 1]; G.relStep(0.01); out.before = F.seen;
+      while (!M.end && M.T < F.arr + 0.5) { const r = G.misFly(0.2); if (r) break; } G.relStep(0.01); out.after = F.seen; out.arr = F.arr;
+      G.startMission('polar'); while (Math.hypot(...M.x) > 0.5) G.misFly(0.05);
+      G.fireFlare(); const F2 = G.REL.flares[G.REL.flares.length - 1]; G.REL.Tx = 1e6; G.relStep(0.01); out.never = F2.seen; out.arr2 = F2.arr;
+      G.stopMission(); out.after_stop = G.SHIP.view; return out; }''')
+    cek('V di misi: kamera luar -> kokpit -> relai -> kamera luar; relai di 22 rs tanpa model wahana',
+        m['seq'] == ['cockpit', 'relay', 'chase'] and abs(m['r'] - 22) < 1e-9 and m['eye'] is None and m['relay'] and m['after_stop'] == 'chase', str({k: m[k] for k in ('seq', 'r', 'eye', 'after_stop')}))
+    pts = m['pts']
+    cek('citra lensa: sinar shader dari arah titik melewati titik pancar (depan, samping, di balik lubang hitam, r 1,05, r 40)',
+        all(q['miss'] < 1e-4 and q['dv'] < 1e-9 for q in pts), '; '.join(f"r {q['re']}: {q['miss']:.1e} rs {q['ms']:.0f} ms" for q in pts))
+    cek('citra lensa: segaris relai-pusat = arah pusat, dari dalam horizon tidak ada citra, di balik piringan ditandai',
+        m['centre'] < 1e-9 and m['inside'] and m['occ'] and not m['free'], f"pusat {m['centre']:.1e}, tertutup {m['occ']}, bebas {m['free']}")
+    cek('pandangan relai: titik wahana tergambar di lapisan HUD', m['drawn'] >= 1, str(m['drawn']))
+    cek('suar dari 10 rs diterima relai setelah waktu tiba; suar dari dalam horizon tidak pernah',
+        m['before'] is None and m['after'] is not None and m['after'] >= m['arr'] and m['never'] is None and (m['arr2'] is None or m['arr2'] == float('inf')),
+        f"tiba {m['arr']:.2f}, diterima {m['after']}, dalam horizon {m['never']}")
+    # render pandangan relai tanpa nilai tidak valid
+    st = await pg.evaluate('''() => new Promise((res) => { const G = window.__gargantua; G.state.paused = true; G.startMission('skim'); G.setShip(true, 'relay');
+      setTimeout(() => { G.state.readCb = (r) => { G.stopMission(); res(r); }; }, 600); })''')
+    cek('render pandangan relai tanpa nilai tidak valid', st['bad'] == 0 and st['mean'] > 0, str(st))
+    # revisi G9: relai di atas piringan, jejak tanpa lompatan, sapuan acak, suar = posisi saat E, penanda sekarang, kartu akhir
+    m = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, out = {}; G.state.paused = true;
+      const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(a, b)))) * 180 / Math.PI;
+      out.above = Object.keys(G.SCEN).map((sc) => { G.startMission(sc); if (M.tes) G.tesLaunch(); return +G.REL.view.pos[1].toFixed(2); });
+      // jatuh lurus: sudut citra dari pusat turun monoton; susur searah arus: tanpa lompatan > 3 derajat antar sampel
+      const trace = (sc, dt, n) => { G.startMission(sc); G.setShip(true, 'relay'); for (let k = 0; k < n && !M.end; k++) if (G.misFly(dt)) break;
+        const c = G.REL.view.pos.map((x) => -x / 22), Tend = M.T, a = [], d = [];
+        for (let i = 0; i <= 60; i++) { const S = G.relSeen(Tend * i / 60); if (!S) continue; const I = G.relImage(S.x); if (I) { a.push(ang(I.d, c)); d.push(I.d); } }
+        let jump = 0; for (let i = 1; i < d.length; i++) jump = Math.max(jump, ang(d[i], d[i - 1]));
+        let mono = true; for (let i = 1; i < a.length; i++) if (a[i] > a[i - 1] + 1e-6) mono = false;
+        return { n: a.length, mono, jump, a0: a[0], a1: a[a.length - 1] }; };
+      out.polar = trace('polar', 0.5, 200); out.pro = trace('skimPro', 3, 80);
+      // 200 titik acak: sinar shader dari arah citra lewat titik pancar (pakai integrasi ulang sederhana di cabang 2D)
+      G.startMission('polar'); const V = G.REL.view; let worst = 0, nulls = 0;
+      for (let k = 0; k < 200; k++) { const re = 1.02 + Math.random() * 40, th = Math.random() * Math.PI, ph = Math.random() * 2 * Math.PI;
+        const xe = [re * Math.sin(th) * Math.cos(ph), re * Math.cos(th), re * Math.sin(th) * Math.sin(ph)], I = G.imageDir(V.pos, xe);
+        if (!I) { nulls++; continue; }
+        let p = V.pos.slice(), v = I.vel0.slice(); const L = [p[1] * v[2] - p[2] * v[1], p[2] * v[0] - p[0] * v[2], p[0] * v[1] - p[1] * v[0]], h2 = dot(L, L); let best = 1e9;
+        const acc = (p) => { const r2 = dot(p, p); return p.map((x) => -1.5 * h2 * x / (r2 * r2 * Math.sqrt(r2))); }, add = (a, b, k = 1) => a.map((x, i) => x + k * b[i]);
+        for (let i = 0; i < 300000; i++) { const r = Math.hypot(...p), ds = Math.min(0.002 * r, 0.05), q = p;
+          const a1 = acc(p), p2 = add(p, v, ds / 2), v2 = add(v, a1, ds / 2), a2 = acc(p2), p3 = add(p, v2, ds / 2), v3_ = add(v, a2, ds / 2), a3 = acc(p3), p4 = add(p, v3_, ds), v4 = add(v, a3, ds), a4 = acc(p4);
+          p = p.map((x, j) => x + ds / 6 * (v[j] + 2 * v2[j] + 2 * v3_[j] + v4[j])); v = v.map((x, j) => x + ds / 6 * (a1[j] + 2 * a2[j] + 2 * a3[j] + a4[j]));
+          const d = add(p, q, -1), t = Math.max(0, Math.min(1, dot(add(xe, q, -1), d) / Math.max(dot(d, d), 1e-30))); best = Math.min(best, Math.hypot(...add(add(q, d, t), xe, -1)));
+          if (Math.hypot(...p) < 1 || Math.hypot(...p) > 120) break; }
+        worst = Math.max(worst, best); }
+      out.worst = worst; out.nulls = nulls;
+      // suar: titik wahana yang terlihat saat suar tiba = posisi saat E
+      G.startMission('polar'); while (Math.hypot(...M.x) > 12) G.misFly(0.2); G.fireFlare(); const F = G.REL.flares[G.REL.flares.length - 1];
+      while (!M.end && M.T < F.arr + 0.2) { if (G.misFly(0.1)) break; G.relStep(0.001); }
+      const Sf = G.relSeen(F.arr); out.flare = { dtau: Math.abs(Sf.tau - F.tau), dx: Math.hypot(Sf.x[0] - F.x[0], Sf.x[1] - F.x[1], Sf.x[2] - F.x[2]), seen: F.seen !== null };
+      // penanda sekarang: ada di luar horizon, tidak ada di dalam
+      G.setShip(true, 'relay'); G.REL.view.nowT = -1e9; G.relUpdate(0.016); out.nowOut = !!G.REL.view.now;
+      while (Math.hypot(...M.x) > 0.6) G.misFly(0.05); G.REL.view.nowT = -1e9; G.relUpdate(0.016); out.nowIn = !!G.REL.view.now;
+      return out; }''')
+    cek('relai di atas piringan untuk semua skenario (y > 0)', all(y > 0 for y in m['above']), str(m['above']))
+    p, q = m['polar'], m['pro']
+    cek('jejak relai: jatuh lurus mendekat ke pusat monoton, susur searah arus tanpa lompatan',
+        p['mono'] and p['n'] > 40 and q['jump'] < 3 and q['n'] > 40, f"lurus {p['a0']:.1f} -> {p['a1']:.1f} derajat, lompatan susur maks {q['jump']:.2f} derajat")
+    cek('citra lensa: 200 titik acak, sinar shader lewat titik pancar', m['worst'] < 1e-4 and m['nulls'] == 0, f"selisih maks {m['worst']:.1e} rs")
+    f = m['flare']
+    cek('suar: saat tiba, titik wahana yang terlihat relai = posisi saat E ditekan', f['seen'] and f['dtau'] < 1e-9 and f['dx'] < 1e-6, str(f))
+    cek('penanda posisi sekarang: ada di luar horizon, tidak ada di dalam', m['nowOut'] and not m['nowIn'], f"{m['nowOut']} {m['nowIn']}")
+    # revisi 3: sudut pandang rendah (relai 4,6 derajat di atas piringan), susur melawan arus: jejak tanpa lompatan > 1 derajat
+    lo = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MIS, V0 = () => G.REL.view; G.state.paused = true;
+      const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], ang = (a, b) => Math.acos(Math.max(-1, Math.min(1, dot(a, b)))) * 180 / Math.PI;
+      const run = (sc, el) => { G.startMission(sc); G.setShip(true, 'relay'); for (let k = 0; k < 400 && !M.end; k++) if (G.misFly(1)) break;
+        const V = V0(); V.el = el; G.relPlace(); G.REL.Tx = 1e6; const t0 = performance.now(); let fr = 0;
+        for (; fr < 5000; fr++) { const n = V.imgs.length, li = V.li; G.relUpdate(0.016, 1e9 + fr * 16); if (V.imgs.length === n && V.li === li && !V.stack.length) break; }
+        const ms = performance.now() - t0; let jump = 0, at = 0;
+        for (let i = 1; i < V.imgs.length; i++) { const j = ang(V.imgs[i], V.imgs[i - 1]); if (j > jump) { jump = j; at = i; } }
+        return { n: V.imgs.length, log: G.REL.log.length, jump, at, frames: fr, msPerFrame: ms / Math.max(fr, 1) }; };
+      const out = { retro: run('skim', 0.08), pro: run('skimPro', 0.08) }; G.stopMission(); return out; }''')
+    cek('jejak relai sudut pandang rendah (4,6 derajat): susur dua arah tanpa lompatan > 1 derajat antar titik',
+        all(q['jump'] <= 1 and q['n'] > 100 for q in lo.values()),
+        '; '.join(f"{k}: {q['n']} titik (log {q['log']}), lompatan maks {q['jump']:.2f} derajat, {q['frames']} frame, {q['msPerFrame']:.1f} ms/frame" for k, q in lo.items()))
+    await pg.set_viewport_size({'width': 1280, 'height': 720})
+    await pg.evaluate("() => { const G = window.__gargantua, M = G.MIS; G.startMission('polar'); G.state.paused = false; for (let i = 0; i < 20000 && !M.end; i++) G.stepMission(0.1); G.state.paused = true; }")
+    await pg.wait_for_timeout(300)
+    k = await pg.evaluate('''() => { const r = {}; const m = document.getElementById('mend'), sh = document.getElementById('mendShow');
+      r.shown = !m.hidden; r.bg = getComputedStyle(m).pointerEvents; const cb = m.querySelector('.card').getBoundingClientRect(); r.right = cb.left > innerWidth / 2 - 40 && innerWidth - cb.right < 40;
+      document.getElementById('mendClose').click(); r.closed = m.hidden; r.btn = !sh.hidden;
+      sh.click(); r.reopen = !m.hidden && sh.hidden;
+      const hh = m.querySelector('.hh'), b = hh.getBoundingClientRect(), x = b.left + 20, y = b.top + 8;
+      return { r, x, y }; }''')
+    tr = await pg.evaluate('''([x, y]) => { const hh = document.querySelector('#mend .hh'), ev = (t, cx, cy) => hh.dispatchEvent(new PointerEvent(t, { clientX: cx, clientY: cy, pointerId: 7, bubbles: true }));
+      ev('pointerdown', x, y); ev('pointermove', x - 30, y + 20); ev('pointermove', x - 60, y + 40); ev('pointerup', x - 60, y + 40);
+      const t = document.querySelector('#mend .card').style.transform; window.__gargantua.stopMission(); return t; }''', [k['x'], k['y']])
+    r = k['r']
+    # revisi 2: relai bisa diputar (seret kiri), arah pandang (seret kanan), zoom roda, klik ganda awal; citra tetap benar
+    await pg.set_viewport_size({'width': 900, 'height': 500})
+    await pg.evaluate("() => { const G = window.__gargantua, M = G.MIS; G.state.paused = true; G.startMission('slant'); for (let i = 0; i < 40; i++) G.misFly(0.5); G.setShip(true, 'relay'); }")
+    await pg.wait_for_timeout(300)
+    a0 = await pg.evaluate("() => { const V = window.__gargantua.REL.view; return { pos: V.pos.slice(), fov: window.__gargantua.REL.fov }; }")
+    await pg.mouse.move(450, 250); await pg.mouse.down(); await pg.mouse.move(350, 100, steps=5)   # seret ke atas = relai turun (seperti kamera biasa)
+    mv = await pg.evaluate("() => ({ moving: window.__gargantua.REL.view.moving, n: window.__gargantua.REL.view.imgs.length })")
+    await pg.mouse.up(); await pg.wait_for_timeout(200)
+    a1 = await pg.evaluate("() => { const V = window.__gargantua.REL.view; return { pos: V.pos.slice(), moving: V.moving, li: V.li, manual: V.manual }; }")
+    await pg.mouse.move(450, 250); await pg.mouse.down(button='right'); await pg.mouse.move(500, 220, steps=3); await pg.mouse.up(button='right')
+    await pg.mouse.wheel(0, -400)   # roda ke atas = zoom masuk; await pg.wait_for_timeout(200)
+    a2 = await pg.evaluate('''() => { const G = window.__gargantua, V = G.REL.view, S = G.relSeen(G.MIS.T), I = G.imageDir(V.pos, S.x);
+      return { pos: V.pos.slice(), manual: V.manual, fov: G.REL.fov, ok: !!I }; }''')
+    await pg.mouse.dblclick(450, 250); await pg.wait_for_timeout(200)
+    a3 = await pg.evaluate("() => { const G = window.__gargantua, V = G.REL.view; const r = { pos: V.pos.slice(), manual: V.manual, fov: G.REL.fov }; G.stopMission(); return r; }")
+    await pg.set_viewport_size({'width': 320, 'height': 200})
+    import math
+    nrm = lambda v: math.sqrt(sum(x * x for x in v))
+    cek('pandangan relai: seret kiri memutar relai (tetap 22 rs, bisa ke bawah piringan), jejak disembunyikan lalu dibangun ulang',
+        abs(nrm(a1['pos']) - 22) < 1e-9 and a1['pos'][1] < 0 and mv['moving'] and not a1['moving'] and not a1['manual'],
+        f"y {a0['pos'][1]:.2f} -> {a1['pos'][1]:.2f}, saat seret moving {mv['moving']}")
+    cek('pandangan relai: seret kanan = arah pandang (posisi tetap), roda = zoom, klik ganda = posisi dan FOV awal',
+        a2['pos'] == a1['pos'] and a2['manual'] and 25 <= a2['fov'] < 70 and a2['ok'] and abs(a3['pos'][1] - a0['pos'][1]) < 1e-9 and a3['fov'] == 70 and not a3['manual'],
+        f"fov {a2['fov']:.1f}, awal y {a3['pos'][1]:.2f}")
+    await kelompok10(pg)
+    await kelompokMK(pg)
+    cek('kartu akhir: bawaan di kanan, latar tembus, x menutup, tombol ringkasan membuka lagi, kepala bisa diseret',
+        r['shown'] and r['right'] and r['bg'] == 'none' and r['closed'] and r['btn'] and r['reopen'] and 'translate(' in tr and tr != 'translate(0px, 0px)', f"{r} {tr}")
+
+async def kelompok10(pg):
+    import subprocess
+    # --- kepala nol: render identik dengan commit sebelum K1 (berkas sementara di folder yang sama agar jalur aset benar) ---
+    k1 = subprocess.run(['git', 'log', '--format=%H', '-1', '--grep=Rencana kokpit GX-01'], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    old = subprocess.run(['git', 'show', f'{k1}:experiences/gargantua/index.html'], cwd=ROOT, capture_output=True, text=True).stdout if k1 else ''
+    if not old or 'CKP' in old:
+        cek('pembanding versi sebelum K1 tersedia', False, 'commit rencana kokpit tidak ditemukan')
+    else:
+        tmp = PAGE.parent / '_uji_lama_k1.html'; tmp.write_text(old, encoding='utf-8')
+        try:
+            setup = '''(view) => new Promise((res) => { const G = window.__gargantua; G.state.paused = true; G.state.simTime = 7.5; G.state.postMode = 2;
+              G.CONFIG.adaptive = false; G.CONFIG.renderScale = 0.8; setTimeout(res, 600); })'''   # K2-K7 sengaja mengubah wahana: pembanding = tanpa wahana
+            px = {}
+            for nama, url in (('baru', PAGE.as_uri()), ('lama', tmp.as_uri())):
+                pgx = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
+                await pgx.goto(url + '?lang=id&mood=klasik&millar=0&aa=0', timeout=120000); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.wait_for_timeout(1000)
+                for view in ('lubang hitam',):
+                    await pgx.evaluate(setup, view); px[(nama, view)] = await pixels(pgx)
+                await pgx.close()
+            for view in ('lubang hitam',):
+                d = beda(px[('baru', view)], px[('lama', view)])
+                cek(f'K1-K7: tampilan tanpa wahana ({view}) identik dengan versi sebelum K1', d == 0, f'{d * 100:.3f}% piksel berbeda')
+        finally:
+            tmp.unlink(missing_ok=True)
+
+    # --- basis kepala, batas, fisika tidak berubah ---
+    m = await pg.evaluate("""() => { const G = window.__gargantua, M = G.MIS, C = G.CKP, out = {}; G.state.paused = true;
+      const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2], cr = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+      G.startMission('skim'); G.setShip(true, 'cockpit'); const S = M.att, b0 = G.viewBasis();
+      out.zero = Math.max(...[0, 1, 2].map((k) => Math.abs(b0.f[k] - S.f[k]) + Math.abs(b0.r[k] - S.r[k]) + Math.abs(b0.u[k] - S.u[k])));
+      const snap = () => JSON.stringify([M.att, M.x, M.xd, M.lock, M.look, M.pred && M.pred.kind, M.pred && M.pred.dTau, M.tau]);
+      const s0 = snap(), y = 0.9, p = -0.4; G.ckpLook(y, p); for (let i = 0; i < 200; i++) G.ckpStep(1 / 60);
+      out.reach = [C.yaw - y, C.pitch - p]; const b = G.viewBasis();
+      out.ortho = Math.max(Math.abs(dot(b.f, b.f) - 1), Math.abs(dot(b.r, b.r) - 1), Math.abs(dot(b.u, b.u) - 1), Math.abs(dot(b.f, b.r)), Math.abs(dot(b.f, b.u)), Math.abs(dot(b.r, b.u)),
+        Math.max(...cr(b.r, b.f).map((x, k) => Math.abs(x - b.u[k]))));
+      out.fdot = [dot(b.f, S.f), Math.cos(y) * Math.cos(p)]; out.fup = [dot(b.f, S.u), Math.sin(p)]; out.fr = [dot(b.f, S.r), Math.sin(y) * Math.cos(p)];
+      const e0 = G.SHIP.data.eye, neck = [e0[0], e0[1] - C.NECK[1], e0[2] + C.NECK[2]];
+      out.neck = [Math.hypot(...b.eyeM.map((x, k) => x - neck[k])), Math.hypot(C.NECK[1], C.NECK[2])]; out.moved = Math.hypot(...b.eyeM.map((x, k) => x - e0[k]));
+      G.ckpReset(); G.ckpLook(1, 0); let over = 0; for (let i = 0; i < 300; i++) { G.ckpStep(1 / 30); over = Math.max(over, C.yaw - 1); }
+      out.over = over;
+      G.ckpLook(100, 100); out.maxUp = [C.ty * 180 / Math.PI, C.tp * 180 / Math.PI]; G.ckpLook(-200, -200); out.maxDn = [C.ty * 180 / Math.PI, C.tp * 180 / Math.PI];
+      for (let i = 0; i < 300; i++) G.ckpStep(1 / 60); G.viewBasis(); out.same = snap() === s0;
+      G.GV.on = true; const bv = G.viewBasis(); out.vr = Math.max(...[0, 1, 2].map((k) => Math.abs(bv.f[k] - S.f[k]))); out.vrOn = G.ckpOn(); G.GV.on = false;
+      G.ckpReset(); return out; }""")
+    cek('K1 kepala nol = basis hidung persis', m['zero'] == 0, str(m['zero']))
+    cek('K1 basis kepala ortonormal, depan = hidung diputar yaw / pitch', m['ortho'] < 1e-12 and all(abs(a - b) < 1e-9 for a, b in (m['fdot'], m['fup'], m['fr'])) and max(abs(x) for x in m['reach']) < 1e-6,
+        f"ortho {m['ortho']:.1e}, cos {m['fdot'][0]:.4f}")
+    cek('K1 mata berputar di titik leher (jarak tetap, mata bergeser)', abs(m['neck'][0] - m['neck'][1]) < 1e-12 and m['moved'] > 0.03, f"geser {m['moved'] * 100:.1f} cm")
+    cek('K1 pegas tanpa lewat sasaran; batas yaw 140, pitch +80 / -60 derajat', m['over'] <= 1e-12 and abs(m['maxUp'][0] - 140) < 1e-9 and abs(m['maxUp'][1] - 80) < 1e-9
+        and abs(m['maxDn'][0] + 140) < 1e-9 and abs(m['maxDn'][1] + 60) < 1e-9, f"{m['maxUp']} {m['maxDn']}")
+    cek('K1 menoleh tidak mengubah sikap, posisi, kecepatan, sikap X, prakiraan', m['same'])
+    cek('K1 VR: kepala mouse diabaikan', m['vr'] == 0 and not m['vrOn'], str(m['vr']))
+
+    # --- input mouse ---
+    await pg.set_viewport_size({'width': 640, 'height': 400})
+    await pg.evaluate("() => { const G = window.__gargantua; G.startMission('polar'); G.state.paused = true; G.setShip(true, 'cockpit'); }")
+    a0 = await pg.evaluate("() => ({ f: window.__gargantua.MIS.att.f.slice(), lock: window.__gargantua.MIS.lock })")
+    await pg.mouse.move(320, 200); await pg.mouse.down(); await pg.mouse.move(380, 170, steps=5); await pg.mouse.up()
+    await pg.wait_for_timeout(100)
+    q = "() => ({ ty: window.__gargantua.CKP.ty, tp: window.__gargantua.CKP.tp, f: window.__gargantua.MIS.att.f.slice(), lock: window.__gargantua.MIS.lock, locked: !!document.pointerLockElement })"
+    a1 = await pg.evaluate(q)
+    if a1['locked']:   # kursor terkunci: gerak mouse = kepala lewat movementX
+        await pg.mouse.move(420, 150, steps=4); await pg.wait_for_timeout(100); a1 = await pg.evaluate(q); a1['locked'] = True
+    cek('K1 seret kiri / kursor terkunci di kokpit = menoleh ke kanan dan atas, hidung tetap',
+        a1['ty'] > 0.05 and a1['tp'] > 0.02 and a1['f'] == a0['f'] and a1['lock'] == a0['lock'], f"yaw {a1['ty']:.3f}, pitch {a1['tp']:.3f}, terkunci {a1['locked']}")
+    await pg.evaluate("() => { if (document.pointerLockElement) document.exitPointerLock(); }"); await pg.wait_for_timeout(400)
+    await pg.mouse.move(320, 200); await pg.mouse.down(button='right'); await pg.mouse.move(360, 200, steps=4); await pg.mouse.up(button='right')
+    a2 = await pg.evaluate("() => ({ ty: window.__gargantua.CKP.ty, f: window.__gargantua.MIS.att.f.slice(), lock: window.__gargantua.MIS.lock })")
+    await pg.mouse.wheel(0, 600); await pg.wait_for_timeout(100)
+    fov1 = await pg.evaluate("() => window.__gargantua.CKP.fov")
+    await pg.mouse.wheel(0, -5000); await pg.wait_for_timeout(100)
+    fov2 = await pg.evaluate("() => window.__gargantua.CKP.fov")
+    await pg.mouse.dblclick(320, 200); await pg.wait_for_timeout(100)
+    a3 = await pg.evaluate("() => { if (document.pointerLockElement) document.exitPointerLock(); const C = window.__gargantua.CKP; return { ty: C.ty, tp: C.tp, fov: C.fov }; }")
+    cek('K1 seret kanan di kokpit = hidung (kepala tetap)', a2['lock'] == 'free' and a2['f'] != a0['f'] and a2['ty'] == a1['ty'], a2['lock'])
+    cek('K1 roda = FOV kokpit 50-95 derajat, klik ganda = kepala ke depan', 75 < fov1 <= 95 and fov2 == 50 and a3['ty'] == 0 and a3['tp'] == 0 and a3['fov'] == 75,
+        f"fov {fov1:.1f} -> {fov2:.1f}, klik ganda {a3}")
+    await pg.set_viewport_size({'width': 320, 'height': 200})
+
+    # --- render menoleh jauh dekat piringan tanpa nilai tidak valid ---
+    for y, p in ((140, -60), (-140, 80), (90, 0)):
+        st = await pg.evaluate('''([y, p]) => new Promise((res) => { const G = window.__gargantua, C = G.CKP; G.state.paused = true; G.startMission('skim');
+          G.setShip(true, 'cockpit'); G.ckpLook(y * Math.PI / 180, p * Math.PI / 180); C.yaw = C.ty; C.pitch = C.tp;
+          setTimeout(() => { G.state.readCb = (r) => { res(r); }; }, 600); })''', [y, p])
+        cek(f'K1 render kokpit menoleh yaw {y} pitch {p} dekat piringan tanpa nilai tidak valid', st['bad'] == 0 and st['mean'] > 0, str(st))
+    await pg.evaluate("() => { window.__gargantua.ckpReset(); window.__gargantua.stopMission(); }")
+
+    src = PAGE.read_text(encoding='utf-8')
+    idb = src[src.index('const ID = {'):src.index('const txt =')]
+    kunci = ['Cockpit view: click, then move the mouse to look around',
+             'Cursor locked: move the mouse to look around, right button = nose, double-click = forward, click or Esc releases']
+    hilang = [k for k in kunci if f"'{k}':" not in idb]
+    cek('K1 kamus ID lengkap', not hilang, ', '.join(hilang))
+
+async def kelompokMK(pg):
+    import subprocess, math
+    setup = '''(mis) => new Promise((res) => { const G = window.__gargantua; G.state.paused = true; G.state.simTime = 7.5; G.state.postMode = 2;
+      G.CONFIG.adaptive = false; G.CONFIG.renderScale = 0.8; if (mis) { G.startMission('polar'); G.state.paused = true; G.setShip(true, 'chase'); } setTimeout(res, 600); })'''   # kamera luar: layar MFD kokpit beranimasi menurut jam
+    # --- saklar mati = identik dengan versi sebelum MK1 ---
+    c0 = subprocess.run(['git', 'log', '--format=%H', '-1', '--grep=Gargantua MK1-MK2'], cwd=ROOT, capture_output=True, text=True).stdout.strip()   # induk commit MK1
+    old = subprocess.run(['git', 'show', f'{c0}~1:experiences/gargantua/index.html'], cwd=ROOT, capture_output=True, text=True).stdout if c0 else ''
+    if not old or 'uPlOn' in old:
+        cek('MK pembanding versi sebelum MK1 tersedia', False, 'commit rencana tidak ditemukan')
+    else:
+        tmp = PAGE.parent / '_uji_lama_mk.html'; tmp.write_text(old, encoding='utf-8')
+        try:
+            px = {}
+            for nama, url in (('baru', PAGE.as_uri()), ('lama', tmp.as_uri())):
+                pgx = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
+                await pgx.goto(url + '?lang=id&mood=klasik&millar=0&aa=0', timeout=120000); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.wait_for_timeout(1000)
+                for mis in (False, True):
+                    await pgx.evaluate(setup, mis); px[(nama, mis)] = await pixels(pgx)
+                await pgx.close()
+            for mis in (False, True):
+                d = beda(px[('baru', mis)], px[('lama', mis)])
+                cek(f"MK Klasik + Millar mati: {'misi (kamera luar)' if mis else 'luar misi'} identik dengan versi sebelum MK1", d == 0, f'{d * 100:.3f}% piksel berbeda')
+        finally:
+            tmp.unlink(missing_ok=True)
+
+    # --- Kelam: tanpa nilai tidak valid di semua kualitas dan kamera ---
+    await pg.evaluate("() => { const G = window.__gargantua; G.stopMission(); G.setMood(true); G.MILLAR.on = true; G.state.paused = true; G.CONFIG.adaptive = false; }")
+    buruk = []
+    for q in ('ultra', 'high', 'medium', 'low'):
+        for pr in ('film', 'edge', 'top', 'close'):
+            st = await pg.evaluate('''([q, pr]) => new Promise((res) => { const G = window.__gargantua; G.CONFIG.quality = q; G.setPreset(pr); G.state.tween = null;
+              const P = { film: [22, 5], edge: [20, 0.6], top: [26, 78], close: [9, 12] }[pr]; G.cam.dist = P[0]; G.cam.pitch = P[1];
+              setTimeout(() => { G.state.readCb = res; }, 300); })''', [q, pr])
+            if st['bad'] or st['max'] > 1e4 or st['mean'] <= 0: buruk.append(f"{q}/{pr}: {st}")
+    cek('MK Kelam: 4 kualitas x 4 kamera tanpa nilai tidak valid', not buruk, '; '.join(buruk[:3]) or '16 render')
+    await pg.evaluate("() => { const G = window.__gargantua; G.CONFIG.quality = 'high'; G.setPreset('edge'); G.state.tween = null; G.cam.dist = 20; G.cam.pitch = 0.6; }")
+    await pg.wait_for_timeout(300); pk = await pixels(pg)
+    await pg.evaluate("() => window.__gargantua.setMood(false)"); await pg.wait_for_timeout(300); pc = await pixels(pg)
+    cek('MK Kelam mengubah tampilan (debu, palet, langit)', beda(pk, pc) > 0.05, f'{beda(pk, pc) * 100:.1f}% piksel berbeda')
+    await pg.evaluate("() => window.__gargantua.setMood(true)")
+    st = await pg.evaluate('''() => new Promise((res) => { const G = window.__gargantua; G.startMission('skim'); G.state.paused = true; G.setShip(true, 'cockpit');
+      setTimeout(() => { G.state.readCb = res; }, 600); })''')
+    cek('MK Kelam saat misi susur piringan (kokpit) tanpa nilai tidak valid', st['bad'] == 0 and st['mean'] > 0, str(st))
+    await pg.evaluate("() => window.__gargantua.stopMission()")
+
+    # --- planet: tergambar, orbit, dilatasi ---
+    a = await pg.evaluate('''() => { const G = window.__gargantua, M = G.millarState(0), M2 = G.millarState(10);
+      const da = Math.atan2(M2.pos[2] / Math.cos(6 * Math.PI / 180), M2.pos[0]) - Math.atan2(M.pos[2] / Math.cos(6 * Math.PI / 180), M.pos[0]);
+      return { r: Math.hypot(...M.pos), dil: M.dil, T: M.T, om: da / 10, nrm: M.nrm, rad: M.rad }; }''')   # 10 satuan: sudut tidak melewati pi
+    cek('MK orbit Millar: r 13, omega = akar(0,5 / r^3), periode 2 pi / omega, dilatasi 1 / akar(1 - 1,5 / 13) = 1,0632',
+        abs(a['r'] - 13) < 1e-9 and abs(a['om'] - math.sqrt(0.5 / 13 ** 3)) < 1e-9 and abs(a['T'] - 2 * math.pi / math.sqrt(0.5 / 13 ** 3)) < 1e-6
+        and abs(a['dil'] - 1 / math.sqrt(1 - 1.5 / 13)) < 1e-12 and abs(sum(x * y for x, y in zip(a['nrm'], a['rad']))) < 1e-12,
+        f"dil {a['dil']:.4f}, T {a['T']:.1f} rs/c")
+    px = []
+    for on in (True, False):
+        await pg.evaluate('''(on) => { const G = window.__gargantua, M = G.millarState(G.state.simTime), d = 8; G.MILLAR.on = on; G.MILLAR.rad = 0.3;
+          const p = M.pos, L = Math.hypot(...p); G.cam.dist = L + d; G.cam.pitch = Math.asin(p[1] / L) * 180 / Math.PI; G.cam.yaw = Math.atan2(p[0], p[2]); G.state.tween = null; }''', on)
+        await pg.wait_for_timeout(300); px.append(await pixels(pg))
+    cek('MK planet Millar tergambar (piksel berubah saat dinyalakan, kamera di belakang planet)', beda(px[0], px[1]) > 0.0005, f'{beda(px[0], px[1]) * 100:.2f}% piksel berbeda')   # planet gelap di depan bayangan gelap: sebagian piksel tidak berubah
+    await pg.evaluate("() => { const G = window.__gargantua; G.MILLAR.rad = 0.06; G.setPreset('film'); }")
+
+    # --- N, bantuan bertab ---
+    pgd = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()   # MK9: bawaan Klasik (Kelam lewat N)
+    await pgd.goto(PAGE.as_uri() + '?lang=id', timeout=120000); await pgd.wait_for_function('window.__gargantua !== undefined', timeout=120000)
+    dm = await pgd.evaluate("() => { localStorage.setItem('gargantua.mood', 'kelam'); return window.__gargantua.MOOD.on; }")
+    # AA1: sampel tambahan hanya di tepi bayangan: aa 4 vs 0 berbeda sedikit (cincin tepi), tanpa nilai tidak valid
+    aa = []
+    for k in (0, 4):
+        aa.append(await pgd.evaluate('''(k) => new Promise((res) => { const G = window.__gargantua; G.CONFIG.adaptive = false; G.CONFIG.quality = 'high'; G.CONFIG.presets.high.aa = k;
+          G.MILLAR.on = false; G.setPreset('film'); G.state.tween = null; G.state.paused = true; setTimeout(() => { G.state.readCb = res; }, 400); })''', k))
+        aa[-1]['px'] = await pixels(pgd)
+    await pgd.close()
+    d = beda(aa[0]['px'], aa[1]['px'])
+    cek('AA1 tepi bayangan: sampel tambahan hanya mengubah sebagian kecil piksel, tanpa nilai tidak valid', 0 < d < 0.08 and aa[1]['bad'] == 0, f'{d * 100:.2f}% piksel berbeda, tidak valid {aa[1]["bad"]}')
+    cek('MK9 bawaan Klasik tanpa debu (Kelam hanya lewat N)', dm is False, str(dm))
+    await pg.evaluate("() => window.__gargantua.setMood(true)")
+    await pg.keyboard.press('KeyN'); n1 = await pg.evaluate("() => [window.__gargantua.MOOD.on, localStorage.getItem('gargantua.mood2')]")
+    await pg.keyboard.press('KeyN'); n2 = await pg.evaluate("() => [window.__gargantua.MOOD.on, localStorage.getItem('gargantua.mood2')]")
+    cek('MK N: Kelam -> Klasik -> Kelam, tersimpan di localStorage', n1 == [False, 'klasik'] and n2 == [True, 'kelam'], f'{n1} {n2}')
+    h = await pg.evaluate('''() => { const G = window.__gargantua; G.toggleHelp(true); const tabs = [...document.querySelectorAll('#helpTabs button')];
+      tabs[1].click(); const vis = [...document.querySelectorAll('#help [data-pane]')].filter((t) => getComputedStyle(t).display !== 'none').map((t) => t.dataset.pane);
+      const ls = localStorage.getItem('gargantua.helpTab'); G.toggleHelp(false);
+      return { n: tabs.length, names: tabs.map((b) => b.textContent), vis, ls, rows: document.querySelectorAll('#help tr').length }; }''')
+    cek('MK bantuan bertab: 5 tab, satu tabel tampil, tab diingat', h['n'] == 5 and h['vis'] == ['mission'] and h['ls'] == 'mission' and h['rows'] > 25, str(h))
+
+    src = PAGE.read_text(encoding='utf-8')
+    idb = src[src.index('const ID = {'):src.index('const txt =')]
+    kunci = ['Planet Millar', 'Show Millar', 'Orbit', 'Shown radius (rs)', 'Near the disk (13 rs)', 'Film (4 rs, in the disk)', 'period', 'h', 'Millar clock',
+             'far away', 'Film 61,362x: needs near-extremal Kerr', 'Mood', 'Dark mood (dust clouds) (N)', 'Mood: dark (dust clouds)', 'Mood: classic',
+             'Mood: dark (dust clouds) or classic', 'Basics', 'Graphics and sound', 'Camera and photo', 'Thrust; Shift = main engine', 'Autopilot skim', 'End the mission']
+    hilang = [k for k in kunci if f"'{k}':" not in idb]
+    cek('MK kamus ID lengkap', not hilang, ', '.join(hilang))
 
 asyncio.run(main())

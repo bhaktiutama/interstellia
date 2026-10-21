@@ -12,16 +12,38 @@ Per 30 September 2026. Patokan: Copper Corn Station. Fungsi yang sama memakai to
 | Q | Kualitas grafik (preset berikutnya) | ya | ya (dulu P) | ya (baru) |
 | P | Efek layar: Tinggi / Sedang / Mati | ya | ya (baru) | ya (baru; dulu tangkap layar) |
 | U | Suara nyala / mati | ya | ya (dulu M) | ya (G7, suara disintesis) |
-| N | Cuaca / suasana | cuaca | suasana | - |
+| N | Cuaca / suasana | cuaca | suasana | suasana Kelam / Klasik |
 | Z | Kecepatan waktu | ya | ya | - |
 | V | Tampilan / kamera luar | kamera luar | jalan kaki, drone, tinggi | wahana GX-01: kamera luar / kokpit (Esc keluar) |
-| F | Mode foto (UI disembunyikan, Enter simpan PNG, F atau Esc keluar) | ya | ya (baru) | ya (dulu layar penuh) |
+| F | Kamera rangefinder (Rencana K; jenis terakhir diingat, panel kamera = Foto bebas lama: UI disembunyikan, Enter simpan PNG), F atau Esc keluar | ya | ya | ya (di luar misi atau saat jeda) |
 | R | Kembali ke titik awal / atur ulang | ya | ya | atur ulang kamera |
 | H | Sembunyikan HUD | ya | ya | ya |
 | ` (backtick) | Panel kontrol | ya | ya (baru) | buka / lipat panel (baru) |
 | ? (atau F1) | Bantuan | ya | ya (baru) | ya (baru) |
 | 1 - 9, 0 | Lokasi / sudut pandang | lokasi | - | sudut pandang 1-4 |
 | Esc | Lepas kursor, tutup bantuan, keluar mode foto | ya | ya | ya |
+
+## Tombol lokal mode kamera rangefinder (Rencana K, `shared/camera.js`)
+
+Hanya berlaku selama mode kamera aktif, sama di ketiga experience. Tombol khusus Copper (B, G, E, M, L, T, I, C) tidak dipakai. WASD, Shift, mouse, Z, Q, P, N, U tetap seperti biasa.
+
+| Tombol | Fungsi |
+| --- | --- |
+| Klik kiri (kursor terkunci) / Enter | Rana foto, atau mulai / berhenti rekam video; rana B: tahan |
+| Roda mouse | Cincin fokus (patch rangefinder di tengah) |
+| Shift + roda, atau , dan . | Aperture |
+| [ dan ] | Kecepatan rana (mode A / P pindah ke M) |
+| - dan = | ISO; dengan Shift = kompensasi eksposur |
+| Klik tengah | Autofocus ke patch tengah (lokal mode kamera) |
+| M | Mode eksposur A / M / P (berganti; lokal mode kamera, tidak membuka peta / radar) |
+| 1 - 6 | Lensa 21 / 28 / 35 / 50 / 75 / 90 mm |
+| Tab | Foto / video |
+| V | Jendela bidik optik / live view |
+| Klik kanan tahan | Kunci eksposur (AE-L) |
+| H | Sembunyikan HUD kamera |
+| ` | Panel kamera (mode M / A / P, tripod, format, fps, bitrate, Foto bebas) |
+| ? / F1 | Bantuan tombol kamera |
+| F / Esc | Keluar |
 
 ## Tombol khusus Copper Corn Station (jangan dipakai untuk fungsi lain)
 
@@ -36,7 +58,7 @@ Per 30 September 2026. Patokan: Copper Corn Station. Fungsi yang sama memakai to
 | C | Motor |
 | O · X | Jalan otomatis · turbo |
 | K | Kualitas vegetasi |
-| J | Musik |
+| J | Musik (Copper: generatif / file sendiri / mati; Gargantua dan Millar: putar / jeda musik dari file sendiri, file dipilih di panel) |
 | Y | Tur sinematik |
 
 Pengecualian yang sudah ada: Millar G = panggil gelombang raksasa (aksi eksperimen, setara G jatuhkan bola di Copper). Millar M = radar misi (setara M peta di Copper), E = ambil barang / naik ke KS-07 / mendarat (setara E aksi di Copper). Di wahana Millar berlaku tombol pesawat Copper: W/S, A/D, R/F (Space juga naik), Shift, mouse, V kamera, E.
@@ -62,9 +84,32 @@ Sinematik (Millar M4): Spasi, Enter, Esc, atau klik = lewati. Pandangan orbit ti
 | Millar | tidak ada | Tubuh astronaut (Mati / Bayangan / Tampil) hanya di panel kontrol `, tanpa tombol (M6a) |
 | Millar | tidak ada | Visor helm (Mati / Tipis / Penuh) hanya di panel kontrol `, tanpa tombol (M6d) |
 
+## Kontroler VR (Rencana VR, `shared/vr.js`, Oculus Touch)
+
+Keyboard tetap berlaku di VR: W A S D jalan ke arah kepala, Shift lari, tombol lain seperti biasa. Mouse = memutar badan (klik layar monitor sekali agar kursor terkunci, Esc melepas; kecepatan atau mati di menu VR). Arah jalan bawaan = arah badan, kepala bebas melihat sekeliling tanpa mengubah arah jalan (menu VR Arah jalan: badan / kepala). Kontroler Touch dipetakan ke tombol lama (dikirim sebagai tombol papan ketik), jadi tidak ada fungsi baru yang memakai huruf.
+
+| Kontrol Touch | Semua experience (VRKIT) |
+| --- | --- |
+| X | Menu VR (panel di depan mata; pilih dengan sinar kontroler kanan + picu kanan) |
+| Y | Pusatkan ulang pandangan |
+| Stik kanan kiri / kanan | Belok patah 30 derajat (menu: 45 derajat atau halus) |
+
+| Kontrol Touch | Copper Corn Station | Millar's World | Gargantua |
+| --- | --- | --- | --- |
+| Stik kiri | Jalan analog (joystik sentuh); motor / shuttle = W A S D | W A S D (jalan / terbang) | Misi: W A S D dorong; luar misi: mengitari dan zoom |
+| Stik kanan atas / bawah | Shuttle: R / F | Terbang: R / F | Misi: R / F |
+| Genggam kanan | Lari (shuttle: Shift) | Lari / Shift | Shift mesin utama |
+| Picu kanan | E aksi | E ambil (tahan), naik, mendarat | E suar; tesseract: kunci bidikan; akhir misi: terbang lagi |
+| A | Space lompat | Space lompat | V tampilan |
+| B | V kamera luar | V tampilan | O autopilot |
+| Picu kiri | C motor | - | X sikap |
+| Tekan stik kiri | - | M radar | Space jeda |
+
+Di VR mati: gerak kepala (B), guncangan kamera, FOV lari, mode foto dan kamera rangefinder F, tur Y Copper, sinematik kedatangan Millar (dilewati), visor layar Millar, butiran / vinyet / noda lensa. Millar tersapu = layar gelap.
+
 ## Aturan untuk experience baru
 
 - Pakai tabel tombol umum di atas. Fungsi baru yang khusus experience: pilih tombol yang tidak ada di kedua tabel, atau letakkan di panel kontrol.
 - Semua tombol dicantumkan di bantuan (?) dan teks tombol di layar, dua bahasa.
 - Penerbangan (shuttle KS-07) mengikuti tombol pesawat di Copper: W/S, A/D, R/F, Z/C, mouse, Shift, X, V, E, L.
-- Misi Gargantua (wahana GX-01, G2 + G3 + G4): W/S, A/D, R/F dorong, Shift mesin utama, seret mouse di kamera luar = kamera mengitari wahana (klik ganda = kembali ke belakang wahana), seret kanan (atau Ctrl + seret) dan seret di kokpit = arah hidung, X sikap (pusat / mendatar / searah lintasan / bebas), O autopilot susur piringan (O = otomatis, seperti jalan otomatis di Copper; selama autopilot R/F tinggi, W/S laju turun), E tembak suar (G4, setara E aksi di Copper), M pandangan relai dan diagram ruang-waktu (G4, setara M peta di Copper dan M radar di Millar), Z waktu, V tampilan, Space jeda, Esc akhiri, Enter terbang lagi; skenario tesseract (G5): selama membidik W/S sudut, A/D bidang orbit, Shift kasar, Enter kunci bidikan dan berangkat. U = suara (G7). Z/C guling tidak dipakai (Z = waktu, sesuai tabel umum). Selama misi F dan R = dorongan, jadi mode foto dan atur ulang kamera menunggu misi selesai.
+- Misi Gargantua (wahana GX-01, G2 + G3 + G4): W/S, A/D, R/F dorong, Shift mesin utama, seret mouse di kamera luar = kamera mengitari wahana (klik ganda = kembali ke belakang wahana), seret kanan (atau Ctrl + seret) = arah hidung, di kokpit (K1) klik = kunci kursor lalu gerak mouse = menoleh (seret kiri / satu jari juga menoleh, tahan klik kanan atau Ctrl = hidung, dua jari di ponsel = hidung, roda = sudut pandang 50-95 derajat, klik ganda = kepala ke depan, Esc pertama melepas kursor), X sikap (pusat / mendatar / searah lintasan / bebas), O autopilot susur piringan (O = otomatis, seperti jalan otomatis di Copper; selama autopilot R/F tinggi, W/S laju turun), E tembak suar (G4, setara E aksi di Copper), M pandangan relai dan diagram ruang-waktu (G4, setara M peta di Copper dan M radar di Millar), Z waktu, V tampilan (kamera luar, kokpit, relai 22 rs; di pandangan relai seret = relai mengitari lubang hitam, seret kanan = arah pandang, roda = zoom, klik ganda = awal), Space jeda, Esc akhiri, Enter terbang lagi; skenario tesseract (G5): selama membidik W/S sudut, A/D bidang orbit, Shift kasar, Enter kunci bidikan dan berangkat. U = suara (G7). Z/C guling tidak dipakai (Z = waktu, sesuai tabel umum). Selama misi F dan R = dorongan, jadi mode foto dan atur ulang kamera menunggu misi selesai.
