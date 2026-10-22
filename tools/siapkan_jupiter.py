@@ -1,4 +1,4 @@
-"""Olah peta global Jupiter menjadi experiences/cooper-station/assets/jupiter.data.js.
+"""Olah peta global Jupiter menjadi experiences/cooper-station/assets/jupiter-<4k|8k|14k>.data.js (satu berkas per lebar; tiga pilihan resolusi di Copper: python3 tools/siapkan_jupiter.py sumber.jpg 4096 / 8192 / 14400).
 Sumber sekarang: "20180511_jupiter_map_css_plus_juno_bj.jpg" (The Planetary Society, Bjorn Jonsson; mosaik Cassini ISS + Juno JunoCam, 14400 x 7200,
 silindris penuh 180 derajat). Sebelumnya: Hubble OPAL 2015 (3600 x 1598, lintang +-80, kutub diisi) dan Cassini PIA07782 (3601 x 1801).
 Pemakaian: python3 tools/siapkan_jupiter.py sumber.jpg [lebar=8192] [mutu=84] [lintang=90]   (lintang < 90 = peta tanpa kutub, diisi alat olah)
@@ -36,7 +36,8 @@ full = np.concatenate([cu, a, cd], axis=0).clip(0, 255).astype(np.uint8)
 im2 = Image.fromarray(full)
 buf = io.BytesIO(); im2.save(buf, 'JPEG', quality=q, optimize=True)
 b = base64.b64encode(buf.getvalue()).decode()
-out = 'experiences/cooper-station/assets/jupiter.data.js'
+tag = '%dk' % round(w / 1024)                                      # 4096 -> 4k, 8192 -> 8k, 14400 -> 14k
+out = 'experiences/cooper-station/assets/jupiter-%s.data.js' % tag
 open(out, 'w').write('/* Peta global Jupiter: Bjorn Jonsson (data NASA/JPL Cassini ISS dan Juno JunoCam), The Planetary Society, diolah tools/siapkan_jupiter.py */\nwindow.JUPITER_MAP = { w: %d, h: %d, jpg: "%s" };\n' % (w, h, b))
 im2.resize((900, 450)).save('/tmp/jupiter_prev.png')
 print(out, w, h, len(buf.getvalue()) // 1024, 'KB jpeg', len(b) // 1024, 'KB base64; baris data', hs, 'kutub', top, bot)

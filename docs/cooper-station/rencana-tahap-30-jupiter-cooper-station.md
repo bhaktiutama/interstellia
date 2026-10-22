@@ -38,6 +38,8 @@ Keputusan pemilik: orbit **150.000 km**, cincin Jupiter ditunda (tanpa cincin), 
 
 Revisi ketiga (permintaan pemilik: peta masih pecah): peta diganti `20180511_jupiter_map_css_plus_juno_bj.jpg` (Bjorn Jonsson, Cassini + Juno, The Planetary Society; 14400 x 7200, kutub penuh) diperkecil ke 8192 x 4096 (5,2 MB berkas data, sekitar 180 MB memori GPU; resolusi penuh 14400 butuh sekitar 550 MB). Orbit Jupiter bawaan 30x: pada 1x planet bergeser hanya 0,027 derajat per detik sehingga tampak diam; 30x = periode 7,4 menit; tombol T berputar 30, 100, 1000, 10000, 1; tur tetap memakai 1x.
 
+Revisi keempat: tiga pilihan resolusi peta Jupiter, 4k (4096 x 2048, 1,4 MB, sekitar 45 MB memori GPU), 8k (8192 x 4096, 5,2 MB, sekitar 180 MB, bawaan), 14k (14400 x 7200 penuh, 13,5 MB, sekitar 550 MB; perkiraan memori dengan mipmap). Dipilih lewat tombol di kartu mulai (hanya Jupiter), `?jres=4k|8k|14k`, atau localStorage `cooperStation.jupiterRes`; otomatis turun bila GPU tidak mendukung lebar sebesar itu.
+
 Catatan: pada 82.550 km stasiun berada di bawah sistem cincin (halo mulai 92.000 km), jadi cincin hanya terlihat sebagai garis tipis ke arah luar. Peta Juno tidak dipakai (tidak ada sumber NASA langsung dengan lisensi jelas); Hubble OPAL dari aset NASA yang dikirim pemilik.
 
 Hasil uji (SwiftShader): `tools/uji_planet.py` lulus: periode 37,570 / 9,008 jam, setengah sudut gerhana 13,40 / 28,46 derajat, diameter sudut 26,8 / 56,9 derajat, lama gerhana 2,790 / 1,421 jam, Saturnus identik dengan komit sebelum tahap 30 (0 nilai berbeda di 9 render langit jauh dengan `?bulan=0`). `tools/uji_gerhana.py` dan `tools/uji_bahasa.py` lulus. Belum diuji visual, FPS, dan NaN di GTX 1060 dan M1; tur (J5) belum diperiksa untuk Jupiter.

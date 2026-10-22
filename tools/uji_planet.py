@@ -94,7 +94,7 @@ UJI = r"""
   const pa = M.pts.geometry.attributes.aB.array; out[`${key}: kecerahan titik bulan terhingga dan <= 1`] = [...pa].every((x) => Number.isFinite(x) && x >= 0 && x <= 1);
   // peta Jupiter NASA (Cassini PIA07782) dan uniform bayangan bulan (K5)
   const SU = S.saturn.userData.U;
-  out[`${key}: peta global ${key === 'jupiter' ? 'NASA dimuat (8192 x 4096, define JUP_MAP)' : 'tidak dimuat (Saturnus prosedural)'}`] = key === 'jupiter' ? !!SU.uJupMap.value && SU.uJupMap.value.image.width === 8192 && SU.uJupMap.value.image.height === 4096 : SU.uJupMap.value === null;
+  out[`${key}: peta global ${key === 'jupiter' ? 'NASA dimuat (sesuai JRES.use, define JUP_MAP)' : 'tidak dimuat (Saturnus prosedural)'}`] = key === 'jupiter' ? !!SU.uJupMap.value && SU.uJupMap.value.image.width === S.JRES.W[S.JRES.use] && SU.uJupMap.value.image.height === S.JRES.W[S.JRES.use] / 2 : SU.uJupMap.value === null;
   out[`${key}: uniform bulan: ${SU.uMoonN.value} bulan, jari-jari = R / 1000 (K5)`] = SU.uMoonN.value === want.n && M.list.every((m) => Math.abs(SU.uMoonS.value[m.i].w - m.R / 1000) < 1e-9 && Math.abs(SU.uMoonS.value[m.i].x - m.pos.x) < 1e-3);
   // bayangan bulan di muka planet: cari bulan dan waktu dengan bayangan jatuh di sisi planet yang terlihat dari stasiun, lalu bandingkan render dengan dan tanpa bayangan
   let sh = null;

@@ -45,6 +45,9 @@
   #presetPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
   #presetPick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #planetPick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+  #jresPick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  #jresPick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
+  #jresPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
   #planetPick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
   #planetPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
   #planetPick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -340,6 +343,8 @@
       <div class="langPick"></div>
       <div class="plabel">Planet</div>
       <div id="planetPick" data-notr></div>
+      <div class="plabel" id="jresLabel" hidden>Resolusi peta Jupiter</div>
+      <div id="jresPick" data-notr hidden></div>
       <div class="plabel">Kualitas grafik</div>
       <div id="presetPick"></div>
       <label class="pauto"><input id="presetAuto" type="checkbox"> Turunkan otomatis bila FPS di bawah 30</label>
@@ -478,6 +483,16 @@ const PLANET = (() => {
   try { k = new URLSearchParams(location.search).get('planet'); } catch (e) { /* abaikan */ }
   if (!PLANETS[k]) { try { k = localStorage.getItem('cooperStation.planet'); } catch (e) { k = null; } }
   return PLANETS[k] || PLANETS.saturn;
+})();
+/* Resolusi peta Jupiter (4k = 4096 x 2048, 8k = 8192 x 4096 bawaan, 14k = 14400 x 7200 penuh): ?jres= lalu localStorage cooperStation.jupiterRes, ganti = simpan lalu muat ulang.
+   `use` = pilihan dikurangi bila lebar melebihi ukuran tekstur maksimum GPU (WebGL MAX_TEXTURE_SIZE). Memori GPU dengan mipmap sekitar 45 / 180 / 550 MB. */
+const JRES = (() => {
+  const W = { '4k': 4096, '8k': 8192, '14k': 14400 };
+  let k = null;
+  try { k = new URLSearchParams(location.search).get('jres'); } catch (e) { /* abaikan */ }
+  if (!W[k]) { try { k = localStorage.getItem('cooperStation.jupiterRes'); } catch (e) { k = null; } }
+  if (!W[k]) k = '8k';
+  return { pick: k, use: k, W };
 })();
 const PLANET_TXT = (() => {                                         // periode orbit dan lama gerhana (jam, satu desimal) untuk teks bantuan bertuliskan angka Saturnus
   const T = 2 * Math.PI * Math.sqrt(Math.pow(PLANET.orbitR * 1e6, 3) / PLANET.GM) / 3600, E = 2 * Math.asin(PLANET.rEq / PLANET.orbitR) / (2 * Math.PI) * T;
@@ -949,6 +964,7 @@ Object.assign(I18N.en, {
   "Pagi: kabut tipis menempel di tanah dan burung kembali terbang.": "Morning: thin mist clings to the ground and the birds fly again.",
   "Meninggalkan stasiun": "Leaving the station",
   "Langit pagi": "Morning sky",
+  "Resolusi peta Jupiter": "Jupiter map resolution",
   "Naik ke langit pagi di atas danau, lalu turun ke jendela Skyway.": "Rising into the morning sky above the lake, then down to the Skyway window.",
   "Kita keluar lewat celah jendela Skyway dan menjauh. Saturnus di belakang. Sampai jumpa di Copper Corn Station.": "We leave through the Skyway window slot and pull away, Saturn behind. See you at Copper Corn Station.",
   "Lewati (Spasi)": "Skip (Space)",
@@ -1745,9 +1761,10 @@ farScene.add(saturn);
   // (oval sekitar 22 derajat selatan, setengah ukuran sudut 0,112 x 0,084 rad dari perkiraan 16.000 x 12.000 km), tiga oval putih kecil, kutub lebih gelap.
   // Aman untuk M1: tanpa pow basis negatif (kuadrat ditulis x * x), atan dengan sisipan kecil di sumbu.
   // Peta global NASA (Cassini ISS PIA07782, tools/siapkan_jupiter.py, assets/jupiter.data.js): dimuat hanya untuk Jupiter; gagal atau ?jupiter=prosedural = pita prosedural di bawah.
+  { const mx = renderer.capabilities.maxTextureSize; for (const k of ['14k', '8k', '4k']) if (JRES.W[k] <= JRES.W[JRES.pick] && JRES.W[k] <= mx) { JRES.use = k; break; } }   // pilihan terbesar yang muat di GPU
   const JUP_TEX = PLANET.key === 'jupiter' && !/[?&]jupiter=prosedural/.test(location.search) ? await new Promise((done) => {
     const sc = document.createElement('script');
-    sc.src = 'assets/jupiter.data.js';
+    sc.src = 'assets/jupiter-' + JRES.use + '.data.js';
     sc.onload = () => {
       const d = window.JUPITER_MAP; window.JUPITER_MAP = undefined; sc.remove();
       if (!d || !d.jpg) { done(null); return; }
@@ -1761,7 +1778,7 @@ farScene.add(saturn);
       img.onerror = () => done(null);
       img.src = 'data:image/jpeg;base64,' + d.jpg;
     };
-    sc.onerror = () => { console.warn('assets/jupiter.data.js tidak ditemukan, memakai Jupiter prosedural'); done(null); };
+    sc.onerror = () => { console.warn('assets/jupiter-' + JRES.use + '.data.js tidak ditemukan, memakai Jupiter prosedural'); done(null); };
     document.head.appendChild(sc);
   }) : null;
   const JUP_FS = /* glsl */`
@@ -18777,6 +18794,14 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
       pp.appendChild(b);
     }
   }
+  if (PLANET.key === 'jupiter') {                                  // resolusi peta Jupiter: 3 pilihan, muat ulang saat diganti
+    const jp = document.getElementById('jresPick'); jp.hidden = false; document.getElementById('jresLabel').hidden = false;
+    for (const [k, name] of [['4k', '4K · 4096'], ['8k', '8K · 8192'], ['14k', '14K · 14400']]) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = name; b.dataset.res = k; if (k === JRES.pick) b.classList.add('on');
+      b.addEventListener('click', () => { if (k === JRES.pick) return; try { localStorage.setItem('cooperStation.jupiterRes', k); } catch (e) { /* abaikan */ } const u = new URL(location.href); u.searchParams.delete('jres'); location.href = u.toString(); });
+      jp.appendChild(b);
+    }
+  }
   mark();
   updateTimeLabels(); updateWeatherLabel(); musicLabel(); soundLabel();   // M3: daftarkan label awal agar ikut ganti bahasa
   translateDom(document.body);
@@ -18791,7 +18816,7 @@ diagApply();
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { groundH0, riverZ, bridgeAt, bridgeIn, RIVER, PATHSDF, FLUFF, warmLater, IMPM, LEAFG, LEAF_SP, DAUN, HX, EXT_LIGHT, extLightUpdate, toggleExterior, ext, exteriorGroup, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, PLANET, PLANETS, MOONS, jumpToMoon, moonDistAt, updateMoons, SATURN, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, PLANET, PLANETS, MOONS, JRES, jumpToMoon, moonDistAt, updateMoons, SATURN, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
 /* =====================================================================
    VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).
    Rig = pose kamera lama dengan pitch 0 dan tanpa gerak kepala, diputar balik sebesar yaw kepala: di dalam stasiun "atas" =
