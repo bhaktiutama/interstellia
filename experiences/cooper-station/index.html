@@ -949,8 +949,6 @@ Object.assign(I18N.en, {
   "Pagi: kabut tipis menempel di tanah dan burung kembali terbang.": "Morning: thin mist clings to the ground and the birds fly again.",
   "Meninggalkan stasiun": "Leaving the station",
   "Langit pagi": "Morning sky",
-  "Bulan dari stasiun": "A moon from the station",
-  "{mn}: jarak {dM} km, tampak {aM} derajat di langit. Kamera diperbesar agar bulan terlihat jelas.": "{mn}: {dM} km away, {aM} degrees across in the sky. The camera is zoomed in so the moon is clearly visible.",
   "Naik ke langit pagi di atas danau, lalu turun ke jendela Skyway.": "Rising into the morning sky above the lake, then down to the Skyway window.",
   "Kita keluar lewat celah jendela Skyway dan menjauh. Saturnus di belakang. Sampai jumpa di Copper Corn Station.": "We leave through the Skyway window slot and pull away, Saturn behind. See you at Copper Corn Station.",
   "Lewati (Spasi)": "Skip (Space)",
@@ -7302,7 +7300,7 @@ function motoCamera() {
   _eye.set(E.x, E.y + 0.5 * lv * M.sy + bump, E.z).applyMatrix4(_mb);
 }
 function updateFov(dt) {                                            // 19a: FOV +4 derajat saat lari, motor sampai +9 derajat
-  if (PHOTO.on || TOUR.zoom) return;                                 // K7: segmen tur bulan mengatur FOV sendiri (setelahnya kembali halus ke CONFIG.fov)
+  if (PHOTO.on) return;
   const L = BOB.level > 0 ? 1 : 0, mv = MOTO.on ? Math.max(0, Math.min(1, (Math.abs(MOTO.v) - 6) / 22)) : 0;
   const target = Math.round((CONFIG.fov + L * (4 * BOB.run * BOB.amp + 9 * mv * mv)) * 100) / 100;   // dibulatkan: diam = tepat CONFIG.fov
   let f = camera.fov + (target - camera.fov) * (1 - Math.exp(-dt / 0.35));
@@ -18192,8 +18190,6 @@ function tourKeys() {
       },
       h: 0, hd: 0, pt: 18, eclipse: true, durF: 8, hold: 9, hr: 23, wx: 'cerah', title: 'Gerhana Saturnus',
       cap: 'Lihat ke end cap B: Saturnus menutup Matahari sekitar {eH} jam tiap orbit {oH} jam. Sinar Matahari di dalam stasiun padam.' },
-    ...(MOONS.on && MOONS.list.length ? [{ ext: 'moon', hold: 12, hr: 23.5, wx: 'cerah', title: 'Bulan dari stasiun',   // K7: kamera luar membidik bulan yang tampak terbesar; waktu orbit dibekukan di konjungsi
-      cap: '{mn}: jarak {dM} km, tampak {aM} derajat di langit. Kamera diperbesar agar bulan terlihat jelas.' }] : []),
     { s: Lk.s, za: Lk.za, h: 0, hd: Lk.heading, pt: 2, hold: 10, hr: 6.6, wx: 'cerah', title: 'Pagi berkabut', orb: true,   // v2.14: diam 10 s; orbit dipercepat mundur: gerhana usai, Saturnus ke sisi terang
       cap: 'Pagi: kabut tipis menempel di tanah dan burung kembali terbang.' },
     { fly: (K, t) => {                                                  // v2.15: naik dari danau ke langit pagi, terbang ke Skyway, turun ke atas kaca jendela menghadap keliling dan menunduk ke celah
@@ -18213,7 +18209,7 @@ const tourIsExt = (K) => !!K && K.ext !== undefined;
 const tourCut = (A, B) => (tourIsExt(A) !== tourIsExt(B) && !(B && B.noFade)) || !!(B && B.cut);   // layar gelap di antara A dan B (noFade: pembuka tersambung langsung)
 function startTour() {
   if (TOUR.on) return;
-  hideTourOffer(); TOUR.moonK = null;
+  hideTourOffer();
   try { localStorage.setItem('cooperStation.tourSeen', '1'); } catch (e) { /* abaikan */ }
   if (ext.flight || !(player.state === 'ground' || player.state === 'air')) { setLabText('Tur bisa dimulai saat berjalan di dalam stasiun.'); return; }
   if (PHOTO.on) togglePhoto(false);
@@ -18245,7 +18241,7 @@ function tourMotoEnd() {                                              // akhir t
 }
 function stopTour() {
   if (!TOUR.on) return;
-  TOUR.on = false; TOUR.zoom = 0; TOUR.moonK = null;
+  TOUR.on = false;
   if (ext.active) toggleExterior();
   if (MOTO.on) tourMotoEnd();
   Object.assign(player, TOUR.save, { vA: 0, vT: 0 });
@@ -18260,29 +18256,10 @@ function stopTour() {
   setLabText('Tur selesai. Kembali ke posisi semula.');
 }
 LANG.hooks.push(() => { if (TOUR.on) tourCaption(); if (PHOTO.on) syncPhotoUI(); });
-// K7: bulan yang ditampilkan segmen tur "Bulan": tampak paling besar (sudut) dalam 1,5 hari orbit ke depan, dengan sisi terang menghadap stasiun
-// (fase >= 0,5) dan tidak di bayangan planet. Dipindai tiap 60 s; hasil disimpan sekali per tur (TOUR.moonK, null saat tur mulai).
-function tourMoonK() {
-  if (!MOONS.on || !MOONS.list.length) return null;
-  if (TOUR.moonK !== undefined && TOUR.moonK !== null) return TOUR.moonK;
-  const sv = new THREE.Vector3().copy(SUN_DIR).applyQuaternion(new THREE.Quaternion().copy(saturn.quaternion).invert()), L = new THREE.Vector3(), W = new THREE.Vector3(), P = new THREE.Vector3();
-  let best = null;
-  for (const m of MOONS.list) for (let dt = 0; dt <= 1.5 * 86400; dt += 60) {
-    const tt = clock.orbit + dt; moonLocal(m, tt, L);
-    if (sunVisAt(L, sv) < 0.99) continue;
-    const phi = ORBIT.phi0 + TAU * tt / T_ORB; P.set(-Math.cos(phi), -Math.sin(phi), 0).applyQuaternion(Q_ORBIT).multiplyScalar(ORBIT.r);
-    W.copy(L).applyQuaternion(saturn.quaternion).add(P);
-    const d = W.length(); if (0.5 * (1 - SUN_DIR.dot(W) / d) < 0.5) continue;
-    const ang = 2 * Math.atan(m.R / 1000 / d) / DEG;
-    if (!best || ang > best.ang) best = { m, t: tt, d, ang, dir: W.clone().divideScalar(d) };
-  }
-  return (TOUR.moonK = best);
-}
 function tourVars() {                                                  // angka di teks tur, dihitung dari konstanta stasiun
   return { s10: fmtN(FOUNT.shift10, 2), hT: fmtInt(LANDMARK.h), gT: fmtN((R - LANDMARK.h) / R, 2), hD: fmtInt(DECK.h),
     eH: fmtN(2 * ECL.half / TAU * T_ORB / 3600, 1), oH: fmtN(T_ORB / 3600, 1),
-    gM: fmtN((OMEGA * R - MOTO.vSport) ** 2 / R / CONFIG.g, 2), dA: TOUR.dA || 'Galileo',
-    get mn() { const k = tourMoonK(); return k ? k.m.name : ''; }, get dM() { const k = tourMoonK(); return k ? fmtInt(k.d * 1000) : ''; }, get aM() { const k = tourMoonK(); return k ? fmtN(k.ang, 2) : ''; } };   // K7: bulan terpilih (dihitung sekali per tur)   // berat terasa motor melawan putaran di batas sport (rumus stepMoto)
+    gM: fmtN((OMEGA * R - MOTO.vSport) ** 2 / R / CONFIG.g, 2), dA: TOUR.dA || 'Galileo'};   // berat terasa motor melawan putaran di batas sport (rumus stepMoto)   // berat terasa motor melawan putaran di batas sport (rumus stepMoto)
 }
 function tourCapText(K) { return K.capNow ? t(K.capNow, K.vars) : t(K.cap, tourVars()); }
 function tourCaption() {
@@ -18383,15 +18360,6 @@ function stepTourExt(K) {
     K.camP = P; K.camQ = Q;
     const L = P.clone().add(new THREE.Vector3(0, 0, -1000).applyQuaternion(Q));
     tourExtCam(P.x, P.y, P.z, [L.x, L.y, L.z]);                        // keadaan kamera luar kira-kira (roll dipasang tourCamPost)
-  } else if (K.ext === 'moon') {                                      // K7: kamera 3 km dari stasiun ke arah bulan, membidik bulan (stasiun di belakang kamera); FOV menyempit dalam 3 s menurut sudut bulan
-    const k = tourMoonK();
-    if (k) {
-      clock.orbit = k.t; ECL.warned = true;
-      const D = k.dir, P = D.clone().multiplyScalar(3000), L = P.clone().addScaledVector(D, 1000);
-      tourExtCam(P.x, P.y, P.z, [L.x, L.y, L.z]);
-      TOUR.zoom = Math.max(3, Math.min(25, k.ang * 12));
-      camSetFov(CONFIG.fov + (TOUR.zoom - CONFIG.fov) * sstep(0, 3, TOUR.t));
-    }
   } else if (K.ext === 'out') {                                       // penutup lama (tidak dipakai sejak v2.14): menjauh dari stasiun
     if (K.z0 === undefined) K.z0 = TOUR.from.za - HALF_L;
     const u = sstep(0, 1, TOUR.t / T);
@@ -18657,8 +18625,6 @@ function stepTour(dt) {
 }
 function tourNext() {
   const K = TOUR.keys[TOUR.i];
-  TOUR.zoom = 0;                                                      // K7: FOV kembali halus ke CONFIG.fov (updateFov)
-  if (K.ext === 'moon') { const P = TAU / OMEGA, el = TOUR.t; clock.sim += P * Math.ceil(el / P) - el; }   // K7: fase putaran stasiun tetap sama dengan tanpa segmen ini (rencana penutup lewat celah Skyway bergantung pada fase); lompatan terjadi di balik layar gelap
   if (K.B) TOUR.from = tourPose();                                    // terbang berikutnya mulai dari pose kamera terakhir (pengejar bola, akhir jalan kaki)
   if (K.moto) { TOUR.from = { s: MOTO.s, za: MOTO.za, hA: MOTO.h, hd: MOTO.hd, pt: player.pitch }; tourMotoEnd(); }
   TOUR.i++; TOUR.t = 0; TOUR.h0 = clock.hour;
@@ -18833,7 +18799,7 @@ diagApply();
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { groundH0, riverZ, bridgeAt, bridgeIn, RIVER, PATHSDF, FLUFF, warmLater, IMPM, LEAFG, LEAF_SP, DAUN, HX, EXT_LIGHT, extLightUpdate, toggleExterior, ext, exteriorGroup, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, PLANET, PLANETS, MOONS, tourMoonK, jumpToMoon, moonDistAt, updateMoons, SATURN, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, PLANET, PLANETS, MOONS, jumpToMoon, moonDistAt, updateMoons, SATURN, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
 /* =====================================================================
    VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).
    Rig = pose kamera lama dengan pitch 0 dan tanpa gerak kepala, diputar balik sebesar yaw kepala: di dalam stasiun "atas" =

@@ -32,11 +32,11 @@ Keputusan pemilik: orbit **150.000 km**, cincin Jupiter ditunda (tanpa cincin), 
 | Periode orbit | 9,008 jam | **3,678 jam** | Kepler, GM 1,26687e17 m3/s2 |
 | Gerhana per orbit | 1,42 jam | **1,226 jam** | `2 asin(R / r) / 360 x T` |
 | Tinggi di atas puncak awan | 78.508 km | **11.058 km** | `r - R` |
-| Permukaan planet | pita prosedural dan oval perkiraan | **peta global NASA Cassini PIA07782** (3600 x 1800, `assets/jupiter.data.js`, `tools/siapkan_jupiter.py`); Bintik Merah Besar, oval putih, dan pita adalah data asli | `?jupiter=prosedural` = tampilan prosedural lama |
+| Permukaan planet | pita prosedural dan oval perkiraan | **peta global Hubble OPAL 2015 (NASA / ESA / A. Simon / OPAL Team, STScI-01EVT28CB7CN0CEYRV56WP1S6A)** (diganti dari Cassini PIA07782 atas permintaan pemilik karena lebih tajam; sumber 3600 x 1598 lintang +-80 derajat, kutub diisi; hasil 3600 x 1800, `assets/jupiter.data.js`, `tools/siapkan_jupiter.py`); Bintik Merah Besar, oval putih, dan pita adalah data asli | `?jupiter=prosedural` = tampilan prosedural lama |
 | Cincin | tanpa cincin | halo, cincin utama, gossamer Amalthea dan Thebe (92.000-226.000 km), kedalaman optik dibesarkan 0,004-0,09 (nilai asli sekitar 1e-6, tidak terlihat) | `?cincin=0` = tanpa cincin |
 | Rotasi permukaan peta | zona ekuator 1% lebih cepat | putaran padat ke timur (prograde) periode 9,925 jam (beda 1% = 3,6 derajat per putaran, tidak terlihat) | - |
 
-Catatan: pada 82.550 km stasiun berada di bawah sistem cincin (halo mulai 92.000 km), jadi cincin hanya terlihat sebagai garis tipis ke arah luar. Tidak ada data peta Juno karena sandbox hanya mendapat peta Cassini dari NASA (domain publik, resolusi global); peta Juno dari pihak ketiga berlisensi lain.
+Catatan: pada 82.550 km stasiun berada di bawah sistem cincin (halo mulai 92.000 km), jadi cincin hanya terlihat sebagai garis tipis ke arah luar. Peta Juno tidak dipakai (tidak ada sumber NASA langsung dengan lisensi jelas); Hubble OPAL dari aset NASA yang dikirim pemilik.
 
 Hasil uji (SwiftShader): `tools/uji_planet.py` lulus: periode 37,570 / 9,008 jam, setengah sudut gerhana 13,40 / 28,46 derajat, diameter sudut 26,8 / 56,9 derajat, lama gerhana 2,790 / 1,421 jam, Saturnus identik dengan komit sebelum tahap 30 (0 nilai berbeda di 9 render langit jauh dengan `?bulan=0`). `tools/uji_gerhana.py` dan `tools/uji_bahasa.py` lulus. Belum diuji visual, FPS, dan NaN di GTX 1060 dan M1; tur (J5) belum diperiksa untuk Jupiter.
 
