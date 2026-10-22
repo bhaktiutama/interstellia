@@ -35,7 +35,7 @@ UJI = r"""
   // render langit jauh
   const W = 256, H = 256, rt = new THREE.WebGLRenderTarget(W, H, { type: THREE.FloatType }), cam = new THREE.PerspectiveCamera(key === 'jupiter' ? 75 : 40, 1, 1, 20000);
   const shoot = (lookAt) => {
-    S.clock.orbit = 0; S.updateFar(); cam.position.set(0, 0, 0); cam.lookAt(lookAt); cam.updateMatrixWorld(true);
+    S.clock.orbit = (E.phiC + Math.PI - S.ORBIT.phi0) / TAU * T; S.updateFar(); cam.position.set(0, 0, 0); cam.lookAt(lookAt.clone().add(S.saturn.position)); cam.updateMatrixWorld(true);   // sisi terang orbit (seberang gerhana)
     const U = S.saturn.userData.U; U.uCamL.value.copy(S.saturn.position).negate().applyQuaternion(S.saturn.quaternion.clone().invert());
     S.renderer.setRenderTarget(rt); S.renderer.setClearColor(0x000000, 1); S.renderer.clear(); S.renderer.render(S.farScene, cam); S.renderer.setRenderTarget(null);
     const px = new Float32Array(W * H * 4); S.renderer.readRenderTargetPixels(rt, 0, 0, W, H, px);
@@ -43,7 +43,7 @@ UJI = r"""
     for (let y = 120; y < 136; y++) for (let x = 120; x < 136; x++) { const i = (y * W + x) * 4; ctr += px[i] + px[i + 1] + px[i + 2]; }
     return { mean: sum / (W * H * 3), bad, ctr: ctr / (256 * 3), px };
   };
-  const dirs = [S.saturn.position.clone(), new THREE.Vector3(1, 0.3, -0.5).add(S.saturn.position), new THREE.Vector3(-1, 0.4, 0.8).add(S.saturn.position)];
+  const dirs = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(1, 0.3, -0.5), new THREE.Vector3(-1, 0.4, 0.8)];
   const shots = dirs.map((d) => shoot(d)); const nbad = shots.reduce((s, x) => s + x.bad, 0);
   out[`${key}: render langit jauh: tanpa nilai tidak valid (${nbad}), planet di tengah terang ${shots[0].ctr.toFixed(4)} > 0,02`] = nbad === 0 && shots[0].ctr > 0.02;
   // bulan
