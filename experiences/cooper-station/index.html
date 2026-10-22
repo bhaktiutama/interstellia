@@ -2059,7 +2059,7 @@ if (MOONS.on) {
   const sunG = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(new Float32Array(SUN_DIR.clone().multiplyScalar(9000).toArray()), 3));
   farScene.add(new THREE.Points(sunG, new THREE.PointsMaterial({ size: 9, sizeAttenuation: false, color: 0xfff3dc })));
 }
-const clock = { sim: 0, orbit: 0, orbitScale: 1 };               // sim = waktu fisika (s); orbit = waktu orbit (s, bisa dipercepat)
+const clock = { sim: 0, orbit: 0, orbitScale: PLANET.key === 'jupiter' ? 30 : 1 };               // sim = waktu fisika (s); orbit = waktu orbit (s, bisa dipercepat); Jupiter bawaan 30x (periode 3,678 jam = 0,027 derajat/s tidak tampak bergerak pada 1x; 30x = periode 7,4 menit, 0,8 derajat/s)
 const _qSt = new THREE.Quaternion(), _zAxis = new THREE.Vector3(0, 0, 1);
 function orbitPhase() { return ORBIT.phi0 + TAU * clock.orbit / T_ORB; }
 function saturnDirInertial(out) {
@@ -7710,7 +7710,7 @@ H('hudTitle').addEventListener('click', () => setHudMode(!hud.classList.contains
 const hEl = { hour: H('hHour'), tram: H('hTram'), sat: H('hSat'), moon: H('hMoon'), orb: H('hOrb'), orbX: H('hOrbX'), fps: H('hFps'), ms: H('hMs'), gpu: H('hGpu'), gpuSh: H('hGpuSh'), gpuSc: H('hGpuSc'), gpuPo: H('hGpuPo'), calls: H('hCalls'), tris: H('hTris'), res: H('hRes'), zone: H('hZone'),
   theta: H('hTheta'), z: H('hZ'), h: H('hH'), head: H('hHead'), dist: H('hDist'), mode: H('hMode'), g: H('hG') };
 const _tmpV2 = new THREE.Vector2(), _satDir = new THREE.Vector3();
-const ORBIT_SPEEDS = [1, 100, 1000, 10000];
+const ORBIT_SPEEDS = PLANET.key === 'jupiter' ? [30, 100, 1000, 10000, 1] : [1, 100, 1000, 10000];
 function cycleOrbitSpeed() { clock.orbitScale = ORBIT_SPEEDS[(ORBIT_SPEEDS.indexOf(clock.orbitScale) + 1) % ORBIT_SPEEDS.length]; updateTimeLabels(); }
 
 // g lokal = omega^2 * r / g, r = jarak kaki ke sumbu. Di udara pemain jatuh bebas (tidak merasakan berat).
@@ -18219,6 +18219,7 @@ function startTour() {
   TOUR.save = { theta: player.theta, za: player.za, h: player.h, heading: player.heading, pitch: player.pitch, state: player.state, mode: player.mode };
   TOUR.saveW = { hour: clock.hour, rate: clock.hourRate, orbit: clock.orbit, oScale: clock.orbitScale, mode: W.mode, state: W.state, dwell: W.dwell, cover: W.cover,
     moto: { parked: M.parked, s: M.s, za: M.za, hd: M.hd, h: M.h }, auto: input.auto, run: input.run, adapt: ADAPT.on, bloom: POST.bloom, rays: RAYS.on };
+  clock.orbitScale = 1;                                                 // tur dirancang untuk orbit 1x (Jupiter bawaan 30x); saveW mengembalikan
   clock.hour = 12; TOUR.h0 = 12;                                        // tur: mulai siang, berakhir pagi berikutnya
   startEl.hidden = true;
   TOUR.outro = TOUR.camI = null;
