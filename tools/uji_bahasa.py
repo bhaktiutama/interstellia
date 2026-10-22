@@ -8,7 +8,7 @@ UJI = r"""
 (async () => {
   const S = window.__station, out = {}, wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const EN = S.I18N.en, keys = new Set(Object.keys(EN)), vals = new Set(Object.values(EN));
-  const nama = new Set(['Copper Corn Station', 'Bahasa Indonesia', 'English']);
+  const nama = new Set(['Copper Corn Station', 'Bahasa Indonesia', 'English', 'Saturnus', 'Jupiter']);   // tombol pilihan planet (tahap 30): nama planet tidak diterjemahkan (data-notr)
   S.setLang('en'); await wait(500);
   const sisa = [], asing = [];
   const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);

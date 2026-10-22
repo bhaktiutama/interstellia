@@ -23,6 +23,8 @@ Keputusan pemilik: orbit **150.000 km**, cincin Jupiter ditunda (tanpa cincin), 
 | J5 tur | Tidak diubah: tur memakai `T_ORB` / `ECL` / `tourSatAt()` secara umum; belum diperiksa visual untuk Jupiter (sudut penutup 115-245 derajat dari gerhana) |
 | J6 uji | `tools/uji_planet.py` (periode, gerhana, diameter sudut, teks, pemilih, render, Saturnus identik lewat `?bulan=0`) |
 
+Hasil uji (SwiftShader): `tools/uji_planet.py` lulus: periode 37,570 / 9,008 jam, setengah sudut gerhana 13,40 / 28,46 derajat, diameter sudut 26,8 / 56,9 derajat, lama gerhana 2,790 / 1,421 jam, Saturnus identik dengan komit sebelum tahap 30 (0 nilai berbeda di 9 render langit jauh dengan `?bulan=0`). `tools/uji_gerhana.py` dan `tools/uji_bahasa.py` lulus. Belum diuji visual, FPS, dan NaN di GTX 1060 dan M1; tur (J5) belum diperiksa untuk Jupiter.
+
 ## Angka dasar
 
 Sumber: NASA NSSDCA Jupiter Fact Sheet (diambil 21 Oktober 2026) dan perhitungan di bawah. Rumus: `T = 2 pi sqrt(r^3 / GM)`, sudut radius `asin(R / r)`, durasi gerhana `2 asin(R / r) / 360 x T` (sama dengan `ECL.half = asin(rEq / r)` di kode, mengabaikan penumbra).

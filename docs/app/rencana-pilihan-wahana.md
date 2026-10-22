@@ -26,6 +26,8 @@ Dikerjakan dengan keputusan: kunci bersama `lazarus.ship` (saran 1a), Petrel dib
 
 Belum: gambar kecil wahana, tab Lainnya Millar dan panel Gargantua sudah memakai muat ulang tetapi tanpa dialog konfirmasi, KS-07 / Petrel di Copper (di luar rencana).
 
+Hasil uji (SwiftShader, 22 Oktober 2026): `tools/uji_wahana.mjs` lulus (kontrak 3 wahana + 3 blob); `tools/uji_wahana.py` lulus untuk ks07, pr11, gx01 di Millar dan Gargantua (kolisi, kokpit, lepas landas dan lolos gelombang, tertelan, mendarat, kedatangan, plasma orbit, V di misi). `tools/uji_misi_gargantua.py` 129 dari 130 dan `tools/uji_millar.py` 129 pemeriksaan lulus; satu pemeriksaan gagal di masing-masing (musik dari file, tombol J), tidak terkait wahana dan belum dibandingkan dengan komit sebelum pekerjaan ini. Belum diuji di GTX 1060 dan M1.
+
 ## Dasar (apa yang ada di kode sekarang)
 
 | Item | Millar | Gargantua |

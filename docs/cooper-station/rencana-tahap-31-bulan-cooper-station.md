@@ -23,6 +23,8 @@ Keputusan pemilik: permukaan **prosedural** dulu, skala sebenarnya, tanpa Hyperi
 | K8 uji | `tools/uji_planet.py` |
 | K5, K7 | Belum: bayangan bulan di planet, segmen tur bulan |
 
+Hasil uji (SwiftShader): `tools/uji_planet.py` lulus: 7 / 4 bulan, posisi kembali setelah 1 periode NASA, periode Kepler dalam 0,5% dari NASA, rotasi sinkron, jarak konjungsi hasil pemindai di antara |a - r| dan a + r (nyata: Enceladus 22.543 km, 1,28 derajat; Tethys 35.299 km, 1,72 derajat; Io 271.863 km, 0,77 derajat), gerhana bulan (Mimas, Io), bulan tergambar tanpa nilai tidak valid. Belum diuji visual dan FPS di GTX 1060 dan M1.
+
 ## Data
 
 Sumber: NASA NSSDCA Saturnian Satellite Fact Sheet dan Jovian Satellite Fact Sheet (diambil 21 Oktober 2026). Jari-jari "~" = rata-rata tiga sumbu dari tabel NASA, dihitung oleh pengambil data. Periode di kolom 4 dihitung dari `2 pi sqrt(a^3 / GM)` sebagai pemeriksaan terhadap angka NASA.
