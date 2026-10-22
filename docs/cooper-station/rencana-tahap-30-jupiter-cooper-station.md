@@ -33,7 +33,7 @@ Keputusan pemilik: orbit **150.000 km**, cincin Jupiter ditunda (tanpa cincin), 
 | Gerhana per orbit | 1,42 jam | **1,226 jam** | `2 asin(R / r) / 360 x T` |
 | Tinggi di atas puncak awan | 78.508 km | **11.058 km** | `r - R` |
 | Permukaan planet | pita prosedural dan oval perkiraan | **peta global Hubble OPAL 2015 (NASA / ESA / A. Simon / OPAL Team, STScI-01EVT28CB7CN0CEYRV56WP1S6A)** (diganti dari Cassini PIA07782 atas permintaan pemilik karena lebih tajam; sumber 3600 x 1598 lintang +-80 derajat, kutub diisi; hasil 3600 x 1800, `assets/jupiter.data.js`, `tools/siapkan_jupiter.py`); Bintik Merah Besar, oval putih, dan pita adalah data asli | `?jupiter=prosedural` = tampilan prosedural lama |
-| Cincin | tanpa cincin | halo, cincin utama, gossamer Amalthea dan Thebe (92.000-226.000 km), kedalaman optik dibesarkan 0,004-0,09 (nilai asli sekitar 1e-6, tidak terlihat) | `?cincin=0` = tanpa cincin |
+| Cincin | tanpa cincin | sempat ditambah (kedalaman optik dibesarkan) lalu dihapus atas permintaan pemilik | tanpa cincin |
 | Rotasi permukaan peta | zona ekuator 1% lebih cepat | putaran padat ke timur (prograde) periode 9,925 jam (beda 1% = 3,6 derajat per putaran, tidak terlihat) | - |
 
 Revisi ketiga (permintaan pemilik: peta masih pecah): peta diganti `20180511_jupiter_map_css_plus_juno_bj.jpg` (Bjorn Jonsson, Cassini + Juno, The Planetary Society; 14400 x 7200, kutub penuh) diperkecil ke 8192 x 4096 (5,2 MB berkas data, sekitar 180 MB memori GPU; resolusi penuh 14400 butuh sekitar 550 MB). Orbit Jupiter bawaan 30x: pada 1x planet bergeser hanya 0,027 derajat per detik sehingga tampak diam; 30x = periode 7,4 menit; tombol T berputar 30, 100, 1000, 10000, 1; tur tetap memakai 1x.

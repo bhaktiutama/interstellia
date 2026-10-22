@@ -117,8 +117,8 @@ UJI = r"""
     let dk = 0, tot = 0, nbad2 = 0; for (let i = 0; i < withS.length; i += 4) { const a = withS[i] + withS[i + 1] + withS[i + 2], b = noS[i] + noS[i + 1] + noS[i + 2]; if (!Number.isFinite(a)) nbad2++; tot += b; if (a < b * 0.5) dk++; }
     out[`${key}: bayangan ${sh.m.name} di muka planet (waktu ${(sh.tt / 3600).toFixed(2)} jam): ${dk} piksel gelap > 50% dibanding tanpa bayangan, tidak valid ${nbad2}`] = dk > 5 && nbad2 === 0;
   } else out[`${key}: bayangan bulan di muka planet: tidak ditemukan dalam 3 hari`] = false;
-  // cincin Jupiter: ada, di bidang khatulistiwa, kedalaman optik kecil
-  if (key === 'jupiter') out['jupiter: cincin ada (satu mesh), profil 92.000-226.000 km'] = S.saturn.children.some((c) => c.geometry && c.geometry.type === 'RingGeometry') && Math.abs(SU.uRing.value.x - 92) < 1e-9 && Math.abs(SU.uRing.value.y - 226) < 1e-9;
+  // cincin: hanya Saturnus
+  out[`${key}: ${key === 'jupiter' ? 'tanpa cincin' : 'cincin Saturnus ada'}`] = S.saturn.children.some((c) => c.geometry && c.geometry.type === 'RingGeometry') === (key === 'saturn');
   rt.dispose(); S.clock.orbit = 0; S.updateFar();
   return out;
 })

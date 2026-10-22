@@ -99,7 +99,7 @@
   #err { position: fixed; inset: 16px; overflow: auto; background: rgba(30, 8, 6, 0.95); color: #ffc2b5; border: 1px solid #6b2a22;
     border-radius: 8px; padding: 16px; white-space: pre-wrap; z-index: 10; margin: 0; }
   #err[hidden], [hidden] { display: none !important; }
-  .hidden-ui #hud, .hidden-ui #cross { display: none; }
+  .hidden-ui #hud, .hidden-ui #cross, .hidden-ui #prompt, .hidden-ui #hint { display: none; }   /* H: semua info layar hilang, termasuk petunjuk W A S D dan baris aksi di bawah */
   /* 24f: tombol kembali ke menu utama saat bermain; HUD digeser ke bawahnya */
   #menuBtn { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; padding: 4px 10px; font-size: 12px;
     color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; text-decoration: none; z-index: 2; }
@@ -1646,20 +1646,11 @@ farScene.add(saturn);
   const n1 = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return h1(i) * (1 - u) + h1(i + 1) * u; };
   const fbm1 = (x) => 0.5 * n1(x) + 0.3 * n1(x * 2.7 + 13) + 0.2 * n1(x * 7.3 + 71);
   // --- profil cincin: 4096 sampel dari 66.900 sampai 141.000 km (sekitar 18 km per sampel) ---
-  // Jupiter (tahap 30 lanjutan): cincin NASA (halo 92.000-122.500 km, cincin utama 122.500-129.000, gossamer Amalthea sampai 181.400 dan Thebe sampai 226.000 km).
-  // Kedalaman optik sebenarnya sekitar 1e-6 (tidak terlihat); di sini dibesarkan jadi 0,004-0,09 sebagai pilihan tampilan. ?cincin=0 = tanpa cincin Jupiter.
-  const JRING = PLANET.key === 'jupiter';
-  const RN = 4096, RR0 = JRING ? 92.0 : 66.9, RR1 = JRING ? 226.0 : 141.0, TAU_MAX = JRING ? 0.1 : 2.5, ringData = new Uint8Array(RN * 4);
+  const RN = 4096, RR0 = 66.9, RR1 = 141.0, TAU_MAX = 2.5, ringData = new Uint8Array(RN * 4);
   for (let k = 0; k < RN; k++) {
     const r = RR0 + (k + 0.5) / RN * (RR1 - RR0);
     let tau = 0, alb = 0.3, c = [0.8, 0.75, 0.7];
-    if (JRING) {
-      if (r < 122.5) tau = 0.004 + 0.006 * sm(92, 122.5, r);                           // halo: tebal, naik ke arah cincin utama
-      else if (r < 129.0) tau = 0.07 + 0.02 * fbm1(r * 30);                            // cincin utama (tepi luar tajam di orbit Adrastea)
-      else if (r < 181.4) tau = 0.012 * (1 - 0.4 * sm(129, 181.4, r));                 // gossamer Amalthea
-      else tau = 0.006 * (1 - sm(181.4, 226, r));                                      // gossamer Thebe
-      alb = 0.34; c = [0.86, 0.62, 0.46];                                              // merah, debu halus
-    } else if (r < 74.51) { tau = 1e-5; }                                            // D: praktis tak terlihat
+    if (r < 74.51) { tau = 1e-5; }                                            // D: praktis tak terlihat
     else if (r >= 74.658 && r < 91.975) {                                            // C
       tau = 0.05 + 0.09 * fbm1(r * 9) + (fbm1(r * 1.3 + 5) > 0.68 ? 0.2 : 0);        // "plateau" C
       if (Math.abs(r - 77.871) < 0.025) tau = 0.35;                                  // ringlet Titan
@@ -1916,7 +1907,7 @@ farScene.add(saturn);
         #include <colorspace_fragment>
       }`,
   });
-  if (PLANET.key === 'saturn' || (JRING && new URLSearchParams(location.search).get('cincin') !== '0')) {
+  if (PLANET.key === 'saturn') {                                    // Jupiter tanpa cincin (cincin Jupiter dicoba lalu dihapus atas permintaan)
     const rg = new THREE.RingGeometry(RR0, RR1, 720, 1).rotateX(-Math.PI / 2);
     const rings = new THREE.Mesh(rg, ringMat);
     rings.renderOrder = 2;
