@@ -526,7 +526,7 @@ async def kelompok7(pg):
       [...document.querySelectorAll('#uiBody .btns button')].find((b) => b.textContent === 'Bahasa Indonesia').click();
       return { tabs: tabs.map((b) => b.textContent), n, vis, after, lbl, ls: localStorage.getItem('gargantua.panelTab') }; }''')
     cek('panel bertab: 7 tab, hanya satu pane tampil, tab diingat setelah ganti bahasa, semua kontrol tetap ada',
-        len(t['tabs']) == 7 and t['vis'] == ['disk'] and t['after'] == 'disk' and t['lbl'] == 'Disk' and t['ls'] == 'disk' and t['n'] == 47, str(t))   # 38 + musik: putar / jeda, pilih file, input file, volume + MK: Millar (centang, orbit, radius), Kelam
+        len(t['tabs']) == 7 and t['vis'] == ['disk'] and t['after'] == 'disk' and t['lbl'] == 'Disk' and t['ls'] == 'disk' and t['n'] == 48, str(t))   # 47 + pilihan wahana (Vessel, pilihan wahana)   # 38 + musik: putar / jeda, pilih file, input file, volume + MK: Millar (centang, orbit, radius), Kelam
     # --- musik dari file sendiri (seperti Copper): J putar / jeda, volume tersimpan ---
     mu = await pg.evaluate('''() => { const G = window.__gargantua, M = G.MUSIC, n = 4800, b = new ArrayBuffer(44 + n * 2), v = new DataView(b);
       const w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
