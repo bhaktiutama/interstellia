@@ -44,6 +44,10 @@
   #presetPick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
   #presetPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
   #presetPick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #planetPick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+  #planetPick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
+  #planetPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
+  #planetPick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* Kartu mulai bersama Copper dan Millar (docs/app/rencana-menu-mulai.md U1): salin sama persis ke kedua file */
   #start { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(8, 9, 12, 0.45); z-index: 6; }
   #start[hidden] { display: none; }
@@ -333,6 +337,8 @@
     <div id="ready" hidden>
       <div class="plabel">Bahasa</div>
       <div class="langPick"></div>
+      <div class="plabel">Planet</div>
+      <div id="planetPick" data-notr></div>
       <div class="plabel">Kualitas grafik</div>
       <div id="presetPick"></div>
       <label class="pauto"><input id="presetAuto" type="checkbox"> Turunkan otomatis bila FPS di bawah 30</label>
@@ -444,11 +450,33 @@ const LANG = { cur: 'id', labels: new Map(), hooks: [], src: new WeakMap() };
   LANG.cur = ok(c) ? c : 'id';
   document.documentElement.lang = LANG.cur;
 }
+/* Tahap 30 (docs/cooper-station/rencana-tahap-30-jupiter-cooper-station.md): planet pilihan. Dibaca sekali saat muat (?planet= lalu localStorage
+   cooperStation.planet lalu Saturnus); mengganti planet = simpan lalu muat ulang. Angka planet: NASA NSSDCA Planetary Fact Sheet (GM = massa x G,
+   radius ekuator 1 bar dan kutub dalam 1.000 km, rotasi sideris Sistem III untuk Jupiter). Orbit Jupiter 150.000 km = pilihan tampilan (diameter sudut
+   56,9 derajat, periode 9,01 jam, gerhana 1,42 jam), tiltDeg Jupiter 12 derajat = pilihan tampilan (bukan data NASA). sunAngDeg = 0,5333 derajat / jarak AU. */
+const PLANETS = {
+  saturn: { key: 'saturn', name: 'Saturnus', GM: 3.7931e16, rEq: 60.268, rPole: 54.364, orbitR: 260, tiltDeg: 15, spinS: 38018, spinWrap: 25, sunAngDeg: 0.0557,
+    limbCol: [1.0, 0.62, 0.34], satCol: [0.09, 0.068, 0.04] },
+  jupiter: { key: 'jupiter', name: 'Jupiter', GM: 1.26687e17, rEq: 71.492, rPole: 66.854, orbitR: 150, tiltDeg: 12, spinS: 35730, spinWrap: 100, sunAngDeg: 0.1026,
+    limbCol: [0.86, 0.7, 0.52], satCol: [0.38, 0.286, 0.168] },   // satCol Saturnus x 4,2 (luas sudut piringan 4,23 kali; albedo dianggap sama)
+};
+const PLANET = (() => {
+  let k = null;
+  try { k = new URLSearchParams(location.search).get('planet'); } catch (e) { /* abaikan */ }
+  if (!PLANETS[k]) { try { k = localStorage.getItem('cooperStation.planet'); } catch (e) { k = null; } }
+  return PLANETS[k] || PLANETS.saturn;
+})();
+const PLANET_TXT = (() => {                                         // periode orbit dan lama gerhana (jam, satu desimal) untuk teks bantuan bertuliskan angka Saturnus
+  const T = 2 * Math.PI * Math.sqrt(Math.pow(PLANET.orbitR * 1e6, 3) / PLANET.GM) / 3600, E = 2 * Math.asin(PLANET.rEq / PLANET.orbitR) / (2 * Math.PI) * T;
+  return { T: T.toFixed(1), E: E.toFixed(1) };
+})();
 function t(src, v) {
   let out = src;
   if (LANG.cur !== 'id') { const d = I18N[LANG.cur]; if (d && d[src] !== undefined) out = d[src]; }
   if (v) out = out.replace(/\{(\w+)\}/g, (m, k) => (v[k] !== undefined ? v[k] : m));
-  return out;
+  if (PLANET.key === 'saturn') return out;
+  return out.replace(/Saturnus/g, PLANET.name).replace(/Saturn/g, PLANET.name).replace('37,6 jam', PLANET_TXT.T.replace('.', ',') + ' jam').replace('37.6-hour', PLANET_TXT.T + '-hour')
+    .replace('sekitar 2,8 jam', 'sekitar ' + PLANET_TXT.E.replace('.', ',') + ' jam').replace('about 2.8 hours', 'about ' + PLANET_TXT.E + ' hours');   // tahap 30: teks menyebut planet pilihan
 }
 const fmtN = (x, d) => { const s = x.toFixed(d); return LANG.cur === 'id' ? s.replace('.', ',') : s; };   // desimal sesuai bahasa
 const fmtInt = (x) => Math.round(x).toLocaleString(LANG.cur === 'id' ? 'id-ID' : 'en-US');
@@ -457,7 +485,7 @@ function uiLabel(id, fn, html) {                                   // label yang
   const b = document.getElementById(id); if (b) b[html ? 'innerHTML' : 'textContent'] = fn();
 }
 function translateDom(root) {                                      // simpul teks statis: sumber Indonesia disimpan sekali
-  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (/^(SCRIPT|STYLE|CANVAS)$/.test(n.parentNode.nodeName) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (/^(SCRIPT|STYLE|CANVAS)$/.test(n.parentNode.nodeName) || n.parentNode.closest('[data-notr]') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
   for (let n = w.nextNode(); n; n = w.nextNode()) {
     let src = LANG.src.get(n);
     if (src === undefined) { const k = n.nodeValue.trim(); src = k && I18N.en[k] !== undefined ? n.nodeValue : null; LANG.src.set(n, src); }
@@ -632,7 +660,7 @@ Object.assign(I18N.en, {
   "g lokal": "local g",
   "Rotasi": "Spin",
   "Periode": "Period",
-  "Saturnus": "Saturn",
+  "Saturnus": "Saturn", "Planet": "Planet",
   "Fase orbit": "Orbit phase",
   "Jam stasiun": "Station time",
   "Orbit x": "Orbit x",
@@ -1560,8 +1588,8 @@ await bootStep(BOOT_W[1], 'Saturnus dan bintang...');
    Kerangka inersia berpusat di stasiun, satuan 1 = 1.000 km. Sumbu z = sumbu stasiun = normal bidang orbit.
    Kamera jauh selalu di titik asal, hanya rotasi: q_far = rotZ(omega*t) * q_kamera_stasiun.
    ===================================================================== */
-const SATURN = { GM: 3.7931e16, rEq: 60.268, rPole: 54.364 };   // m^3/s^2 dan 1.000 km (NASA NSSDCA)
-const ORBIT = { r: 260, tiltDeg: 15, phi0: 0, axisTiltDeg: 65 };  // radius orbit 260.000 km, cincin miring 15 derajat
+const SATURN = { GM: PLANET.GM, rEq: PLANET.rEq, rPole: PLANET.rPole };   // m^3/s^2 dan 1.000 km (NASA NSSDCA); nama lama, kini planet pilihan (tahap 30)
+const ORBIT = { r: PLANET.orbitR, tiltDeg: PLANET.tiltDeg, phi0: 0, axisTiltDeg: 65 };  // Saturnus: radius orbit 260.000 km, cincin miring 15 derajat; Jupiter 150.000 km
 // axisTiltDeg: sumbu stasiun (tetap di ruang inersia, efek giroskop) miring 65 derajat dari normal orbit (25 derajat dari bidang orbit),
 // sehingga Saturnus berpindah antara 25 dan 155 derajat dari sumbu selama satu orbit dan sering terlihat lewat end cap.
 // 17a: nilai lama 40. Diubah agar Matahari (di bidang orbit, syarat gerhana tiap orbit) hanya 25 derajat dari sumbu.
@@ -1639,11 +1667,17 @@ farScene.add(saturn);
   ringTex.generateMipmaps = true; ringTex.minFilter = THREE.LinearMipmapLinearFilter; ringTex.magFilter = THREE.LinearFilter;
   ringTex.wrapS = ringTex.wrapT = THREE.ClampToEdgeWrapping; ringTex.needsUpdate = true;
   // --- tabel warna pita lintang (1024 sampel, -90 sampai +90 derajat), warna linear ---
-  const BANDS = [   // [lintang atas (derajat), warna sRGB]: zona terang dan sabuk gelap, kontras rendah khas Saturnus
+  const SAT_BANDS = [   // [lintang atas (derajat), warna sRGB]: zona terang dan sabuk gelap, kontras rendah khas Saturnus
     [-78, '#9c8c6e'], [-62, '#b39a73'], [-52, '#c9ae80'], [-40, '#d6bf8e'], [-30, '#c4a372'], [-20, '#e0c996'],
     [-9, '#c8a676'], [9, '#ecdcb2'], [20, '#c9a878'], [30, '#e2cc98'], [40, '#c6a574'], [52, '#d5bd8c'],
     [62, '#b59d74'], [76, '#a3a192'], [91, '#8e979b'],
   ];
+  const JUP_BANDS = [   // Jupiter: zona terang dan sabuk gelap (SEB, EZ, NEB, dst.), warna perkiraan tampilan, kontras lebih tinggi dari Saturnus
+    [-80, '#8b7b6b'], [-66, '#a39078'], [-58, '#c2b090'], [-50, '#9b7e63'], [-44, '#d8c9ad'], [-37, '#a98163'], [-31, '#dfd0b3'], [-26, '#b98a66'],
+    [-20, '#e7d9bf'], [-8, '#a9714f'], [7, '#efe2c2'], [18, '#a8684a'], [25, '#e8dbc0'], [31, '#b08a6a'], [38, '#e1d3b8'], [46, '#a98a6e'],
+    [56, '#d6c8ad'], [66, '#a69177'], [80, '#8f8070'], [91, '#7f7a74'],
+  ];
+  const BANDS = PLANET.key === 'jupiter' ? JUP_BANDS : SAT_BANDS;
   const BN = 1024, bandData = new Uint8Array(BN * 4), cA = new THREE.Color(), cB = new THREE.Color();
   for (let k = 0; k < BN; k++) {
     const lat = -90 + (k + 0.5) / BN * 180;
@@ -1678,12 +1712,58 @@ farScene.add(saturn);
       return a * a * uRing.z;
     }
   `;
+  // Jupiter (tahap 30): pita zona dan sabuk, zona ekuator berputar sekitar 1% lebih cepat (Sistem I), tepi sabuk bergelombang, festoon, Bintik Merah Besar
+  // (oval sekitar 22 derajat selatan, setengah ukuran sudut 0,112 x 0,084 rad dari perkiraan 16.000 x 12.000 km), tiga oval putih kecil, kutub lebih gelap.
+  // Aman untuk M1: tanpa pow basis negatif (kuadrat ditulis x * x), atan dengan sisipan kecil di sumbu.
+  const JUP_FS = /* glsl */`
+      ${SAT_COMMON}
+      varying vec3 vP, vL;
+      float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+      float noise3(vec3 x) {
+        vec3 i = floor(x), f = fract(x), u = f * f * (3.0 - 2.0 * f);
+        return mix(mix(mix(h3(i), h3(i + vec3(1, 0, 0)), u.x), mix(h3(i + vec3(0, 1, 0)), h3(i + vec3(1, 1, 0)), u.x), u.y),
+                   mix(mix(h3(i + vec3(0, 0, 1)), h3(i + vec3(1, 0, 1)), u.x), mix(h3(i + vec3(0, 1, 1)), h3(i + vec3(1, 1, 1)), u.x), u.y), u.z);
+      }
+      float dlon(float a, float b) { return atan(sin(a - b), cos(a - b)); }
+      void main() {
+        vec3 p = normalize(vP);
+        float lat = asin(clamp(p.y, -1.0, 1.0));
+        float lq = lat / 0.32;
+        float spin = uSpin * (1.0 + 0.0105 * exp(-lq * lq));
+        float c = cos(spin), s = sin(spin);
+        vec3 q = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
+        float lon = atan(q.z, q.x + 1e-6);
+        float t1 = noise3(q * vec3(5.0, 14.0, 5.0)), t2 = noise3(q * vec3(16.0, 44.0, 16.0) + 9.0), t3 = noise3(q * vec3(40.0, 120.0, 40.0) + 3.0);
+        float fq = (lat - 0.13) / 0.07;
+        float latP = lat + (t1 - 0.5) * 0.045 + (t2 - 0.5) * 0.016 + (t3 - 0.5) * 0.006 + 0.018 * sin(lon * 11.0 + 6.0 * t1) * exp(-fq * fq);
+        vec3 col = texture2D(uBands, vec2(latP / PI + 0.5, 0.5)).rgb;
+        col *= 0.93 + 0.14 * noise3(q * vec3(3.0, 150.0, 3.0)) + 0.06 * (t2 - 0.5);
+        vec2 g = vec2(dlon(lon, 2.2) * cos(lat), lat + 0.384) / vec2(0.112, 0.084);
+        float gd = length(g), sw = noise3(vec3(g * 4.0, 2.0));
+        vec3 grs = mix(vec3(0.60, 0.24, 0.15), vec3(0.72, 0.38, 0.26), sw) * (1.0 - 0.25 * smoothstep(0.0, 0.7, gd));
+        col = mix(col, vec3(0.93, 0.86, 0.76), smoothstep(0.88, 1.0, gd) * (1.0 - smoothstep(1.0, 1.25, gd)) * 0.5);
+        col = mix(col, grs, (1.0 - smoothstep(0.82, 1.0, gd)) * 0.92);
+        for (int i = 0; i < 3; i++) {
+          vec2 o = vec2(dlon(lon, 0.5 + float(i) * 2.1) * cos(lat), lat + 0.575 - 0.02 * float(i)) / vec2(0.035, 0.026);
+          col = mix(col, vec3(0.95, 0.92, 0.86), (1.0 - smoothstep(0.7, 1.0, length(o))) * 0.85);
+        }
+        col = mix(col, col * vec3(0.78, 0.84, 0.95), smoothstep(1.0, 1.45, abs(lat)));
+        vec3 n = normalize(vP / uScale);
+        vec3 V = normalize(uCamL - vL);
+        float mu0 = dot(n, uSunL), mu = max(dot(n, V), 1e-3);
+        float k = 0.85;
+        float I = pow(max(mu0, 0.0), k) * pow(mu, k - 1.0) * smoothstep(-0.02, 0.06, mu0);
+        vec3 outc = col * I * uSunI + col * 0.01;
+        outc += col * vec3(1.0, 0.95, 0.85) * 0.06 * pow(1.0 - mu, 4.0) * max(mu0, 0.0);
+        gl_FragColor = vec4(outc, 1.0);
+        #include <colorspace_fragment>
+      }`;
   const planetMat = new THREE.ShaderMaterial({
     uniforms: SAT_U,
     vertexShader: /* glsl */`
       varying vec3 vP, vL;
       void main() { vP = position; vL = position * ${'vec3(' + SATURN.rEq + ',' + SATURN.rPole + ',' + SATURN.rEq + ')'}; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: /* glsl */`
+    fragmentShader: PLANET.key === 'jupiter' ? JUP_FS : /* glsl */`
       ${SAT_COMMON}
       varying vec3 vP, vL;
       float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -1765,10 +1845,12 @@ farScene.add(saturn);
         #include <colorspace_fragment>
       }`,
   });
-  const rg = new THREE.RingGeometry(RR0, RR1, 720, 1).rotateX(-Math.PI / 2);
-  const rings = new THREE.Mesh(rg, ringMat);
-  rings.renderOrder = 2;
-  saturn.add(rings);
+  if (PLANET.key === 'saturn') {                                    // Jupiter: tanpa cincin pada versi pertama (cincin tipis hampir tak terlihat)
+    const rg = new THREE.RingGeometry(RR0, RR1, 720, 1).rotateX(-Math.PI / 2);
+    const rings = new THREE.Mesh(rg, ringMat);
+    rings.renderOrder = 2;
+    saturn.add(rings);
+  }
   // 17a: cincin cahaya atmosfer di tepi Saturnus saat Matahari di belakangnya (hamburan maju, paling jelas saat gerhana).
   // Cangkang 1,2% lebih besar dari planet, additive; terang di tepi (sudut pandang menyinggung) dan saat kamera membelakangi Matahari.
   const limbMat = new THREE.ShaderMaterial({
@@ -1785,7 +1867,7 @@ farScene.add(saturn);
         float rim = 1.0 - clamp(abs(dot(n, V)), 0.0, 1.0);
         float back = max(-dot(V, uSunL), 0.0);
         float g = pow(rim, 3.0) * pow(back, 24.0) * 1.6 * uSunI;
-        gl_FragColor = vec4(vec3(1.0, 0.62, 0.34) * g, 1.0);
+        gl_FragColor = vec4(vec3(${PLANET.limbCol.map((x) => x.toFixed(3)).join(', ')}) * g, 1.0);
         #include <colorspace_fragment>
       }`,
   });
@@ -1831,13 +1913,13 @@ function saturnDirInertial(out) {
   const phi = orbitPhase();
   return out.set(-Math.cos(phi), -Math.sin(phi), 0).applyQuaternion(Q_ORBIT);
 }
-const SAT_SPIN = 38018;                                           // periode rotasi Saturnus sekitar 10,56 jam (s)
+const SAT_SPIN = PLANET.spinS;                                    // periode rotasi planet (s): Saturnus sekitar 10,56 jam, Jupiter 9,925 jam
 const _qSatInv = new THREE.Quaternion();
 function updateFar() {
   saturnDirInertial(saturn.position).multiplyScalar(ORBIT.r);
   const SU = saturn.userData.U;
   SU.uCamL.value.copy(saturn.position).negate().applyQuaternion(_qSatInv.copy(saturn.quaternion).invert());   // kamera jauh di titik asal
-  SU.uSpin.value = (TAU * clock.orbit / SAT_SPIN) % (TAU * 25);
+  SU.uSpin.value = (TAU * clock.orbit / SAT_SPIN) % (TAU * PLANET.spinWrap);   // kelipatan putaran yang menutup perbedaan laju zona ekuator (4% x 25 = 1; Jupiter 1% x 100 = 1)
   saturn.userData.glareMat.uniforms.uPx.value = renderer.getPixelRatio();
   updateEclipse();                                                  // 17a
   if (ext.active) { farCam.quaternion.copy(camera.quaternion); return; }   // kamera luar sudah di kerangka inersia
@@ -1866,7 +1948,7 @@ const ECL = { k: 1, on: false, phiC: 0, half: Math.asin(SATURN.rEq / ORBIT.r), w
     const d = v.dot(SUN_DIR); if (d > best) { best = d; ECL.phiC = phi; }
   }
 }
-const SUN_ANG = 0.0557 * DEG;                                       // diameter sudut Matahari dari Saturnus (rad)
+const SUN_ANG = PLANET.sunAngDeg * DEG;                             // diameter sudut Matahari dari planet (rad)
 const _eP = new THREE.Vector3(), _eS = new THREE.Vector3(), _eQ = new THREE.Quaternion();
 // detik (waktu orbit) sampai gerhana berikutnya dimulai
 function eclipseIn() { const d = ((ECL.phiC - ECL.half - orbitPhase()) % TAU + TAU) % TAU; return d / TAU * T_ORB; }
@@ -2638,7 +2720,7 @@ const UTIL = { za0: 6400, za1: 6900 };                              // X1: dipin
 const HX = { on: new URLSearchParams(location.search).get('lambung') !== 'lama', seg: [], lists: {}, meshes: {}, blink: null, n: 0 };
 const EXT_LIGHT = { uniforms: {
   uSunW: { value: SUN_DIR.clone() }, uSunCol: { value: new THREE.Vector3(2.1, 2.1, 2.12) },
-  uSatW: { value: new THREE.Vector3(1, 0, 0) }, uSatCol: { value: new THREE.Vector3(0.09, 0.068, 0.04) },
+  uSatW: { value: new THREE.Vector3(1, 0, 0) }, uSatCol: { value: new THREE.Vector3(...PLANET.satCol) },
   uAmbX: { value: new THREE.Vector3(0.016, 0.018, 0.024) }, uLodPx: { value: 0.001 },
 } };
 const EXT_LIGHT_GLSL = /* glsl */`
@@ -18479,6 +18561,14 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
     pick.appendChild(b);
   });
   auto.addEventListener('change', () => { PRESET.auto = auto.checked; applyPreset(PRESET.idx); });
+  { // tahap 30: pilihan planet (muat ulang saat diganti)
+    const pp = document.getElementById('planetPick');
+    for (const k of Object.keys(PLANETS)) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = PLANETS[k].name; b.dataset.planet = k; if (k === PLANET.key) b.classList.add('on');
+      b.addEventListener('click', () => { if (k === PLANET.key) return; try { localStorage.setItem('cooperStation.planet', k); } catch (e) { /* abaikan */ } const u = new URL(location.href); u.searchParams.delete('planet'); location.href = u.toString(); });
+      pp.appendChild(b);
+    }
+  }
   mark();
   updateTimeLabels(); updateWeatherLabel(); musicLabel(); soundLabel();   // M3: daftarkan label awal agar ikut ganti bahasa
   translateDom(document.body);
