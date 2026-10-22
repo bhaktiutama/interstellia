@@ -163,12 +163,20 @@
 <div id="boot"><div class="bt">GARGANTUA</div><div class="bar"><i></i></div><div class="bootRow"><span id="bootTxt">Loading...</span><span id="bootPct"></span></div></div>
 <pre id="err" hidden></pre>
 <script src="../../shared/prof.js"></script>
-<script src="assets/gx01.data.js"></script>
+<script>
+/* Pilihan wahana (shared/armada.js, rencana docs/app/rencana-pilihan-wahana.md): blob model wahana terpilih dimuat sinkron sebelum modul utama.
+   gx01 = assets/gx01.data.js (window.__GX01), ks07 dan pr11 = shared/wahana/*.data.js (window.__SHIPDATA, dibuat tools/siapkan_wahana.mjs) */
+(function () { var id = null; try { id = new URLSearchParams(location.search).get('ship') || localStorage.getItem('lazarus.ship'); } catch (e) { /* abaikan */ }
+  var f = id === 'ks07' ? '../../shared/wahana/ks07.data.js' : id === 'pr11' ? '../../shared/wahana/pr11.data.js' : 'assets/gx01.data.js';
+  document.write('<script src="' + f + '"><\/script>'); })();
+</script>
 <script src="../../shared/post.js"></script>
 <script src="../../shared/camera.js"></script>
 <script src="../../shared/music.js"></script>
 <script src="../../shared/vr.js"></script>
 <script src="../../shared/kestrel.js"></script>
+<script src="../../shared/petrel.js"></script>
+<script src="../../shared/armada.js"></script>
 
 <script>
 'use strict';
@@ -866,7 +874,7 @@ float gxCanopy(vec3 p, vec3 L) {
   return k * 0.9;
 }
 uniform vec3 uL, uLCol, uAmb, uUpV;                                   // uUpV = sumbu atas wahana di ruang pandang
-uniform float uEnc, uCockpit, uMode;                                // uMode: 0 badan, 1 stensil, 2 layar MFD (memancar), 3 panel kaca (aditif)
+uniform float uEnc, uCockpit, uMode, uCan;                                // uMode: 0 badan, 1 stensil, 2 layar MFD (memancar), 3 panel kaca (aditif)
 uniform sampler2D uTex;
 // K4: lampu kabin uEmis (material 3), indikator 10 + k (uInd nyala, uIndCol warna), pendar 5 layar (ruang pandang, w = luas), uScrK 0 = mati
 uniform float uEmis, uInd[8], uScrK; uniform vec3 uIndCol[8], uScrN[5]; uniform vec4 uScrP[5];
@@ -905,7 +913,7 @@ void main() {
     vec3 nv = uRot * nm; n = length(nv) > 1e-4 ? normalize(nv) : n;
     base *= 1.0 - 0.55 * cav;
     float ndl = max(dot(n, uL), 0.0);
-    float through = gxCanopy(vP + nm * 0.01, uLm);                     // K7: bayangan rangka kanopi dan glare shield
+    float through = uCan > 0.5 ? gxCanopy(vP + nm * 0.01, uLm) : 0.55 * smoothstep(-0.2, 0.5, uLm.y);   // selain GX-01 kanopi tidak dimodelkan: cahaya masuk dari atas                     // K7: bayangan rangka kanopi dan glare shield
     vec3 glow = vec3(0.0);                                           // K4: pendar layar sebagai cahaya area kecil
     for (int i = 0; i < 5; i++) {
       vec3 L = uScrP[i].xyz - vV; float d2 = max(dot(L, L), 1e-4); vec3 Ln = L * inversesqrt(d2);
@@ -1238,7 +1246,7 @@ const ID = {
   'Mission': 'Misi', 'In the mission': 'Dalam misi',
   'GX-01 vessel': 'Wahana GX-01', 'Vessel GX-01: chase camera (V cockpit, Esc exit)': 'Wahana GX-01: kamera luar (V kokpit, Esc keluar)',
   'Vessel GX-01: cockpit (V chase camera, Esc exit)': 'Wahana GX-01: kokpit (V kamera luar, Esc keluar)', 'Vessel GX-01: off': 'Wahana GX-01: mati',
-  'Vessel GX-01 model is missing (assets/gx01.data.js)': 'Model wahana GX-01 tidak ada (assets/gx01.data.js)',
+  'Vessel GX-01 model is missing (assets/gx01.data.js)': 'Model wahana GX-01 tidak ada (assets/gx01.data.js)', 'Vessel': 'Wahana',
   'Vessel view: GX-01 chase camera / cockpit (Esc exits)': 'Tampilan wahana: kamera luar GX-01 / kokpit (Esc keluar)',
   'Distance to centre': 'Jarak ke pusat', 'Holding position (fall: stage G2)': 'Menahan posisi (jatuh: tahap G2)',
   'Skim the disk, against the flow': 'Susur piringan, melawan arus',
@@ -1401,7 +1409,10 @@ const ID = {
   'Size is enlarged: the real planet (8,282 km) is about 2.8e-5 rs, far below one pixel. This ray tracer is Schwarzschild, so a circular orbit slows clocks at most 1.414x (at the ISCO, 3 rs); the film value 61,362x needs a Kerr hole spinning within about 1e-14 of the limit.':
     'Ukuran diperbesar: planet nyata (8.282 km) sekitar 2,8e-5 rs, jauh di bawah satu piksel. Ray tracer ini Schwarzschild, jadi orbit lingkaran memperlambat jam paling banyak 1,414x (di ISCO, 3 rs); angka film 61.362x butuh lubang hitam Kerr yang berputar sekitar 1e-14 dari batas.',
 };
-const txt = (s) => (LANG === 'id' && ID[s] !== undefined ? ID[s] : s);
+// Pilihan wahana: teks yang menyebut GX-01 memakai nama wahana terpilih (ks07 / pr11 / gx01)
+const SHIPID = window.FLEET ? window.FLEET.current('gx01') : 'gx01', SHIPINFO = window.FLEET ? window.FLEET.info[SHIPID] : { short: 'GX-01', callsign: 'AMBANG', name: 'GX-01 Ambang' };
+const SHIPNAME = SHIPINFO.short, SHIPCALL = SHIPINFO.callsign;
+const txt = (s) => { const r = LANG === 'id' && ID[s] !== undefined ? ID[s] : s; return SHIPNAME === 'GX-01' ? r : r.split('GX-01').join(SHIPNAME); };
 function helpTab(id, noSave) {
   if (!noSave) try { localStorage.setItem('gargantua.helpTab', id); } catch (e) { /* abaikan */ }
   document.querySelectorAll('#help [data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
@@ -1681,8 +1692,9 @@ async function main() {
      Kerangka model: +x kanan, +y atas, -z depan, meter. Di G1 wahana menahan posisi di titik orbit kamera (dist, yaw, pitch)
      menghadap pusat; jatuh menyusul di G2. Kamera: 'chase' (luar, belakang-atas) atau 'cockpit' (mata pilot).
      ===================================================================== */
-  const SHIP = { on: false, view: 'chase', ready: false, data: window.__GX01 || null,
+  const SHIP = { on: false, view: 'chase', ready: false, data: window.__SHIPDATA || window.__GX01 || null,
     chase: [0, 7.5, 40], aim: [0, 0, -6], near: { chase: 0.5, cockpit: 0.04 } };
+  if (SHIP.data && SHIP.data.chase) { SHIP.chase = SHIP.data.chase.slice(); SHIP.aim = SHIP.data.aim.slice(); }   // wahana lebih kecil / besar: kamera luar menurut ukuran
   const SHIP_P = program(SHIP_FS, 'ship', SHIP_VS);
   /* K1 (docs/gargantua/rencana-kokpit-gx01.md): kepala pilot di kokpit. yaw > 0 = menoleh ke kanan, pitch > 0 = ke atas (radian);
      ty / tp = target dari mouse, yaw / pitch dikejar pegas teredam kritis. Kepala berputar di titik leher (0,10 m di belakang dan
@@ -2721,7 +2733,7 @@ async function main() {
         g.fillText(predText(MIS.pred), ox + 20, 194, W - 40);
         g.fillText(txt('tidal (2 m)') + ' ' + D.tidal.toExponential(1) + ' g', ox + 20, 222, W - 160);
         g.fillStyle = dim; g.fillText('1 s = ' + Math.round(D.warp).toLocaleString(LANG === 'id' ? 'id-ID' : 'en-US') + ' s · ' + txt(WARPS[MIS.warp].name), ox + 20, 250, W - 40);
-        g.fillText('GX-01 · ' + txt(SCEN[MIS.sc].name), ox + 20, 278, W - 40);
+        g.fillText(SHIPNAME + ' · ' + txt(SCEN[MIS.sc].name), ox + 20, 278, W - 40);
         const S = mfdSchem(), sw = 92, sh = 138, sxp = ox + W - sw - 22, syp = 50;
         g.drawImage(S.cv, sxp, syp, sw, sh);
         const gl_ = MIS.glass / 100, k = sw / 200;                // kanopi: warna ikut kerusakan
@@ -2940,7 +2952,7 @@ async function main() {
     gl.uniform3fv(SHIP_P.u('uUpV'), VR.map((row) => v3.dot(row, S.u)));
     gl.uniform3fv(SHIP_P.u('uL'), Lv); gl.uniform3fv(SHIP_P.u('uLCol'), li.col);
     gl.uniform3f(SHIP_P.u('uLm'), v3.dot(li.L, S.r), v3.dot(li.L, S.u), -v3.dot(li.L, S.f)); gl.uniform3f(SHIP_P.u('uAmb'), 0.03, 0.026, 0.024);
-    gl.uniform1f(SHIP_P.u('uEnc'), FMT.enc); gl.uniform1f(SHIP_P.u('uCockpit'), cockpit ? 1 : 0);
+    gl.uniform1f(SHIP_P.u('uEnc'), FMT.enc); gl.uniform1f(SHIP_P.u('uCockpit'), cockpit ? 1 : 0); gl.uniform1f(SHIP_P.u('uCan'), D.canopy === 'gen' ? 0 : 1);
     // K4: lampu kabin, indikator, pendar layar (posisi dan normal layar di ruang pandang, w = luas)
     const scrOn = cockpit && MIS.on && MFD.vao ? 1 : 0;
     gl.uniform1f(SHIP_P.u('uEmis'), cockpit ? (MIS.on ? 1.4 : 0.6) : 0.3);
@@ -3084,7 +3096,7 @@ async function main() {
     let rows;
     if (MIS.on) {
       const D = misData();
-      rows = [['GX-01', txt(SCEN[MIS.sc].name)], ['r', `${fmtN(D.r, D.r < 0.1 ? 4 : 2)} rs · ${D.km.toExponential(2)} km`],
+      rows = [[SHIPNAME, txt(SCEN[MIS.sc].name)], ['r', `${fmtN(D.r, D.r < 0.1 ? 4 : 2)} rs · ${D.km.toExponential(2)} km`],
         [txt('Status'), txt(D.inside ? 'INSIDE THE HORIZON' : 'outside the horizon')], [txt('Proper time'), fmtTau(MIS.tau)],
         [txt('Forecast'), predText(MIS.pred)], [txt('Speed'), D.vStatic === null ? `${fmtN(D.vRain, 3)} c (${txt('fall frame')})` : `${fmtN(D.vStatic, 3)} c (${txt('vs static')})`],
         [txt('Sky'), `${txt('ahead')} x${fmtN(D.ahead, 2)} · ${txt('behind')} x${fmtN(D.behind, 2)}`],
@@ -3098,7 +3110,7 @@ async function main() {
       if (F) rows.push([txt('Flare'), flareRow(F, V.TR)]);
     } else {
       const rs = Math.hypot(...cameraBasis().pos);
-      rows = [['GX-01', 'AMBANG'], [txt('Distance to centre'), `${fmtN(rs, 2)} rs · ${(rs * RS_KM).toExponential(3)} km`],
+      rows = [[SHIPNAME, SHIPCALL], [txt('Distance to centre'), `${fmtN(rs, 2)} rs · ${(rs * RS_KM).toExponential(3)} km`],
         ['', txt('Holding position. Start a fall from the panel (Mission).')]];
       if (MILLAR.on) {                                                // MK2: angka orbit planet Millar
         const Ms = millarState(state.simTime), hr = Ms.T * MIS_T / 3600;
@@ -3231,7 +3243,7 @@ async function main() {
         g.strokeStyle = occ ? 'rgba(215,220,226,0.45)' : 'rgba(215,220,226,0.8)'; g.lineWidth = s; g.setLineDash(occ ? [3 * s, 3 * s] : []);
         g.beginPath(); g.arc(q.x, q.y, 8 * s, 0, 7); g.stroke(); g.setLineDash([]);
         g.font = `bold ${10.5 * s}px ${mono}`; g.textBaseline = 'middle'; g.fillStyle = relColor(f, Math.max(bright, 0.55));
-        g.fillText(`GX-01 · ${fmtTau(S.tau)}`, q.x + 13 * s, q.y - 7 * s);
+        g.fillText(`${SHIPNAME} · ${fmtTau(S.tau)}`, q.x + 13 * s, q.y - 7 * s);
         g.font = `${9.5 * s}px ${mono}`; g.fillStyle = 'rgba(215,220,226,0.85)';
         g.fillText(`r ${fmtN(S.r, 2)} rs · x${fmtRate(f)}${occ ? ' · ' + txt('behind the disk') : ''}`, q.x + 13 * s, q.y + 7 * s);
         if (MIS.tauH !== null) { g.fillStyle = 'rgba(255,120,95,0.85)'; g.fillText(txt('already inside the horizon: the relay will never see it cross'), q.x + 13 * s, q.y + 20 * s); }
@@ -3242,7 +3254,7 @@ async function main() {
         g.fillStyle = 'rgba(240,164,90,0.9)'; g.beginPath();
         g.moveTo(ex + Math.cos(a) * k, ey - Math.sin(a) * k); g.lineTo(ex + Math.cos(a + 2.4) * k, ey - Math.sin(a + 2.4) * k); g.lineTo(ex + Math.cos(a - 2.4) * k, ey - Math.sin(a - 2.4) * k);
         g.closePath(); g.fill();
-        g.font = `${9.5 * s}px ${mono}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('GX-01', ex - Math.cos(a) * 16 * s, ey + Math.sin(a) * 16 * s); g.textAlign = 'left';
+        g.font = `${9.5 * s}px ${mono}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(SHIPNAME, ex - Math.cos(a) * 16 * s, ey + Math.sin(a) * 16 * s); g.textAlign = 'left';
       }
     }
     // keterangan bawah: jam relai dan keadaan cahaya
@@ -3935,6 +3947,7 @@ async function main() {
     { type: 'select', label: 'Attitude (X)', options: LOCKS, names: lockName, get: () => MIS.lock, set: (v) => { MIS.lock = v; } },
     { type: 'mission' },
     { type: 'check', label: 'Relay view and spacetime diagram (M)', get: () => REL.on, set: (v) => { REL.on = v; } },
+    { type: 'select', label: 'Vessel', options: window.FLEET ? window.FLEET.ids : ['gx01'], names: (k) => (window.FLEET ? window.FLEET.info[k].name : k), get: () => SHIPID, set: (v) => { if (window.FLEET && v !== SHIPID) window.FLEET.set(v); } },   // ganti wahana = simpan lalu muat ulang
     { type: 'buttons', defs: [['V', 'GX-01 vessel', cycleShipView]] },
     { type: 'note', text: 'Disk particles and canopy impacts are distilled for the view: a real 1 microgram dust grain at 0.8 c carries 6.0e7 J (about 14 kg of TNT).' },
     { tab: 'camera', label: 'Camera' },
@@ -4416,7 +4429,7 @@ async function main() {
   const vrView = () => txt(SHIP.view === 'cockpit' ? 'Cockpit' : SHIP.view === 'relay' ? 'Relay' : 'Chase');
   VRKIT.init({ backend: 'raw', gl, lang: () => LANG, frame: vrFrame, start: vrStart, end: vrEnd, rs: () => GV.rs,
     items: () => [
-      { label: () => (MIS.on ? `GX-01 · r ${fmtN(Math.hypot(...MIS.x), 3)} rs · ${txt('proper time')} ${fmtTau(MIS.tau)}` : 'Gargantua'), act: () => {} },
+      { label: () => (MIS.on ? `${SHIPNAME} · r ${fmtN(Math.hypot(...MIS.x), 3)} rs · ${txt('proper time')} ${fmtTau(MIS.tau)}` : 'Gargantua'), act: () => {} },
       { label: () => txt(MIS.on ? 'End mission (Esc)' : 'Start mission'), act: () => { if (MIS.on) { stopMission(); toast(txt('Mission ended'), 2); } else startMission(MIS.sc); } },
       { label: () => txt('Scenario') + ': ' + txt(SCEN[MIS.sc].name), act: () => { const k = Object.keys(SCEN); MIS.sc = k[(k.indexOf(MIS.sc) + 1) % k.length]; syncUI(); } },
       { label: () => txt('View (A): {v}').replace('{v}', SHIP.on ? vrView() : txt('Off')), act: () => cycleShipView() },
