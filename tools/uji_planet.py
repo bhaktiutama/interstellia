@@ -1,6 +1,6 @@
-"""Uji Copper Corn Station tahap 30 (Jupiter sebagai pilihan planet, orbit 150.000 km) dan tahap 31 (bulan Saturnus dan Jupiter).
-Per planet (?planet=saturn|jupiter): periode orbit = Kepler (37,57 jam / 9,008 jam), setengah sudut gerhana = asin(R/r), diameter sudut planet dari stasiun
-(26,8 / 56,9 derajat), lama gerhana per orbit (2,80 / 1,42 jam) dan penumbra, kunci teks (planet disebut sesuai pilihan, angka bantuan 37,6 / 9,0 jam),
+"""Uji Copper Corn Station tahap 30 (Jupiter sebagai pilihan planet, orbit 82.550 km = diameter sudut 120 derajat) dan tahap 31 (bulan Saturnus dan Jupiter).
+Per planet (?planet=saturn|jupiter): periode orbit = Kepler (37,57 jam / 3,678 jam), setengah sudut gerhana = asin(R/r), diameter sudut planet dari stasiun
+(26,8 / 120,0 derajat), lama gerhana per orbit (2,80 / 1,23 jam) dan penumbra, kunci teks (planet disebut sesuai pilihan, angka bantuan 37,6 / 3,7 jam),
 pemilih planet di layar mulai, pilihan tersimpan (cooperStation.planet), render langit jauh tanpa nilai tidak valid dan planet tergambar.
 Bulan: jumlah (7 / 4), jarak ke pusat planet = a, periode (posisi kembali setelah 1 periode NASA), periode Kepler dalam 0,5% dari NASA, rotasi sinkron
 (sumbu +x objek ke luar dari planet), jarak terdekat hasil pemindai di antara |a - r| dan a + r, sudut tampak = rumus, lompat ke konjungsi tiba di jarak itu,
@@ -18,7 +18,7 @@ UJI = r"""
   const S = window.__station, out = {}, wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const THREE = S.THREE || (await import('https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js'));
   const DEG = Math.PI / 180, TAU = 2 * Math.PI, PL = S.PLANET, E = S.ECL, SAT = S.SATURN, T = S.T_ORB;
-  const want = { saturn: { T: 37.57, half: 13.40, diam: 26.8, ecl: 2.80, n: 7 }, jupiter: { T: 9.008, half: 28.46, diam: 56.9, ecl: 1.42, n: 4 } }[key];
+  const want = { saturn: { T: 37.57, half: 13.40, diam: 26.8, ecl: 2.80, n: 8 }, jupiter: { T: 3.678, half: 60.0, diam: 120.0, ecl: 1.226, n: 5 } }[key];
   out[`${key}: planet = ${PL.key}`] = PL.key === key;
   out[`${key}: periode ${(T / 3600).toFixed(3)} jam = Kepler 2 pi sqrt(r^3 / GM) (target ${want.T})`] = Math.abs(T / 3600 - want.T) < 0.02 && Math.abs(T - 2 * Math.PI * Math.sqrt(Math.pow(PL.orbitR * 1e6, 3) / PL.GM)) < 1;
   out[`${key}: setengah sudut gerhana ${(E.half / DEG).toFixed(2)} derajat (target ${want.half}), diameter sudut planet ${(2 * Math.asin(SAT.rEq / S.saturn.position.length()) / DEG).toFixed(1)} derajat (target ${want.diam})`] =
@@ -29,7 +29,7 @@ UJI = r"""
   out[`${key}: lama gerhana ${(dark / 3600).toFixed(3)} jam per orbit (target ${want.ecl} +- 3%)`] = Math.abs(dark / 3600 - want.ecl) / want.ecl < 0.03;
   // teks
   const tx = S.t('Orbit Saturnus: {x}x', { x: 1 }), hp = S.t('Lompat ke 2 menit sebelum gerhana Saturnus (sekali tiap orbit 37,6 jam, lamanya sekitar 2,8 jam). Lihat lewat kaca end cap B atau kamera luar (V)');
-  out[`${key}: teks "${tx}" / bantuan "${hp.slice(0, 60)}..."`] = key === 'saturn' ? tx.includes('Saturnus') && hp.includes('37,6 jam') : tx.includes('Jupiter') && !tx.includes('Saturn') && hp.includes('Jupiter') && hp.includes('9,0 jam') && hp.includes('1,4 jam');
+  out[`${key}: teks "${tx}" / bantuan "${hp.slice(0, 60)}..."`] = key === 'saturn' ? tx.includes('Saturnus') && hp.includes('37,6 jam') : tx.includes('Jupiter') && !tx.includes('Saturn') && hp.includes('Jupiter') && hp.includes('3,7 jam') && hp.includes('1,2 jam');
   out[`${key}: pemilih planet: ${[...document.querySelectorAll('#planetPick button')].map((b) => b.textContent + (b.classList.contains('on') ? '*' : '')).join(' ')}`] =
     document.querySelectorAll('#planetPick button').length === 2 && document.querySelector('#planetPick button.on').dataset.planet === key;
   // render langit jauh
@@ -53,7 +53,7 @@ UJI = r"""
   for (const m of M.list) {
     const Pm = TAU / m.w, p0 = new THREE.Vector3(), p1 = new THREE.Vector3(); S.clock.orbit = 12345; S.updateFar();
     const tK = 2 * Math.PI * Math.sqrt(Math.pow(m.a * 1e6, 3) / PL.GM) / 86400;
-    okKep = okKep && Math.abs(tK - m.P) / m.P < 0.005;
+    okKep = okKep && (m.ecc || Math.abs(tK - m.P) / m.P < 0.005);
     const l0 = new THREE.Vector3(), l1 = new THREE.Vector3();
     const loc = (tt, o) => { const Mm = m.M0 + m.w * tt, i = m.inc * DEG; return o.set(m.a * Math.cos(Mm), m.a * Math.sin(Mm) * Math.sin(i), m.a * Math.sin(Mm) * Math.cos(i)); };
     loc(100, l0); loc(100 + Pm, l1);
@@ -92,6 +92,33 @@ UJI = r"""
   out[`${key}: ${m0.name} di sisi terang tergambar (terang tengah ${(c0 / 768).toFixed(3)} > 0,01, tidak valid ${cb})`] = lit && c0 / 768 > 0.01 && cb === 0;
   // titik saat bulan jauh
   const pa = M.pts.geometry.attributes.aB.array; out[`${key}: kecerahan titik bulan terhingga dan <= 1`] = [...pa].every((x) => Number.isFinite(x) && x >= 0 && x <= 1);
+  // peta Jupiter NASA (Cassini PIA07782) dan uniform bayangan bulan (K5)
+  const SU = S.saturn.userData.U;
+  out[`${key}: peta global ${key === 'jupiter' ? 'NASA dimuat (3600 x 1800, define JUP_MAP)' : 'tidak dimuat (Saturnus prosedural)'}`] = key === 'jupiter' ? !!SU.uJupMap.value && SU.uJupMap.value.image.width === 3600 && SU.uJupMap.value.image.height === 1800 : SU.uJupMap.value === null;
+  out[`${key}: uniform bulan: ${SU.uMoonN.value} bulan, jari-jari = R / 1000 (K5)`] = SU.uMoonN.value === want.n && M.list.every((m) => Math.abs(SU.uMoonS.value[m.i].w - m.R / 1000) < 1e-9 && Math.abs(SU.uMoonS.value[m.i].x - m.pos.x) < 1e-3);
+  // bayangan bulan di muka planet: cari bulan dan waktu dengan bayangan jatuh di sisi planet yang terlihat dari stasiun, lalu bandingkan render dengan dan tanpa bayangan
+  let sh = null;
+  const sv = new THREE.Vector3(), cl = new THREE.Vector3();
+  for (const m of M.list) { for (let tt = 0; tt < 3 * 86400 && !sh; tt += 120) {
+    S.clock.orbit = tt; S.updateFar();
+    sv.copy(S.SUN_DIR).applyQuaternion(S.saturn.quaternion.clone().invert()); cl.copy(SU.uCamL.value);
+    const L = m.pos, a = new THREE.Vector3(L.x / SAT.rEq, L.y / SAT.rPole, L.z / SAT.rEq), d = new THREE.Vector3(sv.x / SAT.rEq, sv.y / SAT.rPole, sv.z / SAT.rEq);
+    const A = d.dot(d), B = -2 * a.dot(d), C = a.dot(a) - 1, disc = B * B - 4 * A * C; if (disc < 0) continue;      // titik L - t sv di permukaan elipsoid
+    const t1 = (-B - Math.sqrt(disc)) / (2 * A); if (t1 < 0) continue;
+    const P = new THREE.Vector3(L.x - t1 * sv.x, L.y - t1 * sv.y, L.z - t1 * sv.z), nrm = new THREE.Vector3(P.x / SAT.rEq ** 2, P.y / SAT.rPole ** 2, P.z / SAT.rEq ** 2).normalize();
+    if (nrm.dot(cl.clone().sub(P).normalize()) > 0.5 && nrm.dot(sv) > 0.5) sh = { m, tt, P: P.clone() };
+  } if (sh) break; }
+  if (sh) {
+    S.clock.orbit = sh.tt; S.updateFar();
+    const pw = sh.P.clone().applyQuaternion(S.saturn.quaternion).add(S.saturn.position), c2 = new THREE.PerspectiveCamera(Math.max(2, 6 * Math.atan(sh.m.R / 1000 / pw.length()) / DEG * 4), 1, 1, 20000);
+    c2.lookAt(pw); c2.updateMatrixWorld(true);
+    const grab = () => { S.renderer.setRenderTarget(rt); S.renderer.setClearColor(0x000000, 1); S.renderer.clear(); S.renderer.render(S.farScene, c2); S.renderer.setRenderTarget(null); const q = new Float32Array(W * H * 4); S.renderer.readRenderTargetPixels(rt, 0, 0, W, H, q); return q; };
+    const withS = grab(), n0 = SU.uMoonN.value; SU.uMoonN.value = 0; const noS = grab(); SU.uMoonN.value = n0;
+    let dk = 0, tot = 0, nbad2 = 0; for (let i = 0; i < withS.length; i += 4) { const a = withS[i] + withS[i + 1] + withS[i + 2], b = noS[i] + noS[i + 1] + noS[i + 2]; if (!Number.isFinite(a)) nbad2++; tot += b; if (a < b * 0.5) dk++; }
+    out[`${key}: bayangan ${sh.m.name} di muka planet (waktu ${(sh.tt / 3600).toFixed(2)} jam): ${dk} piksel gelap > 50% dibanding tanpa bayangan, tidak valid ${nbad2}`] = dk > 5 && nbad2 === 0;
+  } else out[`${key}: bayangan bulan di muka planet: tidak ditemukan dalam 3 hari`] = false;
+  // cincin Jupiter: ada, di bidang khatulistiwa, kedalaman optik kecil
+  if (key === 'jupiter') out['jupiter: cincin ada (satu mesh), profil 92.000-226.000 km'] = S.saturn.children.some((c) => c.geometry && c.geometry.type === 'RingGeometry') && Math.abs(SU.uRing.value.x - 92) < 1e-9 && Math.abs(SU.uRing.value.y - 226) < 1e-9;
   rt.dispose(); S.clock.orbit = 0; S.updateFar();
   return out;
 })
@@ -121,7 +148,7 @@ async def main():
             pg = await page('experiences/cooper-station/index.html', f'?lang=id&planet={key}')
             hasil.update(await pg.evaluate(UJI, key))
             if key == 'jupiter':
-                hasil['jupiter: bantuan English: planet dan angka'] = await pg.evaluate("""(() => { const S = window.__station; S.setLang('en'); const a = S.t('Lompat ke 2 menit sebelum gerhana Saturnus (sekali tiap orbit 37,6 jam, lamanya sekitar 2,8 jam). Lihat lewat kaca end cap B atau kamera luar (V)'); S.setLang('id'); return a.includes('Jupiter') && a.includes('9.0-hour') && a.includes('1.4 hours') && !a.includes('Saturn'); })()""")
+                hasil['jupiter: bantuan English: planet dan angka'] = await pg.evaluate("""(() => { const S = window.__station; S.setLang('en'); const a = S.t('Lompat ke 2 menit sebelum gerhana Saturnus (sekali tiap orbit 37,6 jam, lamanya sekitar 2,8 jam). Lihat lewat kaca end cap B atau kamera luar (V)'); S.setLang('id'); return a.includes('Jupiter') && a.includes('3.7-hour') && a.includes('1.2 hours') && !a.includes('Saturn'); })()""")
             await pg.close()
         # pilihan tersimpan: tanpa ?planet= mengikuti localStorage cooperStation.planet
         pg = await page('experiences/cooper-station/index.html', '?lang=id&planet=jupiter')

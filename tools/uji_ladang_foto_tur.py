@@ -1,5 +1,5 @@
 """Uji tahap 12d (Copper Corn Station): siklus tanam gandum dan mesin ladang, mode foto (FOV, blur, simpan PNG,
-semua dikembalikan saat keluar), tur sinematik v2.15 (22 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
+semua dikembalikan saat keluar), tur sinematik v2.15 + K7 (23 titik, jam 12:00 sampai 07:00, hujan di bawah awan, genangan, burung formasi V, motor ke kota,
 lempar bola melawan putaran, gerhana dari dalam, pembuka dan penutup kamera luar, penutup tanpa layar gelap lewat celah Skyway dengan Saturnus
 terang di belakang stasiun, motor di tengah jalan lalu menepi kiri, jalan di tengah trotoar, Spasi = lewati titik, tanpa NaN, semua dikembalikan).
 Pakai: python tools/uji_ladang_foto_tur.py   (butuh: pip install playwright && playwright install chromium; CHROMIUM opsional)"""
@@ -27,7 +27,7 @@ UJI = r"""
   out[`tangkapan PNG ${url.length} karakter`] = url.startsWith('data:image/png') && url.length > 5000;
   st.togglePhoto(false);
   out['keluar mode foto: FOV, blur, waktu kembali'] = st.camera.fov === st.CONFIG.fov && st.compMat.uniforms.uDof.value === 0 && st.clock.hourRate === rate0;
-  // C3: tur sinematik v2.5 (22 titik; tur hanya mengatur jam, awan, posisi kamera, motor dan lemparan lewat keadaan biasa)
+  // C3: tur sinematik v2.5 (23 titik; tur hanya mengatur jam, awan, posisi kamera, motor dan lemparan lewat keadaan biasa)
   const p0 = { th: st.player.theta, za: st.player.za };
   const w0 = { hour: st.clock.hour, rate: st.clock.hourRate, orbit: st.clock.orbit, mode: st.WEATHER.mode, moto: st.MOTO.on, adapt: st.ADAPT.on, bloom: st.POST.bloom, rays: st.RAYS.on };
   st.startTour();
@@ -50,6 +50,7 @@ UJI = r"""
     r.hour = st.clock.hour; r.rain = Math.max(r.rain, st.RAIN.k); r.ecl = Math.min(r.ecl, st.ECL.k); r.eclEnd = st.ECL.k; r.ext = r.ext || st.ext.active; r.rainEnd = st.RAIN.k;
     if (key.ext === 'in') { r.camZ = st.camera.position.z; r.lookEnd = [st.ADAPT.on, st.POST.bloom, st.RAYS.on]; r.fogEnd = st.scene.fog.density; }
     if (!r.lookStart) r.lookStart = [st.ADAPT.on, st.POST.bloom, st.RAYS.on]; if (r.fogStart === undefined) r.fogStart = st.scene.fog.density;              // pembuka: posisi kamera luar terakhir (sudah menembus kaca end cap A?)
+    if (key.ext === 'moon') { r.fovMoon = st.camera.fov; r.moonK = st.tourMoonK(); r.moonOrb = st.clock.orbit; }   // K7
     r.rays = r.rays || st.RAYS.on; if (key.fly) r.hMax = Math.max(r.hMax || 0, P.h - st.groundH(ps, P.za));
     if (hold && key.B && !key.track && !key.ball && !key.eclipse && !key.path && !key.moto && !key.fly) {   // melihat sekitar: simpangan dari arah titik
       const dy = Math.abs(wrap((P.heading - key.B.hd) * st.R) / st.R) * deg0, dp = Math.abs(P.pitch - key.B.pt) * deg0;
@@ -135,8 +136,9 @@ UJI = r"""
   while (st.TOUR.on) { for (let q = 0; q < nSub; q++) st.physicsStep(st.STEP); st.stepTour(0.05); st.updateCamera(); steps++; }
   const T = steps * 0.05, eye = st.TOUR.keys.filter((q) => q.h === 0).length;
   const ball = st.TOUR.keys.find((q) => q.ball), L = ball && ball.landing, deg = 180 / Math.PI;
-  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 260-370 s), tanpa NaN`] = !bad && idx.size === N && N === 22 && T > 260 && T < 370;
+  out[`tur: ${idx.size} dari ${N} titik, ${T.toFixed(0)} s (target 260-370 s), tanpa NaN`] = !bad && idx.size === N && N === 23 && T > 260 && T < 370;
   out[`tur: ${eye} titik setinggi mata (>= 9)`] = eye >= 9;
+  { const mm = get('Bulan dari stasiun'); out[`tur: segmen Bulan (K7): kamera luar, FOV ${mm.fovMoon && mm.fovMoon.toFixed(1)} < ${st.CONFIG.fov - 5}, bulan ${mm.moonK && mm.moonK.m.name} tampak ${mm.moonK && mm.moonK.ang.toFixed(2)} derajat, orbit beku`] = !!mm.ext && mm.fovMoon < st.CONFIG.fov - 5 && !!mm.moonK && mm.moonK.ang > 0.05 && Math.abs(mm.moonOrb - mm.moonK.t) < 1e-6; }
   out[`tur: tinggi maksimum ${maxH.toFixed(0)} m (tidak melewati sumbu)`] = maxH < st.R - 30;
   out[`tur: jam mulai ${hour0.toFixed(2)}, akhir ${(get('Meninggalkan stasiun').hour || 0).toFixed(2)}`] = hour0 === 12 && Math.abs(get('Meninggalkan stasiun').hour - 10) < 0.05;
   out['tur: pembuka dan penutup di kamera luar'] = !!get('Menuju Copper Corn Station').ext && !!get('Meninggalkan stasiun').ext;
@@ -229,14 +231,19 @@ UJI = r"""
 """
 
 async def main():
-    page_url = pathlib.Path(__file__).resolve().parent.parent.joinpath('experiences/cooper-station/index.html').as_uri()
+    page_url = pathlib.Path(__file__).resolve().parent.parent.joinpath(os.environ.get('HALAMAN', 'experiences/cooper-station/index.html')).as_uri()   # HALAMAN = berkas lain (pembanding komit lama)
     async with async_playwright() as p:
         b = await p.chromium.launch(args=['--use-angle=swiftshader', '--enable-unsafe-swiftshader'], **({'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}))
         pg = await b.new_page(viewport={'width': 320, 'height': 200})
         errs = []
         pg.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))
-        await pg.goto(page_url)
-        await pg.wait_for_function('window.__stationReady === true', timeout=240000)
+        if os.environ.get('THREE_LOCAL'):                              # sandbox tanpa CDN: three.js dari berkas lokal
+            local = pathlib.Path(os.environ['THREE_LOCAL'])
+            async def serve(route):
+                await route.fulfill(path=str(local / route.request.url.rsplit('/', 1)[-1]), content_type='text/javascript', headers={'Access-Control-Allow-Origin': '*'})
+            await pg.route('https://cdn.jsdelivr.net/**', serve)
+        await pg.goto(page_url, wait_until='domcontentloaded', timeout=180000)
+        await pg.wait_for_function('window.__stationReady === true', timeout=600000)
         for k, v in (await pg.evaluate(UJI)).items(): print(('OK   ' if v else 'GAGAL'), k)
         print('error:', errs[:10] or 'tidak ada')
         await b.close()

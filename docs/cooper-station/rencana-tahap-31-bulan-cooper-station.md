@@ -1,6 +1,6 @@
 # Rencana tahap 31 Copper Corn Station: bulan Saturnus dan Jupiter
 
-Per 22 Oktober 2026 · Status: K1-K4, K6, K8 dikerjakan; K5 dan K7 belum; menunggu uji visual dan FPS pemilik · Pemilik: Bhakti · Bergantung pada tabel `PLANET` dari `rencana-tahap-30-jupiter-cooper-station.md` (langkah J1)
+Per 22 Oktober 2026 · Status: K1-K8 dikerjakan (K5, K7, Hyperion, Amalthea menyusul pada hari yang sama); menunggu uji visual dan FPS pemilik · Pemilik: Bhakti · Bergantung pada tabel `PLANET` dari `rencana-tahap-30-jupiter-cooper-station.md` (langkah J1)
 
 ## Ringkasan
 
@@ -21,7 +21,9 @@ Keputusan pemilik: permukaan **prosedural** dulu, skala sebenarnya, tanpa Hyperi
 | K4 titik saat kecil | `MOONS.pts` additive, kecerahan = fase x akar(albedo) x gerhana, memudar di atas 1,5 sampai 4 piksel |
 | K6 UI | HUD `hMoon` (bulan terdekat, jarak, sudut), tombol panel tab Waktu per bulan = `jumpToMoon(i)` (pemindai konjungsi langkah 60 s), kamus |
 | K8 uji | `tools/uji_planet.py` |
-| K5, K7 | Belum: bayangan bulan di planet, segmen tur bulan |
+| K5 bayangan bulan di planet | Selesai (22 Oktober 2026): `moonShadow(P)` di `SAT_COMMON` (silinder dari tiap bulan ke arah Matahari, penumbra selebar cakram Matahari pada jarak bulan, antumbra bila bulan lebih kecil dari cakram Matahari), uniform `uMoonS[8]` (xyz kerangka planet, w jari-jari dalam 1.000 km) dan `uMoonN`, diisi `updateMoons()`; `?bulan=0` = `uMoonN` 0 = shader lama persis |
+| K7 tur | Selesai: titik tur `ext: 'moon'` "Bulan dari stasiun" (23 titik, 352 s): `tourMoonK()` memindai 1,5 hari orbit (langkah 60 s) untuk bulan dengan sudut terbesar yang sisi terangnya menghadap stasiun (fase >= 0,5, tidak di bayangan planet); kamera luar 3 km dari stasiun ke arah bulan, FOV menyempit ke 12 x sudut bulan (3-25 derajat, `TOUR.zoom`, `updateFov` menunggu), orbit dibekukan di konjungsi; `clock.sim` dimajukan ke kelipatan periode putaran supaya fase putaran stasiun tetap sama (rencana penutup lewat celah Skyway bergantung pada fase), lompatan di balik layar gelap |
+| Hyperion dan Amalthea | Selesai: Saturnus 8 bulan (Hyperion R 139 km, periode NASA, `ecc: true` = periode Kepler dikecualikan dari uji), Jupiter 5 bulan (Amalthea R 83 km = jari-jari rata-rata bola; bentuk asli lonjong 250 x 146 x 128 km) |
 
 Hasil uji (SwiftShader): `tools/uji_planet.py` lulus: 7 / 4 bulan, posisi kembali setelah 1 periode NASA, periode Kepler dalam 0,5% dari NASA, rotasi sinkron, jarak konjungsi hasil pemindai di antara |a - r| dan a + r (nyata: Enceladus 22.543 km, 1,28 derajat; Tethys 35.299 km, 1,72 derajat; Io 271.863 km, 0,77 derajat), gerhana bulan (Mimas, Io), bulan tergambar tanpa nilai tidak valid. Belum diuji visual dan FPS di GTX 1060 dan M1.
 

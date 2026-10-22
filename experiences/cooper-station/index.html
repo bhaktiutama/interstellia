@@ -453,8 +453,8 @@ const LANG = { cur: 'id', labels: new Map(), hooks: [], src: new WeakMap() };
 }
 /* Tahap 30 (docs/cooper-station/rencana-tahap-30-jupiter-cooper-station.md): planet pilihan. Dibaca sekali saat muat (?planet= lalu localStorage
    cooperStation.planet lalu Saturnus); mengganti planet = simpan lalu muat ulang. Angka planet: NASA NSSDCA Planetary Fact Sheet (GM = massa x G,
-   radius ekuator 1 bar dan kutub dalam 1.000 km, rotasi sideris Sistem III untuk Jupiter). Orbit Jupiter 150.000 km = pilihan tampilan (diameter sudut
-   56,9 derajat, periode 9,01 jam, gerhana 1,42 jam), tiltDeg Jupiter 12 derajat = pilihan tampilan (bukan data NASA). sunAngDeg = 0,5333 derajat / jarak AU. */
+   radius ekuator 1 bar dan kutub dalam 1.000 km, rotasi sideris Sistem III untuk Jupiter). Orbit Jupiter 82.550 km = pilihan tampilan (revisi: dulu 150.000 km; diameter sudut
+   120 derajat = 2 asin(rEq / r), periode 3,68 jam, gerhana 1,23 jam, tinggi di atas awan 11.058 km), tiltDeg Jupiter 12 derajat = pilihan tampilan (bukan data NASA). sunAngDeg = 0,5333 derajat / jarak AU. */
 const PLANETS = {
   saturn: { key: 'saturn', name: 'Saturnus', GM: 3.7931e16, rEq: 60.268, rPole: 54.364, orbitR: 260, tiltDeg: 15, spinS: 38018, spinWrap: 25, sunAngDeg: 0.0557,
     limbCol: [1.0, 0.62, 0.34], satCol: [0.09, 0.068, 0.04],
@@ -464,12 +464,14 @@ const PLANETS = {
       { name: 'Mimas', a: 185.52, R: 199, P: 0.9424218, inc: 1.53, type: 0, k: 1.25 }, { name: 'Enceladus', a: 238.02, R: 252, P: 1.370218, inc: 0, type: 4, k: 1 },
       { name: 'Tethys', a: 294.66, R: 530, P: 1.887802, inc: 1.86, type: 1, k: 0.95 }, { name: 'Dione', a: 377.4, R: 561, P: 2.736915, inc: 0.02, type: 1, k: 0.85 },
       { name: 'Rhea', a: 527.04, R: 763, P: 4.5175, inc: 0.35, type: 1, k: 0.85 }, { name: 'Titan', a: 1221.87, R: 2575, P: 15.945421, inc: 0.33, type: 5, k: 1 },
-      { name: 'Iapetus', a: 3560.85, R: 735, P: 79.330183, inc: 14.72, type: 6, k: 1 }] },
-  jupiter: { key: 'jupiter', name: 'Jupiter', GM: 1.26687e17, rEq: 71.492, rPole: 66.854, orbitR: 150, tiltDeg: 12, spinS: 35730, spinWrap: 100, sunAngDeg: 0.1026,
+      { name: 'Iapetus', a: 3560.85, R: 735, P: 79.330183, inc: 14.72, type: 6, k: 1 },
+      { name: 'Hyperion', a: 1500.93, R: 139, P: 21.2766, inc: 0.43, type: 7, k: 0.6, ecc: true }] },   // Hyperion: orbit eksentrik (Kepler 21,71 hari vs NASA 21,28), dipakai periode NASA; bentuk sebenarnya tidak bulat, di sini bola jari-jari rata-rata
+  jupiter: { key: 'jupiter', name: 'Jupiter', GM: 1.26687e17, rEq: 71.492, rPole: 66.854, orbitR: 82.55, tiltDeg: 12, spinS: 35730, spinWrap: 100, sunAngDeg: 0.1026,
     limbCol: [0.86, 0.7, 0.52], satCol: [0.38, 0.286, 0.168],
     moons: [
       { name: 'Io', a: 421.8, R: 1821.5, P: 1.769138, inc: 0.04, type: 3, k: 1 }, { name: 'Europa', a: 671.1, R: 1560.8, P: 3.551181, inc: 0.47, type: 1, k: 0.95 },
-      { name: 'Ganymede', a: 1070.4, R: 2631.2, P: 7.154553, inc: 0.18, type: 2, k: 1 }, { name: 'Callisto', a: 1882.7, R: 2410.3, P: 16.689017, inc: 0.19, type: 0, k: 0.55 }] },   // satCol Saturnus x 4,2 (luas sudut piringan 4,23 kali; albedo dianggap sama)
+      { name: 'Ganymede', a: 1070.4, R: 2631.2, P: 7.154553, inc: 0.18, type: 2, k: 1 }, { name: 'Callisto', a: 1882.7, R: 2410.3, P: 16.689017, inc: 0.19, type: 0, k: 0.55 },
+      { name: 'Amalthea', a: 181.4, R: 83, P: 0.4982, inc: 0.38, type: 8, k: 0.35 }] },   // Amalthea: lonjong 250 x 146 x 128 km, di sini bola 83 km (jari-jari rata-rata)   // satCol Saturnus x 4,2 (luas sudut piringan 4,23 kali; albedo dianggap sama)
 };
 const PLANET = (() => {
   let k = null;
@@ -947,6 +949,8 @@ Object.assign(I18N.en, {
   "Pagi: kabut tipis menempel di tanah dan burung kembali terbang.": "Morning: thin mist clings to the ground and the birds fly again.",
   "Meninggalkan stasiun": "Leaving the station",
   "Langit pagi": "Morning sky",
+  "Bulan dari stasiun": "A moon from the station",
+  "{mn}: jarak {dM} km, tampak {aM} derajat di langit. Kamera diperbesar agar bulan terlihat jelas.": "{mn}: {dM} km away, {aM} degrees across in the sky. The camera is zoomed in so the moon is clearly visible.",
   "Naik ke langit pagi di atas danau, lalu turun ke jendela Skyway.": "Rising into the morning sky above the lake, then down to the Skyway window.",
   "Kita keluar lewat celah jendela Skyway dan menjauh. Saturnus di belakang. Sampai jumpa di Copper Corn Station.": "We leave through the Skyway window slot and pull away, Saturn behind. See you at Copper Corn Station.",
   "Lewati (Spasi)": "Skip (Space)",
@@ -1601,7 +1605,7 @@ await bootStep(BOOT_W[1], 'Saturnus dan bintang...');
    Kamera jauh selalu di titik asal, hanya rotasi: q_far = rotZ(omega*t) * q_kamera_stasiun.
    ===================================================================== */
 const SATURN = { GM: PLANET.GM, rEq: PLANET.rEq, rPole: PLANET.rPole };   // m^3/s^2 dan 1.000 km (NASA NSSDCA); nama lama, kini planet pilihan (tahap 30)
-const ORBIT = { r: PLANET.orbitR, tiltDeg: PLANET.tiltDeg, phi0: 0, axisTiltDeg: 65 };  // Saturnus: radius orbit 260.000 km, cincin miring 15 derajat; Jupiter 150.000 km
+const ORBIT = { r: PLANET.orbitR, tiltDeg: PLANET.tiltDeg, phi0: 0, axisTiltDeg: 65 };  // Saturnus: radius orbit 260.000 km, cincin miring 15 derajat; Jupiter 82.550 km (120 derajat)
 // axisTiltDeg: sumbu stasiun (tetap di ruang inersia, efek giroskop) miring 65 derajat dari normal orbit (25 derajat dari bidang orbit),
 // sehingga Saturnus berpindah antara 25 dan 155 derajat dari sumbu selama satu orbit dan sering terlihat lewat end cap.
 // 17a: nilai lama 40. Diubah agar Matahari (di bidang orbit, syarat gerhana tiap orbit) hanya 25 derajat dari sumbu.
@@ -1644,11 +1648,20 @@ farScene.add(saturn);
   const n1 = (x) => { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return h1(i) * (1 - u) + h1(i + 1) * u; };
   const fbm1 = (x) => 0.5 * n1(x) + 0.3 * n1(x * 2.7 + 13) + 0.2 * n1(x * 7.3 + 71);
   // --- profil cincin: 4096 sampel dari 66.900 sampai 141.000 km (sekitar 18 km per sampel) ---
-  const RN = 4096, RR0 = 66.9, RR1 = 141.0, TAU_MAX = 2.5, ringData = new Uint8Array(RN * 4);
+  // Jupiter (tahap 30 lanjutan): cincin NASA (halo 92.000-122.500 km, cincin utama 122.500-129.000, gossamer Amalthea sampai 181.400 dan Thebe sampai 226.000 km).
+  // Kedalaman optik sebenarnya sekitar 1e-6 (tidak terlihat); di sini dibesarkan jadi 0,004-0,09 sebagai pilihan tampilan. ?cincin=0 = tanpa cincin Jupiter.
+  const JRING = PLANET.key === 'jupiter';
+  const RN = 4096, RR0 = JRING ? 92.0 : 66.9, RR1 = JRING ? 226.0 : 141.0, TAU_MAX = JRING ? 0.1 : 2.5, ringData = new Uint8Array(RN * 4);
   for (let k = 0; k < RN; k++) {
     const r = RR0 + (k + 0.5) / RN * (RR1 - RR0);
     let tau = 0, alb = 0.3, c = [0.8, 0.75, 0.7];
-    if (r < 74.51) { tau = 1e-5; }                                                   // D: praktis tak terlihat
+    if (JRING) {
+      if (r < 122.5) tau = 0.004 + 0.006 * sm(92, 122.5, r);                           // halo: tebal, naik ke arah cincin utama
+      else if (r < 129.0) tau = 0.07 + 0.02 * fbm1(r * 30);                            // cincin utama (tepi luar tajam di orbit Adrastea)
+      else if (r < 181.4) tau = 0.012 * (1 - 0.4 * sm(129, 181.4, r));                 // gossamer Amalthea
+      else tau = 0.006 * (1 - sm(181.4, 226, r));                                      // gossamer Thebe
+      alb = 0.34; c = [0.86, 0.62, 0.46];                                              // merah, debu halus
+    } else if (r < 74.51) { tau = 1e-5; }                                            // D: praktis tak terlihat
     else if (r >= 74.658 && r < 91.975) {                                            // C
       tau = 0.05 + 0.09 * fbm1(r * 9) + (fbm1(r * 1.3 + 5) > 0.68 ? 0.2 : 0);        // "plateau" C
       if (Math.abs(r - 77.871) < 0.025) tau = 0.35;                                  // ringlet Titan
@@ -1708,15 +1721,30 @@ farScene.add(saturn);
     uRingTex: { value: ringTex }, uBands: { value: bandTex },
     uSunL: { value: new THREE.Vector3() }, uCamL: { value: new THREE.Vector3() },
     uScale: { value: new THREE.Vector3(SATURN.rEq, SATURN.rPole, SATURN.rEq) },
-    uRing: { value: new THREE.Vector3(RR0, RR1, TAU_MAX) }, uSpin: { value: 0 }, uSunI: { value: 0.95 },
+    uRing: { value: new THREE.Vector3(RR0, RR1, TAU_MAX) }, uSpin: { value: 0 }, uSunI: { value: 0.95 }, uJupMap: { value: null },
+    uMoonS: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) }, uMoonN: { value: 0 }, uSunAng: { value: PLANET.sunAngDeg * Math.PI / 180 },
   };
   SAT_U.uSunL.value.copy(SUN_DIR).applyQuaternion(saturn.quaternion.clone().invert());   // tetap: orientasi Saturnus dan arah Matahari tidak berubah
   saturn.userData.U = SAT_U;
   const SAT_COMMON = /* glsl */`
     uniform sampler2D uRingTex, uBands;
     uniform vec3 uSunL, uCamL, uScale, uRing;
-    uniform float uSpin, uSunI;
+    uniform float uSpin, uSunI, uSunAng;
+    uniform vec4 uMoonS[8];                                                          // tahap 31 K5: bulan (xyz kerangka planet, 1.000 km; w jari-jari); uMoonN = 0 tanpa bulan
+    uniform int uMoonN;
     const float PI = 3.141592653589793;
+    // bayangan bulan di muka planet: silinder dari bulan ke arah Matahari, penumbra selebar cakram Matahari pada jarak bulan; bulan jauh (cakram Matahari lebih lebar dari bulan) = antumbra, lebih pucat
+    float moonShadow(vec3 P) {
+      float sh = 1.0;
+      for (int i = 0; i < 8; i++) {
+        if (i >= uMoonN) break;
+        vec3 d = uMoonS[i].xyz - P; float t = dot(d, uSunL);
+        if (t <= 0.0) continue;
+        float dist = length(d - t * uSunL), R = uMoonS[i].w, pen = 0.5 * t * uSunAng + 0.004;
+        sh *= 1.0 - (1.0 - smoothstep(R - pen, R + pen, dist)) * min(1.0, R * R / (pen * pen));
+      }
+      return sh;
+    }
     float ringTau(float r, float lod) {
       float u = (r - uRing.x) / (uRing.y - uRing.x);
       if (u <= 0.0 || u >= 1.0) return 0.0;
@@ -1727,8 +1755,29 @@ farScene.add(saturn);
   // Jupiter (tahap 30): pita zona dan sabuk, zona ekuator berputar sekitar 1% lebih cepat (Sistem I), tepi sabuk bergelombang, festoon, Bintik Merah Besar
   // (oval sekitar 22 derajat selatan, setengah ukuran sudut 0,112 x 0,084 rad dari perkiraan 16.000 x 12.000 km), tiga oval putih kecil, kutub lebih gelap.
   // Aman untuk M1: tanpa pow basis negatif (kuadrat ditulis x * x), atan dengan sisipan kecil di sumbu.
+  // Peta global NASA (Cassini ISS PIA07782, tools/siapkan_jupiter.py, assets/jupiter.data.js): dimuat hanya untuk Jupiter; gagal atau ?jupiter=prosedural = pita prosedural di bawah.
+  const JUP_TEX = PLANET.key === 'jupiter' && !/[?&]jupiter=prosedural/.test(location.search) ? await new Promise((done) => {
+    const sc = document.createElement('script');
+    sc.src = 'assets/jupiter.data.js';
+    sc.onload = () => {
+      const d = window.JUPITER_MAP; window.JUPITER_MAP = undefined; sc.remove();
+      if (!d || !d.jpg) { done(null); return; }
+      const img = new Image();
+      img.onload = () => {
+        const tx = new THREE.Texture(img);
+        tx.colorSpace = THREE.SRGBColorSpace; tx.wrapS = THREE.RepeatWrapping; tx.wrapT = THREE.ClampToEdgeWrapping;
+        tx.minFilter = THREE.LinearMipmapLinearFilter; tx.magFilter = THREE.LinearFilter; tx.generateMipmaps = true; tx.anisotropy = 8; tx.needsUpdate = true;
+        done(tx);
+      };
+      img.onerror = () => done(null);
+      img.src = 'data:image/jpeg;base64,' + d.jpg;
+    };
+    sc.onerror = () => { console.warn('assets/jupiter.data.js tidak ditemukan, memakai Jupiter prosedural'); done(null); };
+    document.head.appendChild(sc);
+  }) : null;
   const JUP_FS = /* glsl */`
       ${SAT_COMMON}
+      uniform sampler2D uJupMap;
       varying vec3 vP, vL;
       float h3(vec3 p) { p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
       float noise3(vec3 x) {
@@ -1741,10 +1790,19 @@ farScene.add(saturn);
         vec3 p = normalize(vP);
         float lat = asin(clamp(p.y, -1.0, 1.0));
         float lq = lat / 0.32;
+        #ifdef JUP_MAP
+        float spin = -uSpin;                                                          // peta: putaran padat ke timur (prograde); zona ekuator 1% lebih cepat terlalu kecil untuk terlihat
+        #else
         float spin = uSpin * (1.0 + 0.0105 * exp(-lq * lq));
+        #endif
         float c = cos(spin), s = sin(spin);
         vec3 q = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
         float lon = atan(q.z, q.x + 1e-6);
+        #ifdef JUP_MAP
+        float ua = -lon / (2.0 * PI), ub = fract(ua);                                // bujur ke timur = ke kanan di peta; ua / ub memilih sisi tanpa lompatan agar mip tidak bergaris di bujur 180
+        vec3 col = texture2D(uJupMap, vec2(fwidth(ua) <= fwidth(ub) ? ua : ub, lat / PI + 0.5)).rgb;
+        col *= 0.97 + 0.06 * noise3(q * vec3(60.0, 160.0, 60.0));                     // butir halus: peta 125 km per piksel, tampak dekat 11 km per piksel
+        #else
         float t1 = noise3(q * vec3(5.0, 14.0, 5.0)), t2 = noise3(q * vec3(16.0, 44.0, 16.0) + 9.0), t3 = noise3(q * vec3(40.0, 120.0, 40.0) + 3.0);
         float fq = (lat - 0.13) / 0.07;
         float latP = lat + (t1 - 0.5) * 0.045 + (t2 - 0.5) * 0.016 + (t3 - 0.5) * 0.006 + 0.018 * sin(lon * 11.0 + 6.0 * t1) * exp(-fq * fq);
@@ -1759,19 +1817,21 @@ farScene.add(saturn);
           vec2 o = vec2(dlon(lon, 0.5 + float(i) * 2.1) * cos(lat), lat + 0.575 - 0.02 * float(i)) / vec2(0.035, 0.026);
           col = mix(col, vec3(0.95, 0.92, 0.86), (1.0 - smoothstep(0.7, 1.0, length(o))) * 0.85);
         }
+        #endif
         col = mix(col, col * vec3(0.78, 0.84, 0.95), smoothstep(1.0, 1.45, abs(lat)));
         vec3 n = normalize(vP / uScale);
         vec3 V = normalize(uCamL - vL);
         float mu0 = dot(n, uSunL), mu = max(dot(n, V), 1e-3);
         float k = 0.85;
-        float I = pow(max(mu0, 0.0), k) * pow(mu, k - 1.0) * smoothstep(-0.02, 0.06, mu0);
+        float I = pow(max(mu0, 0.0), k) * pow(mu, k - 1.0) * smoothstep(-0.02, 0.06, mu0) * moonShadow(vL);
         vec3 outc = col * I * uSunI + col * 0.01;
         outc += col * vec3(1.0, 0.95, 0.85) * 0.06 * pow(1.0 - mu, 4.0) * max(mu0, 0.0);
         gl_FragColor = vec4(outc, 1.0);
         #include <colorspace_fragment>
       }`;
+  SAT_U.uJupMap.value = JUP_TEX;
   const planetMat = new THREE.ShaderMaterial({
-    uniforms: SAT_U,
+    uniforms: SAT_U, defines: JUP_TEX ? { JUP_MAP: 1 } : {},
     vertexShader: /* glsl */`
       varying vec3 vP, vL;
       void main() { vP = position; vL = position * ${'vec3(' + SATURN.rEq + ',' + SATURN.rPole + ',' + SATURN.rEq + ')'}; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
@@ -1815,6 +1875,7 @@ farScene.add(saturn);
           vec3 hit = vL + t * uSunL;
           I *= exp(-ringTau(length(hit.xz), 2.0) / max(abs(uSunL.y), 0.02));
         }
+        I *= moonShadow(vL);
         vec3 outc = col * I * uSunI + col * 0.012;                                   // sisi malam: pantulan cincin samar
         outc += col * vec3(1.0, 0.95, 0.85) * 0.06 * pow(1.0 - mu, 4.0) * max(mu0, 0.0);   // kabut atas di tepi
         gl_FragColor = vec4(outc, 1.0);
@@ -1857,7 +1918,7 @@ farScene.add(saturn);
         #include <colorspace_fragment>
       }`,
   });
-  if (PLANET.key === 'saturn') {                                    // Jupiter: tanpa cincin pada versi pertama (cincin tipis hampir tak terlihat)
+  if (PLANET.key === 'saturn' || (JRING && new URLSearchParams(location.search).get('cincin') !== '0')) {
     const rg = new THREE.RingGeometry(RR0, RR1, 720, 1).rotateX(-Math.PI / 2);
     const rings = new THREE.Mesh(rg, ringMat);
     rings.renderOrder = 2;
@@ -1938,6 +1999,10 @@ if (MOONS.on) {
         float sp = 1.0 - smoothstep(-0.95, -0.8, p.y);
         c = mix(c, vec3(0.55, 0.7, 0.85), sp * (0.5 + 0.5 * sin(p.x * 60.0 + f1 * 6.0)) * 0.6);
       } else if (t == 5) c = vec3(0.62, 0.38, 0.14) * (0.9 + 0.12 * f1);                                // Titan: kabut jingga
+      else if (t == 7) {                                                                                  // Hyperion: es berpori gelap kemerahan, kawah dalam bercak
+        float pit = smoothstep(0.5, 0.75, noise3(p * 7.0 + 21.0));
+        c = vec3(0.46, 0.38, 0.33) * (0.75 + 0.4 * cr) * (1.0 - 0.35 * pit);
+      } else if (t == 8) c = vec3(0.5, 0.26, 0.16) * (0.7 + 0.5 * cr);                                    // Amalthea: merah tua, benda paling merah di tata surya Jupiter
       else {                                                                                              // Iapetus: belahan depan gelap, belakang terang
         float lead = smoothstep(-0.15, 0.15, p.z);
         c = vec3(0.7, 0.66, 0.6) * mix(1.0, 0.12, lead) * (0.85 + 0.3 * cr);
@@ -1957,6 +2022,7 @@ if (MOONS.on) {
   const MOON_VS = /* glsl */`
     varying vec3 vP, vN, vW;
     void main() { vP = position; vN = mat3(modelMatrix) * position; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
+  saturn.userData.U.uMoonN.value = Math.min(8, PLANET.moons.length);
   const defs = PLANET.moons, np = defs.length, pp = new Float32Array(np * 3), pr = new Float32Array(np), pb = new Float32Array(np);
   defs.forEach((d, i) => {
     const mat = new THREE.ShaderMaterial({ vertexShader: MOON_VS, fragmentShader: MOON_FS, uniforms: {
@@ -2045,6 +2111,7 @@ function updateMoons() {
     U.uK.value = k; U.uPlW.value.copy(m.pos).negate().normalize().applyQuaternion(saturn.quaternion);
     U.uPl.value = Math.min(0.1, 0.5 * (SATURN.rEq / m.a) ** 2);
     pp[m.i * 3] = m.pos.x; pp[m.i * 3 + 1] = m.pos.y; pp[m.i * 3 + 2] = m.pos.z;
+    saturn.userData.U.uMoonS.value[m.i].set(m.pos.x, m.pos.y, m.pos.z, m.R / 1000);
     const toC = _mC.copy(_mW).negate().normalize(), phase = 0.5 * (1 + SUN_DIR.dot(toC));      // bagian terang yang terlihat
     pb[m.i] = Math.min(1, (0.12 + 0.88 * phase) * Math.sqrt(m.k) * k) * 0.9;
     if (!near || m.dist - m.R / 1000 < near.dist - near.R / 1000) near = m;
@@ -7235,7 +7302,7 @@ function motoCamera() {
   _eye.set(E.x, E.y + 0.5 * lv * M.sy + bump, E.z).applyMatrix4(_mb);
 }
 function updateFov(dt) {                                            // 19a: FOV +4 derajat saat lari, motor sampai +9 derajat
-  if (PHOTO.on) return;
+  if (PHOTO.on || TOUR.zoom) return;                                 // K7: segmen tur bulan mengatur FOV sendiri (setelahnya kembali halus ke CONFIG.fov)
   const L = BOB.level > 0 ? 1 : 0, mv = MOTO.on ? Math.max(0, Math.min(1, (Math.abs(MOTO.v) - 6) / 22)) : 0;
   const target = Math.round((CONFIG.fov + L * (4 * BOB.run * BOB.amp + 9 * mv * mv)) * 100) / 100;   // dibulatkan: diam = tepat CONFIG.fov
   let f = camera.fov + (target - camera.fov) * (1 - Math.exp(-dt / 0.35));
@@ -18125,6 +18192,8 @@ function tourKeys() {
       },
       h: 0, hd: 0, pt: 18, eclipse: true, durF: 8, hold: 9, hr: 23, wx: 'cerah', title: 'Gerhana Saturnus',
       cap: 'Lihat ke end cap B: Saturnus menutup Matahari sekitar {eH} jam tiap orbit {oH} jam. Sinar Matahari di dalam stasiun padam.' },
+    ...(MOONS.on && MOONS.list.length ? [{ ext: 'moon', hold: 12, hr: 23.5, wx: 'cerah', title: 'Bulan dari stasiun',   // K7: kamera luar membidik bulan yang tampak terbesar; waktu orbit dibekukan di konjungsi
+      cap: '{mn}: jarak {dM} km, tampak {aM} derajat di langit. Kamera diperbesar agar bulan terlihat jelas.' }] : []),
     { s: Lk.s, za: Lk.za, h: 0, hd: Lk.heading, pt: 2, hold: 10, hr: 6.6, wx: 'cerah', title: 'Pagi berkabut', orb: true,   // v2.14: diam 10 s; orbit dipercepat mundur: gerhana usai, Saturnus ke sisi terang
       cap: 'Pagi: kabut tipis menempel di tanah dan burung kembali terbang.' },
     { fly: (K, t) => {                                                  // v2.15: naik dari danau ke langit pagi, terbang ke Skyway, turun ke atas kaca jendela menghadap keliling dan menunduk ke celah
@@ -18144,7 +18213,7 @@ const tourIsExt = (K) => !!K && K.ext !== undefined;
 const tourCut = (A, B) => (tourIsExt(A) !== tourIsExt(B) && !(B && B.noFade)) || !!(B && B.cut);   // layar gelap di antara A dan B (noFade: pembuka tersambung langsung)
 function startTour() {
   if (TOUR.on) return;
-  hideTourOffer();
+  hideTourOffer(); TOUR.moonK = null;
   try { localStorage.setItem('cooperStation.tourSeen', '1'); } catch (e) { /* abaikan */ }
   if (ext.flight || !(player.state === 'ground' || player.state === 'air')) { setLabText('Tur bisa dimulai saat berjalan di dalam stasiun.'); return; }
   if (PHOTO.on) togglePhoto(false);
@@ -18176,7 +18245,7 @@ function tourMotoEnd() {                                              // akhir t
 }
 function stopTour() {
   if (!TOUR.on) return;
-  TOUR.on = false;
+  TOUR.on = false; TOUR.zoom = 0; TOUR.moonK = null;
   if (ext.active) toggleExterior();
   if (MOTO.on) tourMotoEnd();
   Object.assign(player, TOUR.save, { vA: 0, vT: 0 });
@@ -18191,10 +18260,29 @@ function stopTour() {
   setLabText('Tur selesai. Kembali ke posisi semula.');
 }
 LANG.hooks.push(() => { if (TOUR.on) tourCaption(); if (PHOTO.on) syncPhotoUI(); });
+// K7: bulan yang ditampilkan segmen tur "Bulan": tampak paling besar (sudut) dalam 1,5 hari orbit ke depan, dengan sisi terang menghadap stasiun
+// (fase >= 0,5) dan tidak di bayangan planet. Dipindai tiap 60 s; hasil disimpan sekali per tur (TOUR.moonK, null saat tur mulai).
+function tourMoonK() {
+  if (!MOONS.on || !MOONS.list.length) return null;
+  if (TOUR.moonK !== undefined && TOUR.moonK !== null) return TOUR.moonK;
+  const sv = new THREE.Vector3().copy(SUN_DIR).applyQuaternion(new THREE.Quaternion().copy(saturn.quaternion).invert()), L = new THREE.Vector3(), W = new THREE.Vector3(), P = new THREE.Vector3();
+  let best = null;
+  for (const m of MOONS.list) for (let dt = 0; dt <= 1.5 * 86400; dt += 60) {
+    const tt = clock.orbit + dt; moonLocal(m, tt, L);
+    if (sunVisAt(L, sv) < 0.99) continue;
+    const phi = ORBIT.phi0 + TAU * tt / T_ORB; P.set(-Math.cos(phi), -Math.sin(phi), 0).applyQuaternion(Q_ORBIT).multiplyScalar(ORBIT.r);
+    W.copy(L).applyQuaternion(saturn.quaternion).add(P);
+    const d = W.length(); if (0.5 * (1 - SUN_DIR.dot(W) / d) < 0.5) continue;
+    const ang = 2 * Math.atan(m.R / 1000 / d) / DEG;
+    if (!best || ang > best.ang) best = { m, t: tt, d, ang, dir: W.clone().divideScalar(d) };
+  }
+  return (TOUR.moonK = best);
+}
 function tourVars() {                                                  // angka di teks tur, dihitung dari konstanta stasiun
   return { s10: fmtN(FOUNT.shift10, 2), hT: fmtInt(LANDMARK.h), gT: fmtN((R - LANDMARK.h) / R, 2), hD: fmtInt(DECK.h),
     eH: fmtN(2 * ECL.half / TAU * T_ORB / 3600, 1), oH: fmtN(T_ORB / 3600, 1),
-    gM: fmtN((OMEGA * R - MOTO.vSport) ** 2 / R / CONFIG.g, 2), dA: TOUR.dA || 'Galileo' };   // berat terasa motor melawan putaran di batas sport (rumus stepMoto)
+    gM: fmtN((OMEGA * R - MOTO.vSport) ** 2 / R / CONFIG.g, 2), dA: TOUR.dA || 'Galileo',
+    get mn() { const k = tourMoonK(); return k ? k.m.name : ''; }, get dM() { const k = tourMoonK(); return k ? fmtInt(k.d * 1000) : ''; }, get aM() { const k = tourMoonK(); return k ? fmtN(k.ang, 2) : ''; } };   // K7: bulan terpilih (dihitung sekali per tur)   // berat terasa motor melawan putaran di batas sport (rumus stepMoto)
 }
 function tourCapText(K) { return K.capNow ? t(K.capNow, K.vars) : t(K.cap, tourVars()); }
 function tourCaption() {
@@ -18295,6 +18383,15 @@ function stepTourExt(K) {
     K.camP = P; K.camQ = Q;
     const L = P.clone().add(new THREE.Vector3(0, 0, -1000).applyQuaternion(Q));
     tourExtCam(P.x, P.y, P.z, [L.x, L.y, L.z]);                        // keadaan kamera luar kira-kira (roll dipasang tourCamPost)
+  } else if (K.ext === 'moon') {                                      // K7: kamera 3 km dari stasiun ke arah bulan, membidik bulan (stasiun di belakang kamera); FOV menyempit dalam 3 s menurut sudut bulan
+    const k = tourMoonK();
+    if (k) {
+      clock.orbit = k.t; ECL.warned = true;
+      const D = k.dir, P = D.clone().multiplyScalar(3000), L = P.clone().addScaledVector(D, 1000);
+      tourExtCam(P.x, P.y, P.z, [L.x, L.y, L.z]);
+      TOUR.zoom = Math.max(3, Math.min(25, k.ang * 12));
+      camSetFov(CONFIG.fov + (TOUR.zoom - CONFIG.fov) * sstep(0, 3, TOUR.t));
+    }
   } else if (K.ext === 'out') {                                       // penutup lama (tidak dipakai sejak v2.14): menjauh dari stasiun
     if (K.z0 === undefined) K.z0 = TOUR.from.za - HALF_L;
     const u = sstep(0, 1, TOUR.t / T);
@@ -18560,6 +18657,8 @@ function stepTour(dt) {
 }
 function tourNext() {
   const K = TOUR.keys[TOUR.i];
+  TOUR.zoom = 0;                                                      // K7: FOV kembali halus ke CONFIG.fov (updateFov)
+  if (K.ext === 'moon') { const P = TAU / OMEGA, el = TOUR.t; clock.sim += P * Math.ceil(el / P) - el; }   // K7: fase putaran stasiun tetap sama dengan tanpa segmen ini (rencana penutup lewat celah Skyway bergantung pada fase); lompatan terjadi di balik layar gelap
   if (K.B) TOUR.from = tourPose();                                    // terbang berikutnya mulai dari pose kamera terakhir (pengejar bola, akhir jalan kaki)
   if (K.moto) { TOUR.from = { s: MOTO.s, za: MOTO.za, hA: MOTO.h, hd: MOTO.hd, pt: player.pitch }; tourMotoEnd(); }
   TOUR.i++; TOUR.t = 0; TOUR.h0 = clock.hour;
@@ -18734,7 +18833,7 @@ diagApply();
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { groundH0, riverZ, bridgeAt, bridgeIn, RIVER, PATHSDF, FLUFF, warmLater, IMPM, LEAFG, LEAF_SP, DAUN, HX, EXT_LIGHT, extLightUpdate, toggleExterior, ext, exteriorGroup, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, PLANET, PLANETS, MOONS, jumpToMoon, moonDistAt, updateMoons, SATURN, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, PLANET, PLANETS, MOONS, tourMoonK, jumpToMoon, moonDistAt, updateMoons, SATURN, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
 /* =====================================================================
    VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).
    Rig = pose kamera lama dengan pitch 0 dan tanpa gerak kepala, diputar balik sebesar yaw kepala: di dalam stasiun "atas" =

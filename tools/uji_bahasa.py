@@ -39,8 +39,13 @@ async def main():
         pg = await b.new_page(viewport={'width': 320, 'height': 200})
         errs = []
         pg.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))
-        await pg.goto(page_url)
-        await pg.wait_for_function('window.__stationReady === true', timeout=240000)
+        if os.environ.get('THREE_LOCAL'):                              # sandbox tanpa CDN: three.js dari berkas lokal
+            local = pathlib.Path(os.environ['THREE_LOCAL'])
+            async def serve(route):
+                await route.fulfill(path=str(local / route.request.url.rsplit('/', 1)[-1]), content_type='text/javascript', headers={'Access-Control-Allow-Origin': '*'})
+            await pg.route('https://cdn.jsdelivr.net/**', serve)
+        await pg.goto(page_url, wait_until='domcontentloaded', timeout=180000)
+        await pg.wait_for_function('window.__stationReady === true', timeout=600000)
         for k, v in (await pg.evaluate(UJI)).items(): print(('OK   ' if v else 'GAGAL'), k)
         print('error:', errs[:10] or 'tidak ada')
         await b.close()
