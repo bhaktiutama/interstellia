@@ -81,7 +81,7 @@
       parts.push(box(0.05, 0.03, 9, 0, 1.01, 2.0, FRAME));
       // kanopi gelembung dengan dua rusuk (atap badan di bawahnya kaca: dari kursi pilot terlihat tembus pandang)
       const cp = new THREE.SphereGeometry(1, 28, 14); cp.scale(0.95, 0.5, 1.5); cp.translate(0, 0.85, -3.5); parts.push(paint(cp, GLASS));
-      for (const dz of [-0.8, 0.8]) { const t = new THREE.TorusGeometry(0.93, 0.04, 6, 20); t.scale(1, 0.52, 1); t.rotateY(Math.PI / 2); t.translate(0, 0.85, -3.5 + dz); parts.push(paint(t, CREAM)); }
+      for (const dz of [-1.5]) { const t = new THREE.TorusGeometry(0.93, 0.04, 6, 20); t.scale(1, 0.52, 1); t.translate(0, 0.85, -3.5 + dz); parts.push(paint(t, CREAM)); }   // rusuk melintang di depan pilot (dulu rotateY: berdiri membujur di tengah = bilah penghalang pandangan)
       parts.push(box(1.2, 0.04, 0.5, 0, 1.03, -0.7, FRAME));                     // kisi dan pintu dermaga di belakang kokpit
       for (let k = 0; k < 4; k++) parts.push(box(1.1, 0.04, 0.1, 0, 1.07, -1.0 + k * 0.28 + 0.9, METAL));
       parts.push(box(1.1, 0.04, 0.5, 0, 1.06, 1.45, SALMON));
