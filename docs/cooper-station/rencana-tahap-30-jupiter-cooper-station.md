@@ -1,6 +1,6 @@
 # Rencana tahap 30 Copper Corn Station: Jupiter sebagai pilihan planet, orbit dekat
 
-Per 21 Oktober 2026 · Status: rencana, belum dikerjakan · Pemilik: Bhakti · Lanjutan: bulan di `rencana-tahap-31-bulan-cooper-station.md`
+Per 22 Oktober 2026 · Status: J1-J4 dikerjakan, J5 (tur) tidak diubah, J6 uji ditulis (`tools/uji_planet.py`); menunggu uji visual dan FPS pemilik · Pemilik: Bhakti · Lanjutan: bulan di `rencana-tahap-31-bulan-cooper-station.md`
 
 ## Ringkasan
 
@@ -9,6 +9,19 @@ Per 21 Oktober 2026 · Status: rencana, belum dikerjakan · Pemilik: Bhakti · L
 - Periode orbit turun dari 37,57 jam menjadi **9,01 jam**; gerhana tiap orbit **1,42 jam** (Saturnus 2,80 jam). Gerhana jadi 4,2 kali lebih sering.
 - Pekerjaan utama: tabel planet (J1), shader Jupiter (J2), umum-kan gerhana dan cahaya (J3), pemilih dan teks (J4), tur dan uji (J5). Saturnus harus render identik dengan sebelum tahap ini (uji piksel).
 - Satu keputusan butuh pemilik: radius orbit (bagian Pilihan). Saran: 150.000 km, bukan 160.000 km (orbit sinkron, wajah planet tidak berputar).
+
+## Status (22 Oktober 2026)
+
+Keputusan pemilik: orbit **150.000 km**, cincin Jupiter ditunda (tanpa cincin), pemilih di layar mulai (muat ulang saat ganti), halaman detail tetap Saturnus.
+
+| Langkah | Hasil |
+| --- | --- |
+| J1 tabel planet | `PLANETS` / `PLANET` (dibaca sekali: `?planet=` lalu localStorage `cooperStation.planet`), `SATURN`, `ORBIT`, `T_ORB`, `SAT_SPIN`, `SUN_ANG`, `uSatCol` mengikuti planet; nama lama dipertahankan (alias) |
+| J2 shader Jupiter | `JUP_FS`: pita `JUP_BANDS`, zona ekuator 1% lebih cepat (`spinWrap` 100 agar putaran menutup), tepi sabuk bergelombang, festoon, Bintik Merah Besar (22 derajat selatan), 3 oval putih, kutub lebih gelap; tanpa pow basis negatif. Cincin hanya Saturnus |
+| J3 gerhana dan cahaya | Rumus `ECL.half`, penumbra `SUN_ANG` (0,1026 derajat), `limbMat` warna per planet, `uSatCol` Jupiter = Saturnus x 4,2 (tebakan awal, disetel mata) |
+| J4 pemilih, HUD, teks | `#planetPick` di kartu mulai, `t()` mengganti "Saturnus" / "Saturn" dengan nama planet dan angka periode / lama gerhana di bantuan, `data-notr`, kamus "Planet", deskripsi kartu menu |
+| J5 tur | Tidak diubah: tur memakai `T_ORB` / `ECL` / `tourSatAt()` secara umum; belum diperiksa visual untuk Jupiter (sudut penutup 115-245 derajat dari gerhana) |
+| J6 uji | `tools/uji_planet.py` (periode, gerhana, diameter sudut, teks, pemilih, render, Saturnus identik lewat `?bulan=0`) |
 
 ## Angka dasar
 

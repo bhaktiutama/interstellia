@@ -1,6 +1,6 @@
 # Rencana: pilihan wahana (Kestrel, Petrel, GX-01) di Gargantua dan Millar's World
 
-Per 21 Oktober 2026 · Status: rencana, belum dikerjakan · Pemilik: Bhakti
+Per 22 Oktober 2026 · Status: dikerjakan W1-W7 (lihat bagian Status, uji menunggu pemilik di GTX 1060 dan M1) · Pemilik: Bhakti
 
 ## Ringkasan
 
@@ -9,6 +9,22 @@ Per 21 Oktober 2026 · Status: rencana, belum dikerjakan · Pemilik: Bhakti
 - Satu kontrak "deskriptor wahana" (field yang sama dengan keluaran `buildV5`) dipakai kedua experience. Hasilnya: 6 kombinasi (3 wahana x 2 experience), 4 builder baru atau dipindah ke `shared/`, 1 pembuat aset Gargantua yang digeneralisasi.
 - Urutan disarankan: kontrak + Petrel di `shared/` (W1-W3), GX-01 ke `shared/` dengan keluaran identik (W4), Millar (W5), Gargantua (W6), pemilih dan uji (W7). Tiap langkah bisa dipasang sendiri tanpa merusak yang lain.
 - Risiko terbesar: keseimbangan misi Millar untuk wahana besar (GX-01 27,5 m vs gelombang), dan Petrel belum punya kipas angkat, tangga, serta kokpit. Keduanya ada di bagian Risiko.
+
+## Status (22 Oktober 2026)
+
+Dikerjakan dengan keputusan: kunci bersama `lazarus.ship` (saran 1a), Petrel diberi 4 kipas angkat (saran 2a), nama tampil KS-07 Kestrel / PR-11 Petrel / GX-01 Ambang, Copper tidak disentuh.
+
+| Langkah | Hasil | Berbeda dari rencana |
+| --- | --- | --- |
+| W1 kontrak + registri | `shared/armada.js` (`window.FLEET`: `current`, `set`, `mountPicker`, `build`) | Nosel dan kipas berbentuk `[x, y, z, radius]` (Millar membaca radius) |
+| W2 Petrel | `shared/petrel.js` `buildPetrel`: palet putih krem lapuk + karat + garis salem, kotor dan gosong per titik, atap kaca di atas kokpit, 4 kipas angkat (2 per pod), 4 nosel, 3 kaki + tangga, `low` di pod | Bentuk dasar blokout dipertahankan; cincin badan depan sedikit dilebarkan agar pelapis kokpit v5 muat |
+| W3 kokpit Petrel | `buildCockpitPetrel` = kokpit v5 dengan `offset` z -1,45 (geometri v5 tidak diubah, jadi `ksCanopy` di shader tetap cocok) | Tanpa kursi kopilot hiasan (kokpit satu kursi) |
+| W4 GX-01 | `FLEET.build('gx01')` membongkar blob `gx01.data.js` (badan = id 0, kaca = id 1, interior = id >= 2, tongkat dan tuas dari `parts`, layar dari `screens`) + kaki dari segitiga `buildV3` di bawah y -2,45 m | Kode pod TIDAK dipindah ke `shared/gx01.js` dan `gx01.data.js` tidak dibuat ulang (lebih aman: keluaran GX-01 tidak berubah). Millar memuat blob dari `../gargantua/assets/gx01.data.js` lewat `<script>` sinkron bila `?ship=gx01` |
+| W5 Millar | `KS` = deskriptor terpilih, `CK = KS.cockpit`; kokpit generik `KS_COCKG` untuk GX-01; profil terbang `KS.fly` mengalikan `CONFIG.fly`, kamera belakang dan orbit menurut `size`, plasma orbit `KS.orb`; teks "KS-07" diganti nama wahana di `t()`; pemilih `#shipPick` di kartu mulai | Ganti wahana = simpan `lazarus.ship` lalu muat ulang (bukan bangun ulang adegan) |
+| W6 Gargantua | `tools/siapkan_wahana.mjs` membuat `shared/wahana/ks07.data.js` dan `pr11.data.js` (`window.__SHIPDATA`); `SHIP.data`, kamera luar `data.chase`, kanopi generik uniform `uCan`, teks GX-01 diganti `SHIPNAME` di `txt()`, kontrol `Vessel` di tab Misi | KS-07 dan Petrel tanpa HUD kanopi, label tombol, panel kaca, tongkat dan tuas bergerak (data opsional tidak dibuat) |
+| W7 pemilih, teks, uji | Kamus ('Wahana', 'Vessel'), `tools/uji_wahana.mjs`, `tools/uji_wahana.py` | Tanpa gambar kecil di pemilih (tombol teks, tooltip = ukuran) |
+
+Belum: gambar kecil wahana, tab Lainnya Millar dan panel Gargantua sudah memakai muat ulang tetapi tanpa dialog konfirmasi, KS-07 / Petrel di Copper (di luar rencana).
 
 ## Dasar (apa yang ada di kode sekarang)
 

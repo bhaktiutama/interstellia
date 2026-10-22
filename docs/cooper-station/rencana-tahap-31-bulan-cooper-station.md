@@ -1,6 +1,6 @@
 # Rencana tahap 31 Copper Corn Station: bulan Saturnus dan Jupiter
 
-Per 21 Oktober 2026 · Status: rencana, belum dikerjakan · Pemilik: Bhakti · Bergantung pada tabel `PLANET` dari `rencana-tahap-30-jupiter-cooper-station.md` (langkah J1)
+Per 22 Oktober 2026 · Status: K1-K4, K6, K8 dikerjakan; K5 dan K7 belum; menunggu uji visual dan FPS pemilik · Pemilik: Bhakti · Bergantung pada tabel `PLANET` dari `rencana-tahap-30-jupiter-cooper-station.md` (langkah J1)
 
 ## Ringkasan
 
@@ -8,6 +8,20 @@ Per 21 Oktober 2026 · Status: rencana, belum dikerjakan · Pemilik: Bhakti · B
 - Fakta penting untuk ekspektasi: pada skala sebenarnya bulan tampak kecil dari stasiun. Terbesar saat konjungsi terdekat (batas bawah, planar): Enceladus 1,31 derajat, Tethys 1,75 derajat (Saturnus, orbit 260.000 km); Io 0,77 derajat (Jupiter, orbit 150.000 km). Bulan Bumi dari Bumi sekitar 0,5 derajat (nilai umum). Di luar konjungsi kebanyakan bulan 0,05 sampai 0,2 derajat, jadi hampir titik. Rencana ini menambah titik terlihat, tombol lompat ke konjungsi, dan segmen tur supaya bulan benar-benar dilihat.
 - Render: bulan = anak grup planet di `farScene`, satu shader bola bersama dengan jenis permukaan prosedural (tanpa aset baru), terminator, cahaya pantulan planet, dan bayangan planet (bulan ikut gerhana). Opsi B: tekstur NASA domain publik lewat `tools/siapkan_bulan.py`.
 - Urutan: data dan mekanik (K1), shader (K2), jenis khusus (K3), tampil jauh dan LOD (K4), bayangan bulan di planet (K5, opsional), UI dan tur (K6, K7), uji (K8). K1 bisa mulai begitu J1 selesai; K5 paling akhir.
+
+## Status (22 Oktober 2026)
+
+Keputusan pemilik: permukaan **prosedural** dulu, skala sebenarnya, tanpa Hyperion dan Amalthea, bayangan bulan di planet ditunda.
+
+| Langkah | Hasil |
+| --- | --- |
+| K1 data dan mekanik | `PLANETS[*].moons` (angka NASA), `moonLocal()`, `MOONS.list` (M0 acak tetap, w = 2 pi / periode NASA), rotasi sinkron `mesh.rotation.y = -M` |
+| K2 shader | `MOON_FS` Lambert + terminator, cahaya pantulan planet `uPl`, gerhana bulan `uK` dari `sunVisAt()` (rumus `updateEclipse()`) |
+| K3 jenis khusus | Jenis 0 batu, 1 es (retakan), 2 Ganymede (gelap dan terang), 3 Io (belerang, bercak gelap), 4 Enceladus (garis kutub selatan), 5 Titan (kabut tepi jingga), 6 Iapetus (belahan depan gelap, perlu verifikasi arah) |
+| K4 titik saat kecil | `MOONS.pts` additive, kecerahan = fase x akar(albedo) x gerhana, memudar di atas 1,5 sampai 4 piksel |
+| K6 UI | HUD `hMoon` (bulan terdekat, jarak, sudut), tombol panel tab Waktu per bulan = `jumpToMoon(i)` (pemindai konjungsi langkah 60 s), kamus |
+| K8 uji | `tools/uji_planet.py` |
+| K5, K7 | Belum: bayangan bulan di planet, segmen tur bulan |
 
 ## Data
 
