@@ -61,7 +61,7 @@ MILLAR = r"""
   document.getElementById('result').hidden = true; M.stopMission(); M.setMode('jelajah'); M.STATE.started = true; M.flyReset();
   // 5. Jelajah: naik, mendarat, turun di samping tangga
   M.U.uWX.value += 40000 - M.frontX(0); P.x = 0; P.z = 0;
-  const x0 = M.SHIP.x, z0 = M.SHIP.z; M.boardShip(); M.keys.KeyR = true; for (let k = 0; k < 90; k++) M.updateFly(dt); M.keys.KeyR = false; M.keys.KeyW = true; for (let k = 0; k < 60; k++) M.updateFly(dt); M.keys.KeyW = false;
+  const x0 = M.SHIP.x, z0 = M.SHIP.z; M.boardShip(); M.keys.KeyR = true; for (let k = 0; k < 240; k++) M.updateFly(dt); M.keys.KeyR = false; M.keys.KeyW = true; for (let k = 0; k < 120; k++) M.updateFly(dt); M.keys.KeyW = false;   // 240 langkah: wahana berat menyalakan mesin lebih lama (spool)
   for (let k = 0; k < 90; k++) M.updateFly(dt);
   const yAir = FL.y - FL.water; M.keys.KeyF = true; for (let k = 0; k < 900 && FL.y - FL.water > M.CONFIG.fly.landH + M.SHIP.padDrop; k++) M.updateFly(dt); M.keys.KeyF = false;
   for (let k = 0; k < 60; k++) M.updateFly(dt);
