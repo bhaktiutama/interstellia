@@ -594,12 +594,16 @@ float ksGroove(float d, float sg, float w, float dep, inout float g) {
 }
 // satu bidang: uv (m), ukuran panel sz. Hasil xy = gradien tinggi, z = rongga
 vec3 ksPlane(vec2 uv, vec2 sz, float pw, float seed) {
+  // revisi Bhakti: tanpa susunan bata: lebar panel berbeda per baris, geser acak (bukan setengah), nada dan noda per panel
   float row = floor(uv.y / sz.y);
-  uv.x += sz.x * 0.5 * mod(row, 2.0);
+  float rw = sz.x * (0.6 + 1.1 * ksH(vec2(row, seed + 5.3)));
+  uv.x += ksH(vec2(row, seed + 1.7)) * rw;
+  sz = vec2(rw, sz.y);
   vec2 cell = floor(uv / sz), f = uv - cell * sz;
   float h = ksH(cell + seed);
+  float tone = (h - 0.5) * 0.36 + 0.28 * ksH(cell + seed + 11.0) * smoothstep(0.3, 0.0, f.y / sz.y) - 0.1 * step(0.9, ksH(cell + seed + 17.0));   // nada per panel + noda di tepi bawah + sebagian panel gelap
   vec2 g = (vec2(ksH(cell + seed + 3.1), ksH(cell + seed + 7.7)) - 0.5) * 0.024;   // lembaran sedikit miring
-  float w = max(0.011, 1.5 * pw), fade = sqrt(0.011 / w), dep = 0.0025 * fade * 0.011 / w;   // alur 11 mm; dari jauh rongga memudar lebih lambat dari tonjolan
+  float w = max(0.011, 1.5 * pw), fade = sqrt(0.011 / w), dep = 0.0016 * fade * 0.011 / w;   // alur 11 mm; dari jauh rongga memudar lebih lambat dari tonjolan
   vec2 dd = min(f, sz - f), sg = vec2(f.x < sz.x * 0.5 ? 1.0 : -1.0, f.y < sz.y * 0.5 ? 1.0 : -1.0);
   float cav = max(ksGroove(dd.x, sg.x, w, dep, g.x), ksGroove(dd.y, sg.y, w, dep, g.y)) * fade;
   // tutup akses: alur kedua 12 cm di dalam tepi
@@ -619,14 +623,14 @@ vec3 ksPlane(vec2 uv, vec2 sz, float pw, float seed) {
     r2 = dot(q, q);
     if (r2 < RR * RR) { g.x += -0.0024 * q.x / (RR * RR) * rk; g.y += -0.0024 * q.y / (RR * RR) * sg.y * rk; }
   }
-  return vec3(g, cav);
+  return vec3(g, cav * 0.8 + tone);
 }
 vec4 ksPanel(vec3 p, vec3 n, float pw, float ps) {
   vec3 a = abs(n), G;
   float cav;
-  if (a.y >= a.x && a.y >= a.z) { vec3 r = ksPlane(p.xz, vec2(0.62, 0.95) * ps, pw, 1.0); G = vec3(r.x, 0.0, r.y); cav = r.z; }
-  else if (a.x >= a.z) { vec3 r = ksPlane(p.zy, vec2(0.95, 0.5) * ps, pw, 2.0); G = vec3(0.0, r.y, r.x); cav = r.z; }
-  else { vec3 r = ksPlane(p.xy, vec2(0.55, 0.5) * ps, pw, 3.0); G = vec3(r.x, r.y, 0.0); cav = r.z; }
+  if (a.y >= a.x && a.y >= a.z) { vec3 r = ksPlane(p.xz, vec2(1.1, 1.7) * ps, pw, 1.0); G = vec3(r.x, 0.0, r.y); cav = r.z; }
+  else if (a.x >= a.z) { vec3 r = ksPlane(p.zy, vec2(1.7, 0.9) * ps, pw, 2.0); G = vec3(0.0, r.y, r.x); cav = r.z; }
+  else { vec3 r = ksPlane(p.xy, vec2(1.0, 0.9) * ps, pw, 3.0); G = vec3(r.x, r.y, 0.0); cav = r.z; }
   G -= n * dot(G, n);
   vec3 nn = n - G;
   return vec4(nn * inversesqrt(max(dot(nn, nn), 1e-8)), cav);

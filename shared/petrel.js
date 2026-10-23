@@ -80,9 +80,23 @@
         return i < 0 ? FRAME : zm > -5.0 && zm < -2.0 && (i === 3 || i === 4 || i === 5) ? GLASS : weather(CREAM, i, Math.floor((zm + 10) / 1.5), 2); }));
       parts.push(box(0.14, 0.14, 1.6, 0, -0.1, -9.6, METAL));                    // lembing hidung
       // revisi Bhakti: garis salem dan bilah punggung yang melayang di atas badan dihapus
-      // kanopi gelembung dengan dua rusuk (atap badan di bawahnya kaca: dari kursi pilot terlihat tembus pandang)
-      const cp = new THREE.SphereGeometry(1, 28, 14); cp.scale(0.95, 0.5, 1.5); cp.translate(0, 0.85, -3.5); parts.push(paint(cp, GLASS));
-      for (const dz of [-1.5]) { const t = new THREE.TorusGeometry(0.93, 0.04, 6, 20); t.scale(1, 0.52, 1); t.translate(0, 0.85, -3.5 + dz); parts.push(paint(t, CREAM)); }   // rusuk melintang di depan pilot (dulu rotateY: berdiri membujur di tengah = bilah penghalang pandangan)
+      // kanopi kaca bersegi (revisi Bhakti: kubah heksagonal berpanel kaca dengan rangka, seperti GX-01): belahan atas 6 sisi, facet datar
+      {
+        const hg = new THREE.SphereGeometry(1, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2); hg.rotateY(Math.PI / 6); hg.scale(0.95, 0.5, 1.5); hg.translate(0, 0.78, -3.5);
+        const gp = hg.index ? hg.toNonIndexed() : hg; gp.computeVertexNormals(); parts.push(paint(gp, GLASS));
+        const P = hg.attributes.position, I = hg.index, seen = new Set(), key = (a2, b2) => (a2 < b2 ? a2 + '_' + b2 : b2 + '_' + a2);
+        const pos = (i) => new THREE.Vector3(P.getX(i), P.getY(i), P.getZ(i));
+        const q = (v) => Math.round(v * 1000);
+        const vk = (v) => q(v.x) + ',' + q(v.y) + ',' + q(v.z);
+        for (let t = 0; t < I.count; t += 3) for (let e = 0; e < 3; e++) {
+          const A2 = pos(I.getX(t + e)), B2 = pos(I.getX(t + (e + 1) % 3));
+          if (A2.distanceToSquared(B2) < 1e-6) continue;
+          const k = vk(A2) < vk(B2) ? vk(A2) + '|' + vk(B2) : vk(B2) + '|' + vk(A2); if (seen.has(k)) continue; seen.add(k);
+          const d = B2.clone().sub(A2), L = d.length(), g2 = new THREE.CylinderGeometry(0.035, 0.035, L, 5);
+          g2.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+          g2.translate((A2.x + B2.x) / 2, (A2.y + B2.y) / 2, (A2.z + B2.z) / 2); parts.push(paint(g2, FRAME));
+        }
+      }
       parts.push(box(1.2, 0.04, 0.5, 0, 1.03, -0.7, FRAME));                     // kisi dan pintu dermaga di belakang kokpit
       for (let k = 0; k < 4; k++) parts.push(box(1.1, 0.04, 0.1, 0, 1.07, -1.0 + k * 0.28 + 0.9, METAL));
       parts.push(box(1.1, 0.04, 0.5, 0, 1.06, 1.45, SALMON));
@@ -100,7 +114,7 @@
       }
       parts.push(box(2.6, 0.03, 0.2, sx * 2.9, 0.15, 4.4, SALMON), tilt(box(2.2, 0.03, 0.18, sx * 2.3, 0.15, -2.2, SALMON), 'y', sx * 0.7, sx * 2.3, 0.15, -2.2));
       for (let k = 0; k < 5; k++) parts.push(box(0.5 + 0.7 * hash(k, 21), 0.025, 0.4 + 0.5 * hash(k, 22), sx * (1.6 + 2.6 * hash(k, 23)), 0.155, 3.8 + 3 * hash(k, 24) - 3.6 * (k % 2), RUST));   // noda karat
-      parts.push(box(0.1, 0.22, 0.9, sx * 4.5, 0.0, -0.9, WARM), box(0.1, 0.22, 0.7, sx * 2.1, 0.0, -5.0, WARM));   // lampu sorot tepi dek
+      parts.push(box(0.1, 0.22, 0.9, sx * 4.45, 0.0, -0.9, WARM));   // lampu sorot tepi dek (yang di ujung depan dihapus: melayang di luar dek)
     }
     // ---------- 3. dua blok saluran masuk di dek (bukaan gelap berbilah menghadap depan) ----------
     for (const sx of SYM) {
@@ -191,7 +205,7 @@
       id: 'pr11', geo: mk(A), glass: mk(B), legs, PAD_Y,
       pads: [[0, -5.6], [-5.5, 1.5], [5.5, 1.5]].map(([x, z]) => ({ x, z, r: 0.6 })),
       door: { x: -2.35, y: -1.3, z: -4.6, nx: -1 },
-      nav: { red: [-6.9, 0.9, 0.5], green: [6.9, 0.9, 0.5], strobe: [0, 2.5, 5.7] },
+      nav: { red: [-6.4, 0.68, 0.5], green: [6.4, 0.68, 0.5], strobe: [0, 2.5, 5.7] },
       nozzles: [[-5.5, -0.1, 5.47, 0.7], [5.5, -0.1, 5.47, 0.7], [-2.0, 0.3, 10.05, 0.5], [2.0, 0.3, 10.05, 0.5]],
       fans: [[-5.5, -1.3, -1.2, 0.62], [5.5, -1.3, -1.2, 0.62], [-5.5, -1.3, 3.6, 0.62], [5.5, -1.3, 3.6, 0.62]],
       low: [{ x0: -6.9, x1: -4.1, z0: -8.4, z1: 4.6, y: -1.25 }, { x0: 4.1, x1: 6.9, z0: -8.4, z1: 4.6, y: -1.25 }],   // pod: bawahnya di bawah kepala
