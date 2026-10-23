@@ -647,17 +647,22 @@ vec3 ksHex(vec2 uv, vec2 sz, float pw, float seed) {
   return vec3(g, cav * 0.8 + tone);
 }
 vec3 ksPlane(vec2 uv, vec2 sz, float pw, float seed) {
-  float pick = ksH(floor(uv / (sz * vec2(5.0, 4.0))) + seed * 3.1);
-  if (pick < 0.45) return ksRect(uv, sz, pw, seed);
-  if (pick < 0.75) return ksSkew(uv, sz, pw, seed);
+  // revisi Bhakti: wilayah besar (sekitar 5 x 4 panel): 28% polos tanpa panel (hanya nada), 72% berpanel; di wilayah berpanel
+  // 70% persegi panjang, 20% jajar genjang / trapesium, 10% segi enam. uv.x sudah dicerminkan (abs) oleh pemanggil: kanan = kiri.
+  vec2 reg = floor(uv / (sz * vec2(5.0, 4.0))) + seed * 3.1;
+  float bare = ksH(reg + 41.0), pick = ksH(reg);
+  if (bare < 0.28) return vec3(0.0, 0.0, (ksH(reg + 5.0) - 0.5) * 0.12);
+  if (pick < 0.7) return ksRect(uv, sz, pw, seed);
+  if (pick < 0.9) return ksSkew(uv, sz, pw, seed);
   return ksHex(uv, sz, pw, seed);
 }
 vec4 ksPanel(vec3 p, vec3 n, float pw, float ps) {
   vec3 a = abs(n), G;
   float cav;
-  if (a.y >= a.x && a.y >= a.z) { vec3 r = ksPlane(p.xz, vec2(1.1, 1.7) * ps, pw, 1.0); G = vec3(r.x, 0.0, r.y); cav = r.z; }
+  float sx = p.x < 0.0 ? -1.0 : 1.0;
+  if (a.y >= a.x && a.y >= a.z) { vec3 r = ksPlane(vec2(abs(p.x), p.z), vec2(1.1, 1.7) * ps, pw, 1.0); G = vec3(r.x * sx, 0.0, r.y); cav = r.z; }
   else if (a.x >= a.z) { vec3 r = ksPlane(p.zy, vec2(1.7, 0.9) * ps, pw, 2.0); G = vec3(0.0, r.y, r.x); cav = r.z; }
-  else { vec3 r = ksPlane(p.xy, vec2(1.0, 0.9) * ps, pw, 3.0); G = vec3(r.x, r.y, 0.0); cav = r.z; }
+  else { vec3 r = ksPlane(vec2(abs(p.x), p.y), vec2(1.0, 0.9) * ps, pw, 3.0); G = vec3(r.x * sx, r.y, 0.0); cav = r.z; }
   G -= n * dot(G, n);
   vec3 nn = n - G;
   return vec4(nn * inversesqrt(max(dot(nn, nn), 1e-8)), cav);
