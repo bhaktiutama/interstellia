@@ -67,6 +67,8 @@
       return h > 0.86 ? tone(RUST, 0.8 + 0.4 * hash(r, i)) : tone(base, 0.9 + 0.14 * h);
     };
     const SYM = [-1, 1], parts = [];
+    const POD_R = [[-8.4, 0.25, 0.25], [-7.0, 1.0, 0.9], [-4.4, 1.9, 1.7], [-1.6, 2.6, 2.2], [2.4, 2.8, 2.3], [4.6, 2.2, 1.9]];
+    const podTop = (z) => { let k = 0; while (k < POD_R.length - 2 && z > POD_R[k + 1][0]) k++; const a = POD_R[k], b = POD_R[k + 1], u = Math.min(1, Math.max(0, (z - a[0]) / (b[0] - a[0]))); return -0.1 + (a[2] + (b[2] - a[2]) * u) / 2; };   // puncak pod di z
     const F = (w, h, cy) => oct(w, h, cy, 0, Math.min(0.45, w * 0.3), Math.min(0.35, w * 0.3));
 
     // ---------- 1. badan panah: hidung runcing, melebar ke belakang; atap kaca di atas kokpit (z -5,0..-2,0) ----------
@@ -77,8 +79,7 @@
       parts.push(loft(rings, (i, r, z0, z1) => { const zm = (z0 + z1) / 2;
         return i < 0 ? FRAME : zm > -5.0 && zm < -2.0 && (i === 3 || i === 4 || i === 5) ? GLASS : weather(CREAM, i, Math.floor((zm + 10) / 1.5), 2); }));
       parts.push(box(0.14, 0.14, 1.6, 0, -0.1, -9.6, METAL));                    // lembing hidung
-      for (const z of [-5.4, 0.4, 4.2]) parts.push(box(2.0 + (z + 5) * 0.12, 0.03, 0.22, 0, z < -3 ? 0.67 : 1.0, z, SALMON));   // garis salem di punggung badan
-      parts.push(box(0.05, 0.03, 9, 0, 1.01, 2.0, FRAME));
+      // revisi Bhakti: garis salem dan bilah punggung yang melayang di atas badan dihapus
       // kanopi gelembung dengan dua rusuk (atap badan di bawahnya kaca: dari kursi pilot terlihat tembus pandang)
       const cp = new THREE.SphereGeometry(1, 28, 14); cp.scale(0.95, 0.5, 1.5); cp.translate(0, 0.85, -3.5); parts.push(paint(cp, GLASS));
       for (const dz of [-1.5]) { const t = new THREE.TorusGeometry(0.93, 0.04, 6, 20); t.scale(1, 0.52, 1); t.translate(0, 0.85, -3.5 + dz); parts.push(paint(t, CREAM)); }   // rusuk melintang di depan pilot (dulu rotateY: berdiri membujur di tengah = bilah penghalang pandangan)
@@ -113,16 +114,17 @@
     // ---------- 4. dua pod samping: kisi ventilasi, probe ujung, nosel belakang, 2 kipas angkat di perut ----------
     for (const sx of SYM) {
       const X = sx * 5.5;
-      const R = [[-8.4, 0.25, 0.25], [-7.0, 1.0, 0.9], [-4.4, 1.9, 1.7], [-1.6, 2.6, 2.2], [2.4, 2.8, 2.3], [4.6, 2.2, 1.9]];
+      const R = POD_R;
       const g = loft(R.map(([z, w, h]) => ({ z, pts: oct(w, h, -0.1, 0, Math.min(0.7, w * 0.3), Math.min(0.6, w * 0.3)) })), (i, r) => (i < 0 ? FRAME : weather(CREAM, i, r, 11 + (sx > 0 ? 5 : 0))));
       g.translate(X, 0, 0); parts.push(g);
       parts.push(box(0.1, 0.1, 1.9, X, -0.1, -9.2, METAL), box(0.12, 0.12, 0.3, X, -0.1, -8.3, SALMON));
       for (const [zc, w, d] of [[-2.3, 1.15, 0.95], [0.5, 1.2, 1.0]]) {
-        parts.push(box(w + 0.2, 0.08, d + 0.2, X, 1.04, zc, tone(CREAM2, 0.9)), box(w, 0.06, d, X, 1.08, zc, DARK));
-        for (let k = 0; k < 5; k++) parts.push(box(w * 0.95, 0.04, 0.05, X, 1.12, zc - d * 0.4 + k * d * 0.2, METAL));
+        const yt = podTop(zc);                                                     // ventilasi menempel di permukaan pod (dulu melayang)
+        parts.push(box(w * 0.9, 0.06, d, X, yt - 0.01, zc, tone(CREAM2, 0.9)), box(w * 0.8, 0.04, d * 0.85, X, yt + 0.02, zc, DARK));
+        for (let k = 0; k < 5; k++) parts.push(box(w * 0.75, 0.03, 0.05, X, yt + 0.045, zc - d * 0.3 + k * d * 0.15, METAL));
       }
-      parts.push(box(1.0, 0.04, 0.3, X, 1.07, 1.9, SALMON), box(1.0, 0.04, 0.3, X, 1.07, -4.6, SALMON));
-      parts.push(box(0.5, 0.35, 0.6, X - sx * 1.0, 0.95, -0.9, FRAME), box(0.5, 0.3, 0.5, X - sx * 1.0, 0.95, 2.9, FRAME));
+      parts.push(box(0.8, 0.04, 0.3, X, podTop(1.9) + 0.0, 1.9, SALMON), box(0.7, 0.04, 0.3, X, podTop(-4.6) + 0.0, -4.6, SALMON));
+      parts.push(box(0.4, 0.3, 0.6, X - sx * 0.95, 0.5, -0.9, FRAME), box(0.4, 0.26, 0.5, X - sx * 0.95, 0.5, 2.9, FRAME));
       parts.push(cyl(0.7, 0.95, 0.9, X, -0.1, 5.0, METAL, 'z', 18, true), cyl(0.7, 0.7, 0.05, X, -0.1, 4.6, DARK, 'z', 18));
       const rg = new THREE.TorusGeometry(0.97, 0.06, 6, 20); rg.translate(X, -0.1, 5.44); parts.push(paint(rg, FRAME));
       for (const fz of [-1.2, 3.6]) {                                                // kipas angkat tertanam di perut pod
@@ -139,7 +141,8 @@
       for (let k = 0; k < 5; k++) parts.push(box(1.2, 0.04, 0.12, x, 0.1 + k * 0.12, z + 1.06, METAL));
       parts.push(box(0.35, 0.28, 1.4, x * 0.55, 0.15, 7.7, FRAME), box(0.35, 0.28, 1.4, x * 1.3, 0.15, 7.7, FRAME), box(1.5, 0.05, 0.3, x, 0.3, z - 0.95, RUST));
     }
-    parts.push(box(0.3, 4.0, 0.5, 0, 3.0, 5.7, CREAM), cyl(0.0, 0.14, 1.3, 0, 5.65, 5.7, SALMON, 'y', 6), box(0.5, 0.15, 0.5, 0, 1.3, 5.7, FRAME));
+    // antena punggung: cambuk tipis pendek (dulu tiang 4 m berbalok krem)
+    parts.push(box(0.3, 0.1, 0.3, 0, 1.05, 5.7, FRAME), cyl(0.03, 0.045, 1.3, 0, 1.7, 5.7, METAL, 'y', 6), box(0.09, 0.09, 0.09, 0, 2.38, 5.7, SALMON));
     const NBODY = parts.length;
     // ---------- 6. kaki pendarat: satu di hidung, dua di bawah pod; tapak lebar untuk air ----------
     for (const [x, z, top] of [[0, -5.6, -0.5], [-5.5, 1.5, -1.2], [5.5, 1.5, -1.2]]) {
@@ -188,7 +191,7 @@
       id: 'pr11', geo: mk(A), glass: mk(B), legs, PAD_Y,
       pads: [[0, -5.6], [-5.5, 1.5], [5.5, 1.5]].map(([x, z]) => ({ x, z, r: 0.6 })),
       door: { x: -2.35, y: -1.3, z: -4.6, nx: -1 },
-      nav: { red: [-6.9, 0.9, 0.5], green: [6.9, 0.9, 0.5], strobe: [0, 6.4, 5.7] },
+      nav: { red: [-6.9, 0.9, 0.5], green: [6.9, 0.9, 0.5], strobe: [0, 2.5, 5.7] },
       nozzles: [[-5.5, -0.1, 5.47, 0.7], [5.5, -0.1, 5.47, 0.7], [-2.0, 0.3, 10.05, 0.5], [2.0, 0.3, 10.05, 0.5]],
       fans: [[-5.5, -1.3, -1.2, 0.62], [5.5, -1.3, -1.2, 0.62], [-5.5, -1.3, 3.6, 0.62], [5.5, -1.3, 3.6, 0.62]],
       low: [{ x0: -6.9, x1: -4.1, z0: -8.4, z1: 4.6, y: -1.25 }, { x0: 4.1, x1: 6.9, z0: -8.4, z1: 4.6, y: -1.25 }],   // pod: bawahnya di bawah kepala

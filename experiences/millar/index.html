@@ -3335,7 +3335,7 @@ CONFIG.fly = { climb: 40, climbBoost: 65, sink: 18, fwd: 60, fwdBoost: 130, acc:
   C.climb *= F.climb || 1; C.climbBoost *= F.climb || 1; C.fwd *= F.fwd || 1; C.fwdBoost *= F.fwd || 1; C.acc *= F.acc || 1; C.vacc *= F.acc || 1;
   C.yawRate *= F.yawRate || 1; C.spool *= F.spool || 1; C.camDist *= Math.max(1, sz); C.camUp *= Math.max(1, sz);
 }
-const FLY = { on: false, landed: true, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, yawV: 0, pitch: 0, roll: 0, spool: 0, thr: 0, head: [0, 0, 0], pv: [0, 0, 0],
+const FLY = { zoom: 1, on: false, landed: true, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, yaw: 0, yawV: 0, pitch: 0, roll: 0, spool: 0, thr: 0, head: [0, 0, 0], pv: [0, 0, 0],
   lookY: 0, lookP: -0.15, lookT: 9, view: 0, water: 0, passed: false, sprayT: 0 };
 function flyReset() {
   FLY.on = false; FLY.passed = false; placeShip(...SHIP.home);
@@ -3501,9 +3501,11 @@ function flyCamera() {
     return;
   }
   const dx = -Math.sin(cy) * Math.cos(cp), dy = Math.sin(cp), dz = -Math.cos(cy) * Math.cos(cp);
-  camera.position.set(FLY.x - dx * C.camDist, Math.max(FLY.water + 1.5, FLY.y - dy * C.camDist + C.camUp * 0.4), FLY.z - dz * C.camDist);
+  const cd = C.camDist * FLY.zoom;                          // roda mouse: zoom kamera luar (V)
+  camera.position.set(FLY.x - dx * cd, Math.max(FLY.water + 1.5, FLY.y - dy * cd + C.camUp * 0.4 * FLY.zoom), FLY.z - dz * cd);
   camera.rotation.set(cp, cy, 0);
 }
+window.addEventListener('wheel', (e) => { if (FLY.on && FLY.view === 0 && !CINE.on) FLY.zoom = Math.min(5, Math.max(0.2, FLY.zoom * Math.exp(e.deltaY * 0.0012))); }, { passive: true });
 function flyAudio() {                                   // dengung mesin: noise rendah + nada gergaji, ikut dorongan
   const A = AUDIO, c = A.ctx; if (!c) return;
   if (!A.eng) {
@@ -3852,7 +3854,7 @@ function cineStep(dt) {
       const aoa = 0.6 * sm01(14, 16, t2);                  // M5d: hidung mendongak, perut menghadap aliran (sudut serang 34 derajat)
       CINE.orbit = true; orbPlaceShip(alt, 7 * ORB.v + (t2 - 14) * ORB.v, -aoa);
       if (CINE.flow !== 'in') { CINE.flow = 'in'; ORB.setFlow(new THREE.Vector3(0, -Math.sin(0.68), -Math.cos(0.68))); }
-      ORB.plasma.visible = pl > 0.01; ORB_U.uPlasma.value = pl; shake = pl * 0.004;
+      ORB.plasma.visible = pl > 0.01; ORB_U.uPlasma.value = pl; shake = pl * 0.0002;
       orbShipCam(0.036, Math.PI * 0.6, 0.14, -0.06);       // samping-atas: perut dan tepi depan menyala, planet di latar
       cineCaption('', t('Masuk atmosfer')); cineAudio(0, pl);
       CLK.white = sm01(19, 21, t2);
@@ -3870,7 +3872,7 @@ function cineStep(dt) {
       const u = sm01(5, 14, t2), pl = 1 - sm01(5, 7.5, t2);
       CINE.world = false; CINE.orbit = true; CLK.white = 1 - sm01(5, 6.4, t2); orbPlaceShip(60 + 260 * u, 20 + (t2 - 5) * ORB.v, -0.35 * (1 - u));
       if (CINE.flow !== 'out') { CINE.flow = 'out'; ORB.setFlow(new THREE.Vector3(0, -0.12, -1)); }
-      ORB.plasma.visible = pl > 0.01; ORB_U.uPlasma.value = pl * 0.6; shake = pl * 0.002; ORB.glow.color.setRGB(3.2, 1.1, 0.35);
+      ORB.plasma.visible = pl > 0.01; ORB_U.uPlasma.value = pl * 0.6; shake = pl * 0.0001; ORB.glow.color.setRGB(3.2, 1.1, 0.35);
       orbShipCam(0.03, Math.PI - 0.7 + 0.3 * u, 0.12, 0.14);
       cineCaption('', t('Kembali ke orbit')); cineAudio(0, 0.4 * pl);
     } else {

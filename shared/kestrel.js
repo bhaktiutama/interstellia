@@ -392,7 +392,7 @@
       for (let k = 0; k < 4; k++) parts.push(tilt(box(1.3, 0.03, 0.08, fx, -0.11, fz, METAL), 'y', k * Math.PI / 4, fx, -0.11, fz));
       // sirip kecil di ujung sayap (lampu navigasi)
       parts.push(box(0.12, 0.8, 1.2, sx * 5.0, 0.0, 1.7, PALE), box(0.14, 0.14, 0.14, sx * 5.0, 0.44, 1.3, sx < 0 ? [0.9, 0.1, 0.08] : [0.1, 0.8, 0.2]));
-      for (let k = 0; k < 3; k++) parts.push(box(0.03, 0.05, 1.5, sx * (2.0 + k * 0.9), 0.1, 2.6, k % 2 ? FRAME : ORANGE));   // garis jingga
+      // revisi Bhakti: tiga bilah garis jingga di atas sayap dihapus (melayang di luar tepi belakang sayap)
     }
     // ---------- 3. dua mesin di pangkal sayap: saluran masuk berkipas di depan, nosel di belakang ----------
     for (const sx of SYM) {
