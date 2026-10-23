@@ -162,7 +162,7 @@ async def main():
         for name in names:
             res[name] = {}
             for i in range(n):                           # bergantian A, B agar gangguan sistem terbagi rata
-                for tag, port in roots.items():
+                for tag, port in (list(roots.items())[::-1] if i % 2 else roots.items()):   # urutan ditukar tiap ulangan: tanpa bias "yang pertama dingin"
                     r = await one(b, port, name, PAGES[name], net, play)
                     res[name].setdefault(tag, []).append(r)
                     print(f'  {name} {tag} #{i + 1}: modul {r["modul_mulai"] or 0:.0f} ms, siap {r["siap"]:.0f} ms, {r["bytes"] / 1048576:.2f} MB, {r["reqs"]} berkas' +

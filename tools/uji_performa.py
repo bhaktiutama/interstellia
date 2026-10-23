@@ -57,6 +57,22 @@ async def main():
         cek(not errs, f'?rumput=lama&orang=lama tanpa error ({errs[:2]})')
         await pg.close()
 
+        # data besar gagal dimuat (offline / 404): jalur cadangan lama (rumput lama, model kotak) harus tetap jalan
+        pg = await b.new_page(viewport={'width': 640, 'height': 360})
+        errs = []
+        pg.on('pageerror', lambda e: errs.append(str(e)[:200]))
+        if LOCAL:
+            async def serve(route):
+                await route.fulfill(path=str(pathlib.Path(LOCAL) / route.request.url.rsplit('/', 1)[-1]), content_type='text/javascript', headers={'Access-Control-Allow-Origin': '*'})
+            await pg.route('https://cdn.jsdelivr.net/**', serve)
+        await pg.route('**/assets/orang.data.js', lambda r: r.abort())
+        await pg.route('**/assets/rumput.data.js', lambda r: r.abort())
+        await pg.goto(ROOT.joinpath('experiences/cooper-station/index.html').as_uri() + '?lang=id')
+        await pg.wait_for_function('window.__stationReady === true', timeout=900000)
+        r = await pg.evaluate("({ orang: !!window.ORANG_DATA, rumput: !!window.RUMPUT_DATA })")
+        cek(not errs and not r['orang'] and not r['rumput'], f'data besar gagal dimuat: halaman tetap siap tanpa error ({errs[:2]}, {r})')
+        await pg.close()
+
         pg, errs = await page(b, 'experiences/cooper-station/index.html', '?lang=id&planet=jupiter&jres=4k', 'window.__stationReady === true')
         cek(not errs, f'Jupiter 4k (decode) tanpa error ({errs[:2]})')
         cek(await pg.evaluate('window.JUPITER_MAP === undefined'), 'peta Jupiter dikonsumsi (JUPITER_MAP dilepas)')
