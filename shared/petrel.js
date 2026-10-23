@@ -80,23 +80,7 @@
         return i < 0 ? FRAME : zm > -5.0 && zm < -2.0 && (i === 3 || i === 4 || i === 5) ? GLASS : weather(CREAM, i, Math.floor((zm + 10) / 1.5), 2); }));
       parts.push(box(0.14, 0.14, 1.6, 0, -0.1, -9.6, METAL));                    // lembing hidung
       // revisi Bhakti: garis salem dan bilah punggung yang melayang di atas badan dihapus
-      // kanopi kaca bersegi (revisi Bhakti: kubah heksagonal berpanel kaca dengan rangka, seperti GX-01): belahan atas 6 sisi, facet datar
-      {
-        const hg = new THREE.SphereGeometry(1, 6, 3, 0, Math.PI * 2, 0, Math.PI / 2); hg.rotateY(Math.PI / 6); hg.scale(0.95, 0.5, 1.5); hg.translate(0, 0.78, -3.5);
-        const gp = hg.index ? hg.toNonIndexed() : hg; gp.computeVertexNormals(); parts.push(paint(gp, GLASS));
-        const P = hg.attributes.position, I = hg.index, seen = new Set(), key = (a2, b2) => (a2 < b2 ? a2 + '_' + b2 : b2 + '_' + a2);
-        const pos = (i) => new THREE.Vector3(P.getX(i), P.getY(i), P.getZ(i));
-        const q = (v) => Math.round(v * 1000);
-        const vk = (v) => q(v.x) + ',' + q(v.y) + ',' + q(v.z);
-        for (let t = 0; t < I.count; t += 3) for (let e = 0; e < 3; e++) {
-          const A2 = pos(I.getX(t + e)), B2 = pos(I.getX(t + (e + 1) % 3));
-          if (A2.distanceToSquared(B2) < 1e-6) continue;
-          const k = vk(A2) < vk(B2) ? vk(A2) + '|' + vk(B2) : vk(B2) + '|' + vk(A2); if (seen.has(k)) continue; seen.add(k);
-          const d = B2.clone().sub(A2), L = d.length(), g2 = new THREE.CylinderGeometry(0.035, 0.035, L, 5);
-          g2.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
-          g2.translate((A2.x + B2.x) / 2, (A2.y + B2.y) / 2, (A2.z + B2.z) / 2); parts.push(paint(g2, FRAME));
-        }
-      }
+      // revisi Bhakti: kubah kanopi dan rangkanya dihapus; atap kokpit = satu bidang kaca datar (sisi atas badan z -5,0..-2,0 berwarna kaca)
       parts.push(box(1.2, 0.04, 0.5, 0, 1.03, -0.7, FRAME));                     // kisi dan pintu dermaga di belakang kokpit
       for (let k = 0; k < 4; k++) parts.push(box(1.1, 0.04, 0.1, 0, 1.07, -1.0 + k * 0.28 + 0.9, METAL));
       parts.push(box(1.1, 0.04, 0.5, 0, 1.06, 1.45, SALMON));
