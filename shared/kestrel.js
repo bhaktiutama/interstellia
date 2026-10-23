@@ -350,28 +350,6 @@
 
     const parts = [];
     const SYM = [-1, 1];
-    // revisi Bhakti (aerodinamis): sayap menyapu dengan penampang segi enam, menipis dari pangkal ke ujung (dulu pelat tebal rata)
-    function wingGeo(sx) {
-      const LE = [-1.2, 0.9], TE = [3.9, 2.6], ring = (u) => {
-        const x = sx * (1.1 + 3.9 * u), zl = LE[0] + (LE[1] - LE[0]) * u - 0.3, zt = TE[0] + (TE[1] - TE[0]) * u - 0.3, h = 0.15 - 0.09 * u, yc = -0.16;
-        const P = (t, dy) => [x, yc + dy, zl + (zt - zl) * t];
-        return [P(0, 0), P(0.28, h), P(0.72, h), P(1, 0), P(0.72, -h), P(0.28, -h)];
-      };
-      const R = [0, 0.5, 1].map(ring), T = [];
-      for (let r = 0; r < 2; r++) for (let i = 0; i < 6; i++) { const j = (i + 1) % 6, a = R[r][i], b = R[r][j], c = R[r + 1][i], d = R[r + 1][j]; T.push([a, b, c], [b, d, c]); }
-      const tc = R[2].reduce((q, p) => [q[0] + p[0] / 6, q[1] + p[1] / 6, q[2] + p[2] / 6], [0, 0, 0]);
-      for (let i = 0; i < 6; i++) T.push([tc, R[2][i], R[2][(i + 1) % 6]]);                 // tutup ujung
-      const C = [sx * 3, -0.16, 1.2]; let v = 0;                                              // arah segitiga keluar dari pusat sayap
-      for (const [a, b, c] of T) { const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], w = [c[0] - a[0], c[1] - a[1], c[2] - a[2]], n = [u[1] * w[2] - u[2] * w[1], u[2] * w[0] - u[0] * w[2], u[0] * w[1] - u[1] * w[0]];
-        v += n[0] * ((a[0] + b[0] + c[0]) / 3 - C[0]) + n[1] * ((a[1] + b[1] + c[1]) / 3 - C[1]) + n[2] * ((a[2] + b[2] + c[2]) / 3 - C[2]); }
-      const pos = []; for (const [a, b, c] of T) pos.push(...a, ...(v < 0 ? c : b), ...(v < 0 ? b : c));
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return g;
-    }
-    // sirip miring meruncing: poligon (z, y) diekstrusi tipis sepanjang x di tengah x0
-    function fin(pts, x0, th) {
-      const g = new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([z, y]) => new THREE.Vector2(z, y))), { depth: th, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025, bevelSegments: 2 });
-      g.rotateY(-Math.PI / 2); g.translate(x0 + th / 2, 0, 0); return g;
-    }
     // palet v5: keluarga v3 (abu-krem lapuk, jingga), panel berpola gelap di punggung
     const BEIGE = [0.64, 0.64, 0.62], BEIGE2 = [0.47, 0.47, 0.47], PALE = [0.76, 0.76, 0.74], RUST = [0.28, 0.17, 0.1], FRAME = [0.08, 0.08, 0.085];
     const weather = (base, i, r, seed) => (i === 0 || i === 1 || i === 7 ? FRAME : tone(base, 0.88 + 0.16 * hash(i + seed, r)));
@@ -399,19 +377,21 @@
         const z = 0.1 + k * 0.55, w = 0.34 + 0.08 * (k % 2), x = sx * (0.35 + 0.2 * ((k + (sx > 0 ? 1 : 0)) % 2));
         parts.push(tilt(box(w, 0.04, 0.38, x, 1.06, z, FRAME), 'y', sx * 0.3 * (k % 2 ? 1 : -1), x, 1.06, z));
       }
-      { const sp = new THREE.SphereGeometry(1, 14, 8); sp.scale(0.3, 0.2, 1.15); sp.translate(0, 1.1, 3.4); parts.push(paint(sp, BEIGE2)); }   // kerucut punggung belakang (dulu balok)
-      parts.push(paint(fin([[3.0, 1.1], [4.6, 1.1], [4.6, 2.15], [4.15, 2.15]], 0, 0.1), PALE));   // sirip ekor miring meruncing
+      parts.push(box(0.5, 0.35, 1.8, 0, 1.1, 3.4, BEIGE2), box(0.12, 0.9, 1.3, 0, 1.6, 3.9, PALE));   // punggung belakang + sirip kecil
     }
     // ---------- 2. sayap pendek menyapu dengan kipas angkat tertanam, ujung dengan sirip kecil ----------
     for (const sx of SYM) {
-      parts.push(tilt(paint(wingGeo(sx), tone(BEIGE, 0.98)), 'z', sx * -0.1, sx * 1.1, 0, 0));
+      const sh = new THREE.Shape([new THREE.Vector2(0, -1.2), new THREE.Vector2(3.9, 0.9), new THREE.Vector2(3.9, 2.6), new THREE.Vector2(0, 3.9)]);
+      const w = new THREE.ExtrudeGeometry(sh, { depth: 0.22, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 3, curveSegments: 4 }); w.rotateX(Math.PI / 2);
+      if (sx < 0) { w.scale(-1, 1, 1); const q = w.index ? w.index.array : null, P = w.attributes; if (q) for (let k = 0; k < q.length; k += 3) [q[k + 1], q[k + 2]] = [q[k + 2], q[k + 1]]; else for (const nm of ['position', 'normal', 'uv']) { const A = P[nm].array, d = P[nm].itemSize; for (let k = 0; k < A.length; k += 3 * d) for (let e = 0; e < d; e++) [A[k + d + e], A[k + 2 * d + e]] = [A[k + 2 * d + e], A[k + d + e]]; } }   // cermin: urutan segitiga dibalik lagi
+      w.translate(sx * 1.1, -0.05, -0.3); parts.push(tilt(paint(w, tone(BEIGE, 0.98)), 'z', sx * -0.1, sx * 1.1, 0, 0));
       // kipas angkat (cincin + kisi) di tengah sayap
       const fx = sx * 2.9, fz = 1.3;
       const t = new THREE.TorusGeometry(0.72, 0.08, 6, 24); t.rotateX(Math.PI / 2); t.translate(fx, -0.13, fz); parts.push(paint(t, FRAME));
       parts.push(cyl(0.7, 0.7, 0.06, fx, -0.16, fz, DARK, 'y', 24));
       for (let k = 0; k < 4; k++) parts.push(tilt(box(1.3, 0.03, 0.08, fx, -0.11, fz, METAL), 'y', k * Math.PI / 4, fx, -0.11, fz));
       // sirip kecil di ujung sayap (lampu navigasi)
-      parts.push(paint(fin([[0.9, -0.45], [2.3, -0.45], [2.0, 0.6], [1.3, 0.6]], sx * 5.0 - 0.05, 0.1), PALE), box(0.14, 0.14, 0.14, sx * 5.0, 0.44, 1.3, sx < 0 ? [0.9, 0.1, 0.08] : [0.1, 0.8, 0.2]));
+      parts.push(box(0.12, 0.8, 1.2, sx * 5.0, 0.0, 1.7, PALE), box(0.14, 0.14, 0.14, sx * 5.0, 0.44, 1.3, sx < 0 ? [0.9, 0.1, 0.08] : [0.1, 0.8, 0.2]));
       // revisi Bhakti: tiga bilah garis jingga di atas sayap dihapus (melayang di luar tepi belakang sayap)
     }
     // ---------- 3. dua mesin di pangkal sayap: saluran masuk berkipas di depan, nosel di belakang ----------

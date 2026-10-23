@@ -67,8 +67,6 @@
       return h > 0.86 ? tone(RUST, 0.8 + 0.4 * hash(r, i)) : tone(base, 0.9 + 0.14 * h);
     };
     const SYM = [-1, 1], parts = [];
-    // revisi Bhakti (aerodinamis): blok saluran dan pendorong dilofting bersudut enam dan meruncing (dulu balok)
-    const nacelle = (x, cy, rs, col) => loft(rs.map(([z, w, h]) => ({ z, pts: oct(w, h, cy, x, h * 0.42, h * 0.32) })), (i) => (i < 0 ? FRAME : i === 0 || i === 1 || i === 7 ? tone(col, 0.6) : col));
     const POD_R = [[-8.4, 0.25, 0.25], [-7.0, 1.0, 0.9], [-4.4, 1.9, 1.7], [-1.6, 2.6, 2.2], [2.4, 2.8, 2.3], [4.6, 2.2, 1.9]];
     const podTop = (z) => { let k = 0; while (k < POD_R.length - 2 && z > POD_R[k + 1][0]) k++; const a = POD_R[k], b = POD_R[k + 1], u = Math.min(1, Math.max(0, (z - a[0]) / (b[0] - a[0]))); return -0.1 + (a[2] + (b[2] - a[2]) * u) / 2; };   // puncak pod di z
     const F = (w, h, cy) => oct(w, h, cy, 0, Math.min(0.45, w * 0.3), Math.min(0.35, w * 0.3));
@@ -92,7 +90,7 @@
     // ---------- 2. dek: pelat delta lebar dengan ceruk panel gelap, garis salem, noda karat ----------
     for (const sx of SYM) {
       const sh = new THREE.Shape([[1.1, -5.2], [4.5, -1.4], [4.5, 5.6], [2.8, 7.2], [1.1, 7.2]].map(([x, z]) => new THREE.Vector2(x, z)));
-      const d = new THREE.ExtrudeGeometry(sh, { depth: 0.26, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 3 }); d.rotateX(Math.PI / 2);
+      const d = new THREE.ExtrudeGeometry(sh, { depth: 0.34, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 1 }); d.rotateX(Math.PI / 2);
       if (sx < 0) { d.scale(-1, 1, 1); const q = d.index ? d.index.array : null, P = d.attributes; if (q) for (let k = 0; k < q.length; k += 3) [q[k + 1], q[k + 2]] = [q[k + 2], q[k + 1]]; else for (const nm of ['position', 'normal', 'uv']) { const A = P[nm].array, dd = P[nm].itemSize; for (let k = 0; k < A.length; k += 3 * dd) for (let e = 0; e < dd; e++) [A[k + dd + e], A[k + 2 * dd + e]] = [A[k + 2 * dd + e], A[k + dd + e]]; } }
       d.translate(0, 0.14, 0); parts.push(paint(d, tone(CREAM2, 1.03)));
       for (let k = 0; k < 7; k++) {
@@ -104,12 +102,14 @@
       for (let k = 0; k < 5; k++) parts.push(box(0.5 + 0.7 * hash(k, 21), 0.025, 0.4 + 0.5 * hash(k, 22), sx * (1.6 + 2.6 * hash(k, 23)), 0.155, 3.8 + 3 * hash(k, 24) - 3.6 * (k % 2), RUST));   // noda karat
       parts.push(box(0.1, 0.22, 0.9, sx * 4.5, 0.0, -0.9, WARM), box(0.1, 0.22, 0.7, sx * 2.1, 0.0, -5.0, WARM));   // lampu sorot tepi dek
     }
-    // ---------- 3. dua saluran masuk di dek: lofting meruncing (hidung menyempit, bukaan gelap berbilah) ----------
+    // ---------- 3. dua blok saluran masuk di dek (bukaan gelap berbilah menghadap depan) ----------
     for (const sx of SYM) {
       const x = sx * 3.15, z = 1.0;
-      parts.push(nacelle(x, 0.75, [[z - 1.3, 1.2, 0.55], [z - 0.5, 1.9, 1.05], [z + 0.8, 2.1, 1.1], [z + 1.3, 1.5, 0.8]], tone(CREAM2, 0.98)));
-      parts.push(box(0.9, 0.38, 0.08, x, 0.68, z - 1.33, DARK));
-      for (let k = 0; k < 3; k++) parts.push(box(0.8, 0.03, 0.1, x, 0.56 + k * 0.1, z - 1.36, METAL));
+      parts.push(box(2.1, 1.1, 2.4, x, 0.75, z, tone(CREAM2, 0.98)), box(2.2, 0.12, 2.5, x, 1.34, z, CREAM));
+      parts.push(box(1.7, 0.55, 0.1, x, 0.62, z - 1.2, DARK));
+      for (let k = 0; k < 3; k++) parts.push(box(1.6, 0.04, 0.12, x, 0.5 + k * 0.14, z - 1.24, METAL));
+      parts.push(box(0.04, 0.9, 2.3, x - sx * 1.06, 0.78, z, FRAME), box(0.04, 0.9, 2.3, x + sx * 1.06, 0.78, z, FRAME));
+      parts.push(box(0.9, 0.03, 0.9, x, 1.41, z + 0.2, tone(RUST, 0.9)));
     }
     // ---------- 4. dua pod samping: kisi ventilasi, probe ujung, nosel belakang, 2 kipas angkat di perut ----------
     for (const sx of SYM) {
@@ -133,13 +133,13 @@
         for (let k = 0; k < 4; k++) parts.push(tilt(box(1.1, 0.03, 0.07, X, -1.24, fz, METAL), 'y', k * Math.PI / 4, X, -1.24, fz));
       }
     }
-    // ---------- 5. dua pendorong terpisah di belakang (lofting membulat, penopang pendek) dan antena punggung ----------
+    // ---------- 5. dua blok pendorong terpisah di belakang (penopang pendek) dan tiang antena punggung ----------
     for (const sx of SYM) {
       const x = sx * 2.0, z = 9.0;
-      parts.push(nacelle(x, 0.35, [[z - 1.0, 1.1, 0.8], [z - 0.2, 1.7, 1.35], [z + 0.7, 1.6, 1.25], [z + 1.0, 1.2, 0.9]], tone(CREAM2, 1.0)));
-      parts.push(box(0.9, 0.5, 0.08, x, 0.3, z + 1.02, DARK));
-      for (let k = 0; k < 4; k++) parts.push(box(0.8, 0.03, 0.1, x, 0.14 + k * 0.1, z + 1.06, METAL));
-      parts.push(box(0.35, 0.28, 1.4, x * 0.55, 0.15, 7.7, FRAME), box(0.35, 0.28, 1.4, x * 1.3, 0.15, 7.7, FRAME));
+      parts.push(box(1.7, 1.35, 2.0, x, 0.35, z, tone(CREAM2, 1.0)), box(1.8, 0.14, 2.1, x, 1.06, z, CREAM));
+      parts.push(box(1.3, 0.7, 0.1, x, 0.3, z + 1.02, DARK));
+      for (let k = 0; k < 5; k++) parts.push(box(1.2, 0.04, 0.12, x, 0.1 + k * 0.12, z + 1.06, METAL));
+      parts.push(box(0.35, 0.28, 1.4, x * 0.55, 0.15, 7.7, FRAME), box(0.35, 0.28, 1.4, x * 1.3, 0.15, 7.7, FRAME), box(1.5, 0.05, 0.3, x, 0.3, z - 0.95, RUST));
     }
     // antena punggung: cambuk tipis pendek (dulu tiang 4 m berbalok krem)
     parts.push(box(0.3, 0.1, 0.3, 0, 1.05, 5.7, FRAME), cyl(0.03, 0.045, 1.3, 0, 1.7, 5.7, METAL, 'y', 6), box(0.09, 0.09, 0.09, 0, 2.38, 5.7, SALMON));
