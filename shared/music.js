@@ -11,12 +11,17 @@ window.SONGKIT = (() => {
       const s = document.createElement('script'); s.src = K.base + LIST[i] + '.data.js';
       s.onload = () => {
         s.remove();
-        try {
-          const S = window.__SONGS || {}, bin = atob(S[LIST[i]]), u8 = new Uint8Array(bin.length);
-          for (let j = 0; j < bin.length; j++) u8[j] = bin.charCodeAt(j);
-          delete S[LIST[i]];
-          K.urls[i] = URL.createObjectURL(new Blob([u8], { type: 'audio/mpeg' })); ok(K.urls[i]);
-        } catch (e) { no(e); }
+        const S = window.__SONGS || {}, b64 = S[LIST[i]];
+        const done = (blob) => { delete S[LIST[i]]; K.urls[i] = URL.createObjectURL(blob); ok(K.urls[i]); };
+        // P-A7: fetch(data:) menguraikan base64 secara native di luar thread utama (tanpa atob + loop 4,7 juta byte dan dua salinan sementara ~10 MB);
+        // cadangan lama bila fetch data: tidak tersedia
+        fetch('data:audio/mpeg;base64,' + b64).then((r) => r.blob()).then(done).catch(() => {
+          try {
+            const bin = atob(b64), u8 = new Uint8Array(bin.length);
+            for (let j = 0; j < bin.length; j++) u8[j] = bin.charCodeAt(j);
+            done(new Blob([u8], { type: 'audio/mpeg' }));
+          } catch (e) { no(e); }
+        });
       };
       s.onerror = () => { s.remove(); no(new Error('Lagu tema tidak ditemukan: ' + s.src)); };
       document.head.appendChild(s);

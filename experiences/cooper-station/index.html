@@ -2,6 +2,9 @@
 <html lang="id">
 <head>
 <meta charset="utf-8">
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" crossorigin>
+<link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.core.js" crossorigin>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Copper Corn Station</title>
 <style>
@@ -427,8 +430,15 @@
 <script src="../../shared/vr.js"></script>
 <script src="../../shared/music.js"></script>
 <script src="../../shared/orang_data.js"></script>
-<script src="assets/orang.data.js"></script>
-<script src="assets/rumput.data.js"></script>
+<script>
+/* P-A2 (docs/app/analisa-performa-threejs-webgpu.md): data besar (orang.data.js 3,5 MB, rumput.data.js 160 KB) tidak lagi menahan eksekusi modul.
+   Diunduh paralel dengan three.js dan pembangunan dunia; modul menunggu `window.__dataP.<nama>` tepat sebelum dipakai (gagal muat = resolve tanpa data,
+   jalur cadangan lama tetap: rumput lama / model kotak). */
+(function () {
+  function lazy(src) { return new Promise(function (ok) { var s = document.createElement('script'); s.src = src; s.async = true; s.onload = s.onerror = function () { ok(); }; document.head.appendChild(s); }); }
+  window.__dataP = { orang: lazy('assets/orang.data.js'), rumput: lazy('assets/rumput.data.js') };
+})();
+</script>
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.module.js" } }
 </script>
@@ -1769,7 +1779,7 @@ farScene.add(saturn);
       const d = window.JUPITER_MAP; window.JUPITER_MAP = undefined; sc.remove();
       if (!d || !d.jpg) { done(null); return; }
       const img = new Image();
-      img.onload = () => {
+      const build = () => {
         const tx = new THREE.Texture(img);
         tx.colorSpace = THREE.SRGBColorSpace; tx.wrapS = THREE.RepeatWrapping; tx.wrapT = THREE.ClampToEdgeWrapping;
         tx.minFilter = THREE.LinearMipmapLinearFilter; tx.magFilter = THREE.LinearFilter; tx.generateMipmaps = true; tx.anisotropy = 8; tx.needsUpdate = true;
@@ -1777,6 +1787,8 @@ farScene.add(saturn);
       };
       img.onerror = () => done(null);
       img.src = 'data:image/jpeg;base64,' + d.jpg;
+      // P-A6: decode() menguraikan JPEG (hingga 14.400 x 7.200) di luar thread utama; unggah ke GPU tidak lagi menunggu decode sinkron
+      if (img.decode) img.decode().then(build, () => { if (img.complete && img.naturalWidth) build(); else done(null); }); else img.onload = build;
     };
     sc.onerror = () => { console.warn('assets/jupiter-' + JRES.use + '.data.js tidak ditemukan, memakai Jupiter prosedural'); done(null); };
     document.head.appendChild(sc);
@@ -9344,6 +9356,7 @@ applyMeadowRadii();
 // Beda dari sumber: penyebaran lewat sel + peta lahan (bukan MeshSurfaceSampler), warna diturunkan dari warna peta lahan dengan rasio
 // yang sama dengan palet sumber, cahaya stasiun `vegLight()` menggantikan bayangan three.js, tepi jalur taman / dek / ladang dihormati.
 // `?rumput=lama` = rumput sebelum 29a.
+await window.__dataP.rumput;                                         // P-A2: data rumput dimuat async
 const FLUFFLAMA = new URLSearchParams(location.search).get('rumput') === 'lama' || !window.RUMPUT_DATA;
 const FLUFF = {};
 const FG_FIELD = /* glsl */`
@@ -9461,7 +9474,7 @@ const FG_FS = /* glsl */`
 // gandum: kartu batang + bulir dan batang dekat (versi 29f awal, bukan FluffyGrass)
 function fluffAtlas(kind) {                                          // 0 = rumput, 1 = gandum; 3 varian berdampingan 512 px; R = kecerahan, G = bulir, A = siluet
   const N = 3, S = 512, W = S * N;
-  const mk = (bg) => { const c = document.createElement('canvas'); c.width = W; c.height = S; const g = c.getContext('2d'); g.fillStyle = bg; g.fillRect(0, 0, W, S); return [c, g]; };
+  const mk = (bg) => { const c = document.createElement('canvas'); c.width = W; c.height = S; const g = c.getContext('2d', { willReadFrequently: true }); g.fillStyle = bg; g.fillRect(0, 0, W, S); return [c, g]; };   // P-A1: dibaca balik tiga kali (getImageData); raster CPU menghindari henti GPU -> CPU
   const [cm, gm] = mk('#000'), [cs, gs] = mk('rgb(200,200,200)'), [ce, ge] = mk('#000');
   let sd = 9157 + kind * 31; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647);
   const blade = (x0, y0, hh, lean, curv, w0, shade, ear) => {       // pita meruncing dari (x0, y0) ke atas, melengkung
@@ -12727,7 +12740,12 @@ CAMX.acc = new THREE.WebGLRenderTarget(4, 4, { type: CAMX.float ? THREE.FloatTyp
 const SSR = { on: true, ready: false };                              // 23a: pantulan ruang layar (butuh efek layar)
 LIGHT.uniforms.uL_Ssr.value = POST_R.ssr.texture;
 const fsScene = new THREE.Scene(), fsCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-const fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); fsQuad.frustumCulled = false; fsScene.add(fsQuad);
+// P-A5: satu segitiga besar menggantikan dua segitiga (kuad): tidak ada piksel diagonal yang diarsir dua kali, cache tekstur lebih koheren di ~20 pass layar penuh;
+// uv (0,0) (2,0) (0,2) memberi interpolasi yang sama di dalam layar (hasil piksel identik).
+const fsGeo = new THREE.BufferGeometry();
+fsGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 3, -1, 0, -1, 3, 0], 3));
+fsGeo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 2, 0, 0, 2], 2));
+const fsQuad = new THREE.Mesh(fsGeo); fsQuad.frustumCulled = false; fsScene.add(fsQuad);
 const FS_VS = /* glsl */`varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 const FS_MATS = [];                                                // P1: semua material layar penuh, dikompilasi di layar muat (warmShaders)
 const fsMat = (frag, uniforms) => { const m = new THREE.ShaderMaterial({ vertexShader: FS_VS, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false }); FS_MATS.push(m); return m; };
@@ -15610,6 +15628,7 @@ try { const sv = JSON.parse(localStorage.getItem('cooperStation.peds') || 'null'
     let x = mr() * tot, m = 0; while (m < 12 && x >= w[m]) { x -= w[m]; m++; } p.model = m;
   }
 }
+await window.__dataP.orang;                                          // P-A2: data orang dimuat async
 PEDS.newModel = !PEDS.lama && !!window.ORANG_DATA && !!window.ORANGKIT;   // gagal muat data = model kotak lama otomatis
 // --- model orang: kotak-kotak dengan id bagian (aPart) untuk animasi dan warna (cadangan: ?orang=lama atau data GLB tidak termuat) ---
 if (!PEDS.newModel) {
