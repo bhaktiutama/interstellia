@@ -333,8 +333,8 @@
       return g;
     }
     // warna: dasar abu terang dengan beda nada per panel (kesan lapisan panel dan pelapukan)
-    const WHITE = [0.3, 0.3, 0.29], GREY = [0.22, 0.22, 0.22], DARK = [0.07, 0.07, 0.075], BELLY = [0.06, 0.06, 0.065],
-          ORANGE = [0.4, 0.19, 0.07], METAL = [0.26, 0.26, 0.27], GLASS = [0.02, 0.045, 0.085], GOLD = [0.36, 0.28, 0.12];
+    const WHITE = [0.72, 0.72, 0.70], GREY = [0.5, 0.5, 0.5], DARK = [0.07, 0.07, 0.075], BELLY = [0.06, 0.06, 0.065],
+          ORANGE = [0.4, 0.19, 0.07], METAL = [0.4, 0.4, 0.41], GLASS = [0.02, 0.045, 0.085], GOLD = [0.36, 0.28, 0.12];
     const tone = (c, k) => c.map((v) => Math.min(1, v * k));
     const hash = (a, b) => { const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return s - Math.floor(s); };
     const hullColor = (i, r) => i === 0 || i === 1 || i === 7 ? BELLY : tone(WHITE, 0.93 + 0.1 * hash(i, r));
@@ -351,7 +351,7 @@
     const parts = [];
     const SYM = [-1, 1];
     // palet v5: keluarga v3 (abu-krem lapuk, jingga), panel berpola gelap di punggung
-    const BEIGE = [0.23, 0.23, 0.22], BEIGE2 = [0.16, 0.16, 0.16], PALE = [0.3, 0.3, 0.29], RUST = [0.28, 0.17, 0.1], FRAME = [0.08, 0.08, 0.085];
+    const BEIGE = [0.64, 0.64, 0.62], BEIGE2 = [0.47, 0.47, 0.47], PALE = [0.76, 0.76, 0.74], RUST = [0.28, 0.17, 0.1], FRAME = [0.08, 0.08, 0.085];
     const weather = (base, i, r, seed) => (i === 0 || i === 1 || i === 7 ? FRAME : tone(base, 0.88 + 0.16 * hash(i + seed, r)));
     const seamRing = (pts, z, c = tone(BEIGE, 0.62)) => loft([{ z, pts: pts.map(([x, y]) => [x * 1.02, y * 1.02]) }, { z: z + 0.05, pts: pts.map(([x, y]) => [x * 1.02, y * 1.02]) }], () => c, false);
 
@@ -368,7 +368,7 @@
         return i < 0 ? FRAME : zm > -3.6 && zm < -0.6 && (i === 3 || i === 4 || i === 5) ? GLASS : weather(zm < -0.6 ? PALE : BEIGE, i, Math.floor((zm + 7) / 1.5), 3); }));
       for (const z of [-4.0, 1.2]) parts.push(seamRing(F(...v5At(z)), z));   // penampang di z itu (dulu memakai penampang belakang: cincin melayang di depan kanopi)
       // rangka kaca kokpit
-      parts.push(box(1.2, 0.035, 0.05, 0, 0.9, -1.6, PALE));  // palang kaca (tipis: dari kursi pilot hanya 0,45 m di depan mata)
+      // revisi Bhakti: palang kaca di atas kokpit dihapus (menghalangi pandangan pilot)
       // hidung: bibir sensor gelap dan lampu
       parts.push(box(1.3, 0.12, 0.1, 0, -0.18, -6.22, FRAME));
       for (const sx of SYM) parts.push(box(0.14, 0.08, 0.05, sx * 0.45, -0.1, -6.24, [1, 0.95, 0.8]));
@@ -382,7 +382,7 @@
     // ---------- 2. sayap pendek menyapu dengan kipas angkat tertanam, ujung dengan sirip kecil ----------
     for (const sx of SYM) {
       const sh = new THREE.Shape([new THREE.Vector2(0, -1.2), new THREE.Vector2(3.9, 0.9), new THREE.Vector2(3.9, 2.6), new THREE.Vector2(0, 3.9)]);
-      const w = new THREE.ExtrudeGeometry(sh, { depth: 0.22, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 1 }); w.rotateX(Math.PI / 2);
+      const w = new THREE.ExtrudeGeometry(sh, { depth: 0.22, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 3, curveSegments: 4 }); w.rotateX(Math.PI / 2);
       if (sx < 0) { w.scale(-1, 1, 1); const q = w.index ? w.index.array : null, P = w.attributes; if (q) for (let k = 0; k < q.length; k += 3) [q[k + 1], q[k + 2]] = [q[k + 2], q[k + 1]]; else for (const nm of ['position', 'normal', 'uv']) { const A = P[nm].array, d = P[nm].itemSize; for (let k = 0; k < A.length; k += 3 * d) for (let e = 0; e < d; e++) [A[k + d + e], A[k + 2 * d + e]] = [A[k + 2 * d + e], A[k + d + e]]; } }   // cermin: urutan segitiga dibalik lagi
       w.translate(sx * 1.1, -0.05, -0.3); parts.push(tilt(paint(w, tone(BEIGE, 0.98)), 'z', sx * -0.1, sx * 1.1, 0, 0));
       // kipas angkat (cincin + kisi) di tengah sayap
@@ -641,7 +641,6 @@ float ksCanopy(vec3 p, vec3 L) {
   vec3 q = p + L * t;
   float top = 0.503 + K * (q.z + 3.55);
   float o = smoothstep(top - 0.34, top - 0.26, q.y) * smoothstep(-3.62, -3.5, q.z) * (1.0 - smoothstep(-0.7, -0.56, q.z));
-  o *= 1.0 - 0.85 * (1.0 - smoothstep(0.015, 0.04, abs(q.z + 1.6))) * step(top - 0.12, q.y);   // palang kaca tengah
   o *= 1.0 - 0.85 * (1.0 - smoothstep(0.015, 0.04, abs(q.z + 2.6)));                           // lengkung rangka
   o *= 1.0 - step(p.z, -2.48) * step(p.y, 0.36);                                                 // di bawah penutup silau dasbor
   return o * 0.85;                                                                               // kaca bernada menyerap sedikit

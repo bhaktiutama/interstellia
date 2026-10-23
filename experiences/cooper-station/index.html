@@ -45,6 +45,10 @@
   #presetPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
   #presetPick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #planetPick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
+  #shipPick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  #shipPick button, #labShips button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
+  #shipPick button.on, #labShips button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
+  #portFade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 3; }
   #jresPick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
   #jresPick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
   #jresPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
@@ -233,7 +237,7 @@
   <div class="btns"><button id="phWeather" type="button">Cuaca (N)</button><button id="phSave" type="button">Simpan PNG (Enter)</button><button id="phCam" type="button">Kamera rangefinder</button></div>
   <div class="note">WASD bergerak, seret mouse untuk melihat. H menyembunyikan panel ini. Gambar disimpan tanpa panel.</div>
 </div>
-<div id="tourOffer" hidden><b>Tur sinematik</b><span>Sekitar 5 menit keliling stasiun dengan penjelasan fisika.</span><div><button id="tourOfferGo" class="go" type="button">Mulai tur (Y)</button><button id="tourOfferNo" type="button">Lewati</button></div></div><div id="tourFade"></div><div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><span><button id="tourSkip" type="button">Lewati (Spasi)</button> <button id="tourStop" type="button">Berhenti (Y)</button></span></div></div>
+<div id="tourOffer" hidden><b>Tur sinematik</b><span>Sekitar 5 menit keliling stasiun dengan penjelasan fisika.</span><div><button id="tourOfferGo" class="go" type="button">Mulai tur (Y)</button><button id="tourOfferNo" type="button">Lewati</button></div></div><div id="portFade"></div><div id="tourFade"></div><div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><span><button id="tourSkip" type="button">Lewati (Spasi)</button> <button id="tourStop" type="button">Berhenti (Y)</button></span></div></div>
 <div id="plaque" hidden><div class="card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
 <div id="map" hidden><div class="mcard">
   <div class="mhead"><span>Peta silinder (dibuka)</span><span class="mbtns"><button id="mapZoomIn" type="button">+</button><button id="mapZoomOut" type="button">-</button><button id="mapMe" type="button">Posisi saya</button><button id="mapHoloBtn" type="button">Hologram</button><button id="mapCtlBtn" type="button">Kendali 3D</button><button id="mapClose" type="button">Tutup (M)</button></span></div>
@@ -281,6 +285,8 @@
         <button id="labMoto" type="button"><kbd>C</kbd>Naik motor</button>
         <button id="labBob" type="button">Gerak kepala: normal</button>
       </div>
+      <div class="note">Wahana spaceport (dipakai di berth 1 saat naik dari gerbang B1; tidak bisa diganti saat sedang di dalam kokpit terbang):</div>
+      <div class="btns" id="labShips" data-notr></div>
       <div class="note">Motor: W gas, S rem (diam: mundur), A/D belok, Shift sport, Space klakson, O gas terus, mouse menoleh. Malam: lampu depan menyorot jalan. Gerak kepala: kamera ikut langkah saat jalan dan lari.</div>
     </section>
     <section data-lpane="fisika"><div class="ptitle">Uji fisika (bola)</div>
@@ -343,6 +349,8 @@
       <div class="langPick"></div>
       <div class="plabel">Planet</div>
       <div id="planetPick" data-notr></div>
+      <div class="plabel">Wahana spaceport</div>
+      <div id="shipPick" data-notr></div>
       <div class="plabel" id="jresLabel" hidden>Resolusi peta Jupiter</div>
       <div id="jresPick" data-notr hidden></div>
       <div class="plabel">Kualitas grafik</div>
@@ -422,6 +430,9 @@
 <script src="../../shared/prof.js"></script>
 <script src="../../shared/warm.js"></script>
 <script src="../../shared/kestrel.js"></script>
+<script src="../../shared/petrel.js"></script>
+<script src="../gargantua/assets/gx01.data.js"></script>
+<script src="../../shared/armada.js"></script>
 <script src="../../shared/post.js"></script>
 <script src="../../shared/camera.js"></script>
 <script src="../../shared/vr.js"></script>
@@ -885,7 +896,7 @@ Object.assign(I18N.en, {
   "Ladang gandum dekat bukit": "Wheat field near the hill",
   "Skyway (jendela ke angkasa)": "Skyway (window to space)",
   "Air mancur Coriolis": "Coriolis fountain",
-  "Langsung ke kokpit KS-07": "Straight to the KS-07 cockpit",
+  "Langsung ke pilihan wahana": "Straight to the vessel choice",
   "Turun di {stop}": "Get off at {stop}",
   "Di dalam trem · tunggu halte berikutnya": "On the tram · wait for the next stop",
   "Masuk terowongan ke dermaga despun": "Enter the tunnel to the despun dock",
@@ -893,7 +904,7 @@ Object.assign(I18N.en, {
   "Baca plakat": "Read the plaque",
   "Baca plakat air mancur Coriolis": "Read the Coriolis fountain plaque",
   "Naik lift ke sumbu": "Take the lift to the axis",
-  "Gerbang B1: lift ke hub, terowongan, lalu kokpit shuttle KS-07 (otomatis)": "Gate B1: lift to the hub, tunnel, then the KS-07 shuttle cockpit (automatic)",
+  "Gerbang B1: lift ke hub, terowongan, lalu pilihan wahana (otomatis)": "Gate B1: lift to the hub, tunnel, then the vessel choice (automatic)",
   "{kind}: terbang {t} s · mendarat {d} m {dir}": "{kind}: flight {t} s · landed {d} m {dir}",
   " · {a} m sepanjang sumbu": " · {a} m along the axis",
   " · kena dinding end cap": " · hit the end cap wall",
@@ -908,7 +919,11 @@ Object.assign(I18N.en, {
   "hub nol-g": "zero-g hub",
   "kabin lift": "lift cabin",
   "Bola akhirnya diam di lantai kabin: gaya sentrifugal kecil (sekitar 0,006 g) mendorongnya ke lantai.": "The ball finally rests on the cabin floor: a small centrifugal force (about 0.006 g) pushes it down.",
-  "Gerbang B1: lorong ke lift dermaga, naik 994 m ke hub nol-g, lalu kapsul terowongan ke shuttle KS-07 (5x). E = langsung ke kokpit.": "Gate B1: corridor to the dock lift, up 994 m to the zero-g hub, then the tunnel capsule to shuttle KS-07 (5x). E = straight to the cockpit.",
+  "Gerbang B1: lorong ke lift dermaga, naik 994 m ke hub nol-g, lalu kapsul terowongan ke modul dermaga (5x). E = langsung ke pilihan wahana.": "Gate B1: corridor to the dock lift, up 994 m to the zero-g hub, then the tunnel capsule to the dock module (5x). E = straight to the vessel choice.",
+  "Modul dermaga: tiga wahana siaga. Panah kiri / kanan atau 1-3 memilih wahana, E naik, L kembali ke terowongan.": "Dock module: three vessels on standby. Left / right arrows or 1-3 pick a vessel, E boards, L returns to the tunnel.",
+  "Melayang lewat cincin sandar ke palka atas wahana.": "Floating past the docking ring to the vessel's top hatch.",
+  "Di kokpit {w}. E = lepas sandar, L = keluar ke terowongan.": "In the {w} cockpit. E = undock, L = exit to the tunnel.",
+  "Wahana spaceport": "Spaceport vessel",
   "Di kokpit shuttle KS-07. E = lepas sandar, L = keluar ke terowongan.": "In the KS-07 shuttle cockpit. E = undock, L = exit to the tunnel.",
   "Lepas sandar: menjauh 15 m dari cincin, lalu kendali di tanganmu.": "Undocking: backing 15 m away from the ring, then you have control.",
   "Sandar otomatis ke berth 1.": "Auto docking to berth 1.",
@@ -6826,7 +6841,7 @@ const PLAQUE_TEXT = 'Museum Cooper Farm\n\nReplika rumah pertanian keluarga Coop
 const PLAQUE_POS = { s: COOPER.s + 3, za: COOPER.za - COOPER.d / 2 - 4 };
 function nearDist(s, za) { return Math.hypot(wrapS(player.theta * R - s), player.za - za); }
 function availableAction() {
-  if (PORT.trip && (player.state === 'lift' || player.state === 'float' || player.state === 'pod')) return { key: 'skip', label: t('Langsung ke kokpit KS-07') };
+  if (PORT.trip && (player.state === 'lift' || player.state === 'float' || player.state === 'pod')) return { key: 'skip', label: t('Langsung ke pilihan wahana') };
   if (player.state === 'tram') return tram.dwell > 0 ? { key: 'alight', label: t('Turun di {stop}', { stop: t(tramStopName()) }) } : { key: null, label: t('Di dalam trem · tunggu halte berikutnya') };
   if (player.state === 'float' && player.float.pos.z < -HALF_L + HUB.zaMin + 5 && Math.hypot(player.float.pos.x, player.float.pos.y) < 5.5) return { key: 'port', label: t('Masuk terowongan ke dermaga despun') };
   if (player.state !== 'ground') return null;
@@ -6837,7 +6852,7 @@ function availableAction() {
   if (nearDist(LIFT.theta * R, LIFT.za) < 8) return { key: 'lift', label: t('Naik lift ke sumbu') };
   if (DECK.h && !player.deck && Math.abs(wrapS(player.theta * R - DECK.s)) < 6 && Math.abs(player.za - (DECK.za - DECK.podD / 2)) < 4) return { key: 'tower', label: t('Naik ke dek pandang menara ({h} m)', { h: fmtInt(DECK.h) }) };   // 18b
   if (player.deck) return { key: 'towerdown', label: t('Turun ke lobi menara') };
-  if (nearDist(TERM.gate.s, TERM.gate.za) < 4 && player.za > TERM.za - TERM.d / 2) return { key: 'gate', label: t('Gerbang B1: lift ke hub, terowongan, lalu kokpit shuttle KS-07 (otomatis)') };
+  if (nearDist(TERM.gate.s, TERM.gate.za) < 4 && player.za > TERM.za - TERM.d / 2) return { key: 'gate', label: t('Gerbang B1: lift ke hub, terowongan, lalu pilihan wahana (otomatis)') };
   if (MOTO.parked && !player.deck && nearDist(MOTO.s, MOTO.za) < 2.5) return { key: 'moto', label: t('Naik motor') };   // 19b
   return null;
 }
@@ -14380,14 +14395,23 @@ const NAV = { red: new THREE.MeshBasicMaterial({ color: 0xff2a20 }), green: new 
 // --- shuttle "Kestrel" KS-07 v5 (M3e): geometri dari modul bersama shared/kestrel.js, sama dengan Millar's World ---
 // Wahana kecil satu kursi, gelap doff, kotor, gosong. Kaki (dan tangga) ditarik di angkasa. Badan digeser SHUTTLE_UP ke arah
 // sumbu supaya punggung menempel ujung tabung sandar berth (v1 lama 24 m lebih tinggi). v1 tetap ada di modul (KESTREL.build).
-const SHUTTLE = window.KESTREL.buildV5(THREE), SHUTTLE_CK = window.KESTREL.buildCockpitV5(THREE), SHUTTLE_UP = 0.62;
-const shipGlassMat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 90, specular: 0x6a7684 });   // kaca satu sisi: dari dalam tembus pandang
+// revisi Bhakti: tiga wahana (KS-07 Kestrel, PR-11 Petrel, GX-01 Ambang; shared/armada.js) diparkir di dermaga dan bisa dipilih.
+// fleetDesc(id) = deskriptor wahana + `up` (geser badan ke arah sumbu: puncak badan menempel ujung tabung sandar, KS-07 = 0,62) + `bb` (kotak badan).
+const FLEET_D = {}, PSEL_KEY = window.FLEET.KEY;
+function fleetDesc(id) {
+  if (FLEET_D[id]) return FLEET_D[id];
+  const d = window.FLEET.build(THREE, id);
+  d.geo.computeBoundingBox(); d.bb = d.geo.boundingBox.clone(); d.up = 2.67 - d.bb.max.y;
+  return (FLEET_D[id] = d);
+}
+let PSEL = window.FLEET.current('ks07');                              // wahana pemain: ?ship= lalu localStorage lazarus.ship (dibagi dengan Millar dan Gargantua)
+const shipGlassMat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 90, specular: 0x6a7684, transparent: true, opacity: 0.55, depthWrite: false });   // kaca satu sisi, agak tembus dari luar
 /* V2: lambung dan kokpit KS-07 memakai material PBR + detail panel prosedural (KESTREL.PANEL_GLSL: alur sambungan, paku keling,
    tutup akses, lembaran tidak rata). Rongga alur sedikit lebih gelap dan kasar. Kokpit: cahaya lampu sorot dermaga hanya masuk
    lewat kaca kanopi (ksCanopy, palang kaca ikut membayangi), ditambah lampu kabin redup dan pendar layar MFD.
    Kokpit memakai ruang grup COCKPIT (uniform uKsW / uKsInv) supaya tongkat dan tuas gas ikut ruang yang sama. */
 const KS_U = { uKsW: { value: new THREE.Matrix4() }, uKsInv: { value: new THREE.Matrix4() }, uKsScr: { value: 1 } };
-function ksPanelMat(opt, cock) {
+function ksPanelMat(opt, cock, gen) {
   const m = new THREE.MeshStandardMaterial(opt);
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, KS_U);
@@ -14403,25 +14427,25 @@ function ksPanelMat(opt, cock) {
       diffuseColor.rgb *= 1.0 - 0.55 * ksP.w; roughnessFactor = min(1.0, roughnessFactor + 0.2 * ksP.w);`);
     if (cock) fs = fs
       .replace('getDirectionalLightInfo( directionalLight, directLight );', `getDirectionalLightInfo( directionalLight, directLight );
-        directLight.color *= ksCanopy(vKsP, vec3(dot(vKsX, directLight.direction), dot(vKsY, directLight.direction), dot(vKsZ, directLight.direction)));`)
+        directLight.color *= ${gen ? '0.6 * smoothstep(-0.2, 0.5, dot(vKsY, directLight.direction))' : 'ksCanopy(vKsP, vec3(dot(vKsX, directLight.direction), dot(vKsY, directLight.direction), dot(vKsZ, directLight.direction)))'};`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
         { vec3 ds = vec3(0.0, 0.09, -2.36) - vKsP; float d2 = dot(ds, ds);   // pendar 3 layar MFD dan lampu kabin redup dari atas
           float fs = max(dot(ksN, ds * inversesqrt(max(d2, 1e-6))), 0.0) * 0.5 + 0.15;
           reflectedLight.indirectDiffuse += diffuseColor.rgb * (vec3(0.25, 0.55, 0.5) * uKsScr * fs * 0.35 / (1.0 + 6.0 * d2) + vec3(0.085, 0.08, 0.075) * (0.55 + 0.45 * max(ksN.y, 0.0))); }`);
     sh.fragmentShader = fs;
   };
-  m.customProgramCacheKey = () => cock ? 'ksCock' : 'ksHull';
+  m.customProgramCacheKey = () => cock ? (gen ? 'ksCockG' : 'ksCock') : 'ksHull';
   return m;
 }
 const shipHullMat = ksPanelMat({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.72, metalness: 0.15 }, false);
-function makeShuttle() {
-  const g = new THREE.Group(), body = new THREE.Group(); body.position.y = SHUTTLE_UP; g.add(body);
-  const hull = new THREE.Mesh(SHUTTLE.geo, shipHullMat), glass = new THREE.Mesh(SHUTTLE.glass, shipGlassMat);
+function makeShip(id) {
+  const D = fleetDesc(id), g = new THREE.Group(), body = new THREE.Group(); body.position.y = D.up; g.add(body);
+  const hull = new THREE.Mesh(D.geo, shipHullMat), glass = new THREE.Mesh(D.glass, shipGlassMat);
   const glowMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
   const lamp = (p, sz, mat) => new THREE.Mesh(bx(sz, sz, sz, ...p), mat);
-  body.add(hull, glass, lamp(SHUTTLE.nav.red, 0.16, NAV.red), lamp(SHUTTLE.nav.green, 0.16, NAV.green), lamp(SHUTTLE.nav.strobe, 0.18, NAV.strobe));
-  for (const p of SHUTTLE.nozzles) body.add(new THREE.Mesh(new THREE.CircleGeometry(0.42, 16).translate(...p), glowMat));
-  g.userData = { hull, body, glowMat };
+  body.add(hull, glass, lamp(D.nav.red, 0.16, NAV.red), lamp(D.nav.green, 0.16, NAV.green), lamp(D.nav.strobe, 0.18, NAV.strobe));
+  for (const p of D.nozzles) body.add(new THREE.Mesh(new THREE.CircleGeometry(p[3] || 0.42, 16).translate(p[0], p[1], p[2]), glowMat));
+  g.userData = { hull, body, glowMat, id };
   return g;
 }
 // --- kapal kargo 72 m: modul awak, tulang punggung dengan kontainer, radiator, mesin ---
@@ -14490,13 +14514,14 @@ const PODG = new THREE.Group();
   PODG.add(pm); PODG.visible = false; scene.add(PODG);
 }
 // --- kapal-kapal ---
-const SHIPS = { player: makeShuttle(), ai: makeShuttle(), cargo: makeCargo(), tug: makeTug() };
+const SHIPS = { cargo: makeCargo(), tug: makeTug() };   // player, ai, park dipasang assignPortShips() sesudah berth siap
 for (const s of Object.values(SHIPS)) { s.matrixAutoUpdate = false; DOCK.add(s); }
 // kokpit (hanya terlihat saat pandangan kokpit)
 const COCKPIT = new THREE.Group();
-{   // M3e: kokpit v5 (KESTREL.buildCockpitV5): 3 layar MFD (kiri data sandar, tengah penunjuk arah berth, kanan stasiun dan mode)
-  // V2: material PBR dengan detail panel; cahaya dermaga hanya lewat kaca kanopi, lampu kabin redup dan pendar layar (ksPanelMat)
-  const cm = ksPanelMat({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.05 }, true), CK = SHUTTLE_CK;
+const KS_CM = [ksPanelMat({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.05 }, true, false), ksPanelMat({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.05 }, true, true)];
+function fillCockpit(D) {   // kokpit wahana terpilih (M3e: 3 layar MFD: kiri data sandar, tengah penunjuk arah berth, kanan stasiun dan mode); isi ulang saat wahana diganti
+  const CK = D.cockpit, cm = KS_CM[CK.canopy === 'gen' ? 1 : 0];
+  for (const c of [...COCKPIT.children]) { COCKPIT.remove(c); if (c.material && c.material.map) c.material.map.dispose(); if (c.material && c.material.isMeshBasicMaterial) c.material.dispose(); }
   const ksSpace = () => { COCKPIT.updateWorldMatrix(true, false); KS_U.uKsW.value.copy(COCKPIT.matrixWorld); KS_U.uKsInv.value.copy(COCKPIT.matrixWorld).invert(); };
   const stick = new THREE.Mesh(CK.stick, cm), thr = new THREE.Mesh(CK.throttle, cm), shell = new THREE.Mesh(CK.geo, cm);
   for (const o of [shell, stick, thr]) o.onBeforeRender = ksSpace;
@@ -14507,11 +14532,12 @@ const COCKPIT = new THREE.Group();
     const cv = document.createElement('canvas'); cv.width = 256; cv.height = Math.round(256 * S.h / S.w);
     const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(S.w, S.h), new THREE.MeshBasicMaterial({ map: tex }));
-    m.position.set(...S.c); m.rotation.set(S.rx, S.ry, 0, 'YXZ'); COCKPIT.add(m);
+    m.position.set(...S.c); if (S.q) m.quaternion.set(...S.q); else m.rotation.set(S.rx, S.ry, 0, 'YXZ'); COCKPIT.add(m);
     screens[S.name] = { cv, g: cv.getContext('2d'), tex };
   }
-  COCKPIT.position.y = SHUTTLE_UP; COCKPIT.userData = { screens, stick, thr }; COCKPIT.visible = false;
-  SHIPS.player.add(COCKPIT);
+  const off = CK.offset || [0, 0, 0];
+  COCKPIT.position.set(off[0], D.up + off[1], off[2]); COCKPIT.userData = { screens, stick, thr }; COCKPIT.visible = false;
+  COCKPIT.traverse((o) => { if (o.isMesh) o.userData.noLight = true; });
 }
 DOCK.traverse((o) => { if (o.isMesh) o.userData.noLight = true; });
 PODG.traverse((o) => { if (o.isMesh) o.userData.noLight = true; });
@@ -14540,7 +14566,7 @@ const DGUIDE = {};
   const lmat = new THREE.LineDashedMaterial({ color: 0x40ff90, dashSize: 5, gapSize: 4, transparent: true, opacity: 0.8, fog: false });
   const line = new THREE.Line(lg, lmat); line.frustumCulled = false;
   box.visible = line.visible = false; DOCK.add(box, line);
-  Object.assign(DGUIDE, { box, line, mat, lmat, lastDraw: 0 });
+  Object.assign(DGUIDE, { box, cross, line, mat, lmat, lastDraw: 0 });
 }
 function updateDockGuide() {
   const on = ext.flight && (PORT.mode === 'fly' || PORT.mode === 'autodock' || PORT.mode === 'undock');
@@ -14573,6 +14599,35 @@ function aiShuttleState(t) {
   const tau = AI.period - T; return { phase: 'tiba', vis: true, burn: tau > 8 ? 0.8 : 0, p: out(tau), left: 0, arrive: tau };
 }
 placeShip(SHIPS.cargo, BERTH_P[2].p, BERTH_P[2].q);
+// tiga wahana di dermaga: pemain di berth 1, wahana terjadwal di berth 2, satu lagi diparkir di berth 4 (urutan armada diputar mengikuti pilihan)
+function portShipSet() { return [PSEL, ...window.FLEET.ids.filter((k) => k !== PSEL)]; }
+function assignPortShips(id) {
+  PSEL = id;
+  const ids = portShipSet(), D = fleetDesc(id);
+  for (const k of ['player', 'ai', 'park']) if (SHIPS[k]) DOCK.remove(SHIPS[k]);
+  SHIPS.player = makeShip(ids[0]); SHIPS.ai = makeShip(ids[1]); SHIPS.park = makeShip(ids[2]);
+  for (const k of ['player', 'ai', 'park']) { const o = SHIPS[k]; o.matrixAutoUpdate = false; o.traverse((m) => { if (m.isMesh) m.userData.noLight = true; }); DOCK.add(o); }
+  placeShip(SHIPS.park, BERTH_P[3].p, BERTH_P[3].q);
+  fillCockpit(D); SHIPS.player.add(COCKPIT);
+  PORT.eye.set(D.eye[0], D.eye[1] + D.up, D.eye[2]);
+  // kotak panduan sandar seukuran badan wahana
+  const sz = D.bb.getSize(new THREE.Vector3()).addScalar(1.2), ct = D.bb.getCenter(new THREE.Vector3()), bt = D.bb.min.y + D.up - 0.4;
+  DGUIDE.box.geometry.dispose(); DGUIDE.box.geometry = new THREE.EdgesGeometry(new THREE.BoxGeometry(sz.x, sz.y, sz.z).translate(ct.x, ct.y + D.up, ct.z));
+  DGUIDE.box.remove(DGUIDE.cross); DGUIDE.cross.geometry.dispose();
+  DGUIDE.cross = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([[-sz.x / 2, 0], [sz.x / 2, 0], [0, -sz.z / 2], [0, sz.z / 2]].map(([x, z]) => new THREE.Vector3(x + ct.x, bt, z + ct.z))), DGUIDE.mat);
+  DGUIDE.box.add(DGUIDE.cross);
+  if (typeof drawDepartureBoard === 'function' && TERM.board) drawDepartureBoard();
+}
+assignPortShips(PSEL);
+function portSelectShip(id) {                                      // ganti wahana pemain (tanpa muat ulang); tidak saat di dalam kokpit yang sedang terbang
+  if (id === PSEL || !window.FLEET.info[id] || (player.state === 'ship' && PORT.mode !== 'board')) return false;
+  try { localStorage.setItem(PSEL_KEY, id); } catch (e) { /* abaikan */ }
+  assignPortShips(id); portShipUi();
+  return true;
+}
+function portShipUi() {
+  document.querySelectorAll('#shipPick button, #labShips button').forEach((b) => b.classList.toggle('on', b.dataset.ship === PSEL));
+}
 
 // 24c: geometri datar di kerangka lokal pusat (x = tangen) ditekuk mengikuti lengkung silinder, seperti ballparkModel().
 // bendSub: pecah segitiga sampai lebar x <= maxDx (kalau tidak, kotak panjang jadi tali busur yang turun ke lantai).
@@ -14685,7 +14740,7 @@ function bendCyl(geo) {
   plate([['MASUK · TERMINAL', 140]], 6, 0.9, GRN, WHT, 0, 4.65, d / 2 + 0.3, 0);                     // pintu selatan, dari luar
   plate([['KELUAR · HALTE TREM', 120]], 6, 0.9, GRN, WHT, -w / 2 + 0.3, 4.65, 0, Math.PI / 2);       // pintu barat, dari dalam
   plate([['MASUK · TERMINAL', 140]], 6, 0.9, GRN, WHT, -w / 2 - 0.3, 4.65, 0, -Math.PI / 2);          // pintu barat, dari luar
-  plate([['GERBANG B1', 150], ['KE LIFT DERMAGA · SHUTTLE KS-07', 78]], 7, 1.6, ORG, WHT, 0, 5.0, -d / 2 + 0.75, 0);
+  plate([['GERBANG B1', 150], ['KE LIFT DERMAGA · 3 WAHANA', 78]], 7, 1.6, ORG, WHT, 0, 5.0, -d / 2 + 0.75, 0);
   // papan gantung di tengah aula (dua sisi) dan dekat pintu barat
   plate([['\u2191  GERBANG B1 · KE LIFT DERMAGA', 92]], 8, 0.9, ORG, WHT, 0, 5.3, 22, 0);
   plate([['\u2191  KELUAR · KOTA', 110]], 8, 0.9, GRN, WHT, 0, 5.3, 22, Math.PI);
@@ -14720,13 +14775,13 @@ function drawDepartureBoard() {
   g.font = 'bold 30px ui-monospace, monospace'; g.textBaseline = 'middle';
   g.fillStyle = '#f2c14e'; g.fillText('KEBERANGKATAN · DEPARTURES', 24, 30);
   g.fillStyle = '#9aa4ad'; g.textAlign = 'right'; g.fillText(fmtHour(clock.hour), W - 24, 30); g.textAlign = 'left';
-  const ai = aiShuttleState(clock.sim), mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const FI = window.FLEET.info, ids = portShipSet(), ai = aiShuttleState(clock.sim), mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
   const rows = [
-    ['KS-07', 'Orbit Saturnus (bebas)', 'B1', PORT.mode === 'idle' ? 'SIAP · GERBANG B1' : PORT.mode === 'docked' ? 'NAIK' : 'TERBANG'],
-    ['KS-12', 'Titan · Kraken Mare', 'B2', ai.phase === 'sandar' ? `NAIK · ${mmss(ai.left)}` : ai.phase === 'berangkat' ? 'BERANGKAT' : ai.phase === 'tiba' ? `TIBA · ${mmss(ai.arrive)}` : 'DI JALAN'],
+    [FI[ids[0]].short, 'Orbit ' + PLANET.name + ' (bebas)', 'B1', PORT.mode === 'idle' ? 'SIAP · GERBANG B1' : PORT.mode === 'docked' ? 'NAIK' : 'TERBANG'],
+    [FI[ids[1]].short, 'Terjadwal · ' + PLANET.moons[0].name, 'B2', ai.phase === 'sandar' ? `NAIK · ${mmss(ai.left)}` : ai.phase === 'berangkat' ? 'BERANGKAT' : ai.phase === 'tiba' ? `TIBA · ${mmss(ai.arrive)}` : 'DI JALAN'],
     ['CG-3', 'Kargo · Enceladus', 'B3', 'BONGKAR MUAT'],
     ['TG-1', 'Kapal tunda · patroli', '-', 'BERTUGAS'],
-    ['KS-21', 'Rhea · stasiun riset', 'B4', `${fmtHour((clock.hour + 3.5) % 24)} · TERJADWAL`],
+    [FI[ids[2]].short, 'Wahana cadangan · parkir', 'B4', 'SIAGA'],
   ];
   g.font = '28px ui-monospace, monospace';
   rows.forEach((r, i) => {
@@ -14745,7 +14800,7 @@ TERM.gate = { s: TERM.s, za: TERM.za - TERM.d / 2 + 2.5 };
 function portStartTrip() {
   plaqueEl.hidden = true; PORT.trip = true;
   enterLift();
-  setLabText('Gerbang B1: lorong ke lift dermaga, naik 994 m ke hub nol-g, lalu kapsul terowongan ke shuttle KS-07 (5x). E = langsung ke kokpit.');
+  setLabText('Gerbang B1: lorong ke lift dermaga, naik 994 m ke hub nol-g, lalu kapsul terowongan ke modul dermaga (5x). E = langsung ke pilihan wahana.');
 }
 function portEnterPod(dir) {                                        // dir -1 = ke dermaga, +1 = kembali ke hub
   PORT.pod.dir = dir; PORT.pod.v = 0; PORT.pod.z = dir < 0 ? PORT.zHubPod : PORT.zDockPod;
@@ -14764,18 +14819,80 @@ function stepPod(dt) {
     else { const F = player.float; F.pos.set(0, 0, PORT.zHubPod + 2); F.vel.set(0, 0, 0); player.state = 'float'; }
   }
 }
-function portBoard() {                                              // masuk kokpit shuttle di berth 1
-  if (PORT.mode === 'idle') { PORT.mode = 'docked'; berthPose(0, PORT.p, PORT.q); PORT.v.set(0, 0, 0); }
+/* Naik ke wahana (revisi Bhakti: dulu kapsul langsung memindahkan pemain ke kursi pilot): kapsul tiba di modul dermaga, lalu
+   1. pandangan berth: kamera mengitari wahana di berth 1 dengan dua wahana lain terlihat di berth 2 dan 4; panah / 1-3 mengganti wahana pemain,
+   2. E: melayang dari modul lewat cincin sandar ke tabung sandar, turun lewat palka atas wahana (layar sebentar gelap),
+   3. duduk di kursi pilot (mode docked). E lagi di tengah urutan = langsung duduk. */
+const BOARD = { stage: 'view', t: 0, cockpit: false, p0: new THREE.Vector3(), q0: new THREE.Quaternion(), qa: new THREE.Quaternion() };
+const _bC = new THREE.Vector3(), _bU = new THREE.Vector3(), _bT = new THREE.Vector3(), _bW = new THREE.Vector3(), _bE = new THREE.Vector3(), _bM = new THREE.Matrix4(), _bQ = new THREE.Quaternion();
+const portFadeEl = document.getElementById('portFade');
+function boardGeom() {                                              // pusat wahana (dunia) dan ukurannya, vektor radial u dan tangen
+  const D = fleetDesc(PSEL), a = PORT.berthAng[0], h = D.bb.max.y - D.bb.min.y;
+  _bU.set(Math.cos(a), Math.sin(a), 0); _bT.set(-Math.sin(a), Math.cos(a), 0);
+  _bC.copy(BERTH_P[0].p).addScaledVector(_bU, h / 2 - 2.7); _bC.z += (D.bb.max.z + D.bb.min.z) / 2;
+  return { D, h, R: Math.max(D.bb.max.z - D.bb.min.z, D.bb.max.x - D.bb.min.x) * 1.4 + 16 };
+}
+function boardLook(pos, target, up, out) { _bM.lookAt(pos, target, up); return out.setFromRotationMatrix(_bM); }
+function boardCamera(dt) {
+  const B = BOARD, G = boardGeom(), D = G.D;
+  B.t += dt;
+  if (B.stage === 'view') {                                         // mengitari wahana di berth 1, sedikit dari atas
+    const ph = 0.5 + 0.55 * Math.sin(B.t * 0.32), cp = Math.cos(ph), sp = Math.sin(ph);
+    camera.position.copy(_bC).addScaledVector(_bT, G.R * 0.85 * cp).addScaledVector(_bW.set(0, 0, 1), -G.R * 0.85 * sp).addScaledVector(_bU, -(G.h / 2 + 0.34 * G.R));
+    camera.up.copy(_bU).negate(); camera.lookAt(_bC); camera.up.set(0, 1, 0);
+    B.p0.copy(camera.position); B.q0.copy(camera.quaternion);
+    if (portFadeEl) portFadeEl.style.opacity = B.t < 0.8 ? (1 - B.t / 0.8).toFixed(3) : 0;
+    return;
+  }
+  // masuk: 0-3,2 s dekati palka atas (melayang di atas puncak badan), 3,2-5,6 s turun ke kursi; tengah turunan = layar gelap sebentar
+  const eyeW = _bE.copy(PORT.eye).applyQuaternion(PORT.q).add(PORT.p);
+  const hatch = _bW.set(D.eye[0], D.bb.max.y + D.up + 6, D.eye[2]).applyQuaternion(PORT.q).add(PORT.p);
+  const qSeat = BOARD.qa.copy(PORT.q).multiply(_bQ.setFromEuler(new THREE.Euler(PORT.look.pitch, PORT.look.yaw, 0, 'YXZ')));
+  const qDown = boardLook(hatch, eyeW, _bT.set(0, 0, -1).applyQuaternion(PORT.q), new THREE.Quaternion());
+  let fade = 0;
+  if (B.t < 3.2) {
+    const u = Math.min(1, B.t / 3.2), k = u * u * (3 - 2 * u);
+    camera.position.copy(B.p0).lerp(hatch, k); camera.quaternion.copy(B.q0).slerp(qDown, k);
+  } else {
+    const u = Math.min(1, (B.t - 3.2) / 2.4), k = u * u * (3 - 2 * u);
+    camera.position.copy(hatch).lerp(eyeW, k); camera.quaternion.copy(qDown).slerp(qSeat, k);
+    fade = Math.max(0, 1 - Math.abs(u - 0.45) / 0.2);
+    B.cockpit = u > 0.45;
+    if (B.t >= 5.6) { boardFinish(); return; }
+  }
+  if (portFadeEl) portFadeEl.style.opacity = fade.toFixed(3);
+}
+function boardFinish() {
+  BOARD.stage = 'view'; BOARD.cockpit = true; PORT.mode = 'docked'; PORT.view = 'cockpit'; PORT.look.yaw = 0; PORT.look.pitch = -0.05;
+  if (portFadeEl) portFadeEl.style.opacity = 0;
+  camera.up.set(0, 1, 0);
+  const I = window.FLEET.info[PSEL];
+  setLabText(t('Di kokpit {w}. E = lepas sandar, L = keluar ke terowongan.', { w: I.short }));
+}
+function portBoard() {                                              // kapsul tiba di modul dermaga: pandangan berth dengan pilihan wahana
+  berthPose(0, PORT.p, PORT.q); PORT.v.set(0, 0, 0);
+  PORT.mode = 'board'; BOARD.stage = 'view'; BOARD.t = 0; BOARD.cockpit = false;
   PORT.view = 'cockpit'; PORT.look.yaw = 0; PORT.look.pitch = -0.05; PORT.trip = false;
-  player.state = 'ship'; player.mode = 'di kokpit';
+  player.state = 'ship'; player.mode = 'modul dermaga';
   ext.flight = true;
   if (!ext.active) toggleExterior();
   camera.near = 0.3; camera.updateProjectionMatrix();
   lockPointer();
-  setLabText('Di kokpit shuttle KS-07. E = lepas sandar, L = keluar ke terowongan.');
+  setLabText('Modul dermaga: tiga wahana siaga. Panah kiri / kanan atau 1-3 memilih wahana, E naik, L kembali ke terowongan.');
+}
+function boardKey(code) {                                           // tombol saat urutan naik; true = diambil
+  const B = BOARD, ids = window.FLEET.ids;
+  if (code === 'KeyE' || code === 'Enter') { if (B.stage === 'view') { B.stage = 'enter'; B.t = 0; setLabText('Melayang lewat cincin sandar ke palka atas wahana.'); } else if (B.t > 0.4) boardFinish(); return true; }
+  if (B.stage === 'view') {
+    if (code === 'KeyL') { portLeaveShip(true); if (portFadeEl) portFadeEl.style.opacity = 0; return true; }
+    const i = ids.indexOf(PSEL), d = code === 'ArrowRight' || code === 'KeyD' ? 1 : code === 'ArrowLeft' || code === 'KeyA' ? -1 : 0;
+    if (d) { portSelectShip(ids[(i + d + ids.length) % ids.length]); return true; }
+    const n = /^Digit([1-9])$/.exec(code); if (n && ids[+n[1] - 1]) { portSelectShip(ids[+n[1] - 1]); return true; }
+  }
+  return ['KeyV', 'KeyX', 'KeyZ', 'KeyC', 'KeyR', 'KeyF', 'KeyB', 'KeyG', 'KeyT', 'KeyO', 'Space'].includes(code);
 }
 function portLeaveShip(toHub) {                                    // keluar kokpit (kapal kembali parkir di berth 1)
-  ext.flight = false;
+  ext.flight = false; if (portFadeEl) portFadeEl.style.opacity = 0; camera.up.set(0, 1, 0);
   if (ext.active) toggleExterior();
   PORT.mode = 'idle'; berthPose(0, PORT.p, PORT.q); PORT.v.set(0, 0, 0);
   if (toHub) portEnterPod(1);
@@ -14790,6 +14907,7 @@ function portAction() {
 }
 const portCanDock = () => PORT.p.distanceTo(BERTH_P[0].p) < 400 && PORT.v.length() < 30;
 function portKey(code) {
+  if (PORT.mode === 'board') return boardKey(code);
   if (code === 'KeyE') { portAction(); return true; }
   if (code === 'KeyL') { if (PORT.mode === 'docked') portLeaveShip(true); return true; }
   if (code === 'KeyV') { PORT.view = PORT.view === 'cockpit' ? 'chase' : 'cockpit'; camera.near = PORT.view === 'cockpit' ? 0.3 : 1.5; camera.updateProjectionMatrix(); return true; }
@@ -14798,6 +14916,7 @@ function portKey(code) {
 }
 const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _va = new THREE.Vector3(), _vb = new THREE.Vector3();
 function portMouse(dx, dy) {
+  if (PORT.mode === 'board') return;
   if (PORT.mode === 'fly' && PORT.view === 'cockpit' || PORT.mode === 'fly' && PORT.view === 'chase') {   // mouse = tongkat maya: perintah laju putar hidung
     // V2: dulu mouse memutar hidung langsung. Kini menggeser tongkat maya (kembali ke tengah 4/s); laju putar mengikuti tongkat
     // dengan percepatan sudut RCS terbatas, jadi hidung mulai dan berhenti berputar halus. Gerak mouse tetap terasa sama cepat.
@@ -14876,6 +14995,7 @@ function updateFlightCamera(dt) {
   _vb.copy(PORT.acc).multiplyScalar(-0.006); if (_vb.length() > 0.09) _vb.setLength(0.09);
   H.lerp(_vb, kh);
   const vib = PORT.mode === 'fly' ? 0.0012 * PORT.eng * Math.sqrt(PORT.boostK) + 0.0006 * PORT.turn : 0, tt = performance.now() * 0.061;
+  if (PORT.mode === 'board') { boardCamera(dt); PORT.chaseInit = false; return; }
   if (PORT.view === 'cockpit') {
     _eul.set(PORT.mode === 'fly' ? vib * 0.6 * Math.sin(tt * 1.7) : PORT.look.pitch, PORT.mode === 'fly' ? vib * 0.6 * Math.sin(tt * 1.3 + 1) : PORT.look.yaw, 0);
     camera.position.copy(_va.copy(PORT.eye).add(H).add(_vb.set(vib * Math.sin(tt), vib * Math.sin(tt * 1.37 + 2), 0))).applyQuaternion(PORT.q).add(PORT.p);
@@ -14892,7 +15012,7 @@ function updateFlightCamera(dt) {
 function updatePortVisual() {
   DOCK.rotation.z = -OMEGA * clock.sim;                             // despun: diam di ruang inersia
   placeShip(SHIPS.player, PORT.p, PORT.q);
-  COCKPIT.visible = ext.flight && PORT.view === 'cockpit';
+  COCKPIT.visible = ext.flight && PORT.view === 'cockpit' && (PORT.mode !== 'board' || BOARD.cockpit);
   PODG.visible = player.state === 'pod'; if (PODG.visible) PODG.position.set(0, 0, PORT.pod.z);
   const T = clock.sim, strobe = (T % 1.3) < 0.08, beacon = (T % 2) < 1;
   NAV.strobe.color.setScalar(strobe ? 6 : 0.05);
@@ -14959,7 +15079,8 @@ function portPrompt() {
   if (player.state === 'pod') { const P = PORT.pod, rem = P.dir < 0 ? P.z - PORT.zDockPod : PORT.zHubPod - P.z; return `Kapsul terowongan · ${P.v.toFixed(1)} m/s · sisa ${Math.abs(rem).toFixed(0)} m · ${PORT.trip ? 'gerbang B1 (5x) · E langsung ke kokpit' : 'Shift = 5x'}`; }
   const sp = PORT.v.length(), d = PORT.p.distanceTo(BERTH_P[0].p), fmt = (x) => x < 1000 ? `${x.toFixed(0)} m` : `${(x / 1000).toFixed(2)} km`;
   const cam = `V ${PORT.view === 'cockpit' ? 'kamera belakang' : 'kokpit'}`;
-  if (PORT.mode === 'docked') return `Shuttle KS-07 · sandar di berth 1 · E lepas sandar · L keluar ke terowongan · mouse melihat · ${cam}`;
+  if (PORT.mode === 'board') { const I = window.FLEET.info[PSEL]; return BOARD.stage === 'view' ? `Berth 1 · ${I.name} · ${I.crew} awak · ${I.size.L} x ${I.size.W} m · panah kiri / kanan atau 1-3 ganti wahana · E naik · L kembali` : 'Naik ke wahana... · E langsung duduk'; }
+  if (PORT.mode === 'docked') return `Wahana ${window.FLEET.info[PSEL].short} · sandar di berth 1 · E lepas sandar · L keluar ke terowongan · mouse melihat · ${cam}`;
   if (PORT.mode === 'undock') return 'Lepas sandar...';
   if (PORT.mode === 'autodock') return `Sandar otomatis · ${fmt(d)}`;
   const D = dockData();
@@ -18786,6 +18907,16 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
     pick.appendChild(b);
   });
   auto.addEventListener('change', () => { PRESET.auto = auto.checked; applyPreset(PRESET.idx); });
+  { // pilihan wahana spaceport (tanpa muat ulang): kotak awal dan panel Gerak
+    for (const host of [document.getElementById('shipPick'), document.getElementById('labShips')]) {
+      for (const k of window.FLEET.ids) {
+        const I = window.FLEET.info[k], b = document.createElement('button'); b.type = 'button'; b.dataset.ship = k; b.textContent = I.short; b.title = `${I.name} · ${I.crew} awak · ${I.size.L} x ${I.size.W} m`;
+        b.addEventListener('click', () => { portSelectShip(k); b.blur(); });
+        host.appendChild(b);
+      }
+    }
+    portShipUi();
+  }
   { // tahap 30: pilihan planet (muat ulang saat diganti)
     const pp = document.getElementById('planetPick');
     for (const k of Object.keys(PLANETS)) {
