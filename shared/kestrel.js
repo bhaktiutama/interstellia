@@ -593,7 +593,7 @@ float ksGroove(float d, float sg, float w, float dep, inout float g) {
   return 1.0 - t * t * (3.0 - 2.0 * t);
 }
 // satu bidang: uv (m), ukuran panel sz. Hasil xy = gradien tinggi, z = rongga
-vec3 ksPlane(vec2 uv, vec2 sz, float pw, float seed) {
+vec3 ksRect(vec2 uv, vec2 sz, float pw, float seed) {
   // revisi Bhakti: tanpa susunan bata: lebar panel berbeda per baris, geser acak (bukan setengah), nada dan noda per panel
   float row = floor(uv.y / sz.y);
   float rw = sz.x * (0.6 + 1.1 * ksH(vec2(row, seed + 5.3)));
@@ -624,6 +624,33 @@ vec3 ksPlane(vec2 uv, vec2 sz, float pw, float seed) {
     if (r2 < RR * RR) { g.x += -0.0024 * q.x / (RR * RR) * rk; g.y += -0.0024 * q.y / (RR * RR) * sg.y * rk; }
   }
   return vec3(g, cav * 0.8 + tone);
+}
+// revisi Bhakti: pola panel campuran (persegi panjang, jajar genjang / trapesium bergantian, segi enam), dipilih per wilayah lambung
+vec3 ksSkew(vec2 uv, vec2 sz, float pw, float seed) {
+  float band = floor(uv.y / (sz.y * 3.0)), k = 0.55 * (mod(band, 2.0) * 2.0 - 1.0);
+  vec3 r = ksRect(vec2(uv.x + k * uv.y, uv.y), sz, pw, seed + 4.0);
+  return vec3(r.x, r.y + k * r.x, r.z);
+}
+vec3 ksHex(vec2 uv, vec2 sz, float pw, float seed) {
+  float s = sz.y * 1.15;
+  vec2 p = uv / s, r = vec2(1.0, 1.7320508), h = r * 0.5;
+  vec2 a = mod(p, r) - h, b = mod(p - h, r) - h;
+  vec2 gv = dot(a, a) < dot(b, b) ? a : b, id = p - gv, ag = abs(gv);
+  float d1 = dot(ag, vec2(0.5, 0.8660254)), d2 = ag.x, ed = (0.5 - max(d1, d2)) * s;
+  vec2 sgn = vec2(gv.x < 0.0 ? -1.0 : 1.0, gv.y < 0.0 ? -1.0 : 1.0);
+  vec2 inward = d1 > d2 ? -sgn * vec2(0.5, 0.8660254) : vec2(-sgn.x, 0.0);
+  float w = max(0.011, 1.5 * pw), fade = sqrt(0.011 / w), dep = 0.0016 * fade * 0.011 / w, gs = 0.0;
+  float cav = ksGroove(ed, 1.0, w, dep, gs) * fade;
+  float hh = ksH(id + seed);
+  vec2 g = inward * gs + (vec2(ksH(id + seed + 3.1), ksH(id + seed + 7.7)) - 0.5) * 0.02;
+  float tone = (hh - 0.5) * 0.36 + 0.28 * ksH(id + seed + 11.0) * smoothstep(0.1, -0.4, gv.y) - 0.1 * step(0.9, ksH(id + seed + 17.0));
+  return vec3(g, cav * 0.8 + tone);
+}
+vec3 ksPlane(vec2 uv, vec2 sz, float pw, float seed) {
+  float pick = ksH(floor(uv / (sz * vec2(5.0, 4.0))) + seed * 3.1);
+  if (pick < 0.45) return ksRect(uv, sz, pw, seed);
+  if (pick < 0.75) return ksSkew(uv, sz, pw, seed);
+  return ksHex(uv, sz, pw, seed);
 }
 vec4 ksPanel(vec3 p, vec3 n, float pw, float ps) {
   vec3 a = abs(n), G;
