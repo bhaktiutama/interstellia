@@ -333,8 +333,8 @@
       return g;
     }
     // warna: dasar abu terang dengan beda nada per panel (kesan lapisan panel dan pelapukan)
-    const WHITE = [0.3, 0.3, 0.29], GREY = [0.22, 0.22, 0.22], DARK = [0.07, 0.07, 0.075], BELLY = [0.06, 0.06, 0.065],
-          ORANGE = [0.4, 0.19, 0.07], METAL = [0.26, 0.26, 0.27], GLASS = [0.02, 0.045, 0.085], GOLD = [0.36, 0.28, 0.12];
+    const WHITE = [0.72, 0.72, 0.70], GREY = [0.5, 0.5, 0.5], DARK = [0.07, 0.07, 0.075], BELLY = [0.06, 0.06, 0.065],
+          ORANGE = [0.4, 0.19, 0.07], METAL = [0.4, 0.4, 0.41], GLASS = [0.02, 0.045, 0.085], GOLD = [0.36, 0.28, 0.12];
     const tone = (c, k) => c.map((v) => Math.min(1, v * k));
     const hash = (a, b) => { const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return s - Math.floor(s); };
     const hullColor = (i, r) => i === 0 || i === 1 || i === 7 ? BELLY : tone(WHITE, 0.93 + 0.1 * hash(i, r));
@@ -351,7 +351,7 @@
     const parts = [];
     const SYM = [-1, 1];
     // palet v5: keluarga v3 (abu-krem lapuk, jingga), panel berpola gelap di punggung
-    const BEIGE = [0.23, 0.23, 0.22], BEIGE2 = [0.16, 0.16, 0.16], PALE = [0.3, 0.3, 0.29], RUST = [0.28, 0.17, 0.1], FRAME = [0.08, 0.08, 0.085];
+    const BEIGE = [0.64, 0.64, 0.62], BEIGE2 = [0.47, 0.47, 0.47], PALE = [0.76, 0.76, 0.74], RUST = [0.28, 0.17, 0.1], FRAME = [0.08, 0.08, 0.085];
     const weather = (base, i, r, seed) => (i === 0 || i === 1 || i === 7 ? FRAME : tone(base, 0.88 + 0.16 * hash(i + seed, r)));
     const seamRing = (pts, z, c = tone(BEIGE, 0.62)) => loft([{ z, pts: pts.map(([x, y]) => [x * 1.02, y * 1.02]) }, { z: z + 0.05, pts: pts.map(([x, y]) => [x * 1.02, y * 1.02]) }], () => c, false);
 
@@ -368,7 +368,7 @@
         return i < 0 ? FRAME : zm > -3.6 && zm < -0.6 && (i === 3 || i === 4 || i === 5) ? GLASS : weather(zm < -0.6 ? PALE : BEIGE, i, Math.floor((zm + 7) / 1.5), 3); }));
       for (const z of [-4.0, 1.2]) parts.push(seamRing(F(...v5At(z)), z));   // penampang di z itu (dulu memakai penampang belakang: cincin melayang di depan kanopi)
       // rangka kaca kokpit
-      parts.push(box(1.2, 0.035, 0.05, 0, 0.9, -1.6, PALE));  // palang kaca (tipis: dari kursi pilot hanya 0,45 m di depan mata)
+      // revisi Bhakti: palang kaca di atas kokpit dihapus (menghalangi pandangan pilot)
       // hidung: bibir sensor gelap dan lampu
       parts.push(box(1.3, 0.12, 0.1, 0, -0.18, -6.22, FRAME));
       for (const sx of SYM) parts.push(box(0.14, 0.08, 0.05, sx * 0.45, -0.1, -6.24, [1, 0.95, 0.8]));
@@ -382,7 +382,7 @@
     // ---------- 2. sayap pendek menyapu dengan kipas angkat tertanam, ujung dengan sirip kecil ----------
     for (const sx of SYM) {
       const sh = new THREE.Shape([new THREE.Vector2(0, -1.2), new THREE.Vector2(3.9, 0.9), new THREE.Vector2(3.9, 2.6), new THREE.Vector2(0, 3.9)]);
-      const w = new THREE.ExtrudeGeometry(sh, { depth: 0.22, bevelEnabled: true, bevelThickness: 0.04, bevelSize: 0.04, bevelSegments: 1 }); w.rotateX(Math.PI / 2);
+      const w = new THREE.ExtrudeGeometry(sh, { depth: 0.22, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 3, curveSegments: 4 }); w.rotateX(Math.PI / 2);
       if (sx < 0) { w.scale(-1, 1, 1); const q = w.index ? w.index.array : null, P = w.attributes; if (q) for (let k = 0; k < q.length; k += 3) [q[k + 1], q[k + 2]] = [q[k + 2], q[k + 1]]; else for (const nm of ['position', 'normal', 'uv']) { const A = P[nm].array, d = P[nm].itemSize; for (let k = 0; k < A.length; k += 3 * d) for (let e = 0; e < d; e++) [A[k + d + e], A[k + 2 * d + e]] = [A[k + 2 * d + e], A[k + d + e]]; } }   // cermin: urutan segitiga dibalik lagi
       w.translate(sx * 1.1, -0.05, -0.3); parts.push(tilt(paint(w, tone(BEIGE, 0.98)), 'z', sx * -0.1, sx * 1.1, 0, 0));
       // kipas angkat (cincin + kisi) di tengah sayap
@@ -392,7 +392,7 @@
       for (let k = 0; k < 4; k++) parts.push(tilt(box(1.3, 0.03, 0.08, fx, -0.11, fz, METAL), 'y', k * Math.PI / 4, fx, -0.11, fz));
       // sirip kecil di ujung sayap (lampu navigasi)
       parts.push(box(0.12, 0.8, 1.2, sx * 5.0, 0.0, 1.7, PALE), box(0.14, 0.14, 0.14, sx * 5.0, 0.44, 1.3, sx < 0 ? [0.9, 0.1, 0.08] : [0.1, 0.8, 0.2]));
-      for (let k = 0; k < 3; k++) parts.push(box(0.03, 0.05, 1.5, sx * (2.0 + k * 0.9), 0.1, 2.6, k % 2 ? FRAME : ORANGE));   // garis jingga
+      // revisi Bhakti: tiga bilah garis jingga di atas sayap dihapus (melayang di luar tepi belakang sayap)
     }
     // ---------- 3. dua mesin di pangkal sayap: saluran masuk berkipas di depan, nosel di belakang ----------
     for (const sx of SYM) {
@@ -593,13 +593,17 @@ float ksGroove(float d, float sg, float w, float dep, inout float g) {
   return 1.0 - t * t * (3.0 - 2.0 * t);
 }
 // satu bidang: uv (m), ukuran panel sz. Hasil xy = gradien tinggi, z = rongga
-vec3 ksPlane(vec2 uv, vec2 sz, float pw, float seed) {
+vec3 ksRect(vec2 uv, vec2 sz, float pw, float seed) {
+  // revisi Bhakti: tanpa susunan bata: lebar panel berbeda per baris, geser acak (bukan setengah), nada dan noda per panel
   float row = floor(uv.y / sz.y);
-  uv.x += sz.x * 0.5 * mod(row, 2.0);
+  float rw = sz.x * (0.6 + 1.1 * ksH(vec2(row, seed + 5.3)));
+  uv.x += ksH(vec2(row, seed + 1.7)) * rw;
+  sz = vec2(rw, sz.y);
   vec2 cell = floor(uv / sz), f = uv - cell * sz;
   float h = ksH(cell + seed);
+  float tone = (h - 0.5) * 0.36 + 0.28 * ksH(cell + seed + 11.0) * smoothstep(0.3, 0.0, f.y / sz.y) - 0.1 * step(0.9, ksH(cell + seed + 17.0));   // nada per panel + noda di tepi bawah + sebagian panel gelap
   vec2 g = (vec2(ksH(cell + seed + 3.1), ksH(cell + seed + 7.7)) - 0.5) * 0.024;   // lembaran sedikit miring
-  float w = max(0.011, 1.5 * pw), fade = sqrt(0.011 / w), dep = 0.0025 * fade * 0.011 / w;   // alur 11 mm; dari jauh rongga memudar lebih lambat dari tonjolan
+  float w = max(0.011, 1.5 * pw), fade = sqrt(0.011 / w), dep = 0.0016 * fade * 0.011 / w;   // alur 11 mm; dari jauh rongga memudar lebih lambat dari tonjolan
   vec2 dd = min(f, sz - f), sg = vec2(f.x < sz.x * 0.5 ? 1.0 : -1.0, f.y < sz.y * 0.5 ? 1.0 : -1.0);
   float cav = max(ksGroove(dd.x, sg.x, w, dep, g.x), ksGroove(dd.y, sg.y, w, dep, g.y)) * fade;
   // tutup akses: alur kedua 12 cm di dalam tepi
@@ -619,14 +623,46 @@ vec3 ksPlane(vec2 uv, vec2 sz, float pw, float seed) {
     r2 = dot(q, q);
     if (r2 < RR * RR) { g.x += -0.0024 * q.x / (RR * RR) * rk; g.y += -0.0024 * q.y / (RR * RR) * sg.y * rk; }
   }
-  return vec3(g, cav);
+  return vec3(g, cav * 0.8 + tone);
+}
+// revisi Bhakti: pola panel campuran (persegi panjang, jajar genjang / trapesium bergantian, segi enam), dipilih per wilayah lambung
+vec3 ksSkew(vec2 uv, vec2 sz, float pw, float seed) {
+  float band = floor(uv.y / (sz.y * 3.0)), k = 0.55 * (mod(band, 2.0) * 2.0 - 1.0);
+  vec3 r = ksRect(vec2(uv.x + k * uv.y, uv.y), sz, pw, seed + 4.0);
+  return vec3(r.x, r.y + k * r.x, r.z);
+}
+vec3 ksHex(vec2 uv, vec2 sz, float pw, float seed) {
+  float s = sz.y * 1.15;
+  vec2 p = uv / s, r = vec2(1.0, 1.7320508), h = r * 0.5;
+  vec2 a = mod(p, r) - h, b = mod(p - h, r) - h;
+  vec2 gv = dot(a, a) < dot(b, b) ? a : b, id = p - gv, ag = abs(gv);
+  float d1 = dot(ag, vec2(0.5, 0.8660254)), d2 = ag.x, ed = (0.5 - max(d1, d2)) * s;
+  vec2 sgn = vec2(gv.x < 0.0 ? -1.0 : 1.0, gv.y < 0.0 ? -1.0 : 1.0);
+  vec2 inward = d1 > d2 ? -sgn * vec2(0.5, 0.8660254) : vec2(-sgn.x, 0.0);
+  float w = max(0.011, 1.5 * pw), fade = sqrt(0.011 / w), dep = 0.0016 * fade * 0.011 / w, gs = 0.0;
+  float cav = ksGroove(ed, 1.0, w, dep, gs) * fade;
+  float hh = ksH(id + seed);
+  vec2 g = inward * gs + (vec2(ksH(id + seed + 3.1), ksH(id + seed + 7.7)) - 0.5) * 0.02;
+  float tone = (hh - 0.5) * 0.36 + 0.28 * ksH(id + seed + 11.0) * smoothstep(0.1, -0.4, gv.y) - 0.1 * step(0.9, ksH(id + seed + 17.0));
+  return vec3(g, cav * 0.8 + tone);
+}
+vec3 ksPlane(vec2 uv, vec2 sz, float pw, float seed) {
+  // revisi Bhakti: wilayah besar (sekitar 5 x 4 panel): 28% polos tanpa panel (hanya nada), 72% berpanel; di wilayah berpanel
+  // 70% persegi panjang, 20% jajar genjang / trapesium, 10% segi enam. uv.x sudah dicerminkan (abs) oleh pemanggil: kanan = kiri.
+  vec2 reg = floor(uv / (sz * vec2(5.0, 4.0))) + seed * 3.1;
+  float bare = ksH(reg + 41.0), pick = ksH(reg);
+  if (bare < 0.28) return vec3(0.0, 0.0, (ksH(reg + 5.0) - 0.5) * 0.12);
+  if (pick < 0.7) return ksRect(uv, sz, pw, seed);
+  if (pick < 0.9) return ksSkew(uv, sz, pw, seed);
+  return ksHex(uv, sz, pw, seed);
 }
 vec4 ksPanel(vec3 p, vec3 n, float pw, float ps) {
   vec3 a = abs(n), G;
   float cav;
-  if (a.y >= a.x && a.y >= a.z) { vec3 r = ksPlane(p.xz, vec2(0.62, 0.95) * ps, pw, 1.0); G = vec3(r.x, 0.0, r.y); cav = r.z; }
-  else if (a.x >= a.z) { vec3 r = ksPlane(p.zy, vec2(0.95, 0.5) * ps, pw, 2.0); G = vec3(0.0, r.y, r.x); cav = r.z; }
-  else { vec3 r = ksPlane(p.xy, vec2(0.55, 0.5) * ps, pw, 3.0); G = vec3(r.x, r.y, 0.0); cav = r.z; }
+  float sx = p.x < 0.0 ? -1.0 : 1.0;
+  if (a.y >= a.x && a.y >= a.z) { vec3 r = ksPlane(vec2(abs(p.x), p.z), vec2(1.1, 1.7) * ps, pw, 1.0); G = vec3(r.x * sx, 0.0, r.y); cav = r.z; }
+  else if (a.x >= a.z) { vec3 r = ksPlane(p.zy, vec2(1.7, 0.9) * ps, pw, 2.0); G = vec3(0.0, r.y, r.x); cav = r.z; }
+  else { vec3 r = ksPlane(vec2(abs(p.x), p.y), vec2(1.0, 0.9) * ps, pw, 3.0); G = vec3(r.x * sx, r.y, 0.0); cav = r.z; }
   G -= n * dot(G, n);
   vec3 nn = n - G;
   return vec4(nn * inversesqrt(max(dot(nn, nn), 1e-8)), cav);
@@ -641,7 +677,6 @@ float ksCanopy(vec3 p, vec3 L) {
   vec3 q = p + L * t;
   float top = 0.503 + K * (q.z + 3.55);
   float o = smoothstep(top - 0.34, top - 0.26, q.y) * smoothstep(-3.62, -3.5, q.z) * (1.0 - smoothstep(-0.7, -0.56, q.z));
-  o *= 1.0 - 0.85 * (1.0 - smoothstep(0.015, 0.04, abs(q.z + 1.6))) * step(top - 0.12, q.y);   // palang kaca tengah
   o *= 1.0 - 0.85 * (1.0 - smoothstep(0.015, 0.04, abs(q.z + 2.6)));                           // lengkung rangka
   o *= 1.0 - step(p.z, -2.48) * step(p.y, 0.36);                                                 // di bawah penutup silau dasbor
   return o * 0.85;                                                                               // kaca bernada menyerap sedikit
