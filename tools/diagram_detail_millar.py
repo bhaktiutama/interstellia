@@ -119,13 +119,13 @@ files = {}
 
 # ------------------------------------------------------------------ fisika (sama dengan CONFIG experiences/millar/index.html)
 G = 12.75; G_E = 9.80665; R_P = 8282e3; DIL = 61362; JUMP_V = 3.13; EYE = 1.7; DEPTH = 0.66
-WV = dict(H=1200, v=125, wf=80, wr=30, wb=1100, bk=0.8, wt=6000, dd=0.2, ddL=6000)
+WV = dict(H=1200, v=125, wf=1300, fp=2.2, wr=130, wb=800, bk=0.8, wt=4500, dd=0.2, ddL=6000)
 CUR = dict(max=1.6, at=2500, w=3500, push=0.35)
 YEAR = 365.25 * 86400
 def out_s(s): return s * DIL                                           # detik di luar
 def waveG(u):                                                           # = waveG() di game (u < 0 = di depan muka)
     r = math.sqrt(u * u + WV['wr'] ** 2) - WV['wr']
-    return math.exp(-r / WV['wf']) if u < 0 else WV['bk'] * math.exp(-((u / WV['wb']) ** 2)) + (1 - WV['bk']) * math.exp(-r / WV['wt'])
+    return max(1 - r / WV['wf'], 1e-6) ** WV['fp'] if u < 0 else WV['bk'] * math.exp(-((u / WV['wb']) ** 2)) + (1 - WV['bk']) * math.exp(-r / WV['wt'])
 def drawdown(u): return -WV['dd'] * math.exp(-(((u + WV['ddL']) / WV['ddL']) ** 2))
 def current(u):
     if u >= 0: return 0.0
@@ -344,8 +344,8 @@ b.append(f'<line x1="{f1(X(-300))}" y1="{yb}" x2="{f1(X(-300))}" y2="{f1(Yh(1200
 b.append(pill(X(-320), Yh(600), '1,200 m', 11, INK, 'end'))
 b.append(f'<line x1="{f1(X(-1200))}" y1="{yb - 30}" x2="{f1(X(-2400))}" y2="{yb - 30}" stroke="{GA}" stroke-width="2.4" marker-end="url(#ag)"/>')
 b.append(t(X(-1800), yb - 40, '125 m/s', 12, GA, 'middle', 650))
-b.append(callout(X(30), Yh(1100), X(900), 160, 'near-vertical concave face (80 m scale)', GA2, 11))
-b.append(callout(X(2400), Yh(WV['H'] * waveG(2400)), X(3800), 200, 'thick body, then a 6 km tail', INK, 11))
+b.append(callout(X(-420), Yh(WV['H'] * waveG(-420)), X(-1700), 150, 'concave slope (~50 deg), eases into the sea', GA2, 11))
+b.append(callout(X(2400), Yh(WV['H'] * waveG(2400)), X(3800), 200, 'back slope, then a 4.5 km tail', INK, 11))
 # arus balik dan air surut
 x0b, y0b, wb, hb = 110, 380, 360, 110
 Xb = lambda u: x0b + (u + 9000) / 9000 * wb

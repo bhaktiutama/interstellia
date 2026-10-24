@@ -161,9 +161,9 @@ UJI = r"""
 
   // 5f. R4: gelombang raksasa rapat, arus air surut, gelombang dekat tanpa nilai tidak valid
   {
-    const face = M.US.filter((u) => u >= -800 && u <= 300), gaps = face.slice(1).map((u, i) => u - face[i]);
+    const face = M.US.filter((u) => u >= -1500 && u <= 300), gaps = face.slice(1).map((u, i) => u - face[i]);
     const zs = M.ZS.map(Math.abs).sort((a, b) => a - b), dz = zs[1] - zs[0];
-    out[`muka gelombang: ${M.US.length} sampel profil, ${face.length} di muka (jarak ${Math.min(...gaps).toFixed(1)}-${Math.max(...gaps).toFixed(1)} m), baris ${dz.toFixed(1)} m dekat pemain`] = face.length >= 50 && Math.max(...gaps) <= 26 && dz <= 6.5;
+    out[`muka gelombang: ${M.US.length} sampel profil, ${face.length} di muka (jarak ${Math.min(...gaps).toFixed(1)}-${Math.max(...gaps).toFixed(1)} m), baris ${dz.toFixed(1)} m dekat pemain`] = face.length >= 80 && Math.max(...gaps) <= 26 && dz <= 6.5;
     const P = M.P; P.x = 0; P.z = 0; P.vx = 0; P.vz = 0; P.view = 0;
     M.U.uWX.value += 30000 - M.frontX(0); const cFar = M.currentAt(0, 0);
     M.U.uWX.value += M.CONFIG.current.at - M.frontX(0); const cNear = M.currentAt(0, 0);
@@ -308,7 +308,7 @@ UJI = r"""
     }
     out[`lokasi misi: ${okN}/200 benih memenuhi syarat (jarak ${C.rMin}-${C.rMax} m, antarlokasi >= ${C.sep} m), rute ${tmin.toFixed(0)}-${tmax.toFixed(0)} m`] = okN === 200;
     M.setMode('misi'); M.setLevel(1); M.startMission();
-    const eta = (M.frontX(P.z) - P.x) / M.CONFIG.wave.v;
+    const eta = (M.frontX(P.z) - P.x - M.CONFIG.wave.lead) / M.CONFIG.wave.v;   // sampai kaki gelombang (tersapu)
     out[`mode Misi Normal: gelombang tiba dalam ${eta.toFixed(1)} s (batas ${M.MIS.limit} s), 3 pecahan di layar`] = Math.abs(eta - 300) < 0.5 && M.MIS.sites.length === 3 && M.MIS.group;
     // radar: galat mengecil saat dekat
     const S0 = M.MIS.sites[0], err = (dist) => { P.x = S0.x - dist; P.z = S0.z; let e = 0; for (let k = 0; k < 400; k++) { M.radarFix(S0); e += Math.hypot(S0.blip.x - S0.x, S0.blip.z - S0.z); } return e / 400; };
@@ -586,7 +586,7 @@ UJI = r"""
       fRel < 1.2 && hF > 0 && hB < hF && fB > 0.05 && up === 2 && tc < 0.8 && nb === 0;
   }
 
-  // 5p. M5e: penampang gelombang raksasa = tembok tebal: profil JS = GLSL (50 titik di GPU), muka atas hampir tegak,
+  // 5p. M5e: penampang gelombang raksasa = tembok tebal: profil JS = GLSL (50 titik di GPU), muka berupa lereng halus (bukan tebing tegak, foto referensi Bhakti 24 Okt),
   //     lebar badan pada setengah tinggi 0,8-2,5 km, punggung turun ke sekitar 20% dalam 1,5-2,5 km
   {
     const T3 = M.THREE, n = 50, u0 = -1500, u1 = 3500, uAt = (i) => u0 + (u1 - u0) * i / (n - 1);
@@ -603,7 +603,7 @@ UJI = r"""
     let wa = null, wb = 0; for (let u = -2000; u < 8000; u += 1) if (G(u) >= 0.5) { if (wa === null) wa = u; wb = u; }
     let u20 = 0; for (let u = 0; u < 8000; u += 5) if (G(u) <= 0.22) { u20 = u; break; }
     out[`gelombang tembok (M5e): profil JS = GLSL selisih ${dMax.toFixed(3)} m (${n} titik), muka atas ${slope.toFixed(1)} derajat, lebar setengah tinggi ${((wb - wa) / 1000).toFixed(2)} km, punggung 22% di ${(u20 / 1000).toFixed(2)} km`] =
-      dMax < 0.5 && slope > 75 && wb - wa > 800 && wb - wa < 2500 && u20 > 1500 && u20 < 2500;
+      dMax < 0.5 && slope > 40 && slope < 62 && wb - wa > 800 && wb - wa < 2500 && u20 > 1000 && u20 < 2500 && G(-1300) < 0.01 && G(-1500) < 1e-6;   // kaki bertemu laut tanpa tepi keras
   }
 
   // 5n. M6b: percikan dan riak keluar dari sepatu yang terlihat, fase langkah sinkron, yaw badan tertinggal

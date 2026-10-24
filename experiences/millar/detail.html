@@ -386,12 +386,12 @@
    Konstanta (kembaran CONFIG experiences/millar/index.html)
    ===================================================================== */
 const G = 12.75, G_E = 9.80665, R_P = 8282e3, DIL = 61362, JUMP_V = 3.13, EYE = 1.7, DEPTH = 0.66, YEAR = 365.25 * 86400;
-const WV = { H: 1200, v: 125, wf: 80, wr: 30, wb: 1100, bk: 0.8, wt: 6000, dd: 0.2, ddL: 6000 };
+const WV = { H: 1200, v: 125, wf: 1300, fp: 2.2, wr: 130, wb: 800, bk: 0.8, wt: 4500, dd: 0.2, ddL: 6000 };
 const CURW = { max: 1.6, at: 2500, w: 3500, push: 0.35 };
 const TAU = Math.PI * 2, DEG = Math.PI / 180;
 const COL = { ac: '#8fd3dc', ac2: '#d4f3f7', or: '#f3a55a', red: '#ff6b5a', vi: '#b79cff', ink: '#e8ecf2', mu: '#9aa2ae', bg: '#060b0d', sea: '#2d6b78' };
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;   // hanya untuk efek muncul saat digulir dan gulir halus; kanvas tetap beranimasi
-const waveG = (u) => { const r = Math.sqrt(u * u + WV.wr * WV.wr) - WV.wr; return u < 0 ? Math.exp(-r / WV.wf) : WV.bk * Math.exp(-((u / WV.wb) ** 2)) + (1 - WV.bk) * Math.exp(-r / WV.wt); };   // = waveG() game
+const waveG = (u) => { const r = Math.sqrt(u * u + WV.wr * WV.wr) - WV.wr; return u < 0 ? Math.pow(Math.max(1 - r / WV.wf, 1e-6), WV.fp) : WV.bk * Math.exp(-((u / WV.wb) ** 2)) + (1 - WV.bk) * Math.exp(-r / WV.wt); };   // = waveG() game
 const drawdown = (u) => -WV.dd * Math.exp(-(((u + WV.ddL) / WV.ddL) ** 2));                                         // = drawdown() game
 const current = (u) => { if (u >= 0) return 0; const k = (u + CURW.at) / CURW.w, sm = Math.min(1, Math.max(0, -u / 150)); return CURW.max * Math.exp(-k * k) * sm * sm * (3 - 2 * sm); };   // = currentAt() game
 const horizon = (h) => Math.sqrt(2 * R_P * h);
@@ -496,9 +496,9 @@ const S = {
   w_run: ['Lari 4,2 m/s tidak berarti melawan 125 m/s. Satu-satunya jalan keluar adalah KS-07.', 'Running at 4.2 m/s means nothing against 125 m/s. The only way out is KS-07.'],
   c6_p1: ['Sebelum tiba, gelombang menarik air: laut <b>surut 20 cm</b> sampai 6 km di depannya, dan <b>arus balik</b> hingga 1,6 m/s menyeretmu ke arahnya.',
     'Before it arrives, the wave draws water in: the sea <b>drops 20 cm</b> up to 6 km ahead, and a <b>backwash</b> of up to 1.6 m/s drags you toward it.'],
-  c6_p2: ['Mukanya cekung hampir tegak, puncaknya membulat, lalu badan tebal yang turun ke 20% dalam 2 km dan ekor 6 km. Tingginya 984-1.200 m sepanjang muka.',
-    'Its face is concave and nearly vertical, the crest rounded, then a thick body that falls to 20% within 2 km and a 6 km tail. It stands 984-1,200 m along the front.'],
-  c6_fw: ['waveG: muka exp(−r/80 m), puncak bulat 30 m, badan Gauss 1.100 m (80%), ekor 6 km. Arus: puncak 1,6 m/s di 2,5 km depan muka, lebar 3,5 km.', 'waveG: face exp(−r/80 m), crest radius 30 m, Gaussian body 1,100 m (80%), 6 km tail. Current: 1.6 m/s peak 2.5 km ahead of the face, 3.5 km wide.'],
+  c6_p2: ['Mukanya lereng cekung sekitar 50 derajat yang melandai halus ke laut di sekitar 1,3 km depan puncak (tanpa tepi keras), puncaknya membulat, lalu punggung yang turun ke 20% dalam 1,3 km dan ekor 4,5 km. Tingginya 984-1.200 m sepanjang muka.',
+    'Its face is a concave slope of about 50 degrees that eases smoothly into the sea about 1.3 km ahead of the crest (no hard edge), the crest rounded, then a back that falls to 20% within 1.3 km and a 4.5 km tail. It stands 984-1,200 m along the front.'],
+  c6_fw: ['waveG: muka (1 − r/1.300 m)^2,2, puncak bulat 130 m, punggung Gauss 800 m (80%), ekor 4,5 km. Arus: puncak 1,6 m/s di 2,5 km depan muka, lebar 3,5 km.', 'waveG: face (1 − r/1,300 m)^2.2, crest radius 130 m, Gaussian back 800 m (80%), 4.5 km tail. Current: 1.6 m/s peak 2.5 km ahead of the face, 3.5 km wide.'],
   c6_try: ['Di game: <kbd>G</kbd> memanggil gelombang (160 detik lagi); HUD menulis arus "ke arah gelombang".', 'In the game: <kbd>G</kbd> summons a wave (160 seconds away); the HUD shows the current "toward the wave".'],
 
   c7_k: ['Pasang surut', 'Tides'], c7_t: ['Kenapa ada gelombang', 'Why the waves come'],
