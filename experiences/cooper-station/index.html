@@ -2244,7 +2244,7 @@ function toggleExterior() {
     camera.near = 5; camera.far = 120000; scene.fog.density = 0;
   } else {
     camera.near = 0.25; camera.far = 12000; scene.fog.density = CONFIG.fogDensity;
-    scene.rotation.z = 0;
+    scene.rotation.z = 0; CAP_FADE.value = 0;
   }
   camera.updateProjectionMatrix();
 }
@@ -2827,6 +2827,7 @@ scene.add(glass);
 // End cap kaca (seperti desain O'Neill dengan tutup transparan): kaca + 12 jari-jari + hub + cincin tepi.
 // Dari dalam: melihat ke sepanjang sumbu menembus kaca ke luar angkasa. Dari luar (kamera V): isi stasiun terlihat.
 const CAP = { spokes: 12, spokeW: 10, spokeT: 6, hubR: 45, hubLen: 40, rimT: 14, dockLen: 700, dockR: 16 };
+const CAP_FADE = { value: 0 };                                      // 1 = kamera luar (jari-jari dan cincin cap dilebarkan bila tipis dari satu piksel)
 {
   const capGlassGeo = new THREE.CircleGeometry(CONFIG.R, 128);
   for (const sgn of [-1, 1]) {
@@ -2855,7 +2856,33 @@ const CAP = { spokes: 12, spokeW: 10, spokeT: 6, hubR: 45, hubLen: 40, rimT: 14,
     }
   }
   const structGeo = bakeShadeBox();
-  const capStruct = new THREE.InstancedMesh(structGeo, new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x2a2e35 }), parts.length);
+  const capMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0x2a2e35 });
+  // Kamera luar jauh: jari-jari (lebar 10 m) dan cincin tepi lebih tipis dari satu piksel merayap dan putus-putus saat stasiun berputar.
+  // Sisi terkecil dilebarkan sampai ~1,6 piksel dan warnanya dicampur ke abu-abu tengah sebanyak (1 - tutupan sebenarnya), jadi rata-rata
+  // per piksel sama dengan garis tipis aslinya tetapi tidak berkedip (analitik; berlaku di semua preset, TAA tidak diperlukan). Mati di dalam stasiun.
+  capMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uLodPx = EXT_LIGHT.uniforms.uLodPx; sh.uniforms.uCapFade = CAP_FADE;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uLodPx, uCapFade; varying float vThin;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vThin = 1.0;
+        #ifdef USE_INSTANCING
+        if (uCapFade > 0.5) {
+          vec3 sz3 = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+          vec4 cw = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+          float mpp = max(length(cameraPosition - cw.xyz) * uLodPx, 1e-6);          // m per piksel di jarak benda
+          vec3 px = sz3 / mpp;                                                      // ukuran tiap sumbu dalam piksel
+          vec3 kk = clamp(1.6 / max(px, vec3(1e-4)), vec3(1.0), vec3(60.0));
+          transformed *= kk;
+          vThin = clamp(min(px.y, px.z) / 1.6, 0.0, 1.0);                           // tutupan sebenarnya relatif terhadap lebar tampak
+        }
+        #endif`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vThin;')
+      .replace('#include <opaque_fragment>', 'outgoingLight = mix(vec3(0.3), outgoingLight, vThin);\n#include <opaque_fragment>');
+  };
+  capMat.customProgramCacheKey = () => 'capThin1';
+  const capStruct = new THREE.InstancedMesh(structGeo, capMat, parts.length);
   parts.forEach((mm, i) => capStruct.setMatrixAt(i, mm));
   capStruct.instanceMatrix.needsUpdate = true; capStruct.frustumCulled = false;
   scene.add(capStruct);
@@ -2986,6 +3013,7 @@ function extLightUpdate() {
   saturnDirInertial(U.uSatW.value);
   const H = renderer.domElement.height || 1080;
   U.uLodPx.value = 2 * Math.tan(camera.fov * Math.PI / 360) / H;   // m per piksel pada jarak 1 m
+  CAP_FADE.value = 1;
   if (HX.blink) HX.blink.visible = (performance.now() % 1700) < 160;
 }
 // tipe segmen 500 m (acak sendiri, tidak berulang teratur); segmen yang memotong kompleks utilitas = industri
@@ -13229,7 +13257,7 @@ const fxaaMat = fsMat(/* glsl */`
 const V5 = { off: new URLSearchParams(location.search).get('v5') === '0' };
 const TAA = { off: V5.off || new URLSearchParams(location.search).get('taa') === '0', act: false, valid: false, i: 0, jx: 0, jy: 0,
   hist: [0, 1].map(() => new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false, generateMipmaps: false })),
-  cur: 0, prevVP: new THREE.Matrix4(), P: new THREE.Matrix4(), PI: new THREE.Matrix4() };
+  cur: 0, prevVP: new THREE.Matrix4(), P: new THREE.Matrix4(), PI: new THREE.Matrix4(), ek: 0, prevRot: 0, rotM: new THREE.Matrix4() };
 const LENS = { off: V5.off || new URLSearchParams(location.search).get('dirt') === '0', k: 0.08 };   // k relatif terhadap bloom (uBloom 0,083)
 const halton = POSTKIT.halton;
 LENS.tex = POSTKIT.lensDirt(THREE);
@@ -13247,8 +13275,11 @@ const taaOutMat = fsMat(/* glsl */`                                   // pass ak
     gl_FragColor = vec4(c, 1.0);
   }`, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uGrain: { value: 0 }, uTime: { value: 0 }, uSharp: { value: 0.22 } });
 function taaBegin() {                                                // sebelum render scene: geser proyeksi bila TAA aktif
-  const act = !TAA.off && PRESET.idx === 0 && POST.mode === 0 && !ext.active;
-  if (act !== TAA.act) { TAA.act = act; TAA.valid = false; }
+  // Kamera luar ikut TAA (garis miring jendela Skyway, jari-jari end cap, dan seam lambung tidak merayap); di pesawat (ext.flight) tetap FXAA
+  // karena bagian pesawat dan dermaga bergerak di kerangka lain. Stasiun berputar di kamera luar: lihat uPrevVP di postEnd().
+  const act = !TAA.off && PRESET.idx === 0 && POST.mode === 0 && !ext.flight;
+  const ek = ext.active ? 1 : 0;
+  if (act !== TAA.act || ek !== TAA.ek) { TAA.act = act; TAA.ek = ek; TAA.valid = false; }
   TAA.P.copy(camera.projectionMatrix); TAA.PI.copy(camera.projectionMatrixInverse);
   if (!act) return;
   renderer.getDrawingBufferSize(_dbs);
@@ -13261,6 +13292,7 @@ function taaEnd() {                                                  // sesudah 
   if (!TAA.act) return;
   camera.projectionMatrix.copy(TAA.P); camera.projectionMatrixInverse.copy(TAA.PI);
   TAA.prevVP.multiplyMatrices(TAA.P, camera.matrixWorldInverse);
+  TAA.prevRot = scene.rotation.z;
 }
 const _dbs = new THREE.Vector2();
 function postBegin() {                                            // dipanggil sebelum render scene
@@ -13361,7 +13393,7 @@ function postEnd() {
   C.uRayTexel.value.set(1 / R0.ray.width, 1 / R0.ray.height); C.uProjInv.value.copy(camera.projectionMatrixInverse);
   C.uTexelF.value.set(R0.h / 1080 / R0.w, 1 / 1080);                 // radius blur skala 1080p
   C.tHdr.value = R0.hdr.texture; C.tBloom.value = R0.up[0].texture; C.tAO.value = R0.ao[1].texture; C.uUseAO.value = useAO ? 1 : 0; C.uGtao.value = gtao ? 1 : 0; C.uAoView.value = POST.view ? 1 : 0;
-  C.uExp.value = POST.exposure; C.uBloom.value = POST.bloom / 6; C.uAO.value = gtao ? POST.aoG : POST.ao; C.uGrain.value = CAMKIT.U.E[0] > 0.5 ? 0 : POST.grain;   // K: derau sensor menggantikan butiran C.uVig.value = POST.vignette; C.uTime.value = (clock.sim % 100);
+  C.uExp.value = POST.exposure; C.uBloom.value = POST.bloom / 6 * (ext.active && !ext.flight && !TAA.act && !TOUR.on ? 0.6 : 1);   // kamera luar tanpa TAA (preset lain): halo bloom pada tepi tipis berundak dikurangi C.uAO.value = gtao ? POST.aoG : POST.ao; C.uGrain.value = CAMKIT.U.E[0] > 0.5 ? 0 : POST.grain;   // K: derau sensor menggantikan butiran C.uVig.value = POST.vignette; C.uTime.value = (clock.sim % 100);
   C.tBloomW.value = R0.up[2].texture; C.tBloomA.value = R0.down[5].texture; C.tDirt.value = LENS.tex; C.uDirt.value = LENS.off || PRESET.idx > 0 ? 0 : LENS.k; C.uDirtAsp.value = R0.w / R0.h;   // V5 lens dirt
   if (XRC.on) { C.uGrain.value = 0; C.uDirt.value = 0; }         // VR4: butiran dan noda lensa beda antar mata = persaingan binokular
   if (CAMX.final) {                                                  // K: foto akumulasi sudah halus (tanpa TAA / FXAA); pass akhir alpha 1
@@ -13375,7 +13407,10 @@ function postEnd() {
     fsPass(compMat, R0.ldr);
     const U = taaMat.uniforms, hw = TAA.hist[TAA.cur], hr = TAA.hist[1 - TAA.cur];
     U.tCur.value = R0.ldr.texture; U.tHist.value = hr.texture; U.tDepth.value = R0.hdr.depthTexture;
-    U.uProjInv.value.copy(camera.projectionMatrixInverse); U.uCamWorld.value.copy(camera.matrixWorld); U.uPrevVP.value.copy(TAA.prevVP);
+    U.uProjInv.value.copy(camera.projectionMatrixInverse); U.uCamWorld.value.copy(camera.matrixWorld);
+    // titik stasiun berputar bersama scene (scene.rotation.z = omega t di kamera luar): posisi di frame lalu = Rz(rotLalu - rotKini) x posisi kini;
+    // dalam stasiun rotasi 0 jadi matriks ini identitas
+    U.uPrevVP.value.multiplyMatrices(TAA.prevVP, TAA.rotM.makeRotationZ(TAA.prevRot - scene.rotation.z));
     U.uTexel.value.set(1 / R0.w, 1 / R0.h); U.uValid.value = TAA.valid ? 1 : 0;
     fsPass(taaMat, hw); TAA.valid = true; TAA.cur = 1 - TAA.cur;
     const O = taaOutMat.uniforms; O.tSrc.value = hw.texture; O.uTexel.value.set(1 / R0.w, 1 / R0.h); O.uGrain.value = CAMKIT.U.E[0] > 0.5 ? 0 : POST.grain; O.uTime.value = clock.sim % 100;
@@ -14465,7 +14500,34 @@ function makeShip(id) {
   body.add(hull, glass, lamp(D.nav.red, 0.16, NAV.red), lamp(D.nav.green, 0.16, NAV.green), lamp(D.nav.strobe, 0.18, NAV.strobe));
   for (const p of D.nozzles) body.add(new THREE.Mesh(new THREE.CircleGeometry(p[3] || 0.42, 16).translate(p[0], p[1], p[2]), glowMat));
   g.userData = { hull, body, glowMat, id };
+  g.userData.cabin = staticCabin(D); g.add(g.userData.cabin);          // dari luar kaca kanopi menampakkan kabin (kursi, panel, layar), bukan ruang kosong
   return g;
+}
+// Kabin tanpa animasi untuk wahana yang terlihat dari luar (wahana terjadwal dan parkir; wahana pemain memakai COCKPIT hidup).
+// Geometri dan bahan dibagi dengan kokpit hidup; layar MFD memakai satu tekstur siaga bersama.
+let CABIN_IDLE = null;
+function staticCabin(D) {
+  const CK = D.cockpit, cm = KS_CM[CK.canopy === 'gen' ? 1 : 0], G = new THREE.Group();
+  const ksSpace = () => { G.updateWorldMatrix(true, false); KS_U.uKsW.value.copy(G.matrixWorld); KS_U.uKsInv.value.copy(G.matrixWorld).invert(); };
+  const shell = new THREE.Mesh(CK.geo, cm), stick = new THREE.Mesh(CK.stick, cm), thr = new THREE.Mesh(CK.throttle, cm);
+  for (const o of [shell, stick, thr]) o.onBeforeRender = ksSpace;
+  stick.position.set(...CK.stickAt); thr.position.set(...CK.throttleAt); thr.rotation.x = 0.35;
+  G.add(shell, stick, thr);
+  if (!CABIN_IDLE) {
+    const cv = document.createElement('canvas'); cv.width = 128; cv.height = 80; const g = cv.getContext('2d');
+    g.fillStyle = '#041014'; g.fillRect(0, 0, 128, 80); g.strokeStyle = '#123a33'; g.lineWidth = 1;
+    for (let y = 16; y < 80; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(128, y); g.stroke(); }
+    g.fillStyle = '#2c7a64'; g.fillRect(8, 8, 50, 4); g.fillRect(8, 64, 80, 4);
+    CABIN_IDLE = new THREE.CanvasTexture(cv); CABIN_IDLE.colorSpace = THREE.SRGBColorSpace;
+  }
+  for (const S of CK.screens) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(S.w, S.h), new THREE.MeshBasicMaterial({ map: CABIN_IDLE }));
+    m.position.set(...S.c); if (S.q) m.quaternion.set(...S.q); else m.rotation.set(S.rx, S.ry, 0, 'YXZ'); G.add(m);
+  }
+  const off = CK.offset || [0, 0, 0];
+  G.position.set(off[0], D.up + off[1], off[2]);
+  G.traverse((o) => { if (o.isMesh) o.userData.noLight = true; });
+  return G;
 }
 // --- kapal kargo 72 m: modul awak, tulang punggung dengan kontainer, radiator, mesin ---
 function makeCargo() {
@@ -14599,7 +14661,7 @@ const PODG = new THREE.Group();
 // --- kapal-kapal ---
 const SHIPS = { cargo: makeCargo(), tug: makeTug() };   // player, ai, park dipasang assignPortShips() sesudah berth siap
 for (const s of Object.values(SHIPS)) { s.matrixAutoUpdate = false; DOCK.add(s); }
-// kokpit (hanya terlihat saat pandangan kokpit)
+// kokpit hidup wahana pemain (selalu terlihat; layar digambar hanya saat pandangan kokpit)
 const COCKPIT = new THREE.Group();
 const KS_CM = [ksPanelMat({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.05 }, true, false), ksPanelMat({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.8, metalness: 0.05 }, true, true)];
 function fillCockpit(D) {   // kokpit wahana terpilih (M3e: 3 layar MFD: kiri data sandar, tengah penunjuk arah berth, kanan stasiun dan mode); isi ulang saat wahana diganti
@@ -14688,6 +14750,7 @@ function assignPortShips(id) {
   SHIPS.player = makeShip(ids[0]); SHIPS.ai = makeShip(ids[1]); SHIPS.park = makeShip(ids[2]);
   for (const k of ['player', 'ai', 'park']) { const o = SHIPS[k]; o.matrixAutoUpdate = false; o.traverse((m) => { if (m.isMesh) m.userData.noLight = true; }); DOCK.add(o); }
   placeShip(SHIPS.park, BERTH_P[3].p, BERTH_P[3].q);
+  SHIPS.player.remove(SHIPS.player.userData.cabin);                  // pemain: COCKPIT hidup (selalu terlihat, juga dari luar)
   fillCockpit(D); SHIPS.player.add(COCKPIT);
   PORT.eye.set(D.eye[0], D.eye[1] + D.up, D.eye[2]);
   // kotak panduan sandar seukuran badan wahana
@@ -15092,7 +15155,7 @@ function updateFlightCamera(dt) {
 function updatePortVisual() {
   DOCK.rotation.z = -OMEGA * clock.sim;                             // despun: diam di ruang inersia
   placeShip(SHIPS.player, PORT.p, PORT.q);
-  COCKPIT.visible = ext.flight && PORT.view === 'cockpit' && (PORT.mode !== 'board' || BOARD.cockpit);
+  COCKPIT.visible = true;                                           // dari luar kanopi agak tembus: kabin harus terisi (dulu hanya saat pandangan kokpit)
   PODG.visible = player.state === 'pod'; if (PODG.visible) PODG.position.set(0, 0, PORT.pod.z);
   const T = clock.sim, strobe = (T % 1.3) < 0.08, beacon = (T % 2) < 1;
   NAV.strobe.color.setScalar(strobe ? 6 : 0.05);
@@ -15100,7 +15163,7 @@ function updatePortVisual() {
   NAV.guide.color.setRGB(0.3, 1.2 + 1.2 * Math.sin(T * 4), 3);
   if (Math.floor(T) !== TERM.board.t) { TERM.board.t = Math.floor(T); drawDepartureBoard(); }
   const now = performance.now();                                    // 12a: layar kokpit 10 kali per detik (panduan sandar)
-  if (COCKPIT.visible && now - DGUIDE.lastDraw > 100) { DGUIDE.lastDraw = now; drawCockpitScreen(); }
+  if (ext.flight && PORT.view === 'cockpit' && (PORT.mode !== 'board' || BOARD.cockpit) && now - DGUIDE.lastDraw > 100) { DGUIDE.lastDraw = now; drawCockpitScreen(); }   // layar hanya digambar bila terlihat dari dalam
   updateDockGuide();
 }
 function drawCockpitScreen() {                                    // 12a, M3e: kiri = data sandar, tengah = penunjuk arah berth 1, kanan = stasiun dan mode

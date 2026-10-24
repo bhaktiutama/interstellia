@@ -2486,7 +2486,7 @@ function updateBody(dtp) {
   B.foamK += (fk - B.foamK) * (dtp >= 1 ? 1 : 1 - Math.exp(-dtp / 0.15)); if (B.foamK < 1e-3) B.foamK = 0;
   const su = seaNear.material.uniforms, L0 = bodyLegAt(-1, depth), L1 = bodyLegAt(1, depth);
   su.uLegs.value.set(L0.x, L0.z, L1.x, L1.z); su.uLegK.value = B.foamK; su.uLegV.value.set(P.vx, P.vz);
-  B.group.visible = show || B.seat; if (!B.group.visible) return;
+  B.group.visible = show || (B.seat && B.showSeat); if (!B.group.visible) return;   // B.showSeat = hanya alat uji pose duduk; di dalam wahana (kokpit atau pandangan belakang) tubuh pemain tidak digambar (permintaan pemilik); B.seat tetap dihitung
   if (B.seat) bodySeat();
   else {
     B.group.position.set(P.x, feet, P.z); B.group.rotation.set(0, B.yaw, 0);
@@ -4344,7 +4344,7 @@ function vrFrame(t, eyes, xf, dt) {
   vrRig();
   // VR5: posisi dunia genggaman kontroler untuk lengan tubuh; kotak kontroler VRKIT hanya bila tubuh tidak tampil
   ['left', 'right'].forEach((hd, i) => { const m = K.in && K.in.hands[hd]; XRV.hands[i] = m ? (XRV.hands[i] || new THREE.Vector3()).set(m[12], m[13], m[14]).applyMatrix4(XRV.rig) : null; });
-  K.showHands = !(BODY.level === 2 && STATE.started && !CINE.on);
+  K.showHands = !(BODY.level === 2 && STATE.started && !CINE.on && !FLY.on);   // di wahana tubuh tidak tampil: kotak kontroler muncul
   const dark = SWEEP.on ? 0.8 : 0;                                            // tersapu: layar gelap, bukan kamera berguling
   const w = Math.max(16, Math.round(e0.vp.w * XRV.rs)), h = Math.max(16, Math.round(e0.vp.h * XRV.rs));
   if (w !== XRV.w || h !== XRV.h) { XRV.w = w; XRV.h = h; makePost(w, h, PRESETS[PRESET.idx]); }

@@ -718,15 +718,15 @@ UJI = r"""
     const inFr = (v) => { v.project(cam); return Math.abs(v.x) < 1 && Math.abs(v.y) < 1 && v.z < 1; }, kneeIn = B.knees.every((o) => inFr(o.getWorldPosition(new V3())));
     const handIn = (i) => [-1.1, -0.7, 0.7, 1.1].some((ly) => { M.FLY.lookY = ly; M.flyCamera(); cam.updateMatrixWorld(true); return inFr(hw(B.hands[i])); });
     const inF = kneeIn && handIn(0) && handIn(1); M.FLY.lookY = 0; M.flyCamera(); cam.updateMatrixWorld(true);
-    const seatVis = B.group.visible && B.seat;
+    const seatVis = !B.group.visible && B.seat;   // tubuh tidak digambar di dalam wahana (permintaan pemilik); status duduk tetap
     // render kokpit HDR: tanpa nilai tidak valid atau titik menyala
     const r = M.renderer, T = M.POST.hdr, w = T.width, h = T.height, buf = new Uint16Array(w * h * 4), from = M.THREE.DataUtils.fromHalfFloat; let nb = 0, nh = 0;
     M.U.uCam.value.copy(cam.position);
     M.updateShadow(); r.setRenderTarget(T); r.clear(); r.render(M.scene, cam); r.setRenderTarget(null); r.readRenderTargetPixels(T, 0, 0, w, h, buf);
     for (let k = 0; k < buf.length; k += 4) for (let c = 0; c < 3; c++) { const x = from(buf[k + c]); if (!Number.isFinite(x)) nb++; else if (x > 50) nh++; }
     M.FLY.view = 0; M.flyCamera(); M.updateBody(1 / 60); const rearHidden = !B.group.visible;
-    out[`pilot di kokpit: tangan kanan ${(eS * 100).toFixed(1)} cm dari tongkat, kiri ${(eT * 100).toFixed(1)} cm dari tuas (< 4), mata ${(eye * 100).toFixed(2)} cm dari kamera, lutut dan tangan (menoleh) di bingkai ${inF}, render tidak valid ${nb} / menyala ${nh}, tampilan belakang tersembunyi ${rearHidden}`] =
-      seatVis && eS < 0.04 && eT < 0.04 && eye < 0.01 && inF && nb === 0 && nh === 0 && rearHidden;
+    out[`pilot di kokpit: tubuh tidak digambar di kokpit (${!B.group.visible}) maupun pandangan belakang (${rearHidden}), render tidak valid ${nb} / menyala ${nh}`] =
+      seatVis && nb === 0 && nh === 0 && rearHidden;
     M.flyReset(); M.updateBody(10);
     // tahan E: tangan kanan menuju barang
     const wx0 = M.U.uWX.value, ck0 = M.U.uChopK.value;   // startMission memindah gelombang dan keadaan laut: dikembalikan setelahnya
@@ -765,7 +765,7 @@ UJI = r"""
         () => { M.BOB.run = 1; M.BOB.amp = 0.055; M.BOB.phase = 0; M.updateBody(10); },
         () => { M.BOB.run = 1; M.BOB.amp = 0.055; M.BOB.phase = Math.PI / 2; M.updateBody(10); },
         () => { M.BOB.run = 0; M.BOB.amp = 0; P.ground = false; M.updateBody(10); P.ground = true; },
-        () => { M.boardShip(); M.FLY.view = 1; M.flyCamera(); M.updateBody(1 / 60); },
+        () => { M.BODY.showSeat = true; M.boardShip(); M.FLY.view = 1; M.flyCamera(); M.updateBody(1 / 60); },
       ];
       for (const f of poses) {
         f(); const a = g.attributes.position.array, nn = g.attributes.normal.array;
@@ -840,7 +840,7 @@ UJI = r"""
     // tekuk dari kulit: berdiri vs lari (lutut terbesar di satu siklus) vs duduk di kokpit (pinggul tertekuk; kaki pilot hampir lurus ke depan)
     let kr = 0; for (let f = 0; f < 24; f++) { M.BOB.phase = f / 24 * 2 * PI; M.updateBody(10); kr = Math.max(kr, bu.uBend.value[1].y, bu.uBend.value[2].y); }
     M.BOB.run = 0; M.BOB.amp = 0; M.BOB.phase = 0; M.updateBody(10); const st = bu.uBend.value.map((q) => q.clone());
-    M.boardShip(); M.FLY.view = 1; M.flyCamera(); M.updateBody(1 / 60); const se = bu.uBend.value.map((q) => q.clone()); M.flyReset(); M.FLY.view = 0; M.updateBody(10);
+    M.BODY.showSeat = true; M.boardShip(); M.FLY.view = 1; M.flyCamera(); M.updateBody(1 / 60); const se = bu.uBend.value.map((q) => q.clone()); M.flyReset(); M.FLY.view = 0; M.updateBody(10);
     out[`lipatan ikut tekuk (M6g): beda kain sendi lurus ${(e0 * 100).toFixed(1)}% -> tertekuk ${(e1 * 100).toFixed(1)}%; tekuk lutut berdiri ${st[1].y.toFixed(2)} / lari maks ${kr.toFixed(2)}, pinggul berdiri ${st[1].x.toFixed(2)} / duduk ${se[1].x.toFixed(2)}`] =
       e1 > e0 * 1.1 && kr > st[1].y + 0.3 && se[1].x > st[1].x + 0.3 && se.every((q) => q.x >= 0 && q.x <= 1 && q.y >= 0 && q.y <= 1);
     P.pitch = 0; M.updateBody(10);
@@ -884,7 +884,7 @@ UJI = r"""
     M.BOB.run = 0; M.BOB.amp = 0; settle(); const cRest = B.hand[1];
     M.BOB.run = 1; M.BOB.amp = 0.055; settle(); const cRun = B.hand[1];
     M.BOB.run = 0; M.BOB.amp = 0; settle();
-    M.boardShip(); M.FLY.view = 1; M.flyCamera(); for (let f = 0; f < 60; f++) M.updateBody(1 / 60); const cSeat = Math.min(...B.hand); M.flyReset(); M.FLY.view = 0; M.updateBody(10);
+    M.BODY.showSeat = true; M.boardShip(); M.FLY.view = 1; M.flyCamera(); for (let f = 0; f < 60; f++) M.updateBody(1 / 60); const cSeat = Math.min(...B.hand); M.flyReset(); M.FLY.view = 0; M.updateBody(10);
     const wx0 = M.U.uWX.value, ck0 = M.U.uChopK.value;
     M.setMode('misi'); M.setLevel(1); M.startMission(); const S = M.MIS.sites[0]; P.x = S.ix + 0.6; P.z = S.iz; P.y = M.seabed(P.x, P.z) + M.CONFIG.eye; P.yaw = Math.PI / 2; P.pitch = -0.6; M.updateBody(10);
     M.MIS.near = 0; M.MIS.hold = 0.2; for (let f = 0; f < 40; f++) M.updateBody(1 / 60); const cOpen = B.hand[1];
@@ -892,6 +892,7 @@ UJI = r"""
     M.MIS.hold = 0; M.stopMission(); M.setMode('jelajah'); M.U.uWX.value = wx0; M.U.uChopK.value = ck0;
     out[`sarung tangan berjari (M6i): tekuk diam ${cRest.toFixed(2)} (0,25-0,45), lari ${cRun.toFixed(2)} (> 0,55), pilot ${cSeat.toFixed(2)} (> 0,8), ambil barang ${cOpen.toFixed(2)} -> ${cPick.toFixed(2)} (< 0,2 lalu > 0,7), ujung terjauh genggam/terbuka ${tip.map((x) => x.toFixed(2)).join(' / ')} (< 0,8), nilai tidak valid ${bad}`] =
       cRest > 0.25 && cRest < 0.45 && cRun > 0.55 && cSeat > 0.8 && cOpen < 0.2 && cPick > 0.7 && tip.every((x) => x < 0.8) && bad === 0;
+    M.BODY.showSeat = false;
     P.depth = 0; P.x = 0; P.z = 0; P.y = M.seabed(0, 0) + M.CONFIG.eye; P.pitch = 0; P.yaw = -Math.PI / 2 + 0.3; P.ground = true; M.updateBody(10);
   }
 
