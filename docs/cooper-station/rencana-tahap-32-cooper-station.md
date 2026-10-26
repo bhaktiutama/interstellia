@@ -1,6 +1,6 @@
 # Rencana Tahap 32 Copper Corn Station: tekstur jarak dekat (fasad, trotoar, aspal)
 
-Per 26 Oktober 2026 · disusun atas permintaan Bhakti dari 3 foto (gedung dan trotoar, aspal, tembok bata) · status: rencana, belum dikerjakan
+Per 26 Oktober 2026 · disusun atas permintaan Bhakti dari 3 foto (gedung dan trotoar, aspal, tembok bata) · status: 32a-32h diterapkan tanpa uji visual (diuji Bhakti); 32i (skrip uji) tidak dibuat atas permintaan, hanya dicek halaman termuat tanpa error dengan dan tanpa `?tekstur=lama`
 
 ## Ringkasan
 
@@ -64,3 +64,23 @@ Urutan kerja: 32a, 32b, 32c (cacat, langsung terlihat), lalu 32d, 32e, 32f, 32g,
 - Diagnosis berasal dari 3 foto, satu waktu, satu cuaca. Distrik lain (menara kaca, pasar, tani) belum dilihat dan mungkin punya masalah lain.
 - Penyebab 32b dan 32c pasti dari kode; penilaian "rata" dan "bersih" adalah penilaian visual dari foto.
 - Hasil akhir dinilai Bhakti di GPU asli; sandbox hanya memeriksa error, nilai tidak valid, dan keidentikan saklar.
+
+## Catatan penerapan (26 Oktober 2026)
+
+| Langkah | Yang dibuat | Nama di kode |
+| --- | --- | --- |
+| 32a | Saklar `?tekstur=lama` = define `TEKS_LAMA` di shader tanah dan `BUILD_FS`, tanpa peta jalan, atlas, dan alas tiang | `TEKS`, `TEKS_DEF` |
+| 32b | Atlas 1.024 x 512 berisi 32 kata, satu kata per toko, huruf 0,5 m; neon malam memakai huruf yang sama | `SIGN`, `BUILD_U.uSignTex`, `glyph` di blok 22a |
+| 32c | Kanvas kembaran peta lahan (r = arteri, g = jalan lokal) dari pembungkus `lg.fillRect` / `fill` / `stroke`; tekstur RG8 `uRoadM`; di shader: jarak ke tepi = (cakupan - 0,5) x 3,07 m, dalam jalan = warna aspal tepat, luar jalan = warna lahan dipisahkan dari campuran aspal (gamma 2,2) | `roadCanvas`, `ROADM.fill()`, `rEd`, `rLoc` |
+| 32d | Agregat halus, jalur ban dan tetes oli per lajur (arteri dan boulevard dari as, jalan lain dari tepi), tambalan (sel 7 m, 9%), retak, talang 0,45 m, tutup saluran (sel 24 m, 45%), marka aus; jalur ban lebih licin | `laneTracks()`, `boxSD()`, `trk` |
+| 32e | Petak 1,5-3 m per wilayah 60 m, rona per petak, noda air, permen karet, retak di 12% petak, kotor di sisi kerb dan sisi dalam | `tS`, blok 32e setelah sambungan beton |
+| 32f | Nat bata tenggelam, warna per bata (gaya 8), papan bertumpuk dengan bayangan, plester bercak, noda turun di bawah ambang dan dari atap, kaki dinding kotor (lumut tipis di gedung lama), bercak pudar; kekuatan per gedung `wk` | `wk` di `BUILD_FS` |
+| 32g | Ambang menonjol + bayangan (gaya tanpa ambang batu), kaca masuk ke dinding, pintu rumah berpanel 4 + kenop + kusen + 6 warna, pintu toko berkaca, ruang toko di balik etalase (rak berisi barang, lampu malam), bayangan di bawah pita batu | blok 32g |
+| 32h | Plint beton 0,45 m, kerb beton 0,3 m di tepi aspal tanpa trotoar, alas dan kerah tiang lampu | blok 32h, `poleGeo` |
+
+Batasan yang diketahui:
+- 32d-32h hanya Ultra dan Tinggi (`uL_Detail`); 32b dan 32c berlaku di semua preset.
+- Rumput 3D memakai klasifikasi lahannya sendiri, jadi helai rumput masih bisa tumbuh sampai tepi kerb.
+- Strip trotoar 1,5 m jalan lokal masih dari peta lahan (lebih kecil dari satu piksel peta), hanya warnanya tidak lagi tercampur aspal.
+- Jalur ban pada jalan selain arteri kota hanya satu jalur dekat kerb (jarak dari tepi hanya diketahui sampai 1,5 m).
+- Memori tambahan: peta jalan RG8 2.048 x 2.608 sekitar 10,7 MB (+ mipmap sekitar 14 MB), atlas papan nama sekitar 2,8 MB.

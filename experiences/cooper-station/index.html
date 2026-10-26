@@ -2310,6 +2310,10 @@ const SIDEWALK_GLSL = /* glsl */`
     if (artZ && dB < 5.0) d = min(d, dB);
     return d < 5.0 ? d : -1.0;
   }`;
+// 32a: tahap 32 tekstur jarak dekat (rencana docs/cooper-station/rencana-tahap-32-cooper-station.md). ?tekstur=lama = shader tanah
+// dan gedung sebelum tahap 32 (define TEKS_LAMA), tanpa peta jalan dan atlas papan nama, tiang lampu tanpa alas.
+const TEKS = { lama: new URLSearchParams(location.search).get('tekstur') === 'lama' };
+const TEKS_DEF = TEKS.lama ? '#define TEKS_LAMA' : '';
 const SIDEWALK = { in: 12, w: 5, blvdIn: 20,                        // 15c: sama dengan SIDEWALK_GLSL
   d(s, za) {                                                        // jarak dari kerb (0-5 m) bila di trotoar, -1 bila bukan
     if (za < 225 || za > 2517) return -1;
@@ -2357,7 +2361,7 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
     uFieldTex: { value: null }, uCloudTex: { value: null }, uTime: { value: 0 }, uArt: { value: TAU * CONFIG.R / 26 },
     uCloudK: { value: 0.2 }, uFieldZ: { value: new THREE.Vector2(3200, 7850) }, uCityZ: { value: new THREE.Vector2(250, 2500) },
     uReal: { value: new THREE.Vector4(-1e9, -1e9, -1e9, -1e9) }, uShadeTex: { value: null }, uGrassR: { value: 0 }, uCornR: { value: 0 }, uGapHalf: { value: 0 }, uNight: { value: 0 },
-    uWet: { value: 0 }, uRainNow: { value: 0 }, uCropT: { value: 0 }, uPathTex: { value: PATHSDF.tex },
+    uWet: { value: 0 }, uRainNow: { value: 0 }, uCropT: { value: 0 }, uPathTex: { value: PATHSDF.tex }, uRoadM: { value: null },
     uTram: LIGHT.uniforms.uL_Tram,                                     // 15a: (s, za, arah, malam) trem untuk kolam cahaya (17e: dibagi dengan LIGHT)
   }, LIGHT.uniforms]),
   vertexShader: /* glsl */`
@@ -2378,8 +2382,9 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
       #include <fog_vertex>
     }`,
   fragmentShader: /* glsl */`
+    ${TEKS_DEF}
     #include <fog_pars_fragment>
-    uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex;
+    uniform sampler2D uLand, uFieldTex, uCloudTex, uShadeTex, uRoadM;
     uniform float uR, uHalfL, uL, uTime, uArt, uCloudK, uGrassR, uCornR, uGapHalf, uNight, uWet, uRainNow, uCropT;
     // 20a: kolam cahaya lampu jalan dan trem memakai lampPoolL / tramPoolL dari LIGHT_GLSL (dulu salinan di sini)
     vec3 wheatStage(float g) { float ph = fract(uCropT + g);          // sama dengan VEG_COMMON (12d)
@@ -2435,6 +2440,10 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
       float e = lineAA(abs(d) - (hwRoad - 0.7), 0.08, fp);
       return max(c, e);
     }
+    // 32d: dua jalur ban di lajur berpusat c (jarak d dari as jalan atau dari tepi), lebar jejak roda 1,6 m
+    float laneTracks(float d, float c) { float x = abs(abs(d - c) - 0.8); return 1.0 - smoothstep(0.12, 0.42, x); }
+    // 32d / 32e: kotak bertepi AA, jarak bertanda (m) ke tepi persegi pusat c setengah ukuran h
+    float boxSD(vec2 p, vec2 c, vec2 h) { vec2 q = abs(p - c) - h; return max(q.x, q.y); }
     void main() {
       float a = atan(vPos.y, vPos.x);
       float za = vPos.z + uHalfL;
@@ -2458,6 +2467,28 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
       vec2 P = vec2(s, za);
       if (abs(a) > PI - uGapHalf) discard;                       // celah jendela Skyway (mesh bukit menutup lingkaran penuh)
       float eyeDist = length(vWorld - cameraPosition);
+      float rEd = 9.0, rLoc = 0.0;                               // 32c: jarak masuk ke jalan dari tepi (m; 9 = di dalam / tidak diketahui, -9 = di luar), 1 = jalan lokal
+      #if !defined(TEKS_LAMA) && !defined(DECK)
+      {
+        // 32c: tepi jalan dari peta jalan uRoadM (r = cakupan arteri, g = jalan lokal), bukan dari warna lahan bilinear 3,07 m per piksel
+        // (dulu aspal di tepi bercampur hijau rumput sepanjang 3 m). Cakupan terinterpolasi naik sekitar 1 per piksel peta melintasi tepi,
+        // jadi jarak bertanda ke tepi = (cakupan - 0,5) x 3,07 m (sah sampai 1,5 m dari tepi). Di dalam: warna aspal tepat (arteri / lokal);
+        // di luar: warna lahan dipisahkan dari campuran aspal (di ruang sRGB perkiraan, seperti kanvas mencampur tepi anti-alias).
+        vec2 rm = textureGrad(uRoadM, uv, gx, gy).rg;
+        float rc = rm.r + rm.g, kR = 1.0 - smoothstep(0.8, 2.0, fp);    // dari jauh campuran lama tidak terlihat
+        rEd = rc > 0.97 ? 9.0 : rc < 0.003 ? -9.0 : (rc - 0.5) * 3.07;
+        rLoc = rm.g / max(rc, 1e-3);
+        if (kR > 0.0 && rc > 0.003) {
+          vec3 artS = vec3(0.294, 0.306, 0.325), locS = vec3(0.333, 0.345, 0.365);   // PAL.art #4b4e53 dan PAL.road #55585d (sRGB)
+          vec3 aS = mix(artS, locS, rLoc), bS = pow(max(base, 0.0), vec3(1.0 / 2.2));   // gamma 2,2: cukup dekat dengan sRGB untuk memisahkan campuran
+          float inR = rc > 0.97 ? 1.0 : smoothstep(-fp, fp, rEd);
+          float r = min(rc, 0.8);
+          vec3 outS = clamp((bS - r * aS) / (1.0 - r), 0.0, 1.0);    // warna di luar jalan tanpa campuran aspal
+          vec3 nb = mix(pow(outS, vec3(2.2)), pow(aS, vec3(2.2)), inR);
+          base = mix(base, nb, kR * (rc > 0.97 ? 0.0 : 1.0));
+        }
+      }
+      #endif
 
       // ---- klasifikasi permukaan dari warna peta (ruang sRGB perkiraan) ----
       vec3 sb = sqrt(max(base, 0.0));
@@ -2514,6 +2545,13 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
         col = mix(pav, vec3(0.74, 0.73, 0.70), curbM);
         concM = 1.0; asphM = 0.0; vegM = 0.0; grayM = 1.0;
       }
+      #ifndef TEKS_LAMA
+      if (uL_Detail > 0.5 && swd < 0.0 && rEd < 0.0 && rEd > -0.32 && waterM < 0.5) {   // 32h: kerb beton 0,3 m di tepi jalan yang berbatasan rumput / tanah (tanpa trotoar)
+        float kb = (1.0 - smoothstep(-0.3 - fp, -0.3 + fp, -rEd)) * (1.0 - smoothstep(1.0, 2.0, fp));
+        col = mix(col, vec3(0.66, 0.65, 0.62) * (0.93 + 0.12 * vnoise(P * 4.0)) * mix(1.0, 0.8, smoothstep(-0.12, -0.3, rEd)), kb);
+        concM = mix(concM, 1.0, kb); vegM *= 1.0 - kb; asphM *= 1.0 - kb; grayM = mix(grayM, 1.0, kb);
+      }
+      #endif
       // 29b: jalur taman dari medan jarak (tepi bergelombang, kerikil berbutir, tanah aus di tepi, rumput tidak tumbuh di dalamnya)
       if (waterM < 0.5) {
         float pdr = pathD(P);
@@ -2561,14 +2599,96 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
           mark = max(mark, lineAA(abs(dS) - 12.9, 0.07, fp) * step(0.45, fract(za / 9.0)));
         }
         vec3 asphCol = col * asph;
+        float trk = 0.0;                                          // 32d: jalur ban (dipakai kekasaran di bawah)
+        #ifndef TEKS_LAMA
+        if (uL_Detail > 0.5 && asphM > 0.01) {
+          // 32d: aspal yang dipakai: butir batu, dua jalur ban gelap per lajur, tetes oli di tengah lajur, tambalan, retak, tutup
+          // saluran, talang kotor di tepi kerb, marka aus. Semua memudar dengan jejak piksel fp (tidak berkedip dari jauh)
+          float fK = 1.0 - smoothstep(0.03, 0.12, fp), fF = 1.0 - smoothstep(0.006, 0.025, fp);
+          asphCol *= 1.0 + (0.08 * (grainN(P * 55.0) - 0.5) + 0.22 * smoothstep(0.8, 0.92, grainN(P * 41.0 + 3.0))) * fF;   // agregat halus, batu terang
+          bool cityZ = za > uCityZ.x - 13.0 && za < uCityZ.y + 13.0;
+          float dl = -1.0, oil = 0.0;
+          if (!blvd && za > 150.0 && za < 2600.0 && abs(dS) < 12.0 && !(abs(dZ) < 13.0 && cityZ)) dl = abs(dS);
+          else if (cityZ && abs(dZ) < 12.0 && abs(dS) > (blvd ? 21.0 : 13.0)) dl = abs(dZ);
+          if (dl >= 0.0) {
+            trk = laneTracks(dl, 2.75) + laneTracks(dl, 8.25);
+            oil = (1.0 - smoothstep(0.15, 0.55, abs(dl - 2.75))) + (1.0 - smoothstep(0.15, 0.55, abs(dl - 8.25)));
+          } else if (blvd && za > 150.0 && abs(dS) > 9.3 && abs(dS) < 21.0) {
+            trk = laneTracks(abs(dS), 11.0) + laneTracks(abs(dS), 16.1);
+            oil = (1.0 - smoothstep(0.15, 0.55, abs(abs(dS) - 11.0))) + (1.0 - smoothstep(0.15, 0.55, abs(abs(dS) - 16.1)));
+          } else if (rEd > 0.0 && rEd < 2.0) trk = 1.0 - smoothstep(0.15, 0.45, abs(rEd - 0.95));   // jalan lain: roda kanan dekat kerb
+          trk *= 0.75 + 0.5 * vnoise(P * vec2(0.13, 0.13) + 4.0);
+          oil *= smoothstep(0.5, 0.8, vnoise(P * 0.7 + 21.0)) * fK;
+          asphCol *= (1.0 - 0.1 * trk) * (1.0 - 0.18 * oil);
+          // tambalan persegi lebih gelap dengan garis aspal cair di tepi (sel 7 m, 9%)
+          vec2 pcl = floor(P / 7.0);
+          if (hash2(pcl + 41.0) < 0.09) {
+            vec2 pc = (pcl + 0.3 + 0.4 * vec2(hash2(pcl + 5.0), hash2(pcl + 9.0))) * 7.0;
+            vec2 ph = 0.6 + vec2(hash2(pcl + 13.0), hash2(pcl + 17.0)) * 1.8;
+            float sd = boxSD(P, pc, ph);
+            float pm = 1.0 - smoothstep(-fp, fp, sd), seam = (1.0 - smoothstep(0.02, 0.05 + fp, abs(sd))) * fK;
+            asphCol *= mix(1.0, 0.78 + 0.08 * vnoise(P * 3.0), pm) * (1.0 - 0.4 * seam);
+          }
+          // retak halus berkelok di wilayah jarang
+          float cn = abs(vnoise(P * 0.9) - 0.5) + 0.35 * abs(vnoise(P * 2.7 + 5.0) - 0.5);
+          float crack = (1.0 - smoothstep(0.0, 0.012 + fwidth(cn), cn)) * smoothstep(0.6, 0.76, vnoise(P * 0.045 + 3.0)) * (1.0 - smoothstep(0.02, 0.06, fp));
+          asphCol *= 1.0 - 0.5 * crack;
+          // talang di tepi kerb: kotor dan gelap 0,45 m
+          if (rEd > 0.0 && rEd < 0.6) asphCol *= 1.0 - (0.2 + 0.1 * vnoise(P * 2.0)) * (1.0 - smoothstep(0.08, 0.45, rEd));
+          // tutup saluran besi bulat (sel 24 m, 45%), hanya di dalam badan jalan
+          vec2 mcl = floor(P / 24.0);
+          if (hash2(mcl + 71.0) < 0.45 && rEd > 1.0) {
+            vec2 mp = (mcl + 0.2 + 0.6 * vec2(hash2(mcl + 3.0), hash2(mcl + 8.0))) * 24.0;
+            float rr = length(P - mp);
+            if (rr < 0.5) {
+              float disc = 1.0 - smoothstep(0.33 - fp, 0.33 + fp, rr);
+              float grid = max(lineAA(fract((P.x - mp.x) / 0.08 + 0.5) - 0.5, 0.12, fp / 0.08), lineAA(fract((P.y - mp.y) / 0.08 + 0.5) - 0.5, 0.12, fp / 0.08));
+              vec3 iron = vec3(0.055, 0.052, 0.05) * (1.0 + 0.6 * grid * fK) * (1.0 - 0.4 * (1.0 - smoothstep(0.02, 0.045 + fp, abs(rr - 0.3))));
+              asphCol = mix(asphCol, iron, disc);
+              asphCol *= 1.0 - 0.25 * (1.0 - smoothstep(0.33, 0.45, rr)) * (1.0 - disc);   // aspal retak di sekeliling
+            }
+          }
+          // marka aus: pudar berbercak, berbintik, lebih aus di jalur ban
+          mark *= (0.55 + 0.45 * smoothstep(0.25, 0.7, vnoise(P * 1.7 + 2.0))) * mix(1.0, 0.75 + 0.25 * grainN(P * 30.0), fF) * (1.0 - 0.35 * min(trk, 1.0));
+        }
+        #endif
         asphCol = mix(asphCol, vec3(0.62, 0.62, 0.58), mark * 0.85 * detail);
         col = mix(col, asphCol, asphM);
         // beton dan paving: sambungan petak 3 m, tiap petak sedikit beda terang
-        vec2 tid = floor(P / 3.0);
+        #ifndef TEKS_LAMA
+        vec2 tS = vec2(3.0);                                      // 32e: ukuran petak per wilayah 60 m (1,5-3 m, sebagian persegi panjang)
+        if (uL_Detail > 0.5) { vec2 tw = floor(P / 60.0); float hz = hash2(tw + 77.0), t0 = hz < 0.3 ? 1.5 : hz < 0.6 ? 2.0 : hz < 0.8 ? 2.5 : 3.0;
+          tS = hash2(tw + 78.0) < 0.5 ? vec2(t0) : (hash2(tw + 79.0) < 0.5 ? vec2(t0, t0 * 1.5) : vec2(t0 * 1.5, t0)); }
+        #else
+        const vec2 tS = vec2(3.0);
+        #endif
+        vec2 tid = floor(P / tS);
         float tv = 0.94 + 0.12 * hash2(tid + 101.0);
-        vec2 tf = abs(fract(P / 3.0 + 0.5) - 0.5) * 3.0;
+        vec2 tf = abs(fract(P / tS + 0.5) - 0.5) * tS;
         float joint = max(lineAA(tf.x, 0.03, fp), lineAA(tf.y, 0.03, fp));
         col = mix(col, col * mix(tv, 0.72, joint) * (1.0 + 0.05 * spk * (1.0 - smoothstep(0.02, 0.08, fp))), concM * detail);
+        #ifndef TEKS_LAMA
+        if (uL_Detail > 0.5 && concM > 0.01) {
+          // 32e: beton dipakai: rona per petak, sambungan tidak rata gelapnya, noda air besar, bintik permen karet, retak di
+          // sebagian petak, kotor di sisi kerb dan sisi dalam trotoar, batu agregat halus
+          float fK = 1.0 - smoothstep(0.03, 0.12, fp), fF = 1.0 - smoothstep(0.006, 0.025, fp);
+          vec3 cc = vec3(1.0) + (vec3(hash2(tid + 7.0), hash2(tid + 11.0), hash2(tid + 13.0)) - 0.5) * 0.04;
+          cc *= 1.0 - 0.12 * smoothstep(0.6, 0.85, vnoise(P * 0.35 + 9.0));                       // noda air
+          cc *= 1.0 - 0.25 * joint * (0.4 + 0.6 * vnoise(P * 1.3));                                 // sambungan berisi kotoran
+          cc *= 1.0 + 0.06 * (grainN(P * 48.0) - 0.5) * fF;
+          vec2 gc = floor(P / 0.7);                                                                 // permen karet / noda bundar
+          if (hash2(gc + 31.0) < 0.06) { vec2 gp = (gc + 0.2 + 0.6 * vec2(hash2(gc + 2.0), hash2(gc + 4.0))) * 0.7;
+            cc *= 1.0 - 0.45 * (1.0 - smoothstep(0.02, 0.03 + fp, length(P - gp) - 0.012 * hash2(gc + 6.0))) * fK; }
+          if (hash2(tid + 3.0) < 0.12) {                                                            // retak menyeberangi petak
+            vec2 fr = fract(P / tS) - 0.5, cd = vec2(hash2(tid + 21.0), hash2(tid + 23.0)) - 0.5;
+            float an = hash2(tid + 25.0) * 3.1416, d = dot(fr - cd * 0.5, vec2(-sin(an), cos(an))) * tS.x + 0.03 * (vnoise(P * 9.0) - 0.5);
+            cc *= 1.0 - 0.45 * (1.0 - smoothstep(0.003, 0.006 + fp, abs(d))) * (1.0 - smoothstep(0.02, 0.05, fp));
+          }
+          if (swd >= 0.0) cc *= (1.0 - 0.14 * (1.0 - smoothstep(0.3, 0.9, swd))) * (1.0 - 0.12 * smoothstep(4.2, 4.9, swd) * (0.5 + vnoise(P * 1.1)));
+          if (rEd < 0.0 && rEd > -1.6) cc *= 1.0 - 0.1 * smoothstep(-1.0, -1.5, rEd);           // jalan lokal: sisi dalam strip trotoar
+          col = mix(col, col * cc, concM * detail);
+        }
+        #endif
         if (uL_Detail > 0.5) {                                        // V1: aspal dan beton: tonjolan agregat, bagian aus lebih licin, noda
           mdK = (asphM + concM * 0.7) * detail;
           vec3 nA = mdNoiseD(P * 22.0 + 5.0), nB = mdNoiseD(P * 5.0 + 19.0), nC = mdNoiseD(P * 0.35 + 3.0);
@@ -2576,6 +2696,7 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
           mdG = mdK * (nA.yz * (22.0 * 0.0016) * fineK + nB.yz * (5.0 * 0.008) * midK);
           mdRough = mix(0.9, 0.55, smoothstep(0.45, 0.85, nC.x)) * (1.0 - 0.06 * joint);
           col *= 1.0 - 0.1 * mdK * smoothstep(0.5, 0.85, 0.55 * nB.x + 0.45 * nC.x);
+          mdRough = mix(mdRough, 0.42, min(trk, 1.0) * 0.6 * asphM);   // 32d: jalur ban lebih licin (0 bila TEKS_LAMA)
         }
         // jalan tanah ladang: kerikil + dua alur roda
         float ruts = max(lineAA(abs(dS) - 1.0, 0.28, fp), 0.0);
@@ -3806,6 +3927,19 @@ const landCanvas = document.createElement('canvas');
 landCanvas.width = LAND_W; landCanvas.height = LAND_H;
 const lg = landCanvas.getContext('2d');   // 20c: willReadFrequently (raster CPU) dicoba lalu dibatalkan: 9,4% piksel berbeda di tepi anti-alias
 const LX = (s) => (s / CIRC) * LAND_W, LY = (za) => (1 - za / CONFIG.L) * LAND_H, LK = LAND_W / CIRC;
+// 32c: peta jalan kembaran peta lahan. Tiap gambar di lg diulang di kanvas ini dengan warna kelas (r = arteri PAL.art,
+// g = jalan lokal / servis PAL.road, lain = hitam), jadi urutan tumpuk sama persis. Tepi anti-alias kanvas = cakupan per piksel 3 m:
+// shader menemukan tepi jalan di kontur 0,5 (galat sekitar 0,25 m), bukan dari warna lahan bilinear yang bercampur sepanjang 3 m.
+const roadCanvas = TEKS.lama ? null : document.createElement('canvas');
+if (roadCanvas) {
+  roadCanvas.width = LAND_W; roadCanvas.height = LAND_H;
+  const lgR = roadCanvas.getContext('2d');
+  lgR.fillStyle = '#000000'; lgR.fillRect(0, 0, LAND_W, LAND_H);
+  const cls = (c) => { const k = typeof c === 'string' ? c.toLowerCase() : ''; return k === PAL.art ? '#ff0000' : k === PAL.road ? '#00ff00' : '#000000'; };
+  const sync = () => { lgR.fillStyle = cls(lg.fillStyle); lgR.strokeStyle = cls(lg.strokeStyle); lgR.lineWidth = lg.lineWidth; lgR.lineCap = lg.lineCap; lgR.lineJoin = lg.lineJoin; };
+  for (const k of ['fillRect', 'fill', 'stroke']) { const f = lg[k].bind(lg); lg[k] = (...a) => { sync(); lgR[k](...a); return f(...a); }; }
+  for (const k of ['beginPath', 'closePath', 'moveTo', 'lineTo', 'arc', 'ellipse']) { const f = lg[k].bind(lg); lg[k] = (...a) => { lgR[k](...a); return f(...a); }; }
+}
 function lrect(s0, z0, s1, z1, col) {                           // persegi dengan wrap keliling
   lg.fillStyle = col;
   const a = modS(s0), w = s1 - s0;
@@ -4050,6 +4184,18 @@ landTex.colorSpace = THREE.SRGBColorSpace;
 landTex.wrapS = THREE.RepeatWrapping; landTex.wrapT = THREE.ClampToEdgeWrapping;
 landTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
 groundMat.uniforms.uLand.value = landTex;
+// 32c: tekstur peta jalan RG8 (baris dibalik: v = za / L seperti landTex), diisi saat landTex diperbarui (setelah taman / plaza)
+const ROADM = { tex: null, fill() {
+  if (!roadCanvas) return;
+  const d = roadCanvas.getContext('2d').getImageData(0, 0, LAND_W, LAND_H).data, a = new Uint8Array(LAND_W * LAND_H * 2);
+  for (let y = 0; y < LAND_H; y++) { const so = (LAND_H - 1 - y) * LAND_W * 4, o = y * LAND_W * 2; for (let x = 0; x < LAND_W; x++) { a[o + x * 2] = d[so + x * 4]; a[o + x * 2 + 1] = d[so + x * 4 + 1]; } }
+  if (!this.tex) {
+    this.tex = new THREE.DataTexture(a, LAND_W, LAND_H, THREE.RGFormat, THREE.UnsignedByteType);
+    Object.assign(this.tex, { magFilter: THREE.LinearFilter, minFilter: THREE.LinearMipmapLinearFilter, generateMipmaps: true, wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping, anisotropy: 8 });
+    groundMat.uniforms.uRoadM.value = this.tex;
+  } else this.tex.image.data = a;
+  this.tex.needsUpdate = true;
+} };
 LIGHT.uniforms.uL_Land.value = landTex;                            // 17d: pantulan daratan seberang
 
 // --- tahap 6: data petak ladang untuk shader (arah baris, jarak baris, jenis), 3,07 m per piksel ---
@@ -4919,7 +5065,21 @@ building('gambrel', COOPER.s - 32, COOPER.za + 24, 16, 12, 9, '#8e3b2f', 0, true
 // Detail digambar di shader dari koordinat dinding (meter): lantai, jendela, kusen, pintu, etalase, balkon,
 // papan kayu / seng / bata, genteng / seng atap, kerikil atap datar. Detail memudar otomatis ke warna rata-rata
 // saat pola lebih kecil dari beberapa piksel (LOD di shader, tanpa geometri tambahan). Malam: sebagian jendela menyala.
-const BUILD_U = { uNight: { value: 0 }, uInterior: { value: 1 }, uLodK: { value: 1 },   // 14c: 1 = ruangan maya di balik jendela; K10: faktor zoom lensa
+// 32b: atlas papan nama toko: 32 kata pendek ID + EN (tanpa merek), 2 kolom x 16 baris, sel 512 x 32 px = 8 m x 0,5 m (64 px per m).
+// Huruf putih di kanal r, dipadatkan mendatar bila lebih lebar dari 2,5 m; mipmap merata-ratakan huruf dari jauh (dulu balok acak 0,3 m).
+const SIGN = { words: ['TOKO', 'ROTI', 'KOPI', 'DELI', 'BAKERY', 'APOTEK', 'BOOKS', '24 JAM', 'CAFE', 'MARKET', 'WARUNG', 'FLORIST', 'BARBER', 'OPTIK', 'LAUNDRY', 'PIZZA',
+  'NOODLES', 'SUSHI', 'MIE', 'BENGKEL', 'TAILOR', 'HARDWARE', 'BANK', 'POS', 'SALON', 'GROCER', 'DINER', 'TEA', 'BAKSO', 'SEPATU', 'JEWELRY', 'MUSIK'], tex: null };
+if (!TEKS.lama) {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 512;
+  const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, 1024, 512);
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 22px Arial, Helvetica, sans-serif';
+  SIGN.words.forEach((w, i) => {
+    const k = Math.min(1, 160 / Math.max(g.measureText(w).width, 1));
+    g.save(); g.translate((i % 2) * 512 + 256, Math.floor(i / 2) * 32 + 17); g.scale(k, 1); g.fillText(w, 0, 0); g.restore();
+  });
+  SIGN.tex = new THREE.CanvasTexture(c); SIGN.tex.anisotropy = 8;
+}
+const BUILD_U = { uNight: { value: 0 }, uInterior: { value: 1 }, uLodK: { value: 1 }, uSignTex: { value: SIGN.tex },   // 14c: 1 = ruangan maya di balik jendela; K10: faktor zoom lensa; 32b: atlas papan nama
   uLitT: { value: new THREE.Vector2(1, 1) }, uTime: groundMat.uniforms.uTime };   // 21c: faktor nyala jendela per jam (x kantor, y hunian), kedip lampu atap
 const BUILD_VS = /* glsl */`
   #include <fog_pars_vertex>
@@ -4950,8 +5110,10 @@ const BUILD_VS = /* glsl */`
     #include <fog_vertex>
   }`;
 const BUILD_FS = /* glsl */`
+  ${TEKS_DEF}
   #include <fog_pars_fragment>
   uniform float uNight, uInterior, uTime, uLodK;
+  uniform sampler2D uSignTex;
   uniform vec2 uLitT;
   varying vec3 vO, vNo, vW, vNw;
   varying vec3 vDirO;
@@ -5028,6 +5190,7 @@ const BUILD_FS = /* glsl */`
       bool gableEnd = y > H + 0.01;
       vec3 base = vCol;
       float fwU = fwidth(u), fwY = fwidth(y);
+      vec2 dU = vec2(dFdx(u), dFdy(u)), dY = vec2(dFdx(y), dFdy(y));   // 32b: turunan di alur seragam untuk atlas papan nama
       // parameter gaya
       float fh = 3.2, bay = 3.0, wx0 = 0.2, wx1 = 0.8, wy0 = 0.3, wy1 = 0.82, groundH = 0.0, litP = 0.4;
       float mat = 0.0;                                            // 0 plester, 1 papan horizontal, 2 seng vertikal, 3 papan vertikal, 4 bata, 5 kaca
@@ -5129,6 +5292,31 @@ const BUILD_FS = /* glsl */`
       }
       wall *= grain;
       if (code == 6.0) wall *= 1.0 - 0.3 * lines(y, 0.8, 0.05, fwY);   // cincin silo
+      float wk = 0.0;                                             // 32f: kekuatan pelapukan gedung ini (0 = mati: TEKS_LAMA, Sedang ke bawah)
+      #ifndef TEKS_LAMA
+      if (uL_Detail > 0.5) {
+        wk = (0.55 + 0.9 * hash1(vec2(vSeed * 19.0, 3.3))) * (code == 1.0 ? 0.25 : (code == 12.0 || code == 13.0) ? 1.2 : 1.0);
+        if (mat == 4.0) {                                         // 32f: nat bata tenggelam (cahaya dari atas): nat atas dibayangi bata di atasnya, tepi atas bata terang
+          float fr = fract(y / 0.075), rk = 1.0 - smoothstep(0.004, 0.012, fwY);
+          wall *= 1.0 + rk * (0.07 * smoothstep(0.8, 0.88, fr) * (1.0 - smoothstep(0.9, 0.93, fr)) - 0.2 * (1.0 - smoothstep(0.02, 0.11, fr)));
+          if (code != 12.0) { float r = floor(y / 0.075), bxi = floor((u + mod(r, 2.0) * 0.11) / 0.22);   // warna per bata (gaya 12 sudah punya)
+            wall *= mix(0.88 + 0.24 * hash1(vec2(bxi, r + vSeed * 17.0)), 1.0, smoothstep(0.015, 0.05, max(fwU, fwY))); }
+        } else if (mat == 1.0) {                                  // 32f: papan bertumpuk: bibir papan di atas membayangi bagian atas papan di bawahnya
+          float fr = fract(y / 0.2), rk = 1.0 - smoothstep(0.015, 0.05, fwY);
+          wall *= 1.0 - rk * (0.16 * smoothstep(0.62, 0.97, fr) - 0.04 * (1.0 - smoothstep(0.0, 0.2, fr)));
+          wall *= 1.0 + 0.05 * rk * (hash1(vec2(floor(y / 0.2), floor(u / 3.7 + hash1(vec2(floor(y / 0.2), 2.0))) + vSeed * 9.0)) - 0.5);   // papan diganti / dicat ulang
+        } else if (mat == 0.0 || mat == 6.0) {                    // 32f: plester / batu: bercak dan permukaan tidak rata
+          wall *= 1.0 + 0.07 * (vn(vec2(u, y) * 1.7 + vSeed * 5.0) - 0.5) * (1.0 - smoothstep(0.02, 0.08, max(fwU, fwY)));
+        }
+        if (!upper && !(code == 1.0 || code == 4.0 || code == 5.0 || code == 6.0 || code == 9.0 || code == 10.0 || code == 14.0)) {
+          // 32h: plint beton 0,45 m di kaki dinding (tepi atas terang, garis bayangan di atasnya); etalase dan pintu menimpa
+          float pl = band(y, -1.0, 0.45, fwY);
+          vec3 plC = vec3(0.4, 0.395, 0.38) * (0.9 + 0.2 * vn(vec2(u, y) * 2.3)) * mix(1.0, 1.18, band(y, 0.4, 0.45, fwY));
+          wall *= 1.0 - 0.2 * band(y, 0.45, 0.5, fwY);
+          wall = mix(wall, plC, pl);
+        }
+      }
+      #endif
       // grid jendela
       float nB = max(1.0, floor(W / bay + 0.5)), bx = (u / W + 0.5) * nB, fx = fract(bx), bi = floor(bx);
       float yy = y - groundH, fy = fract(yy / fh), fi = floor(yy / fh);
@@ -5162,6 +5350,38 @@ const BUILD_FS = /* glsl */`
           wall = mix(wall, base * 0.5, spS * 0.8);
         }
       }
+      #ifndef TEKS_LAMA
+      if (wk > 0.0) {
+        // 32g: ambang jendela menonjol (gaya tanpa ambang batu) + bayangannya; 32f: noda turun dari sudut ambang dan dari atap,
+        // kaki dinding kotor bertepi tidak rata (lumut tipis di gedung lama), bercak pudar besar per gedung
+        bool sillW = hasWin && code != 1.0 && code != 4.0 && code != 10.0 && wy0 > 0.12;
+        if (sillW) {
+          float sx0 = wx0 - 0.05, sx1 = wx1 + 0.05, sb = wy0 - 0.035;
+          if (code != 12.0) wall = mix(wall, mix(base, vec3(0.8, 0.79, 0.76), 0.6), band(fx, sx0, sx1, fwx) * band(fy, sb, wy0 - 0.005, fwy) * detail * 0.8);
+          wall *= 1.0 - 0.3 * band(fx, sx0, sx1, fwx) * band(fy, sb - 0.05, sb, fwy) * detail;
+          float dy = (sb - 0.05 - fy) * fh;                       // m di bawah ambang
+          if (dy > 0.0 && dy < 1.8) {
+            float sx = (fx - wx0) / max(wx1 - wx0, 1e-3), sk = 1.0 - smoothstep(0.0, 0.9 + 0.8 * hash1(vec2(bi, fi + vSeed)), dy);
+            float st = smoothstep(0.58, 0.85, vn(vec2(u * 22.0, fi * 3.1 + bi * 1.7))) * (1.0 - smoothstep(0.008, 0.03, fwU))
+                     + 0.5 * smoothstep(0.45, 0.8, vn(vec2(u * 3.0, fi * 5.3 + bi))) * (1.0 - smoothstep(0.05, 0.15, fwU));
+            wall *= 1.0 - 0.2 * wk * st * sk * band(sx, -0.04, 1.04, fwx / max(wx1 - wx0, 1e-3));
+          }
+        }
+        float dTop = H - y;
+        if (!gableEnd && dTop > 0.0 && dTop < 4.5 && code != 1.0 && code != 14.0)
+          wall *= 1.0 - 0.18 * wk * smoothstep(0.5, 0.85, vn(vec2(u * 9.0 + vSeed * 40.0, 0.5))) * (1.0 - smoothstep(0.3, 4.5, dTop)) * (1.0 - smoothstep(0.03, 0.1, fwU));
+        if (!upper) {
+          float dh = 0.55 + 0.5 * vn(vec2(u * 0.8 + vSeed * 13.0, 1.7)) + 0.15 * vn(vec2(u * 4.0, 2.3));
+          float moss = (code == 3.0 || code == 7.0 || code == 12.0 || code == 13.0) ? 0.4 * vn(vec2(u * 2.0, y * 3.0)) : 0.0;
+          wall = mix(wall, wall * mix(vec3(0.72, 0.66, 0.56), vec3(0.6, 0.68, 0.5), moss), (1.0 - smoothstep(0.1, dh, y)) * min(wk, 1.0) * 0.8);
+        }
+        wall *= 1.0 + 0.09 * wk * (vn(vec2(u, y) * 0.25 + vSeed * 7.0) - 0.5);
+        if (code == 12.0 || code == 13.0) {                       // 32g: bayangan di bawah pita batu / lis
+          wall *= 1.0 - 0.3 * band(y, H - 1.34, H - 1.2, fwY);
+          if (groundH > 0.0) wall *= 1.0 - 0.3 * band(y, groundH - 0.36, groundH - 0.22, fwY);
+        }
+      }
+      #endif
       // 21d: satu ruangan = rm bay berurutan (rm = 1 untuk gaya lain, hasil identik dengan sebelumnya); rb = nomor ruangan sepanjang muka
       float bayE = W / nB, rm = varW ? clamp(floor((openF > 0.5 ? 1e4 : rwT) / bayE + 0.5), 1.0, nB) : 1.0;
       float rb = floor(bi / rm);
@@ -5177,12 +5397,22 @@ const BUILD_FS = /* glsl */`
         shopM = band(y, 0.55, groundH - 1.25, fwY) * band(sfx, 0.07, 0.93, fws) * (1.0 - drM);
         vec3 signC = hb2 < 0.2 ? vec3(0.02, 0.1, 0.05) : hb2 < 0.4 ? vec3(0.35, 0.03, 0.02) : hb2 < 0.55 ? vec3(0.02, 0.03, 0.12) : hb2 < 0.7 ? vec3(0.02) : hb2 < 0.85 ? vec3(0.5, 0.42, 0.28) : vec3(0.3, 0.12, 0.02);
         float board = band(y, groundH - 1.1, groundH - 0.3, fwY) * band(sfx, 0.03, 0.97, fws);
+        #ifndef TEKS_LAMA
+        // 32b: kata dari atlas (satu per toko), huruf 0,5 m sel; lx = m dari tengah toko, ly = 0 (bawah) sampai 0,5 m (atas)
+        float wi = floor(hash1(vec2(si * 1.37 + vSeed * 53.0, 41.0)) * 32.0), shopW = W / nS, lx = (sfx - 0.5) * shopW, ly = y - (groundH - 0.95);
+        vec2 auv = vec2((mod(wi, 2.0) * 512.0 + 256.0 + lx * 64.0) / 1024.0, 1.0 - (floor(wi / 2.0) * 32.0 + (0.5 - ly) * 64.0) / 512.0);
+        float glyph = textureGrad(uSignTex, auv, vec2(dU.x, dY.x) * vec2(0.0625, 0.125), vec2(dU.y, dY.y) * vec2(0.0625, 0.125)).r * band(lx, -0.45 * shopW, 0.45 * shopW, fwU) * band(ly, 0.0, 0.5, fwY);
+        #else
         float gu = u / 0.3, glyph = band(fract(gu), 0.15, 0.85, fwU / 0.3) * step(0.35, hash1(vec2(floor(gu), si + 3.0)));
         glyph = mix(glyph, 0.45, smoothstep(0.15, 0.4, fwU / 0.3)) * band(sfx, 0.2, 0.8, fws) * band(y, groundH - 0.9, groundH - 0.5, fwY);
+        #endif
         vec3 glyphC = hb2 < 0.7 ? vec3(0.85, 0.8, 0.6) : vec3(0.03);
         wall = mix(wall, vec3(0.03, 0.03, 0.035), band(y, 0.0, 0.55, fwY) * band(sfx, 0.07, 0.93, fws));
         wall = mix(wall, mix(signC, glyphC, glyph), board);
         wall = mix(wall, vec3(0.06, 0.045, 0.035), drM);
+        #ifndef TEKS_LAMA
+        shopM = max(shopM, 0.9 * drM * band(sfx, (hs < 0.5 ? 0.07 : 0.71) + 0.03, (hs < 0.5 ? 0.29 : 0.93) - 0.03, fws) * band(y, 0.15, 2.25, fwY));   // 32g: pintu toko berkaca
+        #endif
         neon = board * glyph * step(hb2, 0.7) * step(0.5, hash1(vec2(si, vSeed * 3.0 + 17.0)));   // setengah papan berhuruf terang menyala malam
         neonC = hash1(vec2(si, 23.0)) < 0.7 ? vec3(1.0, 0.85, 0.6) : vec3(1.0, 0.3, 0.25);
       }
@@ -5207,6 +5437,19 @@ const BUILD_FS = /* glsl */`
         if (code == 3.0 && abs(u - du) < dw) { winM *= step(1.0, fi + 0.5); frameM *= step(1.0, fi + 0.5); }
         vec3 doorC = code == 9.0 || code == 10.0 ? vec3(0.55, 0.56, 0.57) * (1.0 - 0.25 * lines(y, 0.3, 0.02, fwY))
           : code == 5.0 ? vec3(0.32, 0.06, 0.05) : vec3(0.28, 0.17, 0.1);
+        #ifndef TEKS_LAMA
+        if (wk > 0.0 && (code == 3.0 || code == 7.0)) {           // 32g: pintu berpanel, warna per rumah, kenop, kusen terang, bayangan ambang atas
+          float hd = hash1(vec2(vSeed * 23.0, 5.1));
+          if (code == 3.0) doorC = hd < 0.25 ? vec3(0.28, 0.17, 0.1) : hd < 0.45 ? vec3(0.05, 0.16, 0.09) : hd < 0.62 ? vec3(0.04, 0.07, 0.16) : hd < 0.78 ? vec3(0.4, 0.05, 0.04) : hd < 0.9 ? vec3(0.78, 0.77, 0.74) : vec3(0.06);
+          float ux = (u - du) / dw + 0.5, vy = y / dh, fx2 = fwU / dw, fy2 = fwY / dh;
+          float pX = band(ux, 0.16, 0.46, fx2) + band(ux, 0.54, 0.84, fx2), pY = band(vy, 0.1, 0.42, fy2) + band(vy, 0.5, 0.88, fy2);
+          float pan = pX * pY, rail = band(ux, 0.1, 0.9, fx2) * band(vy, 0.06, 0.92, fy2) - pan;
+          doorC *= (1.0 + 0.1 * pan - 0.04 * max(rail, 0.0)) * (1.0 - 0.3 * pX * (band(vy, 0.42, 0.45, fy2) + band(vy, 0.88, 0.91, fy2)));
+          doorC = mix(doorC, vec3(0.72, 0.6, 0.3), 1.0 - smoothstep(0.03, 0.04 + fwU, length(vec2((ux - 0.86) * dw, (vy - 0.48) * dh))));
+          doorC = mix(doorC, vec3(0.82, 0.81, 0.78), (1.0 - band(ux, 0.05, 0.95, fx2) * band(vy, -1.0, 0.96, fy2)) * 0.85);
+          doorC *= 1.0 - 0.35 * band(vy, 0.9, 0.96, fy2) * band(ux, 0.05, 0.95, fx2);
+        }
+        #endif
         if (code == 5.0) {                                        // pintu lumbung: rangka X putih
           float ux = (u - du) / dw + 0.5, vy = y / dh;
           float xb = max(lines(ux - vy, 2.0, 0.02, fwidth(ux - vy)), lines(ux + vy - 1.0, 2.0, 0.02, fwidth(ux + vy)));
@@ -5342,6 +5585,38 @@ const BUILD_FS = /* glsl */`
           glass = mix(glass, glassI, kI);
         }
       }
+      #ifndef TEKS_LAMA
+      if (wk > 0.0 && winM > 0.01 && code != 1.0) {              // 32g: kaca masuk ke dalam dinding: bayangan ambang atas dan kusen kiri
+        float dT = (wy1 - fy) * fh, dL = (fx - wx0) * W / nB;
+        glass *= mix(1.0, (1.0 - 0.45 * (1.0 - smoothstep(0.0, 0.14, dT))) * (1.0 - 0.25 * (1.0 - smoothstep(0.0, 0.07, dL))), detail);
+      }
+      if (wk > 0.0 && shopM > 0.01 && winM < 0.5 && groundH > 0.0) {
+        // 32g: ruang toko di balik etalase (dulu kaca hampir hitam): dinding belakang 3,5 m dengan rak berisi barang, lantai, plafon;
+        // diterangi cahaya siang lemah dan lampu toko malam, kaca memantul sedikit; dari jauh kembali ke kaca lama
+        float sn = fz ? sign(n.z) : sign(n.x);
+        float da = fz ? vDirO.x : vDirO.z, dv = vDirO.y, dd = -(fz ? vDirO.z : vDirO.x) * sn;
+        if (dd > 1e-4) {
+          float top = max(groundH - 1.0, 2.2), tz = 3.5 / dd, tyF = dv < -1e-5 ? -y / dv : 1e9, tyC = dv > 1e-5 ? (top - y) / dv : 1e9;
+          float tt = min(tz, min(tyF, tyC));
+          vec2 h = vec2(u + da * tt, y + dv * tt);
+          vec3 rc;
+          if (tt == tz) {
+            float fyS = fract(h.y / 0.5), shelf = step(0.88, fyS) * step(0.3, h.y);
+            vec2 cell = vec2(floor(h.x / 0.18), floor(h.y / 0.5));
+            float hp = hash1(cell + vSeed * 3.0);
+            vec3 prod = 0.2 + 0.6 * vec3(hash1(cell + 1.0), hash1(cell + 2.0), hash1(cell + 3.0));
+            float item = step(0.3, hp) * step(fyS, 0.55 + 0.3 * hp) * step(0.15, fract(h.x / 0.18)) * step(0.3, h.y) * step(h.y, top - 0.5);
+            rc = mix(vec3(0.6, 0.57, 0.52), prod, item);
+            rc = mix(rc, vec3(0.32, 0.3, 0.28), shelf);
+          } else if (tt == tyF) rc = vec3(0.42, 0.4, 0.37) * (0.92 + 0.16 * step(0.5, fract(h.x / 0.6)));
+          else rc = vec3(0.85, 0.84, 0.82);
+          float onS = uNight * step(0.2, hash1(vec2(floor(u / 4.0) + vSeed * 11.0, 9.0)));
+          vec3 room = rc * (dot(light, vec3(0.333)) * 0.45 + vec3(1.0, 0.9, 0.75) * onS * 0.9);
+          float refK = 0.16 + 0.6 * F;
+          glass = mix(glass, room * (1.0 - refK) + sky * refK, 1.0 - smoothstep(0.08, 0.3, fwU));
+        }
+      }
+      #endif
       vec3 frameC = code == 3.0 || code == 7.0 ? vec3(0.88, 0.87, 0.84) : (varW || code == 12.0 || code == 13.0) ? frameCol : vec3(0.55, 0.55, 0.53);   // 21d: warna rangka per gedung
       vec3 wallLit = wall * light;
       col = mix(mix(wallLit, frameC * light, frameM), glass, max(winM, shopM));
@@ -5530,6 +5805,7 @@ treeList.forEach(([s, za, k]) => { rnd(); rnd(); rnd(); if (!nearRing(za)) addCo
 for (let q = 0; q < treeSkipped * 3; q++) rnd();                  // 13a/13c: pohon yang dibuang tetap memakai 3 angka acak
 // kanvas lahan diperbarui setelah taman/plaza ditambahkan
 landTex.needsUpdate = true;
+ROADM.fill();                                                    // 32c
 // 17d: rata-rata warna daratan (linear), dipakai untuk warna ambient siang (pantulan sisi seberang) dan pantulan kasar
 const FAR = { land: [0.311, 0.351, 0.14] };
 {
@@ -12588,6 +12864,11 @@ const TRAFFIC = {};
     { geo: new THREE.BoxGeometry(0.16, 8, 0.16).translate(0, 4, 0), color: [0.42, 0.45, 0.48] },
     { geo: new THREE.BoxGeometry(0.1, 0.1, 1.6).translate(0, 7.9, 0.75), color: [0.42, 0.45, 0.48] },
     { geo: new THREE.BoxGeometry(0.34, 0.14, 0.6).translate(0, 7.85, 1.5), color: [0.3, 0.32, 0.34] },
+    ...(TEKS.lama ? [] : [                                           // 32h: alas tiang (dudukan baut) dan kerah
+      { geo: new THREE.BoxGeometry(0.34, 0.5, 0.34).translate(0, 0.25, 0), color: [0.3, 0.32, 0.34] },
+      { geo: new THREE.BoxGeometry(0.42, 0.06, 0.42).translate(0, 0.03, 0), color: [0.36, 0.36, 0.35] },
+      { geo: new THREE.BoxGeometry(0.22, 0.12, 0.22).translate(0, 0.56, 0), color: [0.36, 0.39, 0.42] },
+    ]),
   ]);
   const headGeo = new THREE.BoxGeometry(0.28, 0.04, 0.5).translate(0, 7.77, 1.5);
   const poles = new THREE.InstancedMesh(poleGeo, specMat(new THREE.MeshBasicMaterial({ vertexColors: true }), 0.4, 0.05), lamps.length);   // 17b: cat logam
