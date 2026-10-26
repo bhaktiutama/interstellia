@@ -7,100 +7,43 @@
 <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.core.js" crossorigin>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Millar's World</title>
+<link rel="stylesheet" href="../../shared/ui.css">
 <style>
-  :root { --ink: #dfe3ea; --muted: #8a919c; --line: rgba(255,255,255,0.12); --panel: rgba(12,14,18,0.58); --accent: #e8b765; }
+  /* UI seragam (docs/app/rencana-ui-seragam.md): token dan komponen di shared/ui.css; di sini hanya letak dan isi khusus Millar */
+  :root { --ink: var(--ui-ink); --muted: var(--ui-muted); --line: var(--ui-line); --panel: var(--ui-panel); --accent: var(--ui-accent); }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #8e979b; color: var(--ink);
-    font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #8e979b; color: var(--ink); font: var(--ui-font); }
   canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: opacity .25s; }
-  .hide .panel, .pre .play { opacity: 0; pointer-events: none; }
-  /* tombol menu terpisah dari HUD, sama dengan #menuBtn Copper (24f); HUD di bawahnya dengan baris judul seperti Copper */
-  #back { left: 12px; top: calc(12px + env(safe-area-inset-top, 0px)); padding: 4px 10px; font-size: 12px; border-radius: 8px; color: var(--ink); text-decoration: none; z-index: 2; }
-  #back:hover { border-color: var(--accent); color: #fff; }
-  #hud { left: 12px; top: calc(44px + env(safe-area-inset-top, 0px)); padding: 10px 12px; min-width: 270px; border-radius: 8px; }
-  #hud h1 { margin: 0 0 4px; font-size: 10.5px; font-weight: 400; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; }
+  [hidden] { display: none !important; }
+  #hud { min-width: 270px; }
+  #hud h1 { margin-bottom: 4px; }
   #rows { display: grid; grid-template-columns: auto 1fr; gap: 2px 14px; font-variant-numeric: tabular-nums; }
   #rows div:nth-child(odd) { color: var(--muted); }
   #rows div:nth-child(even) { text-align: right; }
   #rows .big { color: var(--accent); font-size: 14px; }
-  #rows .warn { color: #ff9d7a; }
-  #keys { right: 16px; bottom: 16px; padding: 8px 12px; color: var(--muted); max-width: 350px; line-height: 1.6; }
-  #keys b { color: var(--ink); font-weight: 400; }
-  #labLang button.on { border-color: var(--accent); }
+  #rows .warn { color: var(--ui-warn); }
   #labLang { display: flex; gap: 4px; }
-  #labLang button { flex: 1; font: inherit; font-size: 11px; color: var(--ink); background: rgba(255,255,255,0.03); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; cursor: pointer; }
+  #labLang button { flex: 1; font-size: 11px; padding: 5px 6px; }
   #white { position: fixed; inset: 0; background: #eef3f4; opacity: 0; pointer-events: none; }
-  #msg { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); padding: 10px 16px; font-size: 14px; text-align: center;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 10px; opacity: 0; transition: opacity .4s; pointer-events: none; max-width: calc(100vw - 32px); }
+  #msg { opacity: 0; }
   #msg.on { opacity: 1; }
-  /* Kartu mulai bersama Copper dan Millar (docs/app/rencana-menu-mulai.md U1): salin sama persis ke kedua file */
-  #start { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(8, 9, 12, 0.45); z-index: 6; }
-  #start[hidden] { display: none; }
-  #start .card { width: min(440px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 20px; background: rgba(12, 14, 18, 0.82);
-    border: 1px solid rgba(255, 255, 255, 0.10); border-radius: 10px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #e8e6e3; }
-  #start h1 { margin: 0 0 4px; font-size: 18px; font-weight: 600; letter-spacing: .04em; color: #fff; text-transform: none; }
-  #start .sub { color: #8b929c; font-size: 12.5px; margin: 0 0 16px; }
-  #boot .bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
-  #boot .bar i { display: block; height: 100%; width: 0; background: #e8b765; transition: width .25s; }
-  #boot .bootRow { display: flex; justify-content: space-between; margin-top: 8px; color: #8b929c; font-size: 12px; }
-  #ready .plabel { color: #e8b765; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin: 12px 0 6px; }
-  #ready .plabel:first-child { margin-top: 0; }
-  #ready .psec { color: #fff; font-size: 12px; margin: 16px 0 0; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.10); }
-  #ready label { display: flex; gap: 6px; align-items: center; margin: 8px 0 2px; font-size: 12px; }
-  #ready .pnote { color: #8b929c; font-size: 11px; margin: 2px 0 6px; }
-  #go { width: 100%; margin-top: 14px; font: inherit; font-size: 14px; padding: 11px; border-radius: 8px; border: 1px solid #e8b765;
-    background: rgba(232, 183, 101, 0.18); color: #fff; cursor: pointer; }
-  #go:focus-visible { outline: 2px solid #e8b765; outline-offset: 2px; }
-  #ready .links { display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: 12px; }
-  #ready .links a { color: #8b929c; text-decoration: none; }
-  #ready .links a:hover { color: #e8e6e3; }
-  /* P2: bilah muat Millar menunjukkan kemajuan kompilasi shader dan pemanasan (mBoot), bukan bilah tak tentu */
-  .pick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
-  .pick.m3 { grid-template-columns: repeat(3, 1fr); }
-  .pick.m2 { grid-template-columns: repeat(2, 1fr); }
   #radar { position: fixed; left: 50%; bottom: 16px; width: 240px; height: 240px; margin-left: -120px; border-radius: 50%; z-index: 3; pointer-events: none; }
-  #radar[hidden], #result[hidden] { display: none; }
-  #prompt { position: fixed; left: 50%; bottom: 272px; transform: translateX(-50%); padding: 6px 12px; border-radius: 8px; background: var(--panel);
-    border: 1px solid var(--line); font-size: 13px; pointer-events: none; white-space: nowrap; }
+  #prompt { bottom: 272px; font-size: 13px; }
   #prompt:empty { display: none; }
   #prompt .bar { height: 3px; margin-top: 4px; background: var(--accent); border-radius: 2px; }
-  #result { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(10,12,15,0.35); z-index: 8; }
-  #result .card { width: min(420px, 100%); padding: 20px; background: rgba(12,14,18,0.86); border: 1px solid var(--line); border-radius: 12px;
-    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  #result h2 { margin: 0 0 10px; font-weight: 400; letter-spacing: .08em; }
-  #result h2.ok { color: #9be39b; } #result h2.fail { color: #ff9d7a; }
+  #result { z-index: 8; }
+  #result h2.ok { color: #9be39b; } #result h2.fail { color: var(--ui-warn); }
   #resRows { display: grid; grid-template-columns: auto 1fr; gap: 3px 14px; font-size: 13px; }
   #resRows div:nth-child(odd) { color: var(--muted); }
-  #result button { margin-top: 12px; width: 100%; font: inherit; padding: 9px; border-radius: 8px; border: 1px solid var(--line); background: rgba(255,255,255,0.05); color: #fff; cursor: pointer; }
-  #result button:first-of-type { border-color: var(--accent); background: rgba(232,183,101,0.2); }
-  .pick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
-  .pick button.on { border-color: var(--accent); background: rgba(232,183,101,0.18); color: #fff; }
-  #lab { right: 16px; top: 60px; width: 290px; padding: 10px 12px; z-index: 6; max-height: calc(100vh - 76px); overflow-y: auto; }
-  #lab[hidden], #help[hidden] { display: none; }
-  .lhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; color: var(--muted); letter-spacing: .06em; }
-  .lhead button, #labBtns button, #labMus button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.04); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; cursor: pointer; }
+  #result button { margin-top: 12px; width: 100%; padding: 9px; border-radius: var(--ui-r); color: #fff; }
+  #result button:first-of-type { border-color: var(--accent); background: var(--ui-accent-bg); }
+  #lab #labTabs { margin-bottom: 8px; }
   #labBtns, #labMus { display: grid; gap: 4px; }
-  /* panel bertab seperti Copper dan Gargantua (labTab) */
-  #labTabs { display: flex; flex-wrap: wrap; gap: 3px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
-  #labTabs button { flex: 1 1 auto; font: inherit; font-size: 11px; padding: 5px 6px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); color: var(--ink); cursor: pointer; }
-  #labTabs button.on { border-color: var(--accent); color: #fff; background: rgba(232, 183, 101, 0.18); }
-  #labBtns button[hidden], #labVol[hidden], #labMus[hidden] { display: none; }
   #labMus { margin-top: 8px; } #labMus label { font-size: 12px; color: var(--muted); margin-top: 2px; }
   #labVol { display: grid; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted); }
-  #labVol label, #labMus label { display: grid; gap: 2px; } #labVol input, #labMus input { width: 100%; accent-color: var(--accent); }
-  #labBtns button, #labMus button { display: flex; justify-content: space-between; gap: 8px; text-align: left; }
-  #labBtns button:hover, #labMus button:hover, .lhead button:hover { border-color: var(--accent); }
-  #labBtns kbd, #labMus kbd { color: var(--muted); font: inherit; }
-  #help { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(10,12,15,0.35); z-index: 7; }
-  #help .card { width: min(580px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; background: rgba(12,14,18,0.86);
-    border: 1px solid var(--line); border-radius: 12px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
-  #help table { border-collapse: collapse; width: 100%; }
-  #help td { padding: 4px 8px; vertical-align: top; border-top: 1px solid var(--line); }
-  #help td:first-child { color: var(--accent); white-space: nowrap; }
-  body.photo .panel { opacity: 0; pointer-events: none; }
+  #labVol label, #labMus label { display: grid; gap: 2px; }
+  #labBtns button, #labMus button { display: flex; flex-direction: row-reverse; justify-content: flex-end; gap: 0; text-align: left; }
+  body.photo .ui-play, body.photo #lab { opacity: 0; pointer-events: none; }
   /* M4: sinematik (pita hitam atas-bawah, judul, petunjuk lewati) */
   #cine { position: fixed; left: 0; right: 0; bottom: 15%; text-align: center; pointer-events: none; opacity: 0; transition: opacity .9s; z-index: 6; }
   #cine.on { opacity: 1; }
@@ -111,70 +54,71 @@
   body.cine.shown #cineSkip { display: none; }
   body.cine::before, body.cine::after { content: ''; position: fixed; left: 0; right: 0; height: 7vh; background: #000; z-index: 5; pointer-events: none; }
   body.cine::before { top: 0; } body.cine::after { bottom: 0; }
-  body.cine .panel, body.cine #prompt, body.cine #radar, body.cine #msg { opacity: 0 !important; pointer-events: none; }
-  #err { position: fixed; inset: 16px; overflow: auto; background: rgba(30,0,0,0.92); color: #ffb4a8; padding: 16px; white-space: pre-wrap; border-radius: 8px; z-index: 9; }
-  #err[hidden] { display: none; }
-  @media (max-width: 640px) { #prompt { bottom: 268px; } #keys { display: none; } #hud { right: 12px; min-width: 0; } }
+  body.cine .ui-play, body.cine #lab, body.cine #prompt, body.cine #radar, body.cine #msg { opacity: 0 !important; pointer-events: none; }
+  @media (max-width: 640px) { #prompt { bottom: 268px; } #hud { right: 12px; min-width: 0; } }
 </style>
 </head>
-<body class="pre">
+<body class="ui-pre">
 <canvas id="c"></canvas>
-<a id="back" class="panel play" href="../../index.html" data-t="← Menu">← Menu</a>
-<div id="hud" class="panel play">
-  <h1>Millar's World</h1>
+<a id="back" class="ui-menu ui-play" href="../../index.html" data-t="← Menu">← Menu</a>
+<div id="hud" class="ui-hud ui-play">
+  <h1 class="ui-title">Millar's World</h1>
   <div id="rows"></div>
 </div>
-<div id="keys" class="panel play" data-t-html="keys"></div>
-<div id="lab" class="panel" hidden>
-  <div class="lhead"><span data-t="Panel kontrol">Panel kontrol</span><button type="button" id="labClose" data-t="Tutup (`)">Tutup (`)</button></div>
-  <div id="labTabs"></div>
+<div id="keys" class="ui-keys ui-play" data-t-html="keys" hidden></div>
+<div id="lab" class="ui-panel ui-play collapsed">
+  <div class="ui-phead" id="labHead"><span data-t="Panel kontrol">Panel kontrol</span><span class="chev">&#9662;</span></div>
+  <div class="ui-pbody">
+  <div id="labTabs" class="ui-tabs"></div>
   <div id="labBtns"></div>
   <div id="labLang" hidden></div>
   <div id="labVol"><label><span id="volT"></span><input type="range" id="volR" min="0" max="100"></label><label><span id="ambT"></span><input type="range" id="ambR" min="0" max="100"></label></div>
   <div id="labMus"><button type="button" id="musTog"></button><button type="button" id="musPick"></button><input id="inMusicFile" type="file" accept="audio/*" hidden><label><span id="musT"></span><input type="range" id="musR" min="0" max="100"></label></div>
+  </div>
 </div>
-<div id="help" hidden>
-  <div class="card">
-    <div class="lhead"><span data-t="Bantuan">Bantuan</span><button type="button" id="helpClose" data-t="Tutup (?)">Tutup (?)</button></div>
-    <table id="helpRows"></table>
+<div id="help" class="ui-overlay" hidden>
+  <div class="ui-card wide">
+    <div class="ui-hhead"><span data-t="Bantuan">Bantuan</span><span><a class="helpMenu" href="../../index.html" data-t="Kembali ke menu utama">Kembali ke menu utama</a><button type="button" id="helpClose" data-t="Tutup (?)">Tutup (?)</button></span></div>
+    <div class="ui-htabs" id="helpTabs"></div>
+    <div id="helpRows"></div>
   </div>
 </div>
 <div id="white"></div>
 <canvas id="radar" hidden></canvas>
-<div id="prompt"></div>
-<div id="result" hidden>
-  <div class="card">
+<div id="prompt" class="ui-prompt"></div>
+<div id="result" class="ui-overlay" hidden>
+  <div class="ui-card">
     <h2 id="resTitle"></h2>
     <div id="resRows"></div>
     <button type="button" id="resAgain" data-t="Ulangi (posisi baru)">Ulangi (posisi baru)</button>
     <button type="button" id="resFree" data-t="Mode Jelajah">Mode Jelajah</button>
   </div>
 </div>
-<div id="msg"></div>
+<div id="msg" class="ui-toast"></div>
 <div id="cine"><div class="t1"></div><div class="t2"></div></div>
 <div id="cineSkip" data-t="Spasi / Enter / klik: lewati">Spasi / Enter / klik: lewati</div>
-<div id="start" class="loading">
-  <div class="card">
+<div id="start" class="ui-overlay loading">
+  <div class="ui-card">
     <h1>Millar's World</h1>
     <div class="sub" data-t="Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar">Planet air di dekat Gargantua · 1,3 g · 1 jam = 7 tahun di luar</div>
     <div id="boot"><div class="bar"><i></i></div><div class="bootRow"><span id="bootTxt" data-t="Memuat dunia...">Memuat dunia...</span><span id="bootPct"></span></div></div>
     <div id="ready" hidden>
       <div class="plabel" data-t="Bahasa">Bahasa</div>
-      <div class="pick m2" id="lang"></div>
+      <div class="ui-pick m2" id="lang"></div>
       <div class="plabel" data-t="Kualitas grafik">Kualitas grafik</div>
-      <div class="pick" id="presetPick"></div>
+      <div class="ui-pick" id="presetPick"></div>
       <label><input id="presetAuto" type="checkbox"> <span data-t="Turunkan otomatis bila FPS di bawah 30">Turunkan otomatis bila FPS di bawah 30</span></label>
       <div class="pnote" data-t="Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.">Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.</div>
       <div class="psec" data-t="Opsi Millar's World">Opsi Millar's World</div>
       <div class="plabel" data-t="Suasana">Suasana</div>
-      <div class="pick m3" id="moodPick"></div>
+      <div class="ui-pick m3" id="moodPick"></div>
       <div class="plabel" data-t="Wahana">Wahana</div>
-      <div class="pick m3" id="shipPick"></div>
+      <div class="ui-pick m3" id="shipPick"></div>
       <div class="plabel" data-t="Mode">Mode</div>
-      <div class="pick m2" id="modePick"></div>
+      <div class="ui-pick m2" id="modePick"></div>
       <div id="levelBox">
         <div class="plabel" data-t="Tingkat misi">Tingkat misi</div>
-        <div class="pick m3" id="levelPick"></div>
+        <div class="ui-pick m3" id="levelPick"></div>
         <div class="pnote" data-t="Misi: temukan 3 pecahan pesawat dengan radar (M), ambil barangnya (tahan E), lalu kembali ke KS-07 sebelum gelombang tiba.">Misi: temukan 3 pecahan pesawat dengan radar (M), ambil barangnya (tahan E), lalu kembali ke KS-07 sebelum gelombang tiba.</div>
       </div>
       <label><input id="cineOn" type="checkbox" checked> <span data-t="Sinematik kedatangan dari orbit">Sinematik kedatangan dari orbit</span></label>
@@ -183,9 +127,10 @@
     </div>
   </div>
 </div>
-<pre id="err" hidden></pre>
+<pre id="err" class="ui-err" hidden></pre>
 
 <script src="../../shared/prof.js"></script>
+<script src="../../shared/ui.js"></script>
 <script src="../../shared/warm.js"></script>
 <script>
 /* Pilihan wahana (shared/armada.js): GX-01 butuh blob model dari Gargantua, dimuat sinkron sebelum modul utama */
@@ -316,8 +261,13 @@ let LANG = 'id';
   LANG = ok(c) ? c : 'id';
 }
 // Tombol mengikuti standar aplikasi (patokan Copper Corn Station): docs/app/tombol.md
-const KEYS_ID = '<b>Klik</b> kunci / lepas mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat<br><b>M</b> radar &middot; <b>E</b> ambil / naik &middot; <b>V</b> tampilan &middot; <b>G</b> panggil gelombang &middot; <b>Z</b> kecepatan waktu &middot; <b>N</b> suasana<br><b>Q</b> grafik &middot; <b>P</b> efek layar &middot; <b>U</b> suara &middot; <b>J</b> musik &middot; <b>F</b> foto &middot; <b>R</b> kembali &middot; <b>H</b> sembunyikan<br><b>`</b> panel &middot; <b>?</b> bantuan';
+const KEYS_ID = '<b>Klik</b> kunci / lepas mouse &middot; <b>WASD</b> jalan &middot; <b>Shift</b> lari &middot; <b>Space</b> lompat &middot; <b>M</b> radar &middot; <b>E</b> ambil / naik &middot; <b>V</b> tampilan &middot; <b>`</b> panel &middot; <b>?</b> bantuan';
 const I18N = { en: {
+  'Grafik dan suara': 'Graphics and sound',
+  'Kamera': 'Camera',
+  'Terbang': 'Flying',
+  'Misi dan dunia': 'Mission and world',
+  'Dasar': 'Basics',
   'Headset PC (WebXR): tombol Masuk VR di kanan bawah; X menu VR, Y pusatkan ulang, stik kiri jalan, picu kanan E': 'PC headset (WebXR): Enter VR button at bottom right; X VR menu, Y recenter, left stick walks, right trigger E',
   'VR: stik kiri jalan / terbang, stik kanan belok (terbang: naik-turun), genggam kanan lari, picu kanan E (ambil, naik, mendarat), A lompat, B tampilan, tekan stik kiri radar':
     'VR: left stick walk / fly, right stick turn (flying: up/down), right grip run, right trigger E (pick up, board, land), A jump, B view, click left stick radar',
@@ -379,7 +329,7 @@ const I18N = { en: {
   'Tersapu gelombang. Kembali ke titik awal.<br>Waktu yang hilang di luar: {y}': 'Swept by the wave. Back to the start point.<br>Time lost outside: {y}',
   'Gelombang dipanggil: {d} km': 'Wave summoned: {d} km',
   'Grafik: {p}': 'Graphics: {p}', 'Shuttle KS-07': 'Shuttle KS-07', 'Wahana': 'Vessel', 'Suasana: {m}': 'Mood: {m}', 'FPS rendah: grafik diturunkan ke {p}.': 'Low FPS: graphics lowered to {p}.',
-  [KEYS_ID]: '<b>Click</b> lock / release mouse &middot; <b>WASD</b> walk &middot; <b>Shift</b> run &middot; <b>Space</b> jump<br><b>M</b> radar &middot; <b>E</b> pick up / board &middot; <b>V</b> view &middot; <b>G</b> summon wave &middot; <b>Z</b> time speed &middot; <b>N</b> mood<br><b>Q</b> graphics &middot; <b>P</b> screen effects &middot; <b>U</b> sound &middot; <b>J</b> music &middot; <b>F</b> photo &middot; <b>R</b> reset &middot; <b>H</b> hide<br><b>`</b> panel &middot; <b>?</b> help',
+  [KEYS_ID]: '<b>Click</b> lock / release mouse &middot; <b>WASD</b> walk &middot; <b>Shift</b> run &middot; <b>Space</b> jump &middot; <b>M</b> radar &middot; <b>E</b> pick up / board &middot; <b>V</b> view &middot; <b>`</b> panel &middot; <b>?</b> help',
 } };
 // Pilihan wahana (shared/armada.js): teks yang menyebut KS-07 memakai nama wahana terpilih
 const SHIPID = window.FLEET.current('ks07'), SHIPNAME = window.FLEET.info[SHIPID].short;
@@ -393,7 +343,7 @@ function translateDom() {
   document.documentElement.lang = LANG;
   document.querySelectorAll('[data-t]').forEach((el) => { el.textContent = t(el.dataset.t); });
   document.querySelectorAll('[data-t-html]').forEach((el) => { el.innerHTML = t(el.dataset.tHtml === 'keys' ? KEYS_ID : el.dataset.tHtml); });
-  for (const id of ['back', 'menuLink']) document.getElementById(id).href = `../../index.html?lang=${LANG}`;
+  document.querySelectorAll('#back, #menuLink, #help .helpMenu').forEach((el) => { el.href = `../../index.html?lang=${LANG}`; });
   document.querySelectorAll('#lang button, #labLang button').forEach((b) => b.classList.toggle('on', b.dataset.lang === LANG));
   document.querySelectorAll('#presetPick button').forEach((b, i) => { b.textContent = t(PRESETS[i].name); });
   document.querySelectorAll('#moodPick button').forEach((b, i) => { b.textContent = t(MOODS[i].key); });
@@ -1831,6 +1781,7 @@ function resize() {
 }
 function applyPreset(i) {
   PRESET.idx = i; const P = PRESETS[i];
+  UIKIT.lite(P.name === 'Hemat');                                 // UI seragam D1: Hemat tanpa blur kaca
   applyChop(P.nw, P.nm);
   for (const m of [seaNear.material, seaFar.material, waveMat]) { m.defines.NW = P.nw; m.defines.NM = P.nm; m.needsUpdate = true; }
   skyMat.defines.STEPS = P.steps; skyMat.defines.LAYERS = P.layers; skyMat.defines.OCT = P.oct; skyMat.needsUpdate = true;
@@ -2614,7 +2565,7 @@ function lockPointer() {                              // kunci kursor; tolakan (
 function start(skipCine = false) {
   if (STATE.started) return;
   if (CINE.on) cineStop();
-  document.getElementById('start').hidden = true; document.getElementById('result').hidden = true; document.body.classList.remove('pre');
+  document.getElementById('start').hidden = true; document.getElementById('result').hidden = true; document.body.classList.remove('ui-pre');
   lockPointer();
   startAudio();                                        // AudioContext hanya boleh dibuat setelah gestur pengguna
   if (!skipCine && CINE.enabled && !CINE.played) { startCine('arrive'); return; }   // M4: sekali per sesi, lalu beginPlay() di akhir
@@ -2622,6 +2573,7 @@ function start(skipCine = false) {
 }
 function beginPlay(atDoor = false) {                 // atDoor: setelah sinematik kedatangan, pemain turun di samping tangga
   STATE.started = true;
+  UIKIT.flash(document.getElementById('keys'), null, 8);         // UI seragam D6: petunjuk tombol tengah bawah, 8 s
   if (MIS.mode === 'misi') startMission(atDoor);
   else { stopMission(); if (atDoor) playerAtDoor(); }
 }
@@ -2659,7 +2611,7 @@ function togglePhoto(on = !PHOTO.on, kind) {                         // K: kind 
   if (on && kind === 'kamera' && !camAllowed()) { toast(t('Kamera rangefinder hanya bisa dipakai saat berjalan kaki atau pandangan drone'), 3); return; }
   PHOTO.on = on; document.body.classList.toggle('photo', on);
   if (on) {
-    PHOTO.kind = kind === 'kamera' ? 'kamera' : 'bebas'; labEl.hidden = true;
+    PHOTO.kind = kind === 'kamera' ? 'kamera' : 'bebas'; toggleLab(false);
     if (kind) { PHOTO.last = PHOTO.kind; try { localStorage.setItem('millar.photoKind', PHOTO.kind); } catch (e) { /* abaikan */ } }
     if (PHOTO.kind === 'kamera') { CAMKIT.enter(); resize(); lockPointer(); }
     else toast(t('Mode foto: Enter simpan PNG, F atau Esc keluar'), 3);
@@ -2721,25 +2673,43 @@ function syncLab() {
   document.getElementById('volR').value = Math.round(AUDIO.vol * 100); document.getElementById('ambR').value = Math.round(AUDIO.amb * 100);
   document.getElementById('volT').textContent = t('Volume') + ': ' + Math.round(AUDIO.vol * 100) + '%'; document.getElementById('ambT').textContent = t('Angin dan laut') + ': ' + Math.round(AUDIO.amb * 100) + '%'; document.querySelectorAll('#labBtns button').forEach((b, i) => { b.innerHTML = `<span>${LAB[i][1]()}</span><kbd>${LAB[i][0]}</kbd>`; }); syncMusic();
   document.querySelectorAll('#labTabs button').forEach((b) => { b.textContent = t(LAB_TABS.find(([id]) => id === b.dataset.ltab)[1]); }); labTab(labTabId); }
-function toggleLab(on = labEl.hidden) { labEl.hidden = !on; if (on) { syncLab(); if (document.pointerLockElement) document.exitPointerLock(); } }
+// UI seragam D7: panel diciutkan (kepala saja) saat muat, klik kepala atau ` membuka, status terakhir diingat
+const labPanel = UIKIT.panel(labEl, 'millar.panelOpen');
+function toggleLab(on = labEl.classList.contains('collapsed')) { labPanel(on); if (on) { syncLab(); if (document.pointerLockElement) document.exitPointerLock(); } }
+document.getElementById('labHead').addEventListener('click', () => toggleLab());
+// UI seragam D8: bantuan bertab seperti Copper dan Gargantua (tab terakhir diingat di localStorage millar.helpTab)
+const HELP_TABS = [['dasar', 'Dasar'], ['dunia', 'Misi dan dunia'], ['terbang', 'Terbang'], ['kamera', 'Kamera'], ['grafik', 'Grafik dan suara']];
 function buildHelp() {
-  const rows = [
-    ['Mouse', t('Melihat. Klik = kunci kursor, klik lagi atau Esc = lepas kursor')],
-    ['W A S D', t('Berjalan di air setinggi lutut (air menahan langkah)')], ['Shift', t('Lari')], ['Space', t('Lompat (1,3 g: 77% lompatan di Bumi)')],
-    ['M', t('Radar: cari 3 pecahan pesawat (mode Misi)')], [SHIPNAME, t('Terbang KS-07: R/F naik-turun, W/S gas (bertahan), X gas nol, panah: hidung + rudder, Shift cepat, V kamera, E mendarat')], ['E', t('Tahan untuk mengambil barang, tekan di pintu untuk naik ke KS-07')],
-    ['V', t('Tampilan: jalan kaki, drone 60 m, tinggi 1,5 km')], ['G', t('Panggil gelombang raksasa (20 km di depan)')],
-    ['Z', t('Kecepatan waktu 1x, 5x, 20x, 60x')], ['N', t('Suasana: otomatis, mendung, senja')],
-    ['Q', t('Kualitas grafik: Ultra, Tinggi, Sedang, Rendah, Hemat')], ['P', t('Efek layar: tinggi, sedang, mati (bloom, butiran, vinyet)')],
-    ['U', t('Suara nyala / mati')], ['J', t('Musik dari file sendiri: putar / jeda (pilih file di panel `)')], ['F', t('Kamera rangefinder (tombolnya di bawah); Foto bebas lama dari panel kamera')],
-    ['R · H', t('Kembali ke titik awal · sembunyikan HUD')], [t('` (backtick)'), t('Panel kontrol (gerak kepala, tubuh, visor)')],
-    ['VR', t('Headset PC (WebXR): tombol Masuk VR di kanan bawah; X menu VR, Y pusatkan ulang, stik kiri jalan, picu kanan E')],   // VR6
-    [t('? (atau F1)'), t('Tampilkan / tutup bantuan ini')],
-  ];
-  rows.push([`<b>${CAMKIT.helpHead(LANG)}</b>`, ''], ...CAMKIT.helpRows(LANG));   // K: tombol mode kamera
-  document.getElementById('helpRows').innerHTML = rows.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+  const R = {
+    dasar: [
+      ['Mouse', t('Melihat. Klik = kunci kursor, klik lagi atau Esc = lepas kursor')],
+      ['W A S D', t('Berjalan di air setinggi lutut (air menahan langkah)')], ['Shift', t('Lari')], ['Space', t('Lompat (1,3 g: 77% lompatan di Bumi)')],
+      ['E', t('Tahan untuk mengambil barang, tekan di pintu untuk naik ke KS-07')],
+      ['R · H', t('Kembali ke titik awal · sembunyikan HUD')], [t('` (backtick)'), t('Panel kontrol (gerak kepala, tubuh, visor)')],
+      ['VR', t('Headset PC (WebXR): tombol Masuk VR di kanan bawah; X menu VR, Y pusatkan ulang, stik kiri jalan, picu kanan E')],   // VR6
+      [t('? (atau F1)'), t('Tampilkan / tutup bantuan ini')]],
+    dunia: [
+      ['M', t('Radar: cari 3 pecahan pesawat (mode Misi)')], ['V', t('Tampilan: jalan kaki, drone 60 m, tinggi 1,5 km')], ['G', t('Panggil gelombang raksasa (20 km di depan)')],
+      ['Z', t('Kecepatan waktu 1x, 5x, 20x, 60x')], ['N', t('Suasana: otomatis, mendung, senja')]],
+    terbang: [[SHIPNAME, t('Terbang KS-07: R/F naik-turun, W/S gas (bertahan), X gas nol, panah: hidung + rudder, Shift cepat, V kamera, E mendarat')]],
+    kamera: [['F', t('Kamera rangefinder (tombolnya di bawah); Foto bebas lama dari panel kamera')], ...CAMKIT.helpRows(LANG)],   // K: tombol mode kamera
+    grafik: [
+      ['Q', t('Kualitas grafik: Ultra, Tinggi, Sedang, Rendah, Hemat')], ['P', t('Efek layar: tinggi, sedang, mati (bloom, butiran, vinyet)')],
+      ['U', t('Suara nyala / mati')], ['J', t('Musik dari file sendiri: putar / jeda (pilih file di panel `)')]],
+  };
+  document.getElementById('helpTabs').innerHTML = HELP_TABS.map(([id, n]) => `<button type="button" data-tab="${id}">${t(n)}</button>`).join('');
+  document.getElementById('helpRows').innerHTML = HELP_TABS.map(([id]) =>
+    `<table data-pane="${id}">${R[id].map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join('')}</table>`).join('');
+  document.querySelectorAll('#helpTabs button').forEach((b) => b.addEventListener('click', () => helpTab(b.dataset.tab)));
+  helpTab(UIKIT.get('millar.helpTab', 'dasar'));
+}
+function helpTab(id) {
+  if (!HELP_TABS.some(([k]) => k === id)) id = 'dasar';
+  UIKIT.set('millar.helpTab', id);
+  document.querySelectorAll('#helpTabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
+  document.querySelectorAll('#helpRows [data-pane]').forEach((x) => x.classList.toggle('on', x.dataset.pane === id));
 }
 function toggleHelp(on = helpEl.hidden) { helpEl.hidden = !on; if (on && document.pointerLockElement) document.exitPointerLock(); }
-document.getElementById('labClose').addEventListener('click', () => toggleLab(false));
 document.getElementById('helpClose').addEventListener('click', () => toggleHelp(false));
 try { const b = +localStorage.getItem('millar.bob'); if (localStorage.getItem('millar.bob') !== null && BOB_LEVELS[b]) BOB.level = b; } catch (e) { /* abaikan */ }
 try { const b = +localStorage.getItem('millar.body'); if (localStorage.getItem('millar.body') !== null && BODY_LEVELS[b]) BODY.level = b; } catch (e) { /* abaikan */ }
@@ -2776,7 +2746,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyU') toggleSound();
   if (e.code === 'KeyJ') setMusic();
   if (e.code === 'KeyR') resetPlayer();
-  if (e.code === 'KeyH') document.body.classList.toggle('hide');
+  if (e.code === 'KeyH') document.body.classList.toggle('ui-hide');
   if (e.code === 'Space' && P.view === 0 && P.ground) { P.vy = CONFIG.jumpV; P.ground = false; }
 });
 addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -3784,7 +3754,7 @@ function startCine(kind) {
   if (kind === 'orbit') {
     if (MIS.on && !MIS.result && STATE.started) { toast(t('Tidak tersedia di mode Misi'), 2); return; }
     if (FLY.on) { toast(t('Tidak tersedia saat terbang'), 2); return; }
-    CINE.wasStarted = STATE.started; labEl.hidden = true;
+    CINE.wasStarted = STATE.started; toggleLab(false);
   }
   Object.assign(CINE, { on: true, kind, t: 0, shown: false, cap: '', t0land: undefined, spT: 0, flow: '' });
   if (kind === 'arrive') { CINE.played = true; flyReset(); }

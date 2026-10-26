@@ -1,6 +1,6 @@
 # Rencana UI seragam: Copper, Gargantua, Millar
 
-Per 26 Oktober 2026. Status: inventaris selesai, rencana menunggu keputusan Bhakti (bagian D). Belum ada kode yang diubah.
+Per 26 Oktober 2026. Status: UI1-UI8 dikerjakan dengan semua saran D1-D9 (permintaan Bhakti "jalankan sesuai saranmu"), cabang `claude/ui-seragam`; menunggu uji visual dan FPS pemilik. Hasil di bagian G.
 
 ## Ringkasan
 
@@ -98,3 +98,22 @@ Urutan: UI1 dan UI2 dulu, lalu satu experience per langkah (UI3, UI4, UI5) agar 
 - Gargantua teks sumbernya English (`txt()`), Copper dan Millar Indonesia (`t()`). Rencana ini tidak menyamakan sistem kamus, hanya tampilan.
 - Di luar cakupan: halaman detail (`detail.html`), menu utama `index.html`, layar MFD dan HUD kokpit di kanvas, overlay kamera (sudah bersama).
 - Copper "satu file" tetap berlaku untuk kode experience; CSS bersama dimuat lewat `<link>` relatif seperti skrip `shared/` lain dan jalan dari file://.
+
+## G. Hasil pelaksanaan (26 Oktober 2026)
+
+| Langkah | Hasil |
+| --- | --- |
+| UI1 | `shared/ui.css`: token `--ui-*`, material kaca dan kartu, komponen `.ui-menu`, `.ui-hud`, `.ui-panel`, `.ui-overlay` + `.ui-card`, `.ui-hhead` / `.ui-htabs`, `.ui-pick`, `.ui-toast`, `.ui-keys`, `.ui-prompt`, `.ui-err`, kartu mulai U1 (dipindah dari dua salinan), keadaan `ui-pre`, `ui-hide`, `ui-lite`, panel ponsel di bawah tombol menu |
+| UI2 | `shared/ui.js` `window.UIKIT`: `get` / `set`, `flash`, `keys`, `panel`, `tokens`, `lite` |
+| UI3 Copper | kelas umum di HUD, tombol menu, panel (`#lab` kini mulai ciut, `cooperStation.panelOpen`), bantuan, kartu mulai, peta, plakat, foto, kartu tur, toast, petunjuk (8 s), prompt, galat; `.hidden-ui` -> `ui-hide`; HUD dan panel tidak lagi terlihat di belakang kartu mulai; Enter = Mulai; Hemat = tanpa blur. Lembar bawah panel ponsel diganti panel atas seperti dua experience lain |
+| UI4 Millar | `.panel` / `body.pre` / `body.hide` -> kelas umum; panel dari tersembunyi menjadi ciut (`millar.panelOpen`, klik kepala atau `); `#keys` dari kotak kanan bawah 4 baris tetap menjadi petunjuk tengah bawah 2 baris 8 s; toast `#msg` pindah ke tengah atas; bantuan bertab 5 (`millar.helpTab`) + tautan menu; Hemat = tanpa blur |
+| UI5 Gargantua | panel, bantuan (+ tautan menu), toast tengah atas, petunjuk tengah bawah 8 s (dulu teks redup kanan bawah tetap), satu kelas H `ui-hide` (`hideUI` tetap sebagai alias kanvas); `#caption` kiri bawah disembunyikan (nama sudah di kepala panel); aksen kanvas `rgba(240,164,90)` -> token (`UIA`, 15 tempat); kotak relai, corong, peta orbit, petunjuk misi memakai `uiBox()` = material HUD kiri; Rendah = tanpa blur. Layar MFD kokpit (`#f0a45a`) tidak diubah |
+| UI6 | Gargantua kartu mulai: bilah muat di kartu, lalu bahasa, kualitas (Rendah, Sedang, Tinggi, Ultra), Mulai, tautan bantuan dan menu; adegan sudah berjalan di belakang kartu; `window.__gargantua.start()` untuk uji |
+| UI7 | `tools/uji_ui.py` (desktop 1280 x 720 + ponsel 375 x 740 per experience); uji lama disesuaikan: `uji_millar.py` (panel = kelas `collapsed`), `uji_misi_gargantua.py` dan `uji_vr.py` (lewati kartu mulai), `ukur_muat.py` (Gargantua klik Mulai) |
+| UI8 | CLAUDE.md, `tombol.md` (H, `, ?, Enter), `rencana-menu-mulai.md` (U5 selesai) |
+
+Hasil `tools/uji_ui.py` di sandbox SwiftShader: semua lulus (kartu mulai tanpa UI permainan, panel ciut setelah Mulai, petunjuk di tengah bawah, ` dan H, tanpa gulir mendatar di 375 px, tanpa error, 66 nilai gaya terhitung sama di ketiga experience).
+
+Belum diukur: biaya `backdrop-filter` di GTX 1060 dan M1 (sandbox tidak memberi FPS bermakna). Bila FPS turun, preset Hemat / Rendah sudah tanpa blur; pilihan lain menurunkan `--ui-blur` di `shared/ui.css`.
+
+Batasan yang tetap: petunjuk misi Gargantua tetap digambar di kanvas (tengah bawah, berganti menurut keadaan misi) tetapi dengan material yang sama; teks petunjuk Gargantua di layar 375 px menjadi 3 baris (teks tombol keyboard, tidak relevan di layar sentuh).

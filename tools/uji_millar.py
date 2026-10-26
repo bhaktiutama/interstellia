@@ -273,9 +273,9 @@ UJI = r"""
     key('KeyQ'); up('KeyQ'); r.Q = M.PRESET.idx === (p0 + 1) % M.PRESETS.length;
     key('KeyP'); up('KeyP'); r.P = M.POST.mode === 1; key('KeyP'); up('KeyP'); key('KeyP'); up('KeyP'); r.P3 = M.POST.mode === 0;
     key('KeyU'); up('KeyU'); r.U = M.AUDIO.on === !s0; key('KeyU'); up('KeyU');
-    key('Backquote'); up('Backquote'); r.panel = !document.getElementById('lab').hidden && document.querySelectorAll('#labBtns button').length === M.LAB.length;
+    key('Backquote'); up('Backquote'); r.panel = !document.getElementById('lab').classList.contains('collapsed') && document.querySelectorAll('#labBtns button').length === M.LAB.length;
     document.querySelectorAll('#labBtns button')[4].click(); r.bobPanel = M.BOB.level !== b0;
-    key('Backquote'); up('Backquote'); r.panelTutup = document.getElementById('lab').hidden;
+    key('Backquote'); up('Backquote'); r.panelTutup = document.getElementById('lab').classList.contains('collapsed');
     key('KeyB'); up('KeyB'); r.B = M.BOB.level !== b0;                                                  // B tidak lagi dipakai
     key('KeyM'); up('KeyM'); r.M = M.MIS.radar && !document.getElementById('radar').hidden && M.AUDIO.on === s0; key('KeyM'); up('KeyM'); r.M2 = !M.MIS.radar;   // M = radar
     key('Slash'); up('Slash'); r.help = !document.getElementById('help').hidden && document.querySelectorAll('#helpRows tr').length >= 12;

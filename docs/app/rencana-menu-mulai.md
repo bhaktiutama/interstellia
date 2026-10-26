@@ -48,7 +48,7 @@ Gargantua tidak punya kartu mulai (langsung jalan); di luar cakupan rencana ini,
 | U4 | Bagian "Opsi experience" berjudul jelas; Millar: Suasana, Mode, Tingkat (disembunyikan saat Jelajah), Sinematik; tautan Bantuan (?) ke `toggleHelp()`; entri `I18N.en` baru | `millar` `#start`, `I18N.en` | Low | Sonnet 5.5 | low |
 | U5 (opsional) | Gargantua kartu mulai susunan sama (bahasa, kualitas, opsi: skenario misi atau jelajah) | `gargantua/index.html` | Medium | Sonnet 5.5 | medium |
 
-Status: U1-U4 selesai (gaya kaca dengan latar 0,45 dipakai keduanya, sesuai saran yang disetujui Bhakti). U3: modul Millar dimuat sekali jalan tanpa titik jeda, jadi bilahnya tak tentu (bergerak), bukan persen; opsi muncul setelah `__millarReady`. Tingkat misi disembunyikan saat mode Jelajah. U5 hanya bila diminta.
+Status: U1-U4 selesai (gaya kaca dengan latar 0,45 dipakai keduanya, sesuai saran yang disetujui Bhakti). U3: modul Millar dimuat sekali jalan tanpa titik jeda, jadi bilahnya tak tentu (bergerak), bukan persen; opsi muncul setelah `__millarReady`. Tingkat misi disembunyikan saat mode Jelajah. U5 selesai lewat UI6 rencana `rencana-ui-seragam.md` (26 Oktober 2026): Gargantua kartu mulai dengan bahasa, kualitas, Mulai; CSS kartu kini di `shared/ui.css`.
 
 ## Yang dipertahankan
 

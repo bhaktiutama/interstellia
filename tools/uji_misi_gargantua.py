@@ -95,7 +95,7 @@ async def main():
         pg.on('pageerror', lambda e: errs.append('pageerror ' + str(e)))
         pg.on('console', lambda m: errs.append(m.type + ': ' + m.text[:200]) if m.type in ('error', 'warning') else None)
         await pg.goto(PAGE.as_uri() + '?lang=id&mood=klasik&millar=0&aa=0', timeout=120000)   # MK: uji lama memakai tampilan Klasik tanpa planet (Kelam diuji di kelompok MK)
-        await pg.wait_for_function('window.__gargantua !== undefined', timeout=60000)
+        await pg.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pg.evaluate('() => window.__gargantua.start && window.__gargantua.start()')
         await pg.wait_for_timeout(1500)
 
         # --- aset ---
@@ -229,10 +229,10 @@ async def kelompok2(p, exe, pg):
         await pg.evaluate('() => { window.__gargantua.stopMission(); }')
         # V4 (turbulensi piringan, bintang HDR) sengaja mengubah tampilan: pembanding G1 memakai ?v4=0 (= sebelum V4) di halaman sekarang
         pg3 = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
-        await pg3.goto(PAGE.as_uri() + '?lang=id&v4=0&mood=klasik&millar=0&aa=0', timeout=120000); await pg3.wait_for_function('window.__gargantua !== undefined', timeout=120000); await pg3.wait_for_timeout(1000)
+        await pg3.goto(PAGE.as_uri() + '?lang=id&v4=0&mood=klasik&millar=0&aa=0', timeout=120000); await pg3.wait_for_function('window.__gargantua !== undefined', timeout=120000); await pg3.evaluate('() => window.__gargantua.start && window.__gargantua.start()'); await pg3.wait_for_timeout(1000)
         await pg3.evaluate(setup); await pg3.wait_for_timeout(500); baru = await pixels(pg3); await pg3.close()
         pg2 = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
-        await pg2.goto(tmp.as_uri() + '?lang=id', timeout=120000); await pg2.wait_for_function('window.__gargantua !== undefined', timeout=120000); await pg2.wait_for_timeout(1000)
+        await pg2.goto(tmp.as_uri() + '?lang=id', timeout=120000); await pg2.wait_for_function('window.__gargantua !== undefined', timeout=120000); await pg2.evaluate('() => window.__gargantua.start && window.__gargantua.start()'); await pg2.wait_for_timeout(1000)
         await pg2.evaluate(setup); await pg2.wait_for_timeout(500); lama = await pixels(pg2)
         d = beda(baru, lama)
         cek('misi mati: render identik dengan versi sebelum G2 (uFall = 0, ?v4=0, ?mood=klasik, ?millar=0)', d == 0, f'{d * 100:.3f}% piksel berbeda')
@@ -766,7 +766,7 @@ async def kelompok10(pg):
             px = {}
             for nama, url in (('baru', PAGE.as_uri()), ('lama', tmp.as_uri())):
                 pgx = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
-                await pgx.goto(url + '?lang=id&mood=klasik&millar=0&aa=0', timeout=120000); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.wait_for_timeout(1000)
+                await pgx.goto(url + '?lang=id&mood=klasik&millar=0&aa=0', timeout=120000); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.evaluate('() => window.__gargantua.start && window.__gargantua.start()'); await pgx.wait_for_timeout(1000)
                 for view in ('lubang hitam',):
                     await pgx.evaluate(setup, view); px[(nama, view)] = await pixels(pgx)
                 await pgx.close()
@@ -860,7 +860,7 @@ async def kelompokMK(pg):
             px = {}
             for nama, url in (('baru', PAGE.as_uri()), ('lama', tmp.as_uri())):
                 pgx = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()
-                await pgx.goto(url + '?lang=id&mood=klasik&millar=0&aa=0', timeout=120000); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.wait_for_timeout(1000)
+                await pgx.goto(url + '?lang=id&mood=klasik&millar=0&aa=0', timeout=120000); await pgx.wait_for_function('window.__gargantua !== undefined', timeout=60000); await pgx.evaluate('() => window.__gargantua.start && window.__gargantua.start()'); await pgx.wait_for_timeout(1000)
                 for mis in (False, True):
                     await pgx.evaluate(setup, mis); px[(nama, mis)] = await pixels(pgx)
                 await pgx.close()
@@ -908,7 +908,7 @@ async def kelompokMK(pg):
 
     # --- N, bantuan bertab ---
     pgd = await (await pg.context.browser.new_context(viewport={'width': 320, 'height': 200})).new_page()   # MK9: bawaan Klasik (Kelam lewat N)
-    await pgd.goto(PAGE.as_uri() + '?lang=id', timeout=120000); await pgd.wait_for_function('window.__gargantua !== undefined', timeout=120000)
+    await pgd.goto(PAGE.as_uri() + '?lang=id', timeout=120000); await pgd.wait_for_function('window.__gargantua !== undefined', timeout=120000); await pgd.evaluate('() => window.__gargantua.start && window.__gargantua.start()')
     dm = await pgd.evaluate("() => { localStorage.setItem('gargantua.mood', 'kelam'); return window.__gargantua.MOOD.on; }")
     # AA1: sampel tambahan hanya di tepi bayangan: aa 4 vs 0 berbeda sedikit (cincin tepi), tanpa nilai tidak valid
     aa = []

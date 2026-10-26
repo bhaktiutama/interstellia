@@ -20,7 +20,7 @@ EXP = {
                        'pre': 'PROFKIT.parallel || window.__station.warmLater(true)'},
     'millar': {'keys': ['Space', 'KeyN', 'KeyP', 'KeyQ', 'KeyQ', 'KeyQ', 'KeyQ', 'KeyQ', 'KeyF', 'Escape', 'KeyM'], 'go': True,
                'pre': 'PROFKIT.parallel || window.__millar.warmPresets(true)'},
-    'gargantua': {'keys': ['KeyQ', 'KeyP', 'KeyF', 'Escape', 'KeyV'], 'go': False},
+    'gargantua': {'keys': ['KeyQ', 'KeyP', 'KeyF', 'Escape', 'KeyV'], 'go': True},   # UI6: kartu mulai
 }
 
 async def run(b, name, cfg, local):
