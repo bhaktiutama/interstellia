@@ -116,4 +116,4 @@ Hasil `tools/uji_ui.py` di sandbox SwiftShader: semua lulus (kartu mulai tanpa U
 
 Belum diukur: biaya `backdrop-filter` di GTX 1060 dan M1 (sandbox tidak memberi FPS bermakna). Bila FPS turun, preset Hemat / Rendah sudah tanpa blur; pilihan lain menurunkan `--ui-blur` di `shared/ui.css`.
 
-Batasan yang tetap: petunjuk misi Gargantua tetap digambar di kanvas (tengah bawah, berganti menurut keadaan misi) tetapi dengan material yang sama; teks petunjuk Gargantua di layar 375 px menjadi 3 baris (teks tombol keyboard, tidak relevan di layar sentuh).
+Batasan yang tetap: petunjuk misi Gargantua tetap digambar di kanvas (tengah bawah, berganti menurut keadaan misi) tetapi dengan material yang sama; petunjuk tombol keyboard Millar dan Gargantua disembunyikan di layar < 640 px (kelas `ui-desk`; di 375 px teksnya 3-4 baris dan tombolnya tidak ada di layar sentuh), Copper menampilkan teks khusus sentuh.

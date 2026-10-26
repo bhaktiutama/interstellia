@@ -61,7 +61,11 @@ async def run(b, name, cfg, mobile=False):
     pc = await pg.evaluate(f"() => {{ const e = document.querySelector('{cfg['panel']}'), r = e.getBoundingClientRect(); return {{ c: e.classList.contains('collapsed'), h: r.height, w: r.width }}; }}")
     res[f"setelah Mulai: panel ciut, kepala saja ({pc['w']:.0f} x {pc['h']:.0f} px)"] = pc['c'] and pc['h'] < 45 and pc['w'] < 260
     k = await pg.evaluate(f"() => {{ const r = document.querySelector('{cfg['keys']}').getBoundingClientRect(); return {{ vis: !document.querySelector('{cfg['keys']}').hidden, cx: (r.left + r.right) / 2, bottom: innerHeight - r.bottom, h: r.height, w: innerWidth }}; }}")
-    res[f"petunjuk tombol tengah bawah ({k['cx']:.0f} px dari {k['w']} px, tinggi {k['h']:.0f} px)"] = k['vis'] and abs(k['cx'] - k['w'] / 2) < 2 and k['bottom'] < 120 and k['h'] < 80
+    desk = await pg.evaluate(f"() => document.querySelector('{cfg['keys']}').classList.contains('ui-desk')")
+    if mobile and desk:                                              # petunjuk keyboard disembunyikan di layar sempit
+        res['ponsel: petunjuk keyboard disembunyikan (ui-desk)'] = (await pg.evaluate(VIS_JS, [cfg['keys']]))[cfg['keys']] is False
+    else:
+        res[f"petunjuk tombol tengah bawah, maks 2 baris ({k['cx']:.0f} px dari {k['w']} px, tinggi {k['h']:.0f} px)"] = k['vis'] and abs(k['cx'] - k['w'] / 2) < 2 and k['bottom'] < 120 and k['h'] < 60
     res['tanpa gulir mendatar'] = await pg.evaluate('() => document.documentElement.scrollWidth <= innerWidth + 1')
     if not mobile:
         await pg.mouse.move(640, 360)
