@@ -120,4 +120,13 @@ Jumlah (hasil muat): beranda 2.014, kanopi 4.569, pergola 1.443, teras terbuka 3
 | 3 | Toko yang etalasenya menghadap belakang berdiri di rumput | Pelataran beton 4 m di sekeliling 1.391 gedung bertoko (gaya 1, 2, 11, 12, 13, gaya 0 > 12 m); digambar shader tanah dari masker, tidak di jalan atau air | kanal r `YARDM`, blok 32k di shader tanah |
 | 4 | Halaman belakang semua rumput | 50% sisi gedung bertoko yang di depannya kosong (tanpa gedung, jalan, trotoar, air, pohon) jadi lahan parkir aspal 17 m: dua baris petak 2,6 m dengan garis dan penahan roda, lorong 6 m; sisanya tetap rumput. Hasil: 172 lahan, 2.724 petak | kanal g `YARDM`, `TERAS.lots`, `stall` |
 
-Batasan: lahan parkir belum berisi mobil; masker halaman RG8 6.284 x sekitar 2.500 piksel (sekitar 31 MB dengan mipmap).
+Batasan: masker halaman RG8 6.284 x sekitar 2.500 piksel (sekitar 31 MB dengan mipmap).
+
+## Revisi 4 (26 Oktober 2026)
+
+| No | Masalah | Perbaikan | Nama di kode |
+| --- | --- | --- | --- |
+| 1 | Lahan parkir kosong, mobil semua di tepi jalan | Mobil tepi jalan dalam 150 m dari lahan dipindah ke petak (terdekat dulu, 35-75% petak terisi, 25% masuk mundur). Jumlah mobil tetap 4.814; 1.238 dipindah | `PARKED.moved`, `TERAS.lots[].slots` / `cars` |
+| 2 | Lahan parkir di tengah rumput tanpa akses | Jalan masuk aspal 6 m dari lahan ke jalan atau trotoar terdekat (lurus dari tepi jauh atau dari ujung lorong, maks 60 m, tidak menembus gedung, pohon, air, isi halaman). Lahan tanpa jalan masuk tidak dibuat. Hasil: 168 lahan, 2.326 petak, jalan masuk 6-43 m | `drive()`, `TERAS.lots[].drive` |
+| 3 | FPS pusat kota 40-50 | Detail aspal dan beton 32d-32e (8-10 noise per piksel) hanya bila jejak piksel < 0,25 m, memudar 0,12-0,25; pelapukan dinding 32f-32h hanya dalam 110 m, memudar 70-110 m; ruang toko tetap memudar lewat jejak piksel | `fD` shader tanah, `wD` `BUILD_FS` |
+| 4 | Pernyataan `TERAS.clipN` tertelan komentar | Dipisah ke baris sendiri | blok 32k |

@@ -73,7 +73,7 @@ async def run(args):
         pg = await b.new_page(viewport={'width': 640, 'height': 360})
         errs = []; pg.on('pageerror', lambda e: errs.append(str(e)[:200]))
         await pg.route(CDN + '**', serve)
-        await pg.goto(PAGE.as_uri() + f'?lang=id&preset={args.preset}')
+        await pg.goto(PAGE.as_uri() + f'?lang=id&preset={args.preset}' + (('&' + args.q) if args.q else ''))
         await pg.wait_for_function('window.__stationReady === true', timeout=900000)
         await pg.click('#go', timeout=300000)
         await pg.wait_for_timeout(4000)
@@ -117,7 +117,7 @@ def show(name, rec, top):
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
     ap.add_argument('spots', nargs='*', default=['1', '2'])
-    ap.add_argument('--preset', default='ultra'); ap.add_argument('--top', type=int, default=14); ap.add_argument('--json')
+    ap.add_argument('--preset', default='ultra'); ap.add_argument('--top', type=int, default=14); ap.add_argument('--json'); ap.add_argument('--q', default='', help='parameter URL tambahan, mis. tekstur=lama')
     a = ap.parse_args()
     res, errs = asyncio.run(run(a))
     for k, rec in res.items(): show(f'{a.preset} / {k}', rec, a.top)

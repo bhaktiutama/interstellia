@@ -2529,7 +2529,9 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
         vec3 asphCol = col * asph;
         float trk = 0.0;                                          // 32d: jalur ban (dipakai kekasaran di bawah)
         #ifndef TEKS_LAMA
-        if (uL_Detail > 0.5 && asphM > 0.01) {
+        float fD = 1.0 - smoothstep(0.12, 0.25, fp);             // revisi FPS: detail 32d-32e hanya dekat (jejak piksel < 0,25 m), memudar 0,12-0,25
+        if (uL_Detail > 0.5 && asphM > 0.01 && fD > 0.0) {
+          vec3 a0 = asphCol; float mk0 = mark;
           // 32d: aspal yang dipakai: butir batu, dua jalur ban gelap per lajur, tetes oli di tengah lajur, tambalan, retak, tutup
           // saluran, talang kotor di tepi kerb, marka aus. Semua memudar dengan jejak piksel fp (tidak berkedip dari jauh)
           float fK = 1.0 - smoothstep(0.03, 0.12, fp), fF = 1.0 - smoothstep(0.006, 0.025, fp);
@@ -2578,6 +2580,7 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
           }
           // marka aus: pudar berbercak, berbintik, lebih aus di jalur ban
           mark *= (0.55 + 0.45 * smoothstep(0.25, 0.7, vnoise(P * 1.7 + 2.0))) * mix(1.0, 0.75 + 0.25 * grainN(P * 30.0), fF) * (1.0 - 0.35 * min(trk, 1.0));
+          asphCol = mix(a0, asphCol, fD); mark = mix(mk0, mark, fD); trk *= fD;
         }
         #endif
         asphCol = mix(asphCol, vec3(0.62, 0.62, 0.58), mark * 0.85 * detail);
@@ -2596,7 +2599,7 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
         float joint = max(lineAA(tf.x, 0.03, fp), lineAA(tf.y, 0.03, fp));
         col = mix(col, col * mix(tv, 0.72, joint) * (1.0 + 0.05 * spk * (1.0 - smoothstep(0.02, 0.08, fp))), concM * detail);
         #ifndef TEKS_LAMA
-        if (uL_Detail > 0.5 && concM > 0.01) {
+        if (uL_Detail > 0.5 && concM > 0.01 && fD > 0.0) {
           // 32e: beton dipakai: rona per petak, sambungan tidak rata gelapnya, noda air besar, bintik permen karet, retak di
           // sebagian petak, kotor di sisi kerb dan sisi dalam trotoar, batu agregat halus
           float fK = 1.0 - smoothstep(0.03, 0.12, fp), fF = 1.0 - smoothstep(0.006, 0.025, fp);
@@ -2614,7 +2617,7 @@ const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
           }
           if (swd >= 0.0) cc *= (1.0 - 0.14 * (1.0 - smoothstep(0.3, 0.9, swd))) * (1.0 - 0.12 * smoothstep(4.2, 4.9, swd) * (0.5 + vnoise(P * 1.1)));
           if (rEd < 0.0 && rEd > -1.6) cc *= 1.0 - 0.1 * smoothstep(-1.0, -1.5, rEd);           // jalan lokal: sisi dalam strip trotoar
-          col = mix(col, col * cc, concM * detail);
+          col = mix(col, col * mix(vec3(1.0), cc, fD), concM * detail);
         }
         #endif
         if (uL_Detail > 0.5) {                                        // V1: aspal dan beton: tonjolan agregat, bagian aus lebih licin, noda
@@ -5348,8 +5351,10 @@ const BUILD_FS = /* glsl */`
       if (code == 6.0) wall *= 1.0 - 0.3 * lines(y, 0.8, 0.05, fwY);   // cincin silo
       float wk = 0.0;                                             // 32f: kekuatan pelapukan gedung ini (0 = mati: TEKS_LAMA, Sedang ke bawah)
       #ifndef TEKS_LAMA
-      if (uL_Detail > 0.5) {
+      float wD = 1.0 - smoothstep(70.0, 110.0, length(vW - cameraPosition) / max(uLodK, 1.0));   // revisi FPS: pelapukan hanya dalam 110 m (noise per piksel)
+      if (uL_Detail > 0.5 && wD > 0.0) {
         wk = (0.55 + 0.9 * hash1(vec2(vSeed * 19.0, 3.3))) * (code == 1.0 ? 0.25 : (code == 12.0 || code == 13.0) ? 1.2 : 1.0);
+        wk *= wD;
         if (mat == 4.0) {                                         // 32f: nat bata tenggelam (cahaya dari atas): nat atas dibayangi bata di atasnya, tepi atas bata terang
           float fr = fract(y / 0.075), rk = 1.0 - smoothstep(0.004, 0.012, fwY);
           wall *= 1.0 + rk * (0.07 * smoothstep(0.8, 0.88, fr) * (1.0 - smoothstep(0.9, 0.93, fr)) - 0.2 * (1.0 - smoothstep(0.02, 0.11, fr)));
@@ -5366,8 +5371,8 @@ const BUILD_FS = /* glsl */`
           // 32h: plint beton 0,45 m di kaki dinding (tepi atas terang, garis bayangan di atasnya); etalase dan pintu menimpa
           float pl = band(y, -1.0, 0.45, fwY);
           vec3 plC = vec3(0.4, 0.395, 0.38) * (0.9 + 0.2 * vn(vec2(u, y) * 2.3)) * mix(1.0, 1.18, band(y, 0.4, 0.45, fwY));
-          wall *= 1.0 - 0.2 * band(y, 0.45, 0.5, fwY);
-          wall = mix(wall, plC, pl);
+          wall *= 1.0 - 0.2 * wD * band(y, 0.45, 0.5, fwY);
+          wall = mix(wall, plC, pl * wD);
         }
       }
       #endif
@@ -5660,7 +5665,7 @@ const BUILD_FS = /* glsl */`
         // ruangnya (dekat) atau 0,45 x pancaran lama (jauh), jadi deret toko malam tidak lagi terang rata dan silau
         float hO = hash1(vec2(shopId, 17.0)), shut = step(0.6, hO) * step(0.3 + 0.4 * hash1(vec2(shopId, 19.0)), uNight);
         float kI2 = 0.0;
-        if (wk > 0.0 && shut < 0.5) {
+        if (uL_Detail > 0.5 && shut < 0.5 && fwU < 0.3) {          // revisi FPS: dulu wk > 0 (kini wk 0 di atas 110 m); ruang memudar lewat sk
           // 32g / 32j: ruang toko di balik etalase: dinding belakang 3,5 m menurut kelas toko (shopBack), lantai, plafon dengan lampu;
           // diterangi cahaya siang lemah dan lampu toko malam, kaca memantul sedikit; dari jauh kembali ke kaca lama
           float sn = fz ? sign(n.z) : sign(n.x);
@@ -14596,6 +14601,8 @@ if (!TEKS.lama) {
       if ((st === 2 || st === 11 || st === 12 || st === 13 || (st === 0 && h > 12) || st === 1) && h > 6) shops.push(fp);
     }
     for (const [ts, tz] of treeList) put(tg, ts - 2, ts + 2, tz - 2, tz + 2, [ts, tz]);
+    const yg = new Map();                                            // isi halaman rumah yang sudah ada (teras, dek, ayunan, ...)
+    for (const k of Object.keys(list)) for (const it of list[k]) put(yg, it[0] - 2, it[0] + 2, it[1] - 2, it[1] + 2, [it[0], it[1]]);
     const near = (M, s0, s1, z0, z1, f) => { for (let a = Math.floor(s0 / G); a <= Math.floor(s1 / G); a++) for (let b = Math.floor(z0 / G); b <= Math.floor(z1 / G); b++) { const L = M.get(gk(((a % 315) + 315) % 315, b)); if (L) for (const v of L) if (f(v)) return true; } return false; };
     const ov = (q, s0, s1, z0, z1) => Math.abs(wrapS((q[0] + q[1]) / 2 - (s0 + s1) / 2)) < (q[1] - q[0] + s1 - s0) / 2 && q[2] < z1 && q[3] > z0;
     const road = (s0, za) => { if (!ROADM.a) return false; const x = Math.floor(modS(s0) / CIRC * LAND_W), y = Math.floor(za / CONFIG.L * LAND_H); if (y < 0 || y >= LAND_H) return true; const k = (y * LAND_W + x) * 2; return ROADM.a[k] + ROADM.a[k + 1] > 40; };
@@ -14603,9 +14610,33 @@ if (!TEKS.lama) {
       if (!clearOf((s0 + s1) / 2, (z0 + z1) / 2, s1 - s0, z1 - z0, 1)) return false;
       if (near(bg, s0 - 1, s1 + 1, z0 - 1, z1 + 1, (q) => ov(q, s0 - 1, s1 + 1, z0 - 1, z1 + 1))) return false;
       if (near(tg, s0 - 1.5, s1 + 1.5, z0 - 1.5, z1 + 1.5, ([ts, tz]) => Math.abs(wrapS(ts - (s0 + s1) / 2)) < (s1 - s0) / 2 + 1.5 && tz > z0 - 1.5 && tz < z1 + 1.5)) return false;
-      if (LOTS.some((L) => ov([L.s0, L.s1, L.z0, L.z1], s0 - 2, s1 + 2, z0 - 2, z1 + 2))) return false;
+      if (near(yg, s0 - 1.5, s1 + 1.5, z0 - 1.5, z1 + 1.5, ([ys, yz]) => Math.abs(wrapS(ys - (s0 + s1) / 2)) < (s1 - s0) / 2 + 1.5 && yz > z0 - 1.5 && yz < z1 + 1.5)) return false;
+      if (LOTS.some((L) => ov([L.s0, L.s1, L.z0, L.z1], s0 - 2, s1 + 2, z0 - 2, z1 + 2) || ov(L.drive, s0 - 1, s1 + 1, z0 - 1, z1 + 1))) return false;
       for (let a = s0; a <= s1 + 0.01; a += 3) for (let b = z0; b <= z1 + 0.01; b += 3) if (road(a, b) || SIDEWALK.d(modS(a), b) >= 0 || inWater(modS(a), b, 1)) return false;
       return true;
+    };
+    // revisi: jalan masuk aspal 6 m dari lahan ke jalan / trotoar terdekat (dulu ada lahan di tengah rumput tanpa akses). Kandidat:
+    // lurus dari tepi jauh (tengah dan sepertiga lahan) atau dari kedua ujung lorong; dipilih yang terpendek, maks 60 m, tidak menembus
+    // gedung, pohon, air, atau isi halaman. Lahan tanpa jalan masuk tidak dibuat. Koordinat (u sepanjang lahan, v tegak lurus gedung).
+    const blocked = (s, za) => near(bg, s - 0.6, s + 0.6, za - 0.6, za + 0.6, (q) => ov(q, s - 0.6, s + 0.6, za - 0.6, za + 0.6))
+      || near(tg, s - 1.5, s + 1.5, za - 1.5, za + 1.5, ([ts, tz]) => Math.abs(wrapS(ts - s)) < 1.5 && Math.abs(tz - za) < 1.5)
+      || near(yg, s - 1.5, s + 1.5, za - 1.5, za + 1.5, ([ys, yz]) => Math.abs(wrapS(ys - s)) < 1.5 && Math.abs(yz - za) < 1.5)
+      || inWater(modS(s), za, 1);
+    const drive = (side, c, L, n0, far) => {
+      const alongS = side < 2, dn = side === 0 || side === 2 ? 1 : -1, aisle = n0 + dn * 8.5;
+      const P = (u, v) => (alongS ? [u, v] : [v, u]);
+      let best = null;
+      for (const [u0, v0, du, dv] of [[c, far, 0, dn], [c - L / 3, far, 0, dn], [c + L / 3, far, 0, dn], [c - L / 2, aisle, -1, 0], [c + L / 2, aisle, 1, 0]]) {
+        for (let k = 1; k <= (best ? Math.min(60, best.k - 1) : 60); k++) {
+          if ([-2.6, 0, 2.6].some((w) => blocked(...P(u0 + du * k + Math.abs(dv) * w, v0 + dv * k + Math.abs(du) * w)))) break;
+          const [cs, cz] = P(u0 + du * k, v0 + dv * k);
+          if (road(cs, cz) || SIDEWALK.d(modS(cs), cz) >= 0) { best = { k, u0, v0, du, dv }; break; }
+        }
+      }
+      if (!best) return null;
+      const { k, u0, v0, du, dv } = best;
+      const ur = du ? [Math.min(u0, u0 + du * k), Math.max(u0, u0 + du * k)] : [u0 - 3, u0 + 3], vr = dv ? [Math.min(v0, v0 + dv * k), Math.max(v0, v0 + dv * k)] : [v0 - 3, v0 + 3];
+      return alongS ? [...ur, ...vr] : [...vr, ...ur];
     };
     for (const [s0, s1, z0, z1] of shops) {
       clip.push([s0 - 4, s1 + 4, z0 - 4, z1 + 4]);                       // pelataran
@@ -14617,9 +14648,16 @@ if (!TEKS.lama) {
         if (side === 0) q = [c - L / 2, c + L / 2, z1 + 4, z1 + 4 + D]; else if (side === 1) q = [c - L / 2, c + L / 2, z0 - 4 - D, z0 - 4];
         else if (side === 2) q = [s1 + 4, s1 + 4 + D, c - L / 2, c + L / 2]; else q = [s0 - 4 - D, s0 - 4, c - L / 2, c + L / 2];
         if (!freeLot(...q)) continue;
-        LOTS.push({ s0: q[0], s1: q[1], z0: q[2], z1: q[3], side }); asph.push(q);
-        // garis petak 2,6 m di dua baris (5 m dari gedung dan 5 m terjauh), lorong 6 m di tengah
         const n0 = side === 0 ? q[2] : side === 1 ? q[3] : side === 2 ? q[0] : q[1], dn = side === 0 || side === 2 ? 1 : -1;
+        const dw = drive(side, c, L, n0, n0 + dn * D); if (!dw) continue;
+        // petak mobil (untuk PARKED): di antara dua garis, hidung menghadap penahan roda (baris dekat ke gedung, baris jauh ke tepi)
+        const slots = [];
+        for (const off of [3.0, 14.0]) for (let t = -L / 2 + 0.6; t + 2.6 <= L / 2 - 0.6 + 1e-6; t += 2.6) {
+          const u = c + t + 1.3, v = n0 + dn * off, to = off < 10 ? -dn : dn;
+          slots.push(alongS ? [modS(u), v, to > 0 ? 0 : Math.PI, true] : [modS(v), u, to > 0 ? Math.PI / 2 : -Math.PI / 2, false]);
+        }
+        LOTS.push({ s0: q[0], s1: q[1], z0: q[2], z1: q[3], side, drive: dw, slots }); asph.push(q, dw);
+        // garis petak 2,6 m di dua baris (5 m dari gedung dan 5 m terjauh), lorong 6 m di tengah
         for (const off of [3.0, 14.0]) for (let t = -L / 2 + 0.6; t <= L / 2 - 0.6; t += 2.6) {
           const vn = n0 + dn * off, a = alongS ? Math.PI * (dn < 0 ? 1 : 0) : Math.PI / 2 * dn;
           const flip = off > 10 ? Math.PI : 0;
@@ -14646,7 +14684,8 @@ if (!TEKS.lama) {
     YARDM.tex = new THREE.DataTexture(A, Wd, Hd, THREE.RGFormat, THREE.UnsignedByteType);
     Object.assign(YARDM.tex, { magFilter: THREE.LinearFilter, minFilter: THREE.LinearMipmapLinearFilter, generateMipmaps: true, wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping, unpackAlignment: 2 });
     YARDM.tex.needsUpdate = true; groundMat.uniforms.uYardTex.value = YARDM.tex; YARDM.z.set(z0, z0 + Hd * C);
-    groundMat.uniforms.uYardZ.value.copy(YARDM.z);   // revisi: UniformsUtils.merge menyalin vektor, jadi YARDM.z bukan objek uniform TERAS.clipN = clip.length;
+    groundMat.uniforms.uYardZ.value.copy(YARDM.z);   // revisi: UniformsUtils.merge menyalin vektor, jadi YARDM.z bukan objek uniform
+    TERAS.clipN = clip.length;
   }
   const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), _cc = new THREE.Color();
   for (const [kind, geo] of Object.entries(GEO)) {
@@ -14712,6 +14751,26 @@ if (PARKED.on) {
     // mulai 12 m dari tepi arteri: mulut jalan lokal bebas (kafe trotoar 18,6 m dari as arteri tetap muat, urutan acaknya tidak bergeser)
     for (let m = 1; m < sCuts.length - 1; m++) run(true, sCuts[m], c.z0 + ROAD.art / 2 + 12, c.z0 + ART_Z - ROAD.art / 2 - 12, zCuts.slice(1, -1));
     for (let m = 1; m < zCuts.length - 1; m++) run(false, zCuts[m], c.s0 + artHalf(c.s0) + 12, c.s0 + ART - artHalf(c.s0 + ART) - 12, sCuts.slice(1, -1));
+  }
+  // 32l revisi: sebagian mobil tepi jalan di sekitar lahan parkir (150 m) dipindah ke petaknya, yang terdekat lebih dulu; 35-75% petak
+  // terisi bila mobilnya cukup. Jumlah mobil tetap (hanya posisi berubah), generator acak sendiri, sebagian masuk mundur.
+  PARKED.moved = 0;
+  if (TERAS.lots && TERAS.lots.length) {
+    let sd5 = 32555; const r5 = () => ((sd5 = (sd5 * 16807) % 2147483647) / 2147483647);
+    const taken = new Uint8Array(items.length);
+    for (const Lt of TERAS.lots) {
+      const cs = (Lt.s0 + Lt.s1) / 2, cz = (Lt.z0 + Lt.z1) / 2, cand = [];
+      items.forEach((it, i) => { if (taken[i]) return; const ds = wrapS(it[0] - cs), dz = it[1] - cz, d2 = ds * ds + dz * dz; if (d2 < 22500) cand.push([d2, i]); });
+      cand.sort((a, b) => a[0] - b[0]);
+      const ord = Lt.slots.map((x, j) => j);
+      for (let j = ord.length - 1; j > 0; j--) { const k = Math.floor(r5() * (j + 1)); [ord[j], ord[k]] = [ord[k], ord[j]]; }
+      const k = Math.min(Math.round(Lt.slots.length * (0.35 + 0.4 * r5())), cand.length);
+      for (let j = 0; j < k; j++) {
+        const i = cand[j][1], [ss, sz, sa, az] = Lt.slots[ord[j]], it = items[i];
+        taken[i] = 1; items[i] = [ss, sz, sa + (r5() < 0.25 ? Math.PI : 0) + (r5() - 0.5) * 0.06, it[3], az, it[5]];
+      }
+      Lt.cars = k; PARKED.moved += k;
+    }
   }
   const n = items.length, mats = new Float32Array(n * 16), ps = new Float32Array(n), pz = new Float32Array(n), cols = new Float32Array(n * 3);
   const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), cc = new THREE.Color();
