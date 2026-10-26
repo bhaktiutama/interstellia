@@ -2251,6 +2251,17 @@ const PATH_GLSL = /* glsl */`
     vec2 uv = vec2(fract(P.x / (2.0 * PI * uR)), P.y / ${PATHSDF.zMax.toFixed(1)});
     return (textureLod(uPathTex, uv, 0.0).r - 0.5) * ${(2 * PATHSDF.range).toFixed(1)};
   }`;
+// 32k: masker halaman (tapak teras, dek, jalur batu pijakan) 1 m per piksel, cakupan per piksel dari persegi tapak (kontur 0,5 = tepi).
+// Rumput 3D tidak tumbuh di dalamnya (teras bersih). Diisi blok TERAS; sebelum itu tekstur 1 x 1 kosong.
+const YARDM = { tex: new THREE.DataTexture(new Uint8Array(1), 1, 1, THREE.RedFormat, THREE.UnsignedByteType), z: new THREE.Vector2(0, 1), cell: 1 };
+YARDM.tex.needsUpdate = true;
+const YARD_GLSL = /* glsl */`
+  uniform sampler2D uYardTex;
+  uniform vec2 uYardZ;
+  float yardM(vec2 P) {
+    if (P.y < uYardZ.x || P.y > uYardZ.y) return 0.0;
+    return textureLod(uYardTex, vec2(fract(P.x / (2.0 * PI * uR)), (P.y - uYardZ.x) / (uYardZ.y - uYardZ.x)), 0.0).r;
+  }`;
 const groundMat = new THREE.ShaderMaterial({ name: 'tanah',
   fog: true,
   side: THREE.BackSide,
@@ -9377,7 +9388,7 @@ const VU = {
   uMeadowOn: { value: 1 },                                           // 14b: 1 = rumput tinggi bukit aktif (rumput pendek disembunyikan di bukit)
   uLodF: { value: 70 }, uForest: { value: new THREE.Vector4(FOREST.s0, FOREST.z0, FOREST.s1, FOREST.z1) },   // 14a: radius mesh penuh pohon hutan
   uWind: { value: new THREE.Vector3(1.2, 0.4, 0.4) },
-  uCropT: groundMat.uniforms.uCropT, uPathTex: groundMat.uniforms.uPathTex,
+  uCropT: groundMat.uniforms.uCropT, uPathTex: groundMat.uniforms.uPathTex, uYardTex: { value: YARDM.tex }, uYardZ: { value: YARDM.z },   // 32k
   uDeckZ: { value: Array.from({ length: 28 }, () => new THREE.Vector4()) }, uDeckS: { value: Array.from({ length: 10 }, () => new THREE.Vector4()) },
 };
 { let iz = 0, is = 0;                                              // 29d: rumus sama dengan bridgeIn() (+0,5 m tepi)
@@ -9452,6 +9463,7 @@ ${GROUND_FRAME_GLSL}  vec2 landUV(vec2 P) { return vec2(fract(P.x / (2.0 * PI * 
   ${MEADOW_GLSL}
   ${SIDEWALK_GLSL}
   ${PATH_GLSL}
+  ${TEKS.lama ? '' : YARD_GLSL}
   uniform vec4 uDeckZ[28]; uniform vec4 uDeckS[10];                 // 29d: dek jembatan (z: s tengah, setengah lebar, za0, za1; s: za tengah, setengah lebar, s0, panjang): tanpa rumput di atas dek
   bool onDeck(vec2 P) {
     if (P.y < 2200.0 || P.y > 2800.0) return false;
@@ -9562,7 +9574,7 @@ const GRASS_VS = /* glsl */`
       float veg = smoothstep(0.15, 0.2, (mx - mn) / max(mx, 1e-3)) * step(sb.r, sb.g * 1.02) * (1.0 - smoothstep(0.04, 0.1, sb.b - max(sb.r, sb.g)));
       float kS = floor(P.x / uArt + 0.5);
       if (P.y > uFieldZ.x && mod(kS, 2.0) < 0.5 && abs(P.x - kS * uArt) < 3.8) veg = 0.0;   // jalan tanah ladang
-      if (veg < 0.5 || sidewalkD(P, uArt) >= 0.0) { ${CLIP_AWAY} }   // 15c: tidak ada rumput di trotoar
+      if (veg < 0.5 || sidewalkD(P, uArt) >= 0.0${TEKS.lama ? '' : ' || yardM(P) > 0.35'}) { ${CLIP_AWAY} }   // 15c: tidak ada rumput di trotoar
       float pdG = pathD(P); pe = smoothstep(0.2, 1.1, pdG);
       if (pdG < 0.2) { ${CLIP_AWAY} }                                // 29b: tidak ada rumput di jalur taman
       if (uMeadowOn > 0.5 && meadowMask(terrainH(P)) > 0.55) { ${CLIP_AWAY} }   // 14b: diganti rumput tinggi
@@ -9749,7 +9761,7 @@ const FG_VS = (mode) => /* glsl */`
     ${FG_FIELD}
     float kS = floor(P.x / uArt + 0.5);
     if (P.y > uFieldZ.x && mod(kS, 2.0) < 0.5 && abs(P.x - kS * uArt) < 3.8) veg = 0.0;
-    if (veg < 0.5 || sidewalkD(P, uArt) >= 0.0) { ${CLIP_AWAY} }
+    if (veg < 0.5 || sidewalkD(P, uArt) >= 0.0${TEKS.lama ? '' : ' || yardM(P) > 0.35'}) { ${CLIP_AWAY} }
     if (uMeadowOn > 0.5 && meadowMask(terrainH(P)) > 0.55) { ${CLIP_AWAY} }
     float pdG = pathD(P);
     if (pdG < 0.2) { ${CLIP_AWAY} }
@@ -9929,7 +9941,7 @@ const FLUFF_VS = (mode) => /* glsl */`
     ${FLUFF_FIELD}
     float kS = floor(P.x / uArt + 0.5);
     if (P.y > uFieldZ.x && mod(kS, 2.0) < 0.5 && abs(P.x - kS * uArt) < 3.8) veg = 0.0;
-    if (veg < 0.5 || sidewalkD(P, uArt) >= 0.0) { ${CLIP_AWAY} }
+    if (veg < 0.5 || sidewalkD(P, uArt) >= 0.0${TEKS.lama ? '' : ' || yardM(P) > 0.35'}) { ${CLIP_AWAY} }
     if (uMeadowOn > 0.5 && meadowMask(terrainH(P)) > 0.55) { ${CLIP_AWAY} }
     float pdG = pathD(P);
     if (pdG < 0.2) { ${CLIP_AWAY} }
@@ -14444,6 +14456,7 @@ const RAGAM_DET = { count: {} };
 // acak sendiri (kota tetap sama), dikirim dalam radius lewat FURN.kinds, benda besar berkolider. ?tekstur=lama = tanpa isi halaman.
 const TERAS = { count: {} };
 if (!TEKS.lama) {
+  const clip = [];
   let sd = 32011; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647), RU = (a, b) => a + (b - a) * r();
   const g = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
   const cyl = (r0, r1, h, x, y, z, n = 10) => new THREE.CylinderGeometry(r0, r1, h, n).translate(x, y, z);
@@ -14507,6 +14520,7 @@ if (!TEKS.lama) {
     const add = (kind, u, v, sx = 1, sz = 1, a = ang, col = null, colB = null) => { const [cs, cz] = W(u, v); list[kind].push([cs, cz, a, sx, sz, col]); if (colB) addCollider(cs, cz, ...colB); };
     const half = (hu, hv) => axis === 'z' ? [hu, hv] : [hv, hu];    // setengah ukuran (u, v) -> (s, za) untuk kolider
     const take = (u0, u1, v0, v1) => R0.used.push([u0, u1, v0, v1]);
+    const bare = (u0, u1, v0, v1, m = 0.2) => { const [a, b] = W(u0 - m, v0 - m), [c, d] = W(u1 + m, v1 + m); clip.push([Math.min(a, c), Math.max(a, c), Math.min(b, d), Math.max(b, d)]); };   // tapak tanpa rumput
     R0.h.sort((a, b) => a.u - b.u);
     R0.h.forEach((H, i) => {
       const row = H.kind === 'row', nB = Math.max(1, Math.floor(H.w / 3.4 + 0.5)), du = H.u + (Math.floor(nB / 2) + 0.5) / nB * H.w - H.w / 2;   // pintu (BUILD_FS gaya 3)
@@ -14519,7 +14533,7 @@ if (!TEKS.lama) {
       const tk = r(), front = (kind, pw, pd, sx, sz, colB) => {
         const pu = Math.min(Math.max(du, H.u - H.w / 2 + pw / 2 + 0.2), H.u + H.w / 2 - pw / 2 - 0.2);
         if (pw > H.w - 0.2 || H.set < pd + 0.6 || !free(pu - pw / 2, pu + pw / 2, H.set - pd, H.set - 0.01, 0)) return null;
-        add(kind, pu, H.set - pd / 2, sx, sz, ang, null, colB ? half(pw / 2, pd / 2) : null); take(pu - pw / 2, pu + pw / 2, H.set - pd, H.set); vS = H.set - pd; return pu;
+        add(kind, pu, H.set - pd / 2, sx, sz, ang, null, colB ? half(pw / 2, pd / 2) : null); take(pu - pw / 2, pu + pw / 2, H.set - pd, H.set); bare(pu - pw / 2, pu + pw / 2, H.set - pd, H.set); vS = H.set - pd; return pu;
       };
       if (row) { if (tk < 0.6) front('canopy', 2.4, 1.4, 1, 1); else front('terrace', Math.min(H.w - 0.6, 4), 1.45, Math.min(H.w - 0.6, 4) / 4, 0.6); }
       else if (tk < 0.35) { const pw = Math.min(H.w - 1.2, RU(4.5, 7.5)); front('porch', pw, 2.2, pw / 6, 1, true); }
@@ -14528,13 +14542,14 @@ if (!TEKS.lama) {
       else { const pu = front('terrace', 4, 2.4, 1, 1); if (pu !== null && r() < 0.6) list.table.push([...W(pu + (du < pu ? 1 : -1) * 0.9, H.set - 1.2), r() * 6.28, 1, 1, null, 0.1]); }
       for (let v = vS - 0.55; v > 0.6; v -= RU(0.62, 0.75)) if (free(du - 0.35, du + 0.35, v - 0.25, v + 0.25, 0.02)) add('stone', du + RU(-0.06, 0.06), v, 1, 1, ang + RU(-0.12, 0.12));
       take(du - 0.5, du + 0.5, 0, vS);
+      if (vS > 1.2) bare(du - 0.4, du + 0.4, 0.35, vS, 0.05);      // jalur batu pijakan: rumput pendek di sela batu ikut dibuang
       // --- belakang ---
       const vb = H.set + H.dd, back = H.D - vb;
       if (back > 4.5) {
         if (r() < (row ? 0.4 : 0.55)) {                             // dek kayu menempel dinding belakang (dibalik menghadap halaman)
           const dw = row ? Math.min(H.w - 0.6, 4) : 4, dsz = row ? 0.75 : 1, uu = H.u + RU(-0.25, 0.25) * (H.w - dw);
           if (free(uu - dw / 2, uu + dw / 2, vb + 0.01, vb + 3.5 * dsz + 0.4, 0)) {
-            add('deck', uu, vb + 1.75 * dsz, dw / 4, dsz, ang + Math.PI, null, half(dw / 2, 1.75 * dsz)); take(uu - dw / 2, uu + dw / 2, vb, vb + 3.5 * dsz + 0.4);
+            add('deck', uu, vb + 1.75 * dsz, dw / 4, dsz, ang + Math.PI, null, half(dw / 2, 1.75 * dsz)); take(uu - dw / 2, uu + dw / 2, vb, vb + 3.5 * dsz + 0.4); bare(uu - dw / 2, uu + dw / 2, vb, vb + 3.5 * dsz + 0.35);
             if (r() < 0.75) { const tu = uu + RU(-0.6, 0.6) * (dw / 4); list.table.push([...W(tu, vb + 1.75 * dsz), r() * 6.28, 1, 1, null, 0.3]);
               if (r() < 0.55) list.umbrella.push([...W(tu, vb + 1.75 * dsz), 0, 1, 1, UMB[Math.floor(r() * UMB.length)], 0.3]); }
             if (r() < 0.35) list.grill.push([...W(uu + (r() < 0.5 ? -1 : 1) * (dw / 2 - 0.45), vb + 0.5), 0, 1, 1, null, 0.3]);
@@ -14545,6 +14560,25 @@ if (!TEKS.lama) {
         if (!row && back > 8 && r() < 0.1) { const uu = H.u + RU(-4, 4), vv = vb + back * RU(0.4, 0.8); if (free(uu - 2, uu + 2, vv - 2, vv + 2)) { add('tramp', uu, vv, 1, 1, ang, null, half(1.8, 1.8)); take(uu - 2, uu + 2, vv - 2, vv + 2); } }
       }
     });
+  }
+  if (clip.length) {                                               // 32k: masker halaman, cakupan per piksel 1 m (persegi sejajar sumbu s / za)
+    const C = YARDM.cell, Wd = Math.ceil(CIRC / C);
+    let z0 = Infinity, z1 = -Infinity; for (const q of clip) { z0 = Math.min(z0, q[2]); z1 = Math.max(z1, q[3]); }
+    z0 = Math.floor(z0) - 2; z1 = Math.ceil(z1) + 2; const Hd = Math.ceil((z1 - z0) / C), A = new Uint8Array(Wd * Hd);
+    for (const [sa, sb, za, zb] of clip) {
+      const y0 = Math.max(0, Math.floor((za - z0) / C)), y1 = Math.min(Hd - 1, Math.floor((zb - z0) / C));
+      for (let y = y0; y <= y1; y++) {
+        const oy = Math.min(zb, z0 + (y + 1) * C) - Math.max(za, z0 + y * C); if (oy <= 0) continue;
+        for (let x = Math.floor(sa / C); x <= Math.floor(sb / C); x++) {
+          const ox = Math.min(sb, (x + 1) * C) - Math.max(sa, x * C); if (ox <= 0) continue;
+          const k = y * Wd + ((x % Wd) + Wd) % Wd; A[k] = Math.min(255, A[k] + Math.round(255 * ox * oy / (C * C)));
+        }
+      }
+    }
+    YARDM.tex.dispose();
+    YARDM.tex = new THREE.DataTexture(A, Wd, Hd, THREE.RedFormat, THREE.UnsignedByteType);
+    Object.assign(YARDM.tex, { magFilter: THREE.LinearFilter, minFilter: THREE.LinearFilter, generateMipmaps: false, wrapS: THREE.RepeatWrapping, wrapT: THREE.ClampToEdgeWrapping, unpackAlignment: 1 });
+    YARDM.tex.needsUpdate = true; VU.uYardTex.value = YARDM.tex; YARDM.z.set(z0, z0 + Hd * C); TERAS.clipN = clip.length;
   }
   const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), _cc = new THREE.Color();
   for (const [kind, geo] of Object.entries(GEO)) {
