@@ -100,3 +100,13 @@ Batasan revisi:
 - Benda halaman berlaku di semua preset (tidak ada saklar preset); FPS di GPU asli belum diukur.
 - Beranda, pagar, dek, ayunan, trampolin, dan bedeng sayur berkolider (sekitar 80 ribu kolider baru); batu pijakan, bedeng bunga, meja, payung, panggangan tidak.
 - Helai rumput 3D bisa menembus batu pijakan setinggi 8 cm.
+
+## Revisi 2 dari 3 foto Bhakti (26 Oktober 2026)
+
+| No | Masalah | Perbaikan |
+| --- | --- | --- |
+| 1 | Undakan rumah deret menutup pintu; tanaman bedeng terlalu low poly | Undakan dan bedeng bunga dihapus. Teras kini rata tanah (lantai 0,1 m, tanpa anak tangga), beranda juga diturunkan dari 0,35 m ke 0,1 m |
+| 2 | Pagar tidak perlu | Semua pagar (kayu putih, kayu tinggi, tanaman) dan bedeng sayur dihapus. Diganti variasi teras depan: beranda beratap 35%, pergola kayu 25%, kanopi pintu 20%, teras terbuka dengan meja 20% (rumah deret: kanopi 60% / teras terbuka 40%) |
+| 3 | Kedalaman toko terlihat aneh: isi menembus pilar ke toko sebelah | Ruang toko kini kotak selebar modulnya (dinding samping di batas toko, di balik pilar: `shopU0` / `shopU1`), makin gelap ke belakang, sudut gelap, lantai catur kontras lebih rendah |
+
+Jumlah (hasil muat): beranda 2.014, kanopi 4.569, pergola 1.443, teras terbuka 3.429, batu pijakan 35.269, dek belakang 4.652, meja 4.169, payung 1.929, panggangan 1.644, ayunan 320, trampolin 157. Kolider tinggal di beranda, pergola, dek, ayunan, trampolin.

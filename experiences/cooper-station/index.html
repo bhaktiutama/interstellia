@@ -5146,7 +5146,7 @@ const BUILD_FS = /* glsl */`
   }
   vec3 shopFloor(float k, vec2 h, float sd) {
     if (k > 0.5 && k < 1.5) {                                     // tempat makan: ubin papan catur / kayu, bayangan meja bundar
-      vec3 f = hash1(vec2(sd, 4.0)) < 0.5 ? mix(vec3(0.08), vec3(0.8), mod(floor(h.x / 0.3) + floor(h.y / 0.3), 2.0)) : vec3(0.42, 0.27, 0.15) * (0.9 + 0.2 * step(0.5, fract(h.x / 0.18)));
+      vec3 f = hash1(vec2(sd, 4.0)) < 0.5 ? mix(vec3(0.16), vec3(0.62), mod(floor(h.x / 0.3) + floor(h.y / 0.3), 2.0)) : vec3(0.42, 0.27, 0.15) * (0.9 + 0.2 * step(0.5, fract(h.x / 0.18)));
       return f * (1.0 - 0.45 * (1.0 - step(0.42, length(fract(h / 1.5) - 0.5))));
     }
     if (k > 5.5) return vec3(0.36, 0.35, 0.33) * (0.85 + 0.2 * hash1(floor(h * 1.5)));
@@ -5412,7 +5412,7 @@ const BUILD_FS = /* glsl */`
       // lantai dasar: etalase kaca / pintu masuk
       float shopM = 0.0, neon = 0.0;
       vec3 neonC = vec3(0.0);
-      float shopK = 0.0, shopS = 0.0, shopId = 0.0;               // 32j: kelas, sub, benih toko di titik ini
+      float shopK = 0.0, shopS = 0.0, shopId = 0.0, shopU0 = -1e3, shopU1 = 1e3;   // 32j: kelas, sub, benih toko di titik ini; batas modul toko (u)
       if (code == 12.0 && y < groundH) {
         // 22a: deret toko: modul 3,2-5 m per gedung, pintu di kiri / kanan, papan nama berwarna per toko dengan huruf, kaki etalase gelap
         float nS = max(1.0, floor(W / (3.2 + 1.8 * fract(sp1 * 7.31)) + 0.5)), ui = (u / W + 0.5) * nS, si = floor(ui), sfx = fract(ui), fws = fwU * nS / W;
@@ -5425,7 +5425,7 @@ const BUILD_FS = /* glsl */`
         // 32b: kata dari atlas (satu per toko), huruf 0,5 m sel; lx = m dari tengah toko, ly = 0 (bawah) sampai 0,5 m (atas)
         // 32j: lx dibalik di muka -z dan +x agar tulisan terbaca dari luar (kanan pengamat = +u hanya di muka +z dan -x)
         float wi = floor(hash1(vec2(si * 1.37 + vSeed * 53.0, 41.0)) * 32.0), shopW = W / nS, lx = (sfx - 0.5) * shopW * (fz ? sign(n.z) : -sign(n.x)), ly = y - (groundH - 0.95);
-        shopK = SHOPK[int(wi)]; shopS = SHOPS[int(wi)]; shopId = si + vSeed * 31.0;
+        shopK = SHOPK[int(wi)]; shopS = SHOPS[int(wi)]; shopId = si + vSeed * 31.0; shopU0 = (si / nS - 0.5) * W; shopU1 = ((si + 1.0) / nS - 0.5) * W;
         vec2 auv = vec2((mod(wi, 2.0) * 512.0 + 256.0 + lx * 64.0) / 1024.0, 1.0 - (floor(wi / 2.0) * 32.0 + (0.5 - ly) * 64.0) / 512.0);
         float glyph = textureGrad(uSignTex, auv, vec2(dU.x, dY.x) * vec2(0.0625, 0.125), vec2(dU.y, dY.y) * vec2(0.0625, 0.125)).r * band(lx, -0.45 * shopW, 0.45 * shopW, fwU) * band(ly, 0.0, 0.5, fwY);
         #else
@@ -5446,7 +5446,8 @@ const BUILD_FS = /* glsl */`
         float sfx = fract(u / 2.6 + 0.5);
         shopM = band(y, 0.15, groundH - 0.9, fwY) * band(sfx, 0.06, 0.94, fwU / 2.6);
         #ifndef TEKS_LAMA
-        shopId = floor((u / 2.6 + 0.5) / 2.0) + vSeed * 31.0;
+        float pI = floor((u / 2.6 + 0.5) / 2.0);
+        shopId = pI + vSeed * 31.0; shopU0 = (2.0 * pI - 0.5) * 2.6; shopU1 = shopU0 + 5.2;
         { int wj = int(floor(hash1(vec2(shopId, 41.0)) * 32.0)); shopK = SHOPK[wj]; shopS = SHOPS[wj]; }
         #endif
         wall = mix(wall, vec3(0.16, 0.16, 0.17), band(y, groundH - 0.8, groundH - 0.3, fwY));   // pita kanopi / papan nama
@@ -5634,16 +5635,21 @@ const BUILD_FS = /* glsl */`
           float sn = fz ? sign(n.z) : sign(n.x);
           float da = fz ? vDirO.x : vDirO.z, dv = vDirO.y, dd = -(fz ? vDirO.z : vDirO.x) * sn;
           if (dd > 1e-4) {
+            // revisi: ruang toko = kotak selebar modulnya (dinding samping di batas toko, di balik pilar), jadi isi tidak menembus ke toko sebelah
             float top = max(groundH - 1.0, 2.2), tz = 3.5 / dd, tyF = dv < -1e-5 ? -y / dv : 1e9, tyC = dv > 1e-5 ? (top - y) / dv : 1e9;
-            float tt = min(tz, min(tyF, tyC));
+            float tx = da > 1e-5 ? (shopU1 - u) / da : (da < -1e-5 ? (shopU0 - u) / da : 1e9);
+            float tt = min(min(tz, tx), min(tyF, tyC));
             vec2 h = vec2(u + da * tt, y + dv * tt);
             vec3 rc; float spot = 0.0;
-            if (tt == tz) rc = shopBack(shopK, shopS, h, top, shopId);
+            if (tt == tx) rc = vec3(0.7, 0.68, 0.64) * 0.85 * mix(0.8, 1.0, step(0.12, h.y));   // dinding samping polos, plint gelap
+            else if (tt == tz) rc = shopBack(shopK, shopS, vec2(h.x - shopU0, h.y), top, shopId);
             else if (tt == tyF) rc = shopFloor(shopK, vec2(h.x, dd * tt), shopId);
             else { vec2 lp = fract(vec2(h.x, dd * tt) / 1.6) - 0.5; spot = 1.0 - step(0.12, length(lp)); rc = vec3(0.85, 0.84, 0.82); }
             float sk = 1.0 - smoothstep(0.08, 0.3, fwU);
             vec3 lampC = shopK > 0.5 && shopK < 2.5 ? vec3(1.0, 0.82, 0.6) : vec3(0.95, 0.95, 1.0);
-            vec3 room = rc * (dot(light, vec3(0.333)) * 0.45 + lampC * uNight * 0.55 * (1.0 - 0.4 * (dd * tt) / 3.5)) + lampC * spot * (0.6 + 2.0 * uNight);
+            float dep = clamp(dd * tt / 3.5, 0.0, 1.0);
+            vec3 room = rc * (dot(light, vec3(0.333)) * 0.45 * (1.0 - 0.45 * dep) + lampC * uNight * 0.55 * (1.0 - 0.4 * dep)) + lampC * spot * (0.6 + 2.0 * uNight);
+            room *= 1.0 - 0.25 * smoothstep(0.0, 0.35, 0.35 - min(abs(h.x - shopU0), abs(h.x - shopU1)));   // sudut ruang lebih gelap
             float refK = 0.16 + 0.6 * F;
             glass = mix(glass, room * (1.0 - refK) + sky * refK, sk);
             kI2 = sk;
@@ -14432,10 +14438,9 @@ const RAGAM_DET = { count: {} };
   }
 }
 // 32k: teras dan isi halaman rumah (permintaan Bhakti: halaman rumput di antara rumah terlalu kosong dan datar). Per rumah dari
-// fillHomes (TERAS_H): depan = beranda beratap (rumah tunggal / besar) atau undakan beton (rumah deret) di depan pintu (rumus pintu
-// BUILD_FS gaya 3), batu pijakan ke jalan, bedeng bunga di kaki muka, pagar kayu putih atau pagar tanaman di tepi jalan (celah di
-// depan garasi); belakang = dek kayu dengan meja, payung, panggangan, ayunan, bedeng sayur, trampolin, pagar kayu antar kavling dan
-// pagar belakang. Tiap benda diuji tidak bertumpuk dengan rumah, garasi, gudang kebun, pohon halaman, benda lain, dan air. Generator
+// fillHomes (TERAS_H): depan = satu teras rata tanah di depan pintu (rumus pintu BUILD_FS gaya 3), variasi beranda beratap, pergola,
+// kanopi pintu, teras terbuka dengan meja; batu pijakan ke jalan; belakang = dek kayu dengan meja, payung, panggangan, ayunan,
+// trampolin. Revisi foto Bhakti: undakan, bedeng bunga, bedeng sayur, dan semua pagar dihapus. Tiap benda diuji tidak bertumpuk dengan rumah, garasi, gudang kebun, pohon halaman, benda lain, dan air. Generator
 // acak sendiri (kota tetap sama), dikirim dalam radius lewat FURN.kinds, benda besar berkolider. ?tekstur=lama = tanpa isi halaman.
 const TERAS = { count: {} };
 if (!TEKS.lama) {
@@ -14445,27 +14450,24 @@ if (!TEKS.lama) {
   const WH = [0.9, 0.89, 0.86], WOOD = [0.5, 0.38, 0.27], DWOOD = [0.36, 0.26, 0.18], ROOF = [0.25, 0.26, 0.28], CONC = [0.62, 0.6, 0.57];
   const GRN = [0.16, 0.3, 0.12], SOIL = [0.2, 0.14, 0.09], IRON = [0.08, 0.08, 0.09];
   // semua menghadap +z (ke jalan), alas di y = 0
-  const porch = (() => { const P = [{ geo: g(6, 0.35, 2.2, 0, 0.175, 0), color: WOOD },
-    { geo: g(1.6, 0.23, 0.3, 0, 0.115, 1.25), color: WOOD }, { geo: g(1.6, 0.12, 0.3, 0, 0.06, 1.55), color: WOOD },
+  // 32k revisi: teras rata tanah (lantai 0,1 m, tanpa anak tangga: pintu BUILD_FS mulai dari tanah dan tidak tertutup)
+  const porch = (() => { const P = [{ geo: g(6, 0.1, 2.2, 0, 0.05, 0), color: WOOD },
     { geo: g(6.3, 0.12, 2.6, 0, 0, 0).rotateX(0.12).translate(0, 3.0, 0.15), color: ROOF }, { geo: g(6.1, 0.22, 0.18, 0, 2.8, 1.0), color: WH }];
-    for (const x of [-2.9, -1.0, 1.0, 2.9]) P.push({ geo: g(0.14, 2.5, 0.14, x, 1.6, 1.0), color: WH });
-    for (const [x0, x1] of [[-2.9, -1.0], [1.0, 2.9]]) { P.push({ geo: g(x1 - x0, 0.06, 0.06, (x0 + x1) / 2, 1.28, 1.0), color: WH });
-      for (let x = x0 + 0.15; x < x1 - 0.05; x += 0.15) P.push({ geo: g(0.04, 0.85, 0.04, x, 0.8, 1.0), color: WH }); }
-    for (const x of [-2.9, 2.9]) { P.push({ geo: g(0.06, 0.06, 2.0, x, 1.28, 0), color: WH }); for (let z = -0.9; z < 0.95; z += 0.15) P.push({ geo: g(0.04, 0.85, 0.04, x, 0.8, z), color: WH }); }
+    for (const x of [-2.9, -1.0, 1.0, 2.9]) P.push({ geo: g(0.14, 2.75, 0.14, x, 1.475, 1.0), color: WH });
+    for (const [x0, x1] of [[-2.9, -1.0], [1.0, 2.9]]) { P.push({ geo: g(x1 - x0, 0.06, 0.06, (x0 + x1) / 2, 0.95, 1.0), color: WH });
+      for (let x = x0 + 0.15; x < x1 - 0.05; x += 0.15) P.push({ geo: g(0.04, 0.82, 0.04, x, 0.52, 1.0), color: WH }); }
     return mergeSimple(P); })();
-  const stoop = mergeSimple([{ geo: g(1.8, 0.75, 1.2, 0, 0.375, 0), color: CONC }, { geo: g(1.4, 0.5, 0.3, 0, 0.25, 0.75), color: CONC },
-    { geo: g(1.4, 0.25, 0.3, 0, 0.125, 1.05), color: CONC },
-    ...[-0.75, 0.75].flatMap((x) => [{ geo: g(0.04, 0.9, 0.04, x, 1.2, -0.5), color: IRON }, { geo: g(0.04, 0.9, 0.04, x, 0.95, 1.05), color: IRON },
-      { geo: g(0.04, 0.04, 1.7, 0, 0, 0).rotateX(-Math.atan2(0.5, 1.55)).translate(x, 1.4, 0.3), color: IRON }])]);
+  const canopy = mergeSimple([{ geo: g(2.4, 0.1, 1.4, 0, 0.05, 0), color: CONC }, { geo: g(1.9, 0.08, 0.95, 0, 2.5, -0.22), color: ROOF },
+    { geo: g(1.95, 0.12, 0.05, 0, 2.47, 0.26), color: WH },
+    ...[-0.85, 0.85].map((x) => ({ geo: g(0.05, 0.05, 0.8, 0, 0, 0).rotateX(0.75).translate(x, 2.2, -0.35), color: WH }))]);
+  const pergola = (() => { const P = [{ geo: g(4.5, 0.1, 2.6, 0, 0.05, 0), color: CONC }];
+    for (const x of [-2.1, 2.1]) for (const z of [-1.1, 1.15]) P.push({ geo: g(0.13, 2.6, 0.13, x, 1.35, z), color: DWOOD });
+    for (const z of [-1.1, 1.15]) P.push({ geo: g(4.6, 0.16, 0.1, 0, 2.7, z), color: DWOOD });
+    for (let x = -2.0; x <= 2.01; x += 0.5) P.push({ geo: g(0.06, 0.12, 2.8, x, 2.84, 0.02), color: DWOOD });
+    return mergeSimple(P); })();
+  const terrace = mergeSimple([{ geo: g(4, 0.1, 2.4, 0, 0.05, 0), color: CONC }, ...[-1.5, -0.5, 0.5, 1.5].map((x) => ({ geo: g(0.015, 0.004, 2.4, x, 0.101, 0), color: [0.45, 0.44, 0.42] })),
+    ...[-0.6, 0.6].map((z) => ({ geo: g(4, 0.004, 0.015, 0, 0.101, z), color: [0.45, 0.44, 0.42] }))]);
   const stone = mergeSimple([{ geo: g(0.65, 0.08, 0.45, 0, 0.04, 0), color: [0.6, 0.58, 0.55] }]);
-  const bed = mergeSimple([{ geo: g(1, 0.15, 0.9, 0, 0.075, 0), color: SOIL }, { geo: g(1.02, 0.17, 0.05, 0, 0.085, 0.45), color: [0.45, 0.43, 0.4] },
-    ...[-0.33, 0, 0.33].map((x, i) => ({ geo: new THREE.IcosahedronGeometry(0.28 - 0.04 * (i % 2), 0).scale(1, 0.8, 1).translate(x, 0.32, -0.08), color: GRN })),
-    ...[[-0.2, 0.2, [0.85, 0.2, 0.3]], [0.15, 0.25, [0.95, 0.8, 0.2]], [0.4, 0.15, [0.9, 0.9, 0.95]], [-0.42, 0.18, [0.6, 0.3, 0.75]]].map(([x, z, c]) => ({ geo: g(0.09, 0.09, 0.09, x, 0.24, z), color: c }))]);
-  const picket = mergeSimple([{ geo: g(1, 0.06, 0.04, 0, 0.35, 0), color: WH }, { geo: g(1, 0.06, 0.04, 0, 0.78, 0), color: WH },
-    ...[-0.43, -0.29, -0.14, 0, 0.14, 0.29, 0.43].map((x) => ({ geo: g(0.07, 0.95, 0.025, x, 0.475, 0.03), color: WH }))]);
-  const privacy = mergeSimple([{ geo: g(1, 1.65, 0.04, 0, 0.88, 0), color: WOOD }, { geo: g(0.09, 1.8, 0.09, 0.5, 0.9, -0.05), color: DWOOD },
-    { geo: g(1, 0.08, 0.06, 0, 0.35, -0.05), color: DWOOD }, { geo: g(1, 0.08, 0.06, 0, 1.45, -0.05), color: DWOOD }]);
-  const hedge = mergeSimple([{ geo: g(1, 0.85, 0.7, 0, 0.425, 0), color: GRN }, { geo: g(0.96, 0.08, 0.64, 0, 0.88, 0), color: [0.2, 0.36, 0.15] }]);
   const deck = mergeSimple([{ geo: g(4, 0.3, 3.5, 0, 0.15, 0), color: WOOD }, { geo: g(1.4, 0.15, 0.35, 0, 0.075, 1.92), color: WOOD },
     ...[-1.5, -0.5, 0.5, 1.5].map((x) => ({ geo: g(0.02, 0.005, 3.5, x, 0.302, 0), color: DWOOD }))]);
   const table = mergeSimple([{ geo: cyl(0.5, 0.5, 0.05, 0, 0.74, 0, 16), color: WH }, { geo: cyl(0.04, 0.04, 0.72, 0, 0.36, 0), color: [0.3, 0.3, 0.3] },
@@ -14481,12 +14483,10 @@ if (!TEKS.lama) {
     P.push({ geo: cyl(0.05, 0.05, 2.7, 0, 0, 0, 8).rotateZ(Math.PI / 2).translate(0, 2.2, 0), color: MC });
     for (const x of [-0.6, 0.6]) { P.push({ geo: g(0.45, 0.04, 0.2, x, 0.5, 0), color: [0.15, 0.3, 0.6] }); for (const dx of [-0.2, 0.2]) P.push({ geo: g(0.015, 1.7, 0.015, x + dx, 1.35, 0), color: [0.3, 0.3, 0.3] }); }
     return mergeSimple(P); })();
-  const garden = mergeSimple([{ geo: g(3, 0.35, 1.3, 0, 0.175, 0), color: DWOOD }, { geo: g(2.9, 0.02, 1.2, 0, 0.36, 0), color: SOIL },
-    ...[-0.4, 0, 0.4].flatMap((z) => [-1.2, -0.8, -0.4, 0, 0.4, 0.8, 1.2].map((x) => ({ geo: new THREE.IcosahedronGeometry(0.13, 0).translate(x, 0.45, z), color: [0.22, 0.45, 0.16] })))]);
   const tramp = mergeSimple([{ geo: cyl(1.7, 1.7, 0.03, 0, 0.88, 0, 20), color: [0.05, 0.05, 0.05] }, { geo: cyl(1.85, 1.85, 0.1, 0, 0.84, 0, 20), color: [0.15, 0.35, 0.75] },
     ...[0, 1, 2, 3].map((k) => ({ geo: g(0.05, 0.8, 0.05, Math.sin(k * 1.571 + 0.785) * 1.75, 0.4, Math.cos(k * 1.571 + 0.785) * 1.75), color: IRON }))]);
-  const GEO = { porch, stoop, stone, bed, picket, privacy, hedge, deck, table, umbrella, grill, swing, garden, tramp };
-  const RANGE = { porch: 220, stoop: 160, stone: 90, bed: 110, picket: 140, privacy: 180, hedge: 160, deck: 160, table: 110, umbrella: 150, grill: 80, swing: 130, garden: 110, tramp: 130 };
+  const GEO = { porch, canopy, pergola, terrace, stone, deck, table, umbrella, grill, swing, tramp };
+  const RANGE = { porch: 220, canopy: 150, pergola: 180, terrace: 120, stone: 90, deck: 160, table: 110, umbrella: 150, grill: 80, swing: 130, tramp: 130 };
   const UMB = ['#b8322a', '#2c5c8f', '#e8e2d0', '#2f6b47', '#d89a2a', '#5a3d6e'];
   const list = {}; for (const k of Object.keys(GEO)) list[k] = [];
   // baris = (axis, e, dir): u sepanjang tepi jalan, v = jarak dari tepi jalan. Persegi terpakai per baris untuk uji tumpang tindih
@@ -14513,25 +14513,20 @@ if (!TEKS.lama) {
       const bL = P && H.u - H.w / 2 - (P.u + P.w / 2) < 30 ? (P.u + P.w / 2 + H.u - H.w / 2) / 2 : H.u - H.w / 2 - 4;   // batas kavling
       const bR = N && N.u - N.w / 2 - (H.u + H.w / 2) < 30 ? (H.u + H.w / 2 + N.u - N.w / 2) / 2 : H.u + H.w / 2 + 4;
       // --- depan ---
-      let vS = H.set;                                              // ujung benda depan pintu (batu pijakan mulai di sini)
-      if (row) { if (H.set > 2.4 && free(du - 0.95, du + 0.95, H.set - 1.85, H.set - 0.01, 0)) { add('stoop', du, H.set - 0.6, 1, 1, ang, null, half(0.9, 0.6)); take(du - 0.95, du + 0.95, H.set - 1.85, H.set); vS = H.set - 1.85; } }
-      else if (H.set > 3.6 && r() < 0.7) {
-        const pw = Math.min(H.w - 1.2, RU(4.5, 7.5)), pu = Math.min(Math.max(du, H.u - H.w / 2 + pw / 2 + 0.3), H.u + H.w / 2 - pw / 2 - 0.3);
-        if (pw > 3.5 && free(pu - pw / 2, pu + pw / 2, H.set - 2.85, H.set - 0.01, 0)) { add('porch', pu, H.set - 1.1, pw / 6, 1, ang, null, half(pw / 2, 1.1)); take(pu - pw / 2, pu + pw / 2, H.set - 2.85, H.set); vS = H.set - 2.85; }
-      }
+      let vS = H.set;                                              // ujung teras di depan pintu (batu pijakan mulai di sini)
+      // 32k revisi: satu teras per rumah, empat variasi rata tanah: beranda beratap, pergola kayu, kanopi pintu, teras terbuka (meja)
+      const tk = r(), front = (kind, pw, pd, sx, sz, colB) => {
+        const pu = Math.min(Math.max(du, H.u - H.w / 2 + pw / 2 + 0.2), H.u + H.w / 2 - pw / 2 - 0.2);
+        if (pw > H.w - 0.2 || H.set < pd + 0.6 || !free(pu - pw / 2, pu + pw / 2, H.set - pd, H.set - 0.01, 0)) return null;
+        add(kind, pu, H.set - pd / 2, sx, sz, ang, null, colB ? half(pw / 2, pd / 2) : null); take(pu - pw / 2, pu + pw / 2, H.set - pd, H.set); vS = H.set - pd; return pu;
+      };
+      if (row) { if (tk < 0.6) front('canopy', 2.4, 1.4, 1, 1); else front('terrace', Math.min(H.w - 0.6, 4), 1.45, Math.min(H.w - 0.6, 4) / 4, 0.6); }
+      else if (tk < 0.35) { const pw = Math.min(H.w - 1.2, RU(4.5, 7.5)); front('porch', pw, 2.2, pw / 6, 1, true); }
+      else if (tk < 0.6) front('pergola', 4.5, 2.6, 1, 1, true);
+      else if (tk < 0.8) front('canopy', 2.4, 1.4, 1, 1);
+      else { const pu = front('terrace', 4, 2.4, 1, 1); if (pu !== null && r() < 0.6) list.table.push([...W(pu + (du < pu ? 1 : -1) * 0.9, H.set - 1.2), r() * 6.28, 1, 1, null, 0.1]); }
       for (let v = vS - 0.55; v > 0.6; v -= RU(0.62, 0.75)) if (free(du - 0.35, du + 0.35, v - 0.25, v + 0.25, 0.02)) add('stone', du + RU(-0.06, 0.06), v, 1, 1, ang + RU(-0.12, 0.12));
       take(du - 0.5, du + 0.5, 0, vS);
-      if (r() < 0.7) for (const sg of [-1, 1]) {                   // bedeng bunga di kaki muka, kiri dan kanan pintu / beranda
-        const a0 = sg < 0 ? H.u - H.w / 2 + 0.3 : du + 1.2, a1 = sg < 0 ? du - 1.2 : H.u + H.w / 2 - 0.3, L = a1 - a0;
-        if (L > 1.2 && free(a0, a1, H.set - 0.95, H.set - 0.02, 0)) { add('bed', (a0 + a1) / 2, H.set - 0.47, L, 1); take(a0, a1, H.set - 0.95, H.set); }
-      }
-      if (!row && H.set > 2.5) {                                   // pagar depan di tepi jalan (celah di batu pijakan dan jalur garasi)
-        const fk = r(), kind = fk < 0.35 ? 'picket' : fk < 0.6 ? 'hedge' : null;
-        if (kind) for (const [a0, a1] of [[bL + 0.2, du - 0.8], [du + 0.8, bR - 0.2]]) {
-          let x = a0;
-          while (x < a1 - 0.3) { const x1 = Math.min(a1, x + 3); if (free(x, x1, 0.5, 1.2, 0)) { add(kind, (x + x1) / 2, 0.85, x1 - x, 1, ang, null, half((x1 - x) / 2, kind === 'hedge' ? 0.35 : 0.05)); take(x, x1, 0.5, 1.2); } x = x1; }
-        }
-      }
       // --- belakang ---
       const vb = H.set + H.dd, back = H.D - vb;
       if (back > 4.5) {
@@ -14546,16 +14541,7 @@ if (!TEKS.lama) {
         }
         const mid = vb + back * RU(0.45, 0.7);
         if (!row && back > 9 && r() < 0.18) { const uu = H.u + RU(-3, 3); if (free(uu - 1.5, uu + 1.5, mid - 1.2, mid + 1.2)) { add('swing', uu, mid, 1, 1, ang + Math.PI / 2 * (r() < 0.5 ? 1 : 0), null, half(1.4, 0.5)); take(uu - 1.5, uu + 1.5, mid - 1.2, mid + 1.2); } }
-        if (r() < 0.25) { const uu = H.u + RU(-4, 4), vv = vb + back * RU(0.3, 0.85); if (free(uu - 1.6, uu + 1.6, vv - 0.8, vv + 0.8)) { add('garden', uu, vv, 1, 1, ang, null, half(1.5, 0.65)); take(uu - 1.6, uu + 1.6, vv - 0.8, vv + 0.8); } }
         if (!row && back > 8 && r() < 0.1) { const uu = H.u + RU(-4, 4), vv = vb + back * RU(0.4, 0.8); if (free(uu - 2, uu + 2, vv - 2, vv + 2)) { add('tramp', uu, vv, 1, 1, ang, null, half(1.8, 1.8)); take(uu - 2, uu + 2, vv - 2, vv + 2); } }
-        // pagar kayu antar kavling (sisi kanan tiap kavling) dan pagar belakang (hanya baris dir +1: dua baris yang bertemu tidak berpagar ganda)
-        if (r() < 0.6) {
-          const fb = row ? H.u + H.w / 2 : bR;
-          if (N && Math.abs(fb - (row ? N.u - N.w / 2 : bR)) < 0.5) for (let v = vb + 0.2; v < H.D - 0.4; v += 2.5) { const v1 = Math.min(H.D - 0.4, v + 2.5);
-            if (free(fb - 0.05, fb + 0.05, v, v1, 0)) { add('privacy', fb, (v + v1) / 2, v1 - v, 1, ang + Math.PI / 2, null, half(0.05, (v1 - v) / 2)); take(fb - 0.05, fb + 0.05, v, v1); } }
-          if (dir === 1) for (let x = (row ? H.u - H.w / 2 : bL); x < (row ? H.u + H.w / 2 : bR) - 0.3; x += 2.5) { const x1 = Math.min(row ? H.u + H.w / 2 : bR, x + 2.5);
-            if (free(x, x1, H.D - 0.45, H.D - 0.35, 0)) { add('privacy', (x + x1) / 2, H.D - 0.4, x1 - x, 1, ang + Math.PI, null, half((x1 - x) / 2, 0.05)); take(x, x1, H.D - 0.45, H.D - 0.35); } }
-        }
       }
     });
   }
