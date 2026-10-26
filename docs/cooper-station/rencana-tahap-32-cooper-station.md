@@ -110,3 +110,14 @@ Batasan revisi:
 | 3 | Kedalaman toko terlihat aneh: isi menembus pilar ke toko sebelah | Ruang toko kini kotak selebar modulnya (dinding samping di batas toko, di balik pilar: `shopU0` / `shopU1`), makin gelap ke belakang, sudut gelap, lantai catur kontras lebih rendah |
 
 Jumlah (hasil muat): beranda 2.014, kanopi 4.569, pergola 1.443, teras terbuka 3.429, batu pijakan 35.269, dek belakang 4.652, meja 4.169, payung 1.929, panggangan 1.644, ayunan 320, trampolin 157. Kolider tinggal di beranda, pergola, dek, ayunan, trampolin.
+
+## Revisi 3 (26 Oktober 2026)
+
+| No | Masalah | Perbaikan | Nama di kode |
+| --- | --- | --- | --- |
+| 1 | Penyangga kanopi pintu terbalik | Penyangga siku naik dari dinding (1,95 m) ke bawah tepi luar kanopi (2,46 m) | `canopy` |
+| 2 | Rumput tumbuh menembus teras, dek, dan batu pijakan | Masker halaman 1 m per piksel dari tapak teras, dek, dan jalur batu pijakan; rumpun rumput 3D di dalamnya dibuang | `YARDM`, `YARD_GLSL` / `yardM()`, `bare()` |
+| 3 | Toko yang etalasenya menghadap belakang berdiri di rumput | Pelataran beton 4 m di sekeliling 1.391 gedung bertoko (gaya 1, 2, 11, 12, 13, gaya 0 > 12 m); digambar shader tanah dari masker, tidak di jalan atau air | kanal r `YARDM`, blok 32k di shader tanah |
+| 4 | Halaman belakang semua rumput | 50% sisi gedung bertoko yang di depannya kosong (tanpa gedung, jalan, trotoar, air, pohon) jadi lahan parkir aspal 17 m: dua baris petak 2,6 m dengan garis dan penahan roda, lorong 6 m; sisanya tetap rumput. Hasil: 172 lahan, 2.724 petak | kanal g `YARDM`, `TERAS.lots`, `stall` |
+
+Batasan: lahan parkir belum berisi mobil; masker halaman RG8 6.284 x sekitar 2.500 piksel (sekitar 31 MB dengan mipmap).
