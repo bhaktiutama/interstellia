@@ -4489,6 +4489,8 @@ function clearOf(s, za, w, d, margin = 4) {                      // tidak di air
 // jalan sepanjang za (front 3/4). Bentuk menurut kepadatan: rumah deret 2-3 lantai (d > 0,45), rumah tunggal, rumah besar
 // berhalaman di tepi. Pohon halaman belakang dicatat di YARD_TREES dan ditanam di blok pohon.
 const YARD_TREES = [], GANGS = [];
+// 32k: rumah yang dibuat fillHomes (untuk teras dan isi halaman). Hanya dicatat, tanpa angka acak, jadi kota tetap sama.
+const TERAS_H = [], TERAS_G = [], TERAS_T = [];                    // rumah, garasi / gudang kebun, pohon halaman
 function fillHomes(s0, z0, s1, z1, d, sparse) {
   // 16a: tingkat kepadatan menurut d (makin jauh dari pusat, makin jarang): kavling makin lebar, makin banyak yang kosong
   const T = d > 0.47 ? { kind: 'row', gang: 60 } : d > 0.33 ? { kind: 'house', lot: [16, 20], empty: 0, gang: 60 }
@@ -4510,9 +4512,11 @@ function fillHomes(s0, z0, s1, z1, d, sparse) {
       const t = axis === 'z' ? type : type === 'gable' ? 'gablez' : type;
       const front = axis === 'z' ? (dir === 1 ? 1 : 2) : (dir === 1 ? 3 : 4);
       if (!clearOf(cs, cz, ws, wz)) return false;
-      building(t, cs, cz, ws, wz, h, col, 0, true, style, style === 3 || style === 9 ? front : 0); return true;
+      building(t, cs, cz, ws, wz, h, col, 0, true, style, style === 3 || style === 9 ? front : 0);
+      (style === 3 ? TERAS_H : TERAS_G).push({ axis, e, dir, u, set: v - dd / 2, w, dd, D, kind });   // 32k
+      return true;
     };
-    const yard = (u, v) => { if (u > a + 2 && u < b - 2) YARD_TREES.push(axis === 'z' ? [u, e + dir * v] : [e + dir * v, u]); };   // 16a: tetap di dalam baris
+    const yard = (u, v) => { if (u > a + 2 && u < b - 2) { YARD_TREES.push(axis === 'z' ? [u, e + dir * v] : [e + dir * v, u]); TERAS_T.push({ axis, e, dir, u, v }); } };   // 16a: tetap di dalam baris; 32k: dicatat
     let u = a + U(0, 3);
     if (kind === 'row') {                                        // rumah deret: 4-6 unit menempel, jeda 3-5 m antar deret
       while (u < b - 16) {
@@ -5130,6 +5134,127 @@ const BUILD_FS = /* glsl */`
     float d = abs(fract(x / period + 0.5) - 0.5) * period;
     return (1.0 - smoothstep(w - fw, w + fw, d)) * (1.0 - smoothstep(period * 0.25, period * 0.6, fw));
   }
+  #ifndef TEKS_LAMA
+  // 32j: isi toko menurut kata papan nama (urutan SIGN.words). Kelas: 0 rak barang, 1 tempat makan, 2 roti, 3 jasa, 4 busana, 5 bunga,
+  // 6 bengkel. Sub: 0 umum, 1 buku, 2 apotek, 3 perkakas, 4 cukur / salon, 5 laundry, 6 bank / pos, 7 optik, 8 sepatu, 9 perhiasan,
+  // 10 musik, 11 penjahit
+  const float SHOPK[32] = float[32](0.,2.,1.,1.,2.,0.,0.,0.,1.,0.,1.,5.,3.,3.,3.,1.,1.,1.,1.,6.,4.,0.,3.,3.,3.,0.,1.,1.,1.,4.,4.,4.);
+  const float SHOPS[32] = float[32](0.,0.,0.,0.,0.,2.,1.,0.,0.,0.,0.,0.,4.,7.,5.,0.,0.,0.,0.,0.,11.,3.,6.,6.,4.,0.,0.,0.,0.,8.,9.,10.);
+  float boxM(vec2 p, vec2 a, vec2 b) { return step(a.x, p.x) * step(p.x, b.x) * step(a.y, p.y) * step(p.y, b.y); }
+  // dinding belakang toko: h = (m sepanjang muka, m di atas lantai), top = tinggi plafon, sd = benih toko
+  vec3 shopBack(float k, float sb, vec2 h, float top, float sd) {
+    float hr = hash1(vec2(sd, 5.0));
+    vec3 wallC = hr < 0.3 ? vec3(0.8, 0.78, 0.74) : hr < 0.5 ? vec3(0.72, 0.62, 0.5) : hr < 0.7 ? vec3(0.62, 0.68, 0.64) : hr < 0.85 ? vec3(0.78, 0.7, 0.6) : vec3(0.5, 0.38, 0.28);
+    vec3 c = wallC;
+    if (k < 0.5) {                                                // rak barang (buku, apotek, perkakas, kelontong)
+      float iw = sb == 1.0 ? 0.045 : sb == 3.0 ? 0.3 : sb == 2.0 ? 0.11 : 0.17, sh = sb == 3.0 ? 0.6 : 0.42;
+      float fyS = fract(h.y / sh);
+      vec2 cell = vec2(floor(h.x / iw), floor(h.y / sh));
+      float hp = hash1(cell + sd * 3.0);
+      vec3 prod = sb == 1.0 ? mix(vec3(0.42, 0.1, 0.08), vec3(0.12, 0.17, 0.3), hash1(cell + 1.0)) * (0.7 + 0.9 * hash1(cell + 2.0))
+        : sb == 2.0 ? mix(vec3(0.92, 0.92, 0.9), vec3(0.3, 0.5, 0.85), step(0.75, hp))
+        : sb == 3.0 ? (hp < 0.35 ? vec3(0.75, 0.32, 0.06) : hp < 0.7 ? vec3(0.32, 0.33, 0.35) : vec3(0.55, 0.1, 0.07))
+        : 0.2 + 0.65 * vec3(hash1(cell + 1.0), hash1(cell + 2.0), hash1(cell + 3.0));
+      float item = step(sb == 1.0 ? 0.06 : 0.25, hp) * step(fyS, sb == 1.0 ? 0.62 + 0.25 * hp : 0.4 + 0.35 * hp) * step(sb == 1.0 ? 0.08 : 0.14, fract(h.x / iw));
+      c = mix(sb == 2.0 ? vec3(0.9, 0.9, 0.88) : vec3(0.6, 0.57, 0.52), prod, item);
+      c = mix(c, sb == 1.0 ? vec3(0.32, 0.2, 0.12) : vec3(0.3, 0.29, 0.28), step(0.9, fyS));
+      c = mix(c, wallC, clamp(step(top - 0.5, h.y) + step(h.y, 0.25), 0.0, 1.0));
+    } else if (k < 1.5) {                                         // tempat makan: konter kayu, rak cangkir, papan menu
+      c = mix(wallC, vec3(0.62, 0.3, 0.2), step(0.7, hash1(vec2(sd, 8.0))));
+      float bx = fract(h.x / 1.3);
+      float menu = boxM(vec2(bx, h.y), vec2(0.1, 1.75), vec2(0.9, min(2.4, top - 0.2)));
+      c = mix(c, vec3(0.06, 0.07, 0.065) * (1.0 + 4.0 * step(0.75, fract(h.y / 0.09)) * step(0.2, bx) * step(bx, 0.8 - 0.3 * hash1(vec2(floor(h.y / 0.09), sd)))), menu);
+      float cup = boxM(vec2(fract(h.x / 0.14), h.y), vec2(0.25, 1.28), vec2(0.75, 1.42)) * step(0.3, hash1(vec2(floor(h.x / 0.14), sd)));
+      c = mix(c, mix(vec3(0.9, 0.88, 0.84), vec3(0.25, 0.4, 0.2), step(0.7, hash1(vec2(floor(h.x / 0.14), sd + 1.0)))), cup);
+      c = mix(c, vec3(0.3, 0.29, 0.28), boxM(h, vec2(-1e3, 1.25), vec2(1e3, 1.28)));
+      c = mix(c, vec3(0.24, 0.14, 0.08) * (0.9 + 0.2 * step(0.5, fract(h.x / 0.9))), step(h.y, 1.0));
+      c = mix(c, vec3(0.55, 0.5, 0.45), boxM(h, vec2(-1e3, 0.95), vec2(1e3, 1.02)));
+    } else if (k < 2.5) {                                         // roti: rak dengan roti bulat, etalase kaca di bawah
+      c = vec3(0.86, 0.8, 0.68);
+      vec2 q = vec2(fract(h.x / 0.26) - 0.5, fract(h.y / 0.36) - 0.3);
+      float bread = (1.0 - step(0.11, length(q * vec2(1.0, 2.0)))) * step(0.9, h.y) * step(h.y, 2.1) * step(0.2, hash1(floor(h / vec2(0.26, 0.36)) + sd));
+      c = mix(c, mix(vec3(0.62, 0.36, 0.14), vec3(0.78, 0.55, 0.25), hash1(floor(h / vec2(0.26, 0.36)) + 2.0)), bread);
+      c = mix(c, vec3(0.4, 0.3, 0.22), boxM(vec2(1.0, fract(h.y / 0.36)), vec2(0.0, 0.9), vec2(2.0, 1.0)) * step(0.9, h.y) * step(h.y, 2.2));
+      c = mix(c, vec3(0.75, 0.78, 0.8) * (0.8 + 0.3 * step(0.5, fract(h.x / 0.6))), step(h.y, 0.85));
+    } else if (k < 3.5) {                                         // jasa
+      if (sb == 5.0) {                                            // laundry: mesin cuci bertumpuk dengan pintu bulat
+        c = vec3(0.82, 0.84, 0.85);
+        vec2 q = vec2(fract(h.x / 0.7), h.y);
+        float body = boxM(q, vec2(0.04, 0.0), vec2(0.96, 1.85)) * step(abs(fract(h.y / 0.93) - 0.5), 0.47);
+        float door = 1.0 - step(0.22, length(vec2((q.x - 0.5) * 0.7, fract(h.y / 0.93) * 0.93 - 0.48)));
+        c = mix(c, vec3(0.93, 0.93, 0.92), body);
+        c = mix(c, vec3(0.12, 0.15, 0.18), door * body);
+        c = mix(c, vec3(0.45, 0.48, 0.5), (1.0 - step(0.03, abs(length(vec2((q.x - 0.5) * 0.7, fract(h.y / 0.93) * 0.93 - 0.48)) - 0.235))) * body);
+      } else if (sb == 6.0) {                                     // bank / pos: konter kayu, sekat kaca, pita warna
+        c = mix(wallC, vec3(0.75, 0.6, 0.2), boxM(h, vec2(-1e3, top - 0.6), vec2(1e3, top - 0.35)));
+        c = mix(c, vec3(0.6, 0.66, 0.7) * (0.9 + 0.2 * step(0.97, fract(h.x / 1.5))), boxM(h, vec2(-1e3, 1.1), vec2(1e3, 2.0)));
+        c = mix(c, vec3(0.3, 0.2, 0.12), step(h.y, 1.1));
+      } else if (sb == 7.0) {                                     // optik: dinding putih, deretan bingkai kacamata
+        c = vec3(0.9, 0.9, 0.88);
+        vec2 q = vec2(fract(h.x / 0.22), fract(h.y / 0.2));
+        float fr = boxM(q, vec2(0.15, 0.45), vec2(0.85, 0.6)) * (1.0 - boxM(q, vec2(0.2, 0.48), vec2(0.45, 0.57))) * (1.0 - boxM(q, vec2(0.55, 0.48), vec2(0.8, 0.57)));
+        c = mix(c, mix(vec3(0.05), vec3(0.45, 0.25, 0.1), hash1(floor(h / vec2(0.22, 0.2)) + sd)), fr * step(0.8, h.y) * step(h.y, 2.0));
+        c = mix(c, vec3(0.55, 0.62, 0.68), boxM(vec2(fract(h.x / 3.0), h.y), vec2(0.4, 0.9), vec2(0.6, 2.1)));
+      } else {                                                    // cukur / salon: cermin berbingkai, meja, lemari bawah
+        c = mix(vec3(0.85, 0.82, 0.8), vec3(0.75, 0.82, 0.8), step(0.5, hr));
+        vec2 q = vec2(fract(h.x / 1.3), h.y);
+        float frame = boxM(q, vec2(0.17, 0.97), vec2(0.83, 2.03)), mir = boxM(q, vec2(0.2, 1.0), vec2(0.8, 2.0));
+        c = mix(c, vec3(0.15, 0.13, 0.12), frame);
+        c = mix(c, vec3(0.5, 0.56, 0.6) * (0.85 + 0.3 * smoothstep(0.0, 1.0, q.y - 1.0)), mir);
+        c = mix(c, vec3(0.92), boxM(q, vec2(0.1, 0.85), vec2(0.9, 0.92)));
+        c = mix(c, vec3(0.25, 0.22, 0.2), step(h.y, 0.85));
+      }
+    } else if (k < 4.5) {                                         // busana
+      if (sb == 8.0) {                                            // sepatu: rak miring berderet
+        c = vec3(0.8, 0.77, 0.72);
+        vec2 q = vec2(fract(h.x / 0.32), fract(h.y / 0.3));
+        float shoe = boxM(q, vec2(0.1, 0.12), vec2(0.9, 0.35 + 0.15 * q.x)) * step(0.4, h.y) * step(h.y, 2.1) * step(0.2, hash1(floor(h / vec2(0.32, 0.3)) + sd));
+        c = mix(c, 0.1 + 0.6 * vec3(hash1(floor(h / vec2(0.32, 0.3)) + 1.0), hash1(floor(h / vec2(0.32, 0.3)) + 2.0), 0.3), shoe);
+        c = mix(c, vec3(0.95), step(0.93, q.y) * step(0.4, h.y) * step(h.y, 2.1));
+      } else if (sb == 9.0) {                                     // perhiasan: dinding gelap, lemari kaca terang berkilau
+        c = vec3(0.14, 0.11, 0.09);
+        float cs = boxM(vec2(fract(h.x / 1.6), h.y), vec2(0.05, 0.75), vec2(0.95, 1.05));
+        c = mix(c, vec3(0.85, 0.8, 0.68) + 0.6 * step(0.93, hash1(floor(h * 40.0))), cs);
+        c = mix(c, vec3(0.32, 0.22, 0.12), step(h.y, 0.75));
+      } else if (sb == 10.0) {                                    // musik: gitar tergantung di dinding papan kayu
+        c = vec3(0.42, 0.28, 0.16) * (0.9 + 0.2 * step(0.5, fract(h.x / 0.15)));
+        vec2 q = vec2(fract(h.x / 0.55) - 0.5, h.y);
+        float body = 1.0 - step(0.16, length(vec2(q.x, (q.y - 1.25) * 0.75))), neck = boxM(q, vec2(-0.025, 1.3), vec2(0.025, 2.05));
+        vec3 gc = mix(vec3(0.55, 0.12, 0.06), vec3(0.08), step(0.5, hash1(vec2(floor(h.x / 0.55), sd))));
+        c = mix(c, gc, max(body, neck));
+      } else {                                                    // pakaian: rel gantung dengan baju berderet
+        c = wallC;
+        float gi = floor(h.x / 0.07), gq = fract(h.x / 0.07) - 0.5, hg = 1.88 - 0.05 * (1.0 - 4.0 * gq * gq);
+        float cloth = step(0.75 + 0.35 * hash1(vec2(gi, sd + 3.0)), h.y) * step(h.y, hg) * step(0.15, fract(h.x / 0.07)) * step(0.25, fract(h.x / 2.4));
+        c = mix(c, (0.15 + 0.6 * vec3(hash1(vec2(gi, sd)), hash1(vec2(gi, sd + 1.0)), hash1(vec2(gi, sd + 2.0)))) * 0.85, cloth);
+        c = mix(c, vec3(0.6, 0.6, 0.62), boxM(h, vec2(-1e3, 1.9), vec2(1e3, 1.93)));
+      }
+    } else if (k < 5.5) {                                         // bunga: ember di lantai, tanaman berbunga, rak tanaman
+      c = vec3(0.88, 0.88, 0.85);
+      float g = smoothstep(0.35, 0.65, hash1(floor(h * 9.0) + sd)) * step(h.y, 1.3 + 0.3 * hash1(vec2(floor(h.x * 3.0), sd)));
+      c = mix(c, vec3(0.12, 0.3, 0.1) * (0.7 + 0.6 * hash1(floor(h * 13.0))), g);
+      float fl = step(0.85, hash1(floor(h * 22.0) + 7.0)) * g;
+      c = mix(c, mix(vec3(0.85, 0.15, 0.25), vec3(0.95, 0.8, 0.2), hash1(floor(h * 22.0))), fl);
+      c = mix(c, vec3(0.3, 0.33, 0.35), step(h.y, 0.45) * step(0.12, fract(h.x / 0.5)));
+    } else {                                                      // bengkel: dinding beton, papan perkakas, tumpukan ban
+      c = vec3(0.5, 0.5, 0.48) * (0.9 + 0.15 * hash1(floor(h * 2.0)));
+      float pb = boxM(h, vec2(-1e3, 1.2), vec2(1e3, 2.1));
+      c = mix(c, vec3(0.45, 0.32, 0.2), pb);
+      c = mix(c, vec3(0.12), pb * boxM(vec2(fract(h.x / 0.3), fract(h.y / 0.3)), vec2(0.3, 0.1), vec2(0.42, 0.8)) * step(0.4, hash1(floor(h / 0.3))));
+      vec2 q = vec2(fract(h.x / 0.75) - 0.5, fract(h.y / 0.26) - 0.5);
+      c = mix(c, vec3(0.05), step(h.y, 1.05) * step(0.35, fract(h.x / 2.6)) * boxM(q, vec2(-0.32, -0.42), vec2(0.32, 0.42)));
+    }
+    return c;
+  }
+  vec3 shopFloor(float k, vec2 h, float sd) {
+    if (k > 0.5 && k < 1.5) {                                     // tempat makan: ubin papan catur / kayu, bayangan meja bundar
+      vec3 f = hash1(vec2(sd, 4.0)) < 0.5 ? mix(vec3(0.08), vec3(0.8), mod(floor(h.x / 0.3) + floor(h.y / 0.3), 2.0)) : vec3(0.42, 0.27, 0.15) * (0.9 + 0.2 * step(0.5, fract(h.x / 0.18)));
+      return f * (1.0 - 0.45 * (1.0 - step(0.42, length(fract(h / 1.5) - 0.5))));
+    }
+    if (k > 5.5) return vec3(0.36, 0.35, 0.33) * (0.85 + 0.2 * hash1(floor(h * 1.5)));
+    return mix(vec3(0.62, 0.6, 0.56), vec3(0.42, 0.4, 0.37), step(0.5, hash1(vec2(sd, 6.0)))) * (0.94 + 0.12 * step(0.5, fract(h.x / 0.6) + 0.0 * h.y)) * (1.0 - 0.15 * max(lines(h.x, 0.6, 0.006, 0.004), lines(h.y, 0.6, 0.006, 0.004)));
+  }
+  #endif
   void main() {
     float code = floor(vStyle.x + 0.001), front = floor(vStyle.y + 0.001);   // 22c: bilangan bulat = gaya / depan, pecahan / 0,99 = p1 / p2
     float sp1 = fract(vStyle.x) / 0.99, sp2 = fract(vStyle.y) / 0.99;
@@ -5389,6 +5514,7 @@ const BUILD_FS = /* glsl */`
       // lantai dasar: etalase kaca / pintu masuk
       float shopM = 0.0, neon = 0.0;
       vec3 neonC = vec3(0.0);
+      float shopK = 0.0, shopS = 0.0, shopId = 0.0;               // 32j: kelas, sub, benih toko di titik ini
       if (code == 12.0 && y < groundH) {
         // 22a: deret toko: modul 3,2-5 m per gedung, pintu di kiri / kanan, papan nama berwarna per toko dengan huruf, kaki etalase gelap
         float nS = max(1.0, floor(W / (3.2 + 1.8 * fract(sp1 * 7.31)) + 0.5)), ui = (u / W + 0.5) * nS, si = floor(ui), sfx = fract(ui), fws = fwU * nS / W;
@@ -5399,7 +5525,9 @@ const BUILD_FS = /* glsl */`
         float board = band(y, groundH - 1.1, groundH - 0.3, fwY) * band(sfx, 0.03, 0.97, fws);
         #ifndef TEKS_LAMA
         // 32b: kata dari atlas (satu per toko), huruf 0,5 m sel; lx = m dari tengah toko, ly = 0 (bawah) sampai 0,5 m (atas)
-        float wi = floor(hash1(vec2(si * 1.37 + vSeed * 53.0, 41.0)) * 32.0), shopW = W / nS, lx = (sfx - 0.5) * shopW, ly = y - (groundH - 0.95);
+        // 32j: lx dibalik di muka -z dan +x agar tulisan terbaca dari luar (kanan pengamat = +u hanya di muka +z dan -x)
+        float wi = floor(hash1(vec2(si * 1.37 + vSeed * 53.0, 41.0)) * 32.0), shopW = W / nS, lx = (sfx - 0.5) * shopW * (fz ? sign(n.z) : -sign(n.x)), ly = y - (groundH - 0.95);
+        shopK = SHOPK[int(wi)]; shopS = SHOPS[int(wi)]; shopId = si + vSeed * 31.0;
         vec2 auv = vec2((mod(wi, 2.0) * 512.0 + 256.0 + lx * 64.0) / 1024.0, 1.0 - (floor(wi / 2.0) * 32.0 + (0.5 - ly) * 64.0) / 512.0);
         float glyph = textureGrad(uSignTex, auv, vec2(dU.x, dY.x) * vec2(0.0625, 0.125), vec2(dU.y, dY.y) * vec2(0.0625, 0.125)).r * band(lx, -0.45 * shopW, 0.45 * shopW, fwU) * band(ly, 0.0, 0.5, fwY);
         #else
@@ -5419,6 +5547,10 @@ const BUILD_FS = /* glsl */`
       if (code != 12.0 && groundH > 0.0 && y < groundH) {
         float sfx = fract(u / 2.6 + 0.5);
         shopM = band(y, 0.15, groundH - 0.9, fwY) * band(sfx, 0.06, 0.94, fwU / 2.6);
+        #ifndef TEKS_LAMA
+        shopId = floor((u / 2.6 + 0.5) / 2.0) + vSeed * 31.0;
+        { int wj = int(floor(hash1(vec2(shopId, 41.0)) * 32.0)); shopK = SHOPK[wj]; shopS = SHOPS[wj]; }
+        #endif
         wall = mix(wall, vec3(0.16, 0.16, 0.17), band(y, groundH - 0.8, groundH - 0.3, fwY));   // pita kanopi / papan nama
       }
       if (code == 12.0 || code == 13.0) {                         // 22a: pita batu di bawah lis dan di atas toko
@@ -5590,38 +5722,48 @@ const BUILD_FS = /* glsl */`
         float dT = (wy1 - fy) * fh, dL = (fx - wx0) * W / nB;
         glass *= mix(1.0, (1.0 - 0.45 * (1.0 - smoothstep(0.0, 0.14, dT))) * (1.0 - 0.25 * (1.0 - smoothstep(0.0, 0.07, dL))), detail);
       }
-      if (wk > 0.0 && shopM > 0.01 && winM < 0.5 && groundH > 0.0) {
-        // 32g: ruang toko di balik etalase (dulu kaca hampir hitam): dinding belakang 3,5 m dengan rak berisi barang, lantai, plafon;
-        // diterangi cahaya siang lemah dan lampu toko malam, kaca memantul sedikit; dari jauh kembali ke kaca lama
-        float sn = fz ? sign(n.z) : sign(n.x);
-        float da = fz ? vDirO.x : vDirO.z, dv = vDirO.y, dd = -(fz ? vDirO.z : vDirO.x) * sn;
-        if (dd > 1e-4) {
-          float top = max(groundH - 1.0, 2.2), tz = 3.5 / dd, tyF = dv < -1e-5 ? -y / dv : 1e9, tyC = dv > 1e-5 ? (top - y) / dv : 1e9;
-          float tt = min(tz, min(tyF, tyC));
-          vec2 h = vec2(u + da * tt, y + dv * tt);
-          vec3 rc;
-          if (tt == tz) {
-            float fyS = fract(h.y / 0.5), shelf = step(0.88, fyS) * step(0.3, h.y);
-            vec2 cell = vec2(floor(h.x / 0.18), floor(h.y / 0.5));
-            float hp = hash1(cell + vSeed * 3.0);
-            vec3 prod = 0.2 + 0.6 * vec3(hash1(cell + 1.0), hash1(cell + 2.0), hash1(cell + 3.0));
-            float item = step(0.3, hp) * step(fyS, 0.55 + 0.3 * hp) * step(0.15, fract(h.x / 0.18)) * step(0.3, h.y) * step(h.y, top - 0.5);
-            rc = mix(vec3(0.6, 0.57, 0.52), prod, item);
-            rc = mix(rc, vec3(0.32, 0.3, 0.28), shelf);
-          } else if (tt == tyF) rc = vec3(0.42, 0.4, 0.37) * (0.92 + 0.16 * step(0.5, fract(h.x / 0.6)));
-          else rc = vec3(0.85, 0.84, 0.82);
-          float onS = uNight * step(0.2, hash1(vec2(floor(u / 4.0) + vSeed * 11.0, 9.0)));
-          vec3 room = rc * (dot(light, vec3(0.333)) * 0.45 + vec3(1.0, 0.9, 0.75) * onS * 0.9);
-          float refK = 0.16 + 0.6 * F;
-          glass = mix(glass, room * (1.0 - refK) + sky * refK, 1.0 - smoothstep(0.08, 0.3, fwU));
+      #endif
+      float shopE = shopM;                                        // 32j: bagian etalase yang memancar malam (TEKS_LAMA: seluruh etalase)
+      #ifndef TEKS_LAMA
+      if (shopM > 0.01 && winM < 0.5 && groundH > 0.0) {
+        // 32j: buka / tutup per toko. Malam 40% toko tutup (pintu gulung besi diterangi lampu jalan); toko buka memancar lewat
+        // ruangnya (dekat) atau 0,45 x pancaran lama (jauh), jadi deret toko malam tidak lagi terang rata dan silau
+        float hO = hash1(vec2(shopId, 17.0)), shut = step(0.6, hO) * step(0.3 + 0.4 * hash1(vec2(shopId, 19.0)), uNight);
+        float kI2 = 0.0;
+        if (wk > 0.0 && shut < 0.5) {
+          // 32g / 32j: ruang toko di balik etalase: dinding belakang 3,5 m menurut kelas toko (shopBack), lantai, plafon dengan lampu;
+          // diterangi cahaya siang lemah dan lampu toko malam, kaca memantul sedikit; dari jauh kembali ke kaca lama
+          float sn = fz ? sign(n.z) : sign(n.x);
+          float da = fz ? vDirO.x : vDirO.z, dv = vDirO.y, dd = -(fz ? vDirO.z : vDirO.x) * sn;
+          if (dd > 1e-4) {
+            float top = max(groundH - 1.0, 2.2), tz = 3.5 / dd, tyF = dv < -1e-5 ? -y / dv : 1e9, tyC = dv > 1e-5 ? (top - y) / dv : 1e9;
+            float tt = min(tz, min(tyF, tyC));
+            vec2 h = vec2(u + da * tt, y + dv * tt);
+            vec3 rc; float spot = 0.0;
+            if (tt == tz) rc = shopBack(shopK, shopS, h, top, shopId);
+            else if (tt == tyF) rc = shopFloor(shopK, vec2(h.x, dd * tt), shopId);
+            else { vec2 lp = fract(vec2(h.x, dd * tt) / 1.6) - 0.5; spot = 1.0 - step(0.12, length(lp)); rc = vec3(0.85, 0.84, 0.82); }
+            float sk = 1.0 - smoothstep(0.08, 0.3, fwU);
+            vec3 lampC = shopK > 0.5 && shopK < 2.5 ? vec3(1.0, 0.82, 0.6) : vec3(0.95, 0.95, 1.0);
+            vec3 room = rc * (dot(light, vec3(0.333)) * 0.45 + lampC * uNight * 0.55 * (1.0 - 0.4 * (dd * tt) / 3.5)) + lampC * spot * (0.6 + 2.0 * uNight);
+            float refK = 0.16 + 0.6 * F;
+            glass = mix(glass, room * (1.0 - refK) + sky * refK, sk);
+            kI2 = sk;
+          }
         }
+        if (shut > 0.5) {                                         // pintu gulung: bilah 8 cm, kotak gulungan di atas, cat sedikit kotor
+          float sl = 1.0 - 0.35 * lines(y, 0.08, 0.01, fwY);
+          vec3 sc = vec3(0.42, 0.43, 0.44) * mix(1.0, 0.75, step(0.5, hash1(vec2(shopId, 23.0)))) * sl * (0.92 + 0.12 * vn(vec2(u * 2.0, y * 0.5)));
+          glass = mix(glass, sc * light, 1.0);
+        }
+        shopE = shopM * (1.0 - shut) * mix(0.45, 0.0, kI2);
       }
       #endif
       vec3 frameC = code == 3.0 || code == 7.0 ? vec3(0.88, 0.87, 0.84) : (varW || code == 12.0 || code == 13.0) ? frameCol : vec3(0.55, 0.55, 0.53);   // 21d: warna rangka per gedung
       vec3 wallLit = wall * light;
       col = mix(mix(wallLit, frameC * light, frameM), glass, max(winM, shopM));
-      emit = (warm * on * max(winM * (1.0 - kI), shopM * 0.8) * 1.6 +   // 14c: jendela dekat menyala lewat ruangannya
-         vec3(1.0, 0.8, 0.55) * shopM * uNight * 0.5) * mix(1.0, 0.55, ax * ay);
+      emit = (warm * on * max(winM * (1.0 - kI), shopE * 0.8) * 1.6 +   // 14c: jendela dekat menyala lewat ruangannya; 32j: etalase per toko
+         vec3(1.0, 0.8, 0.55) * shopE * uNight * 0.5) * mix(1.0, 0.55, ax * ay);
       if (code == 1.0 && H > 120.0 && hash1(vec2(vSeed, 11.0)) < 0.3 && y > H - 12.0 && y < H) {   // 21c: lampu mahkota 30% menara > 120 m
         float hc = hash1(vec2(vSeed, 12.0)), kc = (y - (H - 12.0)) / 12.0;                           // disorot dari lis bawah, pudar ke atas
         vec3 cc = hc < 0.8 ? vec3(1.0, 0.95, 0.88) : hc < 0.9 ? vec3(0.35, 0.55, 1.0) : vec3(0.7, 0.45, 1.0);   // 1 dari 5 berwarna
@@ -14393,6 +14535,151 @@ const RAGAM_DET = { count: {} };
     FURN.kinds['r22' + kind] = { mesh, mats, ps, pz, n, range: RANGE[kind], idx: tinted ? new Int32Array(n) : null, cols };
   }
 }
+// 32k: teras dan isi halaman rumah (permintaan Bhakti: halaman rumput di antara rumah terlalu kosong dan datar). Per rumah dari
+// fillHomes (TERAS_H): depan = beranda beratap (rumah tunggal / besar) atau undakan beton (rumah deret) di depan pintu (rumus pintu
+// BUILD_FS gaya 3), batu pijakan ke jalan, bedeng bunga di kaki muka, pagar kayu putih atau pagar tanaman di tepi jalan (celah di
+// depan garasi); belakang = dek kayu dengan meja, payung, panggangan, ayunan, bedeng sayur, trampolin, pagar kayu antar kavling dan
+// pagar belakang. Tiap benda diuji tidak bertumpuk dengan rumah, garasi, gudang kebun, pohon halaman, benda lain, dan air. Generator
+// acak sendiri (kota tetap sama), dikirim dalam radius lewat FURN.kinds, benda besar berkolider. ?tekstur=lama = tanpa isi halaman.
+const TERAS = { count: {} };
+if (!TEKS.lama) {
+  let sd = 32011; const r = () => ((sd = (sd * 16807) % 2147483647) / 2147483647), RU = (a, b) => a + (b - a) * r();
+  const g = (sx, sy, sz, x, y, z) => new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
+  const cyl = (r0, r1, h, x, y, z, n = 10) => new THREE.CylinderGeometry(r0, r1, h, n).translate(x, y, z);
+  const WH = [0.9, 0.89, 0.86], WOOD = [0.5, 0.38, 0.27], DWOOD = [0.36, 0.26, 0.18], ROOF = [0.25, 0.26, 0.28], CONC = [0.62, 0.6, 0.57];
+  const GRN = [0.16, 0.3, 0.12], SOIL = [0.2, 0.14, 0.09], IRON = [0.08, 0.08, 0.09];
+  // semua menghadap +z (ke jalan), alas di y = 0
+  const porch = (() => { const P = [{ geo: g(6, 0.35, 2.2, 0, 0.175, 0), color: WOOD },
+    { geo: g(1.6, 0.23, 0.3, 0, 0.115, 1.25), color: WOOD }, { geo: g(1.6, 0.12, 0.3, 0, 0.06, 1.55), color: WOOD },
+    { geo: g(6.3, 0.12, 2.6, 0, 0, 0).rotateX(0.12).translate(0, 3.0, 0.15), color: ROOF }, { geo: g(6.1, 0.22, 0.18, 0, 2.8, 1.0), color: WH }];
+    for (const x of [-2.9, -1.0, 1.0, 2.9]) P.push({ geo: g(0.14, 2.5, 0.14, x, 1.6, 1.0), color: WH });
+    for (const [x0, x1] of [[-2.9, -1.0], [1.0, 2.9]]) { P.push({ geo: g(x1 - x0, 0.06, 0.06, (x0 + x1) / 2, 1.28, 1.0), color: WH });
+      for (let x = x0 + 0.15; x < x1 - 0.05; x += 0.15) P.push({ geo: g(0.04, 0.85, 0.04, x, 0.8, 1.0), color: WH }); }
+    for (const x of [-2.9, 2.9]) { P.push({ geo: g(0.06, 0.06, 2.0, x, 1.28, 0), color: WH }); for (let z = -0.9; z < 0.95; z += 0.15) P.push({ geo: g(0.04, 0.85, 0.04, x, 0.8, z), color: WH }); }
+    return mergeSimple(P); })();
+  const stoop = mergeSimple([{ geo: g(1.8, 0.75, 1.2, 0, 0.375, 0), color: CONC }, { geo: g(1.4, 0.5, 0.3, 0, 0.25, 0.75), color: CONC },
+    { geo: g(1.4, 0.25, 0.3, 0, 0.125, 1.05), color: CONC },
+    ...[-0.75, 0.75].flatMap((x) => [{ geo: g(0.04, 0.9, 0.04, x, 1.2, -0.5), color: IRON }, { geo: g(0.04, 0.9, 0.04, x, 0.95, 1.05), color: IRON },
+      { geo: g(0.04, 0.04, 1.7, 0, 0, 0).rotateX(-Math.atan2(0.5, 1.55)).translate(x, 1.4, 0.3), color: IRON }])]);
+  const stone = mergeSimple([{ geo: g(0.65, 0.08, 0.45, 0, 0.04, 0), color: [0.6, 0.58, 0.55] }]);
+  const bed = mergeSimple([{ geo: g(1, 0.15, 0.9, 0, 0.075, 0), color: SOIL }, { geo: g(1.02, 0.17, 0.05, 0, 0.085, 0.45), color: [0.45, 0.43, 0.4] },
+    ...[-0.33, 0, 0.33].map((x, i) => ({ geo: new THREE.IcosahedronGeometry(0.28 - 0.04 * (i % 2), 0).scale(1, 0.8, 1).translate(x, 0.32, -0.08), color: GRN })),
+    ...[[-0.2, 0.2, [0.85, 0.2, 0.3]], [0.15, 0.25, [0.95, 0.8, 0.2]], [0.4, 0.15, [0.9, 0.9, 0.95]], [-0.42, 0.18, [0.6, 0.3, 0.75]]].map(([x, z, c]) => ({ geo: g(0.09, 0.09, 0.09, x, 0.24, z), color: c }))]);
+  const picket = mergeSimple([{ geo: g(1, 0.06, 0.04, 0, 0.35, 0), color: WH }, { geo: g(1, 0.06, 0.04, 0, 0.78, 0), color: WH },
+    ...[-0.43, -0.29, -0.14, 0, 0.14, 0.29, 0.43].map((x) => ({ geo: g(0.07, 0.95, 0.025, x, 0.475, 0.03), color: WH }))]);
+  const privacy = mergeSimple([{ geo: g(1, 1.65, 0.04, 0, 0.88, 0), color: WOOD }, { geo: g(0.09, 1.8, 0.09, 0.5, 0.9, -0.05), color: DWOOD },
+    { geo: g(1, 0.08, 0.06, 0, 0.35, -0.05), color: DWOOD }, { geo: g(1, 0.08, 0.06, 0, 1.45, -0.05), color: DWOOD }]);
+  const hedge = mergeSimple([{ geo: g(1, 0.85, 0.7, 0, 0.425, 0), color: GRN }, { geo: g(0.96, 0.08, 0.64, 0, 0.88, 0), color: [0.2, 0.36, 0.15] }]);
+  const deck = mergeSimple([{ geo: g(4, 0.3, 3.5, 0, 0.15, 0), color: WOOD }, { geo: g(1.4, 0.15, 0.35, 0, 0.075, 1.92), color: WOOD },
+    ...[-1.5, -0.5, 0.5, 1.5].map((x) => ({ geo: g(0.02, 0.005, 3.5, x, 0.302, 0), color: DWOOD }))]);
+  const table = mergeSimple([{ geo: cyl(0.5, 0.5, 0.05, 0, 0.74, 0, 16), color: WH }, { geo: cyl(0.04, 0.04, 0.72, 0, 0.36, 0), color: [0.3, 0.3, 0.3] },
+    ...[0, 1, 2, 3].flatMap((k) => { const a = k * Math.PI / 2 + 0.4, x = Math.sin(a) * 0.85, z = Math.cos(a) * 0.85;
+      return [{ geo: g(0.45, 0.05, 0.45, 0, 0, 0).rotateY(a).translate(x, 0.45, z), color: [0.35, 0.3, 0.25] },
+        { geo: g(0.45, 0.5, 0.05, 0, 0, 0.22).rotateY(a).translate(x, 0.7, z), color: [0.35, 0.3, 0.25] },
+        ...[[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]].map(([lx, lz]) => ({ geo: g(0.04, 0.45, 0.04, lx, 0.225, lz).rotateY(a).translate(x, 0, z), color: IRON }))]; })]);
+  const umbrella = mergeSimple([{ geo: cyl(0.025, 0.025, 2.3, 0, 1.15, 0, 6), color: [0.85, 0.85, 0.85] }, { geo: new THREE.ConeGeometry(1.35, 0.45, 8).translate(0, 2.3, 0), color: [1, 1, 1] }]);
+  const grill = mergeSimple([{ geo: new THREE.SphereGeometry(0.3, 10, 5, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2).translate(0, 0.85, 0), color: IRON },
+    { geo: cyl(0.3, 0.3, 0.03, 0, 0.86, 0, 10), color: [0.25, 0.25, 0.25] }, ...[0, 2.1, 4.2].map((a) => ({ geo: g(0.03, 0.75, 0.03, Math.sin(a) * 0.22, 0.38, Math.cos(a) * 0.22), color: IRON }))]);
+  const swing = (() => { const P = [], MC = [0.62, 0.2, 0.14], L = Math.hypot(2.2, 0.75), a = Math.atan2(0.75, 2.2);
+    for (const x of [-1.3, 1.3]) for (const sg of [-1, 1]) P.push({ geo: g(0.08, L, 0.08, 0, 0, 0).rotateX(sg * a).translate(x, 1.1, sg * 0.37), color: MC });
+    P.push({ geo: cyl(0.05, 0.05, 2.7, 0, 0, 0, 8).rotateZ(Math.PI / 2).translate(0, 2.2, 0), color: MC });
+    for (const x of [-0.6, 0.6]) { P.push({ geo: g(0.45, 0.04, 0.2, x, 0.5, 0), color: [0.15, 0.3, 0.6] }); for (const dx of [-0.2, 0.2]) P.push({ geo: g(0.015, 1.7, 0.015, x + dx, 1.35, 0), color: [0.3, 0.3, 0.3] }); }
+    return mergeSimple(P); })();
+  const garden = mergeSimple([{ geo: g(3, 0.35, 1.3, 0, 0.175, 0), color: DWOOD }, { geo: g(2.9, 0.02, 1.2, 0, 0.36, 0), color: SOIL },
+    ...[-0.4, 0, 0.4].flatMap((z) => [-1.2, -0.8, -0.4, 0, 0.4, 0.8, 1.2].map((x) => ({ geo: new THREE.IcosahedronGeometry(0.13, 0).translate(x, 0.45, z), color: [0.22, 0.45, 0.16] })))]);
+  const tramp = mergeSimple([{ geo: cyl(1.7, 1.7, 0.03, 0, 0.88, 0, 20), color: [0.05, 0.05, 0.05] }, { geo: cyl(1.85, 1.85, 0.1, 0, 0.84, 0, 20), color: [0.15, 0.35, 0.75] },
+    ...[0, 1, 2, 3].map((k) => ({ geo: g(0.05, 0.8, 0.05, Math.sin(k * 1.571 + 0.785) * 1.75, 0.4, Math.cos(k * 1.571 + 0.785) * 1.75), color: IRON }))]);
+  const GEO = { porch, stoop, stone, bed, picket, privacy, hedge, deck, table, umbrella, grill, swing, garden, tramp };
+  const RANGE = { porch: 220, stoop: 160, stone: 90, bed: 110, picket: 140, privacy: 180, hedge: 160, deck: 160, table: 110, umbrella: 150, grill: 80, swing: 130, garden: 110, tramp: 130 };
+  const UMB = ['#b8322a', '#2c5c8f', '#e8e2d0', '#2f6b47', '#d89a2a', '#5a3d6e'];
+  const list = {}; for (const k of Object.keys(GEO)) list[k] = [];
+  // baris = (axis, e, dir): u sepanjang tepi jalan, v = jarak dari tepi jalan. Persegi terpakai per baris untuk uji tumpang tindih
+  const rows = new Map(), key = (o) => o.axis + '|' + o.e.toFixed(2) + '|' + o.dir;
+  const rowOf = (o) => { const k = key(o); let R0 = rows.get(k); if (!R0) rows.set(k, R0 = { h: [], used: [] }); return R0; };
+  for (const H of TERAS_H) { const R0 = rowOf(H); R0.h.push(H); R0.used.push([H.u - H.w / 2, H.u + H.w / 2, H.set, H.set + H.dd]); }
+  for (const G of TERAS_G) rowOf(G).used.push([G.u - G.w / 2, G.u + G.w / 2, G.set, G.set + G.dd], [G.u - G.w / 2, G.u + G.w / 2, 0, G.set]);   // garasi + jalur masuk
+  for (const T of TERAS_T) rowOf(T).used.push([T.u - 1.2, T.u + 1.2, T.v - 1.2, T.v + 1.2]);
+  for (const [k, R0] of rows) {
+    const [axis, eS, dS] = k.split('|'), e = +eS, dir = +dS;
+    const W = (u, v) => axis === 'z' ? [u, e + dir * v] : [e + dir * v, u];
+    const ang = Math.atan2(axis === 'z' ? 0 : -dir, axis === 'z' ? -dir : 0);   // menghadap jalan
+    const free = (u0, u1, v0, v1, m = 0.3) => {
+      if (R0.used.some(([a0, a1, b0, b1]) => u0 < a1 + m && u1 > a0 - m && v0 < b1 + m && v1 > b0 - m)) return false;
+      const [cs, cz] = W((u0 + u1) / 2, (v0 + v1) / 2); return !inWater(cs, cz, 2) && !inRiver(cs, cz, 2);
+    };
+    const add = (kind, u, v, sx = 1, sz = 1, a = ang, col = null, colB = null) => { const [cs, cz] = W(u, v); list[kind].push([cs, cz, a, sx, sz, col]); if (colB) addCollider(cs, cz, ...colB); };
+    const half = (hu, hv) => axis === 'z' ? [hu, hv] : [hv, hu];    // setengah ukuran (u, v) -> (s, za) untuk kolider
+    const take = (u0, u1, v0, v1) => R0.used.push([u0, u1, v0, v1]);
+    R0.h.sort((a, b) => a.u - b.u);
+    R0.h.forEach((H, i) => {
+      const row = H.kind === 'row', nB = Math.max(1, Math.floor(H.w / 3.4 + 0.5)), du = H.u + (Math.floor(nB / 2) + 0.5) / nB * H.w - H.w / 2;   // pintu (BUILD_FS gaya 3)
+      const P = R0.h[i - 1], N = R0.h[i + 1];
+      const bL = P && H.u - H.w / 2 - (P.u + P.w / 2) < 30 ? (P.u + P.w / 2 + H.u - H.w / 2) / 2 : H.u - H.w / 2 - 4;   // batas kavling
+      const bR = N && N.u - N.w / 2 - (H.u + H.w / 2) < 30 ? (H.u + H.w / 2 + N.u - N.w / 2) / 2 : H.u + H.w / 2 + 4;
+      // --- depan ---
+      let vS = H.set;                                              // ujung benda depan pintu (batu pijakan mulai di sini)
+      if (row) { if (H.set > 2.4 && free(du - 0.95, du + 0.95, H.set - 1.85, H.set - 0.01, 0)) { add('stoop', du, H.set - 0.6, 1, 1, ang, null, half(0.9, 0.6)); take(du - 0.95, du + 0.95, H.set - 1.85, H.set); vS = H.set - 1.85; } }
+      else if (H.set > 3.6 && r() < 0.7) {
+        const pw = Math.min(H.w - 1.2, RU(4.5, 7.5)), pu = Math.min(Math.max(du, H.u - H.w / 2 + pw / 2 + 0.3), H.u + H.w / 2 - pw / 2 - 0.3);
+        if (pw > 3.5 && free(pu - pw / 2, pu + pw / 2, H.set - 2.85, H.set - 0.01, 0)) { add('porch', pu, H.set - 1.1, pw / 6, 1, ang, null, half(pw / 2, 1.1)); take(pu - pw / 2, pu + pw / 2, H.set - 2.85, H.set); vS = H.set - 2.85; }
+      }
+      for (let v = vS - 0.55; v > 0.6; v -= RU(0.62, 0.75)) if (free(du - 0.35, du + 0.35, v - 0.25, v + 0.25, 0.02)) add('stone', du + RU(-0.06, 0.06), v, 1, 1, ang + RU(-0.12, 0.12));
+      take(du - 0.5, du + 0.5, 0, vS);
+      if (r() < 0.7) for (const sg of [-1, 1]) {                   // bedeng bunga di kaki muka, kiri dan kanan pintu / beranda
+        const a0 = sg < 0 ? H.u - H.w / 2 + 0.3 : du + 1.2, a1 = sg < 0 ? du - 1.2 : H.u + H.w / 2 - 0.3, L = a1 - a0;
+        if (L > 1.2 && free(a0, a1, H.set - 0.95, H.set - 0.02, 0)) { add('bed', (a0 + a1) / 2, H.set - 0.47, L, 1); take(a0, a1, H.set - 0.95, H.set); }
+      }
+      if (!row && H.set > 2.5) {                                   // pagar depan di tepi jalan (celah di batu pijakan dan jalur garasi)
+        const fk = r(), kind = fk < 0.35 ? 'picket' : fk < 0.6 ? 'hedge' : null;
+        if (kind) for (const [a0, a1] of [[bL + 0.2, du - 0.8], [du + 0.8, bR - 0.2]]) {
+          let x = a0;
+          while (x < a1 - 0.3) { const x1 = Math.min(a1, x + 3); if (free(x, x1, 0.5, 1.2, 0)) { add(kind, (x + x1) / 2, 0.85, x1 - x, 1, ang, null, half((x1 - x) / 2, kind === 'hedge' ? 0.35 : 0.05)); take(x, x1, 0.5, 1.2); } x = x1; }
+        }
+      }
+      // --- belakang ---
+      const vb = H.set + H.dd, back = H.D - vb;
+      if (back > 4.5) {
+        if (r() < (row ? 0.4 : 0.55)) {                             // dek kayu menempel dinding belakang (dibalik menghadap halaman)
+          const dw = row ? Math.min(H.w - 0.6, 4) : 4, dsz = row ? 0.75 : 1, uu = H.u + RU(-0.25, 0.25) * (H.w - dw);
+          if (free(uu - dw / 2, uu + dw / 2, vb + 0.01, vb + 3.5 * dsz + 0.4, 0)) {
+            add('deck', uu, vb + 1.75 * dsz, dw / 4, dsz, ang + Math.PI, null, half(dw / 2, 1.75 * dsz)); take(uu - dw / 2, uu + dw / 2, vb, vb + 3.5 * dsz + 0.4);
+            if (r() < 0.75) { const tu = uu + RU(-0.6, 0.6) * (dw / 4); list.table.push([...W(tu, vb + 1.75 * dsz), r() * 6.28, 1, 1, null, 0.3]);
+              if (r() < 0.55) list.umbrella.push([...W(tu, vb + 1.75 * dsz), 0, 1, 1, UMB[Math.floor(r() * UMB.length)], 0.3]); }
+            if (r() < 0.35) list.grill.push([...W(uu + (r() < 0.5 ? -1 : 1) * (dw / 2 - 0.45), vb + 0.5), 0, 1, 1, null, 0.3]);
+          }
+        }
+        const mid = vb + back * RU(0.45, 0.7);
+        if (!row && back > 9 && r() < 0.18) { const uu = H.u + RU(-3, 3); if (free(uu - 1.5, uu + 1.5, mid - 1.2, mid + 1.2)) { add('swing', uu, mid, 1, 1, ang + Math.PI / 2 * (r() < 0.5 ? 1 : 0), null, half(1.4, 0.5)); take(uu - 1.5, uu + 1.5, mid - 1.2, mid + 1.2); } }
+        if (r() < 0.25) { const uu = H.u + RU(-4, 4), vv = vb + back * RU(0.3, 0.85); if (free(uu - 1.6, uu + 1.6, vv - 0.8, vv + 0.8)) { add('garden', uu, vv, 1, 1, ang, null, half(1.5, 0.65)); take(uu - 1.6, uu + 1.6, vv - 0.8, vv + 0.8); } }
+        if (!row && back > 8 && r() < 0.1) { const uu = H.u + RU(-4, 4), vv = vb + back * RU(0.4, 0.8); if (free(uu - 2, uu + 2, vv - 2, vv + 2)) { add('tramp', uu, vv, 1, 1, ang, null, half(1.8, 1.8)); take(uu - 2, uu + 2, vv - 2, vv + 2); } }
+        // pagar kayu antar kavling (sisi kanan tiap kavling) dan pagar belakang (hanya baris dir +1: dua baris yang bertemu tidak berpagar ganda)
+        if (r() < 0.6) {
+          const fb = row ? H.u + H.w / 2 : bR;
+          if (N && Math.abs(fb - (row ? N.u - N.w / 2 : bR)) < 0.5) for (let v = vb + 0.2; v < H.D - 0.4; v += 2.5) { const v1 = Math.min(H.D - 0.4, v + 2.5);
+            if (free(fb - 0.05, fb + 0.05, v, v1, 0)) { add('privacy', fb, (v + v1) / 2, v1 - v, 1, ang + Math.PI / 2, null, half(0.05, (v1 - v) / 2)); take(fb - 0.05, fb + 0.05, v, v1); } }
+          if (dir === 1) for (let x = (row ? H.u - H.w / 2 : bL); x < (row ? H.u + H.w / 2 : bR) - 0.3; x += 2.5) { const x1 = Math.min(row ? H.u + H.w / 2 : bR, x + 2.5);
+            if (free(x, x1, H.D - 0.45, H.D - 0.35, 0)) { add('privacy', (x + x1) / 2, H.D - 0.4, x1 - x, 1, ang + Math.PI, null, half((x1 - x) / 2, 0.05)); take(x, x1, H.D - 0.45, H.D - 0.35); } }
+        }
+      }
+    });
+  }
+  const m4 = new THREE.Matrix4(), rot = new THREE.Matrix4(), _cc = new THREE.Color();
+  for (const [kind, geo] of Object.entries(GEO)) {
+    const items = list[kind], n = items.length; TERAS.count[kind] = n; if (!n) continue;
+    const tinted = kind === 'umbrella';
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true }), n);
+    const mats = new Float32Array(n * 16), ps = new Float32Array(n), pz = new Float32Array(n), cols = tinted ? new Float32Array(n * 3) : null;
+    items.forEach(([cs, cz, a, sx, sz, col, dy = 0], i) => {
+      surfaceMatrix(m4, cs / R, cz, groundH(cs, cz) + dy); m4.multiply(rot.makeRotationY(a)).scale(_v1.set(sx, 1, sz));
+      m4.toArray(mats, i * 16); ps[i] = cs; pz[i] = cz;
+      if (tinted) { _cc.set(col); cols[i * 3] = _cc.r; cols[i * 3 + 1] = _cc.g; cols[i * 3 + 2] = _cc.b; }
+    });
+    mesh.count = 0; mesh.frustumCulled = false; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (tinted) mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    scene.add(mesh);
+    FURN.kinds['t32' + kind] = { mesh, mats, ps, pz, n, range: RANGE[kind], idx: tinted ? new Int32Array(n) : null, cols };
+  }
+}
 // 22d: mobil parkir di kedua tepi jalan lokal sel pusat dan menengah (jalan lokal tanpa lalu lintas). Statis, berkolider, generator
 // acak sendiri. Tidak di simpang (9 m dari as jalan silang, 12 m dari tepi arteri), air, Skyway, boulevard, cincin, lapangan baseball. Dua mesh (cat dengan
 // warna per mobil, kaca/roda/lampu tanpa bayangan) berbagi matriks, dikirim dalam radius lewat FURN.kinds.
@@ -19372,7 +19659,7 @@ diagApply();
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { groundH0, riverZ, bridgeAt, bridgeIn, RIVER, PATHSDF, FLUFF, warmLater, IMPM, LEAFG, LEAF_SP, DAUN, HX, EXT_LIGHT, extLightUpdate, toggleExterior, ext, exteriorGroup, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,
-  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, PLANET, PLANETS, MOONS, JRES, jumpToMoon, moonDistAt, updateMoons, SATURN, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal };
+  jump, throwBall, dropBall, enterLift, runSelfTest, localG, clock, saturnDirStation, T_ORB, ORBIT, SUN_DIR, ECL, PLANET, PLANETS, MOONS, JRES, jumpToMoon, moonDistAt, updateMoons, SATURN, farScene, LIGHT_GLSL, FAR, SUNSH, sunShadowPass, shadowPass, SHU, ADAPT, POST_R, CLOUD, postBegin, postEnd, UTIL, UTIL_PLAN, SKY_S, toggleAdapt, SHP, SSR, toggleSsr, DECK, goDeck, towerJump, onDeck, getLastBall: () => lastBall, LAB: lab, eclipseIn, updateEclipse, jumpToEclipse, orbitPhase, updateFar, WIN, farCam, saturn, cycleOrbitSpeed, tram, TRAM, TRAM_PARTS, CABIN_LIGHT, updateTramVisual, groundMat, COOPER, FIELD, doAction, availableAction, collide, houseList, treeList, toggleMap, R, ext, toggleExterior, saturnDirInertial, cityMeshes, BUILD, fieldList, inWater, riverZ, cityDensity, cityClass, landCanvas, LIGHT, SHADOW, shiftHour, updateLighting, COOPER_HOUSE, BALLPARK, BALLPARK_G, ballInfo: () => { const b = lastBall; if (!b) return null; cabinFrame(); const q = cabinLocal(b.pos, new THREE.Vector3()); return { done: b.done, x: +q.x.toFixed(2), y: +q.y.toFixed(2), z: +q.z.toFixed(2) }; }, liftETA, ballFromAxis, liftTower, TRAFFIC, TRAM_SEATS, tramMesh, applyPreset, PRESET, POST, WEATHER, CLOUD, cycleWeather, RAYS, toggleRays, POST_R, FURN, PORT, SHIPS, portBoard, portAction, portEnterPod, TERM, COL, DGUIDE, dockData, XING, sigState, stepTraffic, stepTram, updateCrossings, updateFurniture, XVIS, FARM, updateFarm, farmStage, PHOTO, togglePhoto, savePhoto, compMat, TOUR, startTour, stopTour, stepTour, BOOT, toggleHelp, toggleLab, LANG, setLang, t, I18N, translateDom, labTab, LABUI, setLabText, setHudMode, BASEBALL, stepBaseball, scene, BUILD_U, MEADOW, applyMeadowRadii, GRASS, updateWind, MEADOW_WIND: () => ({ w: VU.uWindSlow.value, off: VU.uGustOff.value }), FOREST, inForest, forestTrail, updateForest, MAPV, MAP_MARKS, toggleMap, mapGo, mapZoomAt, mapCenterMe, HOLO, holoP, drawHolo, holoZoomAt, holoRotate, holoReset, mapTab, goHub, drawMap, SKYX, SKY_ROADS, RING_LAMP_S, RAIN, updateRain, FOUNT, VIS, fountDist, colAt, stepVisit, updateClouds, rainSheltered, VIBE, updateVibe, BIRDS, stepBirds, updateBirds, PEDS, stepPeds, updatePeds, pedAct, sigQ, BLVD, SIDEWALK, PARK_PATHS, YARD_TREES, GANGS, cityCells, inRiver, MOSQUE, homeDensity, DISTRICTS, districtAt, HUD_DIST, SITES, LANDMARK, CITY_BLOCKS, MARKET, STOP_LIGHT, LEAF, WIND, FALL, applyLeafMode, cycleLeafMode, leafColorFor, ROAD, ART, ART_Z, RINGS_Z, PRESETS, cyclePost, AUDIO, REAL, TER, HILLS, groundH, groundH0, BRIDGES, BRIDGE_G, bridgeAt, onRoad, waterAt, SWIM, TREES, GRASS, CORN, teleport, cycleVegQuality, SPOTS, RAGAM, RAGAM_DET, PARKED, MOBIL, CAR_SHAPE, CAR_MAT, carShape, CARGEO, CAR_NEAR, carNearMat, updateTrafficNear, KACA, BUS, ATMO, TAA, OCT, octBake, TREE_SPECIES, CAMX, PIPE, updateReal, TEKS, TERAS, SIGN, ROADM };
 /* =====================================================================
    VR4 (docs/app/rencana-vr.md): Copper Corn Station di headset lewat shared/vr.js (backend three, jalur render calon B).
    Rig = pose kamera lama dengan pitch 0 dan tanpa gerak kepala, diputar balik sebesar yaw kepala: di dalam stasiun "atas" =

@@ -84,3 +84,19 @@ Batasan yang diketahui:
 - Strip trotoar 1,5 m jalan lokal masih dari peta lahan (lebih kecil dari satu piksel peta), hanya warnanya tidak lagi tercampur aspal.
 - Jalur ban pada jalan selain arteri kota hanya satu jalur dekat kerb (jarak dari tepi hanya diketahui sampai 1,5 m).
 - Memori tambahan: peta jalan RG8 2.048 x 2.608 sekitar 10,7 MB (+ mipmap sekitar 14 MB), atlas papan nama sekitar 2,8 MB.
+
+## Revisi 1 dari 4 foto Bhakti (26 Oktober 2026)
+
+| No | Masalah di foto | Penyebab | Perbaikan | Nama di kode |
+| --- | --- | --- | --- | --- |
+| 32j-1 | Nama toko terbalik di sebagian sisi gedung | Koordinat `u` naik ke kanan pengamat hanya di muka +z dan -x | `lx` dikali `sign(n.z)` / `-sign(n.x)` | blok 22a |
+| 32j-2 | Isi semua toko mirip toko buku | Satu pola rak untuk semua toko | Isi toko mengikuti kata papan nama: 7 kelas (rak barang, makan, roti, jasa, busana, bunga, bengkel) dan 12 sub (buku, apotek, perkakas, cukur / salon, laundry, bank / pos, optik, sepatu, perhiasan, musik, penjahit); lantai per kelas (ubin catur / kayu dengan bayangan meja untuk tempat makan), lampu plafon | `SHOPK`, `SHOPS`, `shopBack()`, `shopFloor()`, `shopK` / `shopS` / `shopId` |
+| 32j-3 | Malam: semua etalase menyala rata dan silau, isi tidak terlihat | Etalase memancar penuh (`shopM`) di atas ruang toko | 40% toko tutup malam dengan pintu gulung (jam tutup berbeda per toko); toko buka diterangi lewat ruangnya, pancaran rata hanya 0,45x dari jauh | `shut`, `shopE` |
+| 32k | Halaman rumput di antara rumah kosong dan datar | Tidak ada benda halaman | Depan: beranda beratap (rumah tunggal / besar), undakan beton (rumah deret), batu pijakan, bedeng bunga, pagar kayu putih atau pagar tanaman; belakang: dek kayu, meja dan kursi, payung, panggangan, ayunan, bedeng sayur, trampolin, pagar kayu antar kavling dan belakang. Tidak bertumpuk dengan rumah, garasi, gudang kebun, pohon halaman, air | `TERAS_H` / `TERAS_G` / `TERAS_T` (dicatat di `fillHomes` tanpa angka acak), `TERAS`, `FURN.kinds.t32*` |
+
+Jumlah benda halaman (hasil muat): beranda 4.019, undakan 5.655, batu pijakan 33.555, bedeng bunga 7.346, pagar kayu putih 14.610 ruas, pagar kayu 40.730 ruas, pagar tanaman 10.712 ruas, dek 4.575, meja 3.438, payung 1.857, panggangan 1.556, ayunan 295, bedeng sayur 1.857, trampolin 149. Dikirim ke GPU hanya dalam radius 80-220 m (`updateFurniture()`).
+
+Batasan revisi:
+- Benda halaman berlaku di semua preset (tidak ada saklar preset); FPS di GPU asli belum diukur.
+- Beranda, pagar, dek, ayunan, trampolin, dan bedeng sayur berkolider (sekitar 80 ribu kolider baru); batu pijakan, bedeng bunga, meja, payung, panggangan tidak.
+- Helai rumput 3D bisa menembus batu pijakan setinggi 8 cm.
