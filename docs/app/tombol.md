@@ -17,9 +17,10 @@ Per 30 September 2026. Patokan: Copper Corn Station. Fungsi yang sama memakai to
 | V | Tampilan / kamera luar | kamera luar | jalan kaki, drone, tinggi | wahana GX-01: kamera luar / kokpit (Esc keluar) |
 | F | Kamera rangefinder (Rencana K; jenis terakhir diingat, panel kamera = Foto bebas lama: UI disembunyikan, Enter simpan PNG), F atau Esc keluar | ya | ya | ya (di luar misi atau saat jeda) |
 | R | Kembali ke titik awal / atur ulang | ya | ya | atur ulang kamera |
-| H | Sembunyikan HUD | ya | ya | ya |
-| ` (backtick) | Panel kontrol | ya | ya (baru) | buka / lipat panel (baru) |
-| ? (atau F1) | Bantuan | ya | ya (baru) | ya (baru) |
+| H | Sembunyikan HUD (satu kelas `body.ui-hide`, semua elemen `.ui-play`) | ya | ya | ya |
+| ` (backtick) | Panel kontrol: buka / ciutkan (kepala panel tetap terlihat, status terakhir diingat) | ya | ya | ya |
+| ? (atau F1) | Bantuan bertab | ya | ya | ya |
+| Enter | Mulai di kartu mulai | ya | ya | ya |
 | 1 - 9, 0 | Lokasi / sudut pandang | lokasi | - | sudut pandang 1-4 |
 | Esc | Lepas kursor, tutup bantuan, keluar mode foto | ya | ya | ya |
 

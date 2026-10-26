@@ -4,165 +4,105 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Gargantua Black Hole</title>
+<link rel="stylesheet" href="../../shared/ui.css">
 <style>
-  :root {
-    --panel-bg: rgba(10, 11, 15, 0.62);
-    --panel-border: rgba(255, 255, 255, 0.09);
-    --text: #cfd3da;
-    --muted: #7d838f;
-    --accent: #f0a45a;
-    --track: rgba(255, 255, 255, 0.14);
-  }
+  /* UI seragam (docs/app/rencana-ui-seragam.md): token dan komponen di shared/ui.css; di sini hanya letak dan isi khusus Gargantua */
+  :root { --panel-bg: var(--ui-panel); --panel-border: var(--ui-line); --text: var(--ui-ink); --muted: var(--ui-muted); --accent: var(--ui-accent); --track: var(--ui-track); }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: var(--text);
-    font: 11px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: var(--text); font: var(--ui-font); }
   canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
   canvas#c.dragging { cursor: grabbing; }
+  [hidden] { display: none !important; }
 
-  #ui { position: fixed; top: 16px; right: 16px; width: 272px; max-height: calc(100vh - 32px); overflow: auto;
-    background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 10px;
-    backdrop-filter: blur(14px) saturate(120%); -webkit-backdrop-filter: blur(14px) saturate(120%);
-    box-shadow: 0 10px 40px rgba(0,0,0,0.5); user-select: none; transition: opacity .25s; }
-  #ui.hidden, .overlay-text.hidden { opacity: 0; pointer-events: none; }
-  #ui header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px;
-    cursor: pointer; letter-spacing: .14em; text-transform: uppercase; font-size: 10px; color: var(--text); }
-  #ui header .chev { transition: transform .2s; color: var(--muted); }
-  #ui.collapsed header .chev { transform: rotate(-90deg); }
-  #ui.collapsed .body { display: none; }
-  #ui .body { padding: 0 12px 12px; }
-  #uiTabs { display: flex; flex-wrap: wrap; gap: 3px; padding-bottom: 8px; border-bottom: 1px solid var(--panel-border); }
-  #uiTabs button { flex: 1 1 auto; padding: 5px 6px; font-size: 10.5px; background: rgba(255,255,255,0.03); }
-  #uiTabs button.on { border-color: var(--accent); color: #fff; background: rgba(232, 183, 101, 0.18); }
   #ui .row select { max-width: 150px; min-width: 0; text-overflow: ellipsis; }
   #ui .pane { display: none; } #ui .pane.on { display: block; }
   #ui .pane > .sec:first-child { margin-top: 4px; border-top: 0; }
   .sec { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--panel-border);
-    font-size: 9.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+    color: var(--accent); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
   .row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; margin-top: 7px; }
   .row label { color: var(--text); }
   .row .val { color: var(--accent); font-variant-numeric: tabular-nums; min-width: 3.5em; text-align: right; }
-  .row input[type=range] { grid-column: 1 / -1; width: 100%; margin: 0; height: 14px; background: transparent; -webkit-appearance: none; appearance: none; }
-  input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--track); border-radius: 2px; }
-  input[type=range]::-moz-range-track { height: 2px; background: var(--track); border-radius: 2px; }
-  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; margin-top: -4px; border-radius: 50%; background: var(--accent); border: none; }
-  input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); border: none; }
+  .row input[type=range] { grid-column: 1 / -1; }
   .check { display: flex; align-items: center; gap: 8px; margin-top: 7px; cursor: pointer; }
-  .check input { accent-color: var(--accent); margin: 0; }
-  select, button { font: inherit; color: var(--text); background: rgba(255,255,255,0.06); border: 1px solid var(--panel-border);
-    border-radius: 6px; padding: 4px 6px; cursor: pointer; }
-  select option { background: #111; }
-  button:hover, select:hover { border-color: rgba(240,164,90,0.5); }
   .btns { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-top: 8px; }
-  .btns button { padding: 5px 4px; }
-  .btns button.on { border-color: rgba(240,164,90,0.8); color: #fff; }
-  .btns button kbd { color: var(--muted); font: inherit; margin-right: 4px; }
+  .btns button { padding: 6px 4px; }
   #readout { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--panel-border); color: var(--muted);
     display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; font-variant-numeric: tabular-nums; }
   #readout b { color: var(--text); font-weight: normal; text-align: right; }
-  .keys { margin-top: 8px; color: var(--muted); line-height: 1.6; }
-
-  .overlay-text { position: fixed; color: rgba(220,224,232,0.55); pointer-events: none; letter-spacing: .08em; transition: opacity .25s; }
-  #caption { left: 16px; bottom: 14px; font-size: 10.5px; }
-  #hint { right: 16px; bottom: 14px; font-size: 10px; color: rgba(220,224,232,0.35); }
-  #err { position: fixed; inset: 16px; overflow: auto; background: rgba(20,0,0,0.92); color: #ffb4a8; border: 1px solid #6b2a22;
-    border-radius: 8px; padding: 16px; white-space: pre-wrap; font-size: 12px; z-index: 10; }
-  #err[hidden] { display: none; }
-  /* layar muat: bilah kemajuan seperti Millar / Copper (kompilasi shader sempat membuat halaman tidak merespons) */
-  #boot { position: fixed; inset: 0; z-index: 40; background: #050506; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
-    font: 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: #cfd3da; }
-  #boot[hidden] { display: none; }
-  #boot .bt { color: #e8b765; letter-spacing: .3em; font-size: 14px; }
-  #boot .bar { width: min(320px, 70vw); height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
-  #boot .bar i { display: block; height: 100%; width: 0; background: #e8b765; transition: width .25s; }
-  #boot .bootRow { width: min(320px, 70vw); display: flex; justify-content: space-between; color: #8b929c; }
-
-  body.photo #ui, body.photo .overlay-text:not(#toast), body.photo #menuLink { opacity: 0; pointer-events: none; }
-  /* tombol kembali ke menu utama: sama dengan #menuBtn Copper (24f) */
-  #menuLink { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; z-index: 20; padding: 4px 10px; font-size: 12px;
-    color: var(--text); background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 8px; text-decoration: none; }
-  #menuLink:hover { border-color: var(--accent); color: #fff; }
-  #toast { left: 50%; top: 30%; transform: translateX(-50%); font-size: 12px; color: #dfe3ea; background: rgba(10,11,15,0.7); padding: 8px 14px;
-    border-radius: 8px; opacity: 0; }
+  .keys { margin-top: 8px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+  #toast { opacity: 0; }
   #toast.on { opacity: 1; }
-  #help { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(5,6,9,0.45); z-index: 30; }
-  #help[hidden] { display: none; }
-  #help .card { width: min(520px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 14px 16px; background: var(--panel-bg);
-    border: 1px solid var(--panel-border); border-radius: 10px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-  #help .hh { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; letter-spacing: .14em; text-transform: uppercase; font-size: 10px; }
-  #help table { border-collapse: collapse; width: 100%; }
-  #help td { padding: 4px 8px; vertical-align: top; border-top: 1px solid var(--panel-border); color: var(--text); }
-  #help td:first-child { color: var(--accent); white-space: nowrap; }
-  /* bantuan bertab seperti Copper (helpTab) */
-  #help .htabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
-  #help .htabs button { font: inherit; font-size: 11px; color: var(--text); background: rgba(255,255,255,0.05); border: 1px solid var(--panel-border); border-radius: 6px; padding: 4px 8px; cursor: pointer; }
-  #help .htabs button.on { border-color: var(--accent); color: #fff; background: rgba(240,164,90,0.18); }
-  #help [data-pane] { display: none; }
-  #help [data-pane].on { display: table; }
+  #help .ui-hhead span { display: flex; align-items: center; }
+
+  body.photo .ui-play { opacity: 0; pointer-events: none; }
   #dash { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-  #dash[hidden] { display: none; }
   #ckhud { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; }   /* K6: HUD kanopi */
-  #ckhud[hidden], body.hideUI #ckhud, body.photo #ckhud { display: none; }
+  body.ui-hide #ckhud, body.photo #ckhud { display: none; }
   /* ponsel saat misi: pilih jendela bawah (relai / corong / sembunyi) tanpa membuka panel */
   #mobView { position: fixed; left: 50%; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: flex; gap: 6px; z-index: 12; }
-  #mobView[hidden] { display: none; }
-  #mobView button { font: inherit; font-size: 12px; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--panel-border); background: var(--panel-bg); color: var(--text); }
-  #mobView button.on { border-color: var(--accent); color: #fff; }
+  #mobView button { font-size: 12px; padding: 7px 12px; border-radius: var(--ui-r); }
   body.misMob #caption, body.photo #mobView { display: none; }
   /* tombol ciutkan / tampilkan tiap kotak info di kanvas HUD (info, relai, corong) */
-  #boxBtns .boxBtn { position: fixed; z-index: 12; font: inherit; font-size: 12px; line-height: 1; padding: 4px 7px; border-radius: 6px; cursor: pointer;
-    border: 1px solid var(--panel-border); background: rgba(12,14,18,0.72); color: var(--text); white-space: nowrap; }
+  #boxBtns .boxBtn { position: fixed; z-index: 12; font: inherit; font-size: 12px; line-height: 1; padding: 4px 7px; border-radius: var(--ui-r-btn); cursor: pointer;
+    border: 1px solid var(--ui-line); background: var(--ui-panel); color: var(--text); white-space: nowrap; }
   #boxBtns .boxBtn:hover { border-color: var(--accent); color: #fff; }
-  #boxBtns .boxBtn[hidden] { display: none; }
-  /* H: semua kotak info, tombol menu, dan pilihan ponsel ikut tersembunyi (seperti .hidden-ui Copper) */
-  body.hideUI #boxBtns, body.hideUI #menuLink, body.hideUI #mobView, body.photo #boxBtns { display: none !important; }
-  body.photo #dash { display: none; }
+  body.photo #boxBtns, body.photo #dash, #caption { display: none !important; }
   /* G9: kartu akhir tidak menutup layar: latar tembus (pandangan relai tetap berjalan), kepala diseret, x menutup */
   #mend { position: fixed; inset: 0; display: grid; place-items: center end; padding-right: 12px; background: transparent; z-index: 12; pointer-events: none; }   /* G9: bawaan di kanan */
-  #mend[hidden] { display: none; }
-  #mend .card { pointer-events: auto; position: relative; }
-  #mend .hh { display: flex; align-items: center; gap: 8px; cursor: move; user-select: none; touch-action: none; }
+  #mend .card { pointer-events: auto; position: relative; width: min(500px, calc(100vw - 32px)); padding: 16px; }
+  #mend .hh { display: flex; align-items: center; gap: 8px; cursor: move; user-select: none; touch-action: none; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; font-size: 11px; margin-bottom: 8px; }
   #mend .hh #mendTitle { flex: 1; }
-  #mend .hh .mv { color: var(--muted, #8a96a3); letter-spacing: 0; text-transform: none; font-size: 10px; }
+  #mend .hh .mv { color: var(--muted); letter-spacing: 0; text-transform: none; font-size: 10px; }
   #mendClose { all: unset; cursor: pointer; color: var(--text); font-size: 18px; line-height: 1; padding: 0 4px; letter-spacing: 0; }
-  #mendShow { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 12; font: inherit; font-size: 12px; color: var(--text);
-    background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
-  #mendShow[hidden] { display: none; }
-  #mend .card { width: min(500px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; padding: 16px; background: var(--panel-bg); border: 1px solid var(--panel-border);
-    border-radius: 10px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
-  #mend .hh { color: var(--accent); letter-spacing: .12em; text-transform: uppercase; font-size: 11px; margin-bottom: 8px; }
-  #mend p { margin: 6px 0; color: var(--text); font-size: 11.5px; line-height: 1.5; }
+  #mendShow { position: fixed; top: var(--ui-top); left: 50%; transform: translateX(-50%); z-index: 12; font-size: 12px; padding: 6px 12px; cursor: pointer; }
+  #mend p { margin: 6px 0; font-size: 12.5px; line-height: 1.5; }
   #tess { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 11; background: #000; }
-  #tess[hidden] { display: none; }
   #mendRelay { display: block; width: 100%; height: 230px; margin: 8px 0; border-radius: 6px; }
+  .ui-pick.m4 { grid-template-columns: repeat(4, 1fr); }
   @media (max-width: 640px) {
-    #ui { top: calc(44px + env(safe-area-inset-top, 0px)); right: 12px; left: 12px; width: auto; max-height: 60vh; }
-    #hint { display: none; }
-    #uiTabs { border-bottom: 0; border-top: 1px solid var(--panel-border); padding: 8px 0 0; position: sticky; bottom: 0; background: var(--panel-bg); order: 2; }
-    #uiBody { display: flex; flex-direction: column; }
+    #ui .ui-tabs { border-bottom: 0; border-top: 1px solid var(--panel-border); padding: 8px 0 0; position: sticky; bottom: 0; background: var(--ui-solid); order: 2; }
+    #ui:not(.collapsed) #uiBody { display: flex; flex-direction: column; }
   }
 </style>
 </head>
-<body>
+<body class="ui-pre">
 <canvas id="c"></canvas>
-<div id="ui">
-  <header id="uiHeader"><span>Gargantua Black Hole</span><span class="chev">&#9662;</span></header>
-  <div class="body" id="uiBody"></div>
+<div id="ui" class="ui-panel ui-play collapsed">
+  <header id="uiHeader" class="ui-phead"><span>Gargantua Black Hole</span><span class="chev">&#9662;</span></header>
+  <div class="body ui-pbody" id="uiBody"></div>
 </div>
-<div id="caption" class="overlay-text">Gargantua Black Hole · Schwarzschild ray-traced approximation</div>
-<div id="hint" class="overlay-text">drag: orbit &middot; wheel/pinch: zoom &middot; 1-4: presets &middot; H: hide UI &middot; ?: help</div>
-<div id="toast" class="overlay-text"></div>
-<div id="help" hidden><div class="card"><div class="hh"><span id="helpTitle">Help</span><button type="button" id="helpClose">Close (?)</button></div><div class="htabs" id="helpTabs"></div><div id="helpRows"></div></div></div>
+<div id="caption">Gargantua Black Hole · Schwarzschild ray-traced approximation</div>
+<div id="hint" class="ui-keys ui-play ui-desk" hidden>drag: orbit &middot; wheel/pinch: zoom &middot; 1-4: presets &middot; H: hide UI &middot; ?: help</div>
+<div id="toast" class="ui-toast ui-play"></div>
+<div id="help" class="ui-overlay" hidden><div class="ui-card wide"><div class="ui-hhead"><span id="helpTitle">Help</span><span><a class="helpMenu" href="../../index.html">Back to the main menu</a><button type="button" id="helpClose">Close (?)</button></span></div><div class="ui-htabs" id="helpTabs"></div><div id="helpRows"></div></div></div>
 <canvas id="dash" hidden></canvas>
 <canvas id="ckhud" hidden></canvas>
-<div id="boxBtns"></div>
-<div id="mobView" hidden><button type="button" data-v="relay"></button><button type="button" data-v="funnel"></button><button type="button" data-v="off"></button></div>
+<div id="boxBtns" class="ui-play"></div>
+<div id="mobView" class="ui-play" hidden><button type="button" class="ui-btn ui-box" data-v="relay"></button><button type="button" class="ui-btn ui-box" data-v="funnel"></button><button type="button" class="ui-btn ui-box" data-v="off"></button></div>
 <canvas id="tess" hidden></canvas>
-<button type="button" id="mendShow" hidden></button>
-<div id="mend" hidden><div class="card"><div class="hh"><span id="mendTitle"></span><span class="mv" id="mendMove"></span><button type="button" id="mendClose" aria-label="Close">&times;</button></div><div id="mendBody"></div><canvas id="mendRelay"></canvas>
+<button type="button" id="mendShow" class="ui-btn ui-box" hidden></button>
+<div id="mend" hidden><div class="card ui-card"><div class="hh"><span id="mendTitle"></span><span class="mv" id="mendMove"></span><button type="button" id="mendClose" aria-label="Close">&times;</button></div><div id="mendBody"></div><canvas id="mendRelay"></canvas>
   <div class="btns"><button type="button" id="mendAgain">Fly again</button><button type="button" id="mendExit">Exit mission</button></div></div></div>
-<div id="boot"><div class="bt">GARGANTUA</div><div class="bar"><i></i></div><div class="bootRow"><span id="bootTxt">Loading...</span><span id="bootPct"></span></div></div>
-<pre id="err" hidden></pre>
+<!-- UI6: kartu mulai seragam dengan Copper dan Millar (rencana-menu-mulai.md U1, rencana-ui-seragam.md D5) -->
+<div id="start" class="ui-overlay">
+  <div class="ui-card">
+    <h1>Gargantua</h1>
+    <div class="sub" id="startSub">Rotating black hole · ray-traced light bending · fall missions</div>
+    <div id="boot"><div class="bar"><i></i></div><div class="bootRow"><span id="bootTxt">Loading...</span><span id="bootPct"></span></div></div>
+    <div id="ready" hidden>
+      <div class="plabel" id="stLang">Language</div>
+      <div class="ui-pick m2" id="lang"></div>
+      <div class="plabel" id="stQ">Graphics quality</div>
+      <div class="ui-pick m4" id="presetPick"></div>
+      <div class="pnote" id="stQNote">Low: for laptops without a dedicated GPU (MacBook M1). Change any time with Q.</div>
+      <button id="go" type="button">Start</button>
+      <div class="links"><a href="#" id="helpLink">Controls and help (?)</a><a id="startMenu" href="../../index.html">Back to the main menu</a></div>
+    </div>
+  </div>
+</div>
+<pre id="err" class="ui-err" hidden></pre>
 <script src="../../shared/prof.js"></script>
+<script src="../../shared/ui.js"></script>
 <script>
 /* Pilihan wahana (shared/armada.js, rencana docs/app/rencana-pilihan-wahana.md): blob model wahana terpilih dimuat sinkron sebelum modul utama.
    gx01 = assets/gx01.data.js (window.__GX01), ks07 dan pr11 = shared/wahana/*.data.js (window.__SHIPDATA, dibuat tools/siapkan_wahana.mjs) */
@@ -1115,6 +1055,9 @@ let LANG = 'en';
 const ID = {
   'Gargantua Black Hole · Schwarzschild ray-traced approximation': 'Gargantua Black Hole · pendekatan ray tracing Schwarzschild',
   'drag: orbit · wheel/pinch: zoom · 1-4: presets · H: hide UI · ?: help': 'seret: putar · roda/cubit: zoom · 1-4: sudut pandang · H: sembunyikan UI · ?: bantuan',
+  'Rotating black hole · ray-traced light bending · fall missions': 'Lubang hitam berputar · lintasan cahaya dijejak sinar · misi jatuh',
+  'Graphics quality': 'Kualitas grafik', 'Low: for laptops without a dedicated GPU (MacBook M1). Change any time with Q.': 'Rendah: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.',
+  'Start': 'Mulai', 'Controls and help (?)': 'Kontrol dan bantuan (?)', 'Loading...': 'Memuat...',
   'Photo mode': 'Mode foto', 'Fullscreen': 'Layar penuh', 'Help': 'Bantuan', 'Close (?)': 'Tutup (?)', 'Photo saved': 'Foto disimpan', 'The rangefinder camera works outside a mission or while paused': 'Kamera rangefinder bisa dipakai di luar misi atau saat jeda', 'Rangefinder camera outside a mission or while paused (keys below); the old free photo mode is in the camera panel': 'Kamera rangefinder di luar misi atau saat jeda (tombolnya di bawah); mode foto bebas lama ada di panel kamera',
   'Photo mode: Enter saves PNG, F or Esc exits': 'Mode foto: Enter simpan PNG, F atau Esc keluar',
   'Quality: {q}': 'Kualitas: {q}', 'Screen effects: {m}': 'Efek layar: {m}', 'Off': 'Mati', 'Paused': 'Dijeda', 'Running': 'Berjalan',
@@ -1454,9 +1397,19 @@ function applyStaticLang() {
   $('#mendAgain').textContent = txt('Fly again'); $('#mendExit').textContent = txt('Exit mission');
   $('#mendShow').textContent = txt('Mission summary (Enter: fly again)'); $('#mendMove').textContent = txt('drag to move'); $('#mendClose').title = txt('Close');
   const m = $('#menuLink'); if (m) { m.href = `../../index.html?lang=${LANG}`; m.title = txt('Back to the main menu'); }
+  for (const a of document.querySelectorAll('#help .helpMenu, #startMenu')) { a.href = `../../index.html?lang=${LANG}`; a.textContent = txt('Back to the main menu'); }
+  $('#startSub').textContent = txt('Rotating black hole · ray-traced light bending · fall missions');
+  $('#stLang').textContent = txt('Language'); $('#stQ').textContent = txt('Graphics quality'); $('#stQNote').textContent = txt('Low: for laptops without a dedicated GPU (MacBook M1). Change any time with Q.');
+  $('#go').textContent = txt('Start'); $('#helpLink').textContent = txt('Controls and help (?)');
 }
 applyStaticLang();
 document.addEventListener('DOMContentLoaded', applyStaticLang);   // tautan menu ada setelah skrip
+const UIA = UIKIT.tokens().accentRGB.replace(/\s/g, '');
+// kotak info di kanvas memakai material yang sama dengan .ui-box (latar 0,72, garis 0,10, sudut 8 px); blur tidak tersedia di kanvas 2D
+function uiBox(g, x, y, w, h, s) {
+  g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, 8 * s); else g.rect(x, y, w, h);
+  g.fillStyle = 'rgba(12,14,18,0.72)'; g.fill(); g.strokeStyle = 'rgba(255,255,255,0.10)'; g.lineWidth = s; g.stroke();
+}               // UI seragam D4: aksen kanvas = --ui-accent
 const errBox = $('#err');
 function showError(msg) { errBox.hidden = false; errBox.textContent = msg; }
 
@@ -3135,7 +3088,7 @@ async function main() {
       ph = 2 * padY + 16 * s + (rows.length - 1) * lh;
       g.beginPath(); if (g.roundRect) g.roundRect(x0, y0, pw, ph, 8 * s); else g.rect(x0, y0, pw, ph);
       g.fillStyle = 'rgba(12,14,18,0.72)'; g.fill(); g.strokeStyle = 'rgba(255,255,255,0.10)'; g.lineWidth = s; g.stroke();
-      g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(title, x0 + padX, y0 + padY + 8 * s, pw - 2 * padX - 26 * s);
+      g.fillStyle = `rgba(${UIA},0.95)`; g.fillText(title, x0 + padX, y0 + padY + 8 * s, pw - 2 * padX - 26 * s);
       boxBtn('info', true, x0 + pw - 6 * s, y0 + 6 * s, s, true);
       g.font = fRow; const kx = Math.min(kw, (pw - 2 * padX) * 0.4);
       for (let i = 1; i < rows.length; i++) {
@@ -3170,7 +3123,7 @@ async function main() {
           : 'W/S A/D R/F thrust (Shift main) · mouse = look around · right-drag = nose · click screen = page · X attitude · Z time · V view · E flare · M relay · Esc end');
       g.font = `${11 * s}px ui-monospace, Menlo, Consolas, monospace`; g.textAlign = 'center';
       const tw = Math.min(g.measureText(hint).width + 20 * s, w - 16 * s);
-      g.fillStyle = 'rgba(6,8,11,0.45)'; g.fillRect((w - tw) / 2, h - 34 * s, tw, 20 * s);
+      uiBox(g, (w - tw) / 2, h - 36 * s, tw, 24 * s, s);
       g.fillStyle = 'rgba(215,220,226,0.85)'; g.fillText(hint, w / 2, h - 24 * s, tw - 12 * s); g.textAlign = 'left';
       // G4: jendela relai + diagram ruang-waktu di bawah HUD (M)
       const top = y0 + ph + 10 * s, rh = Math.min(380 * s, h - 44 * s - top), rw = Math.min(340 * s, w - 24 * s);
@@ -3179,7 +3132,7 @@ async function main() {
       {                                                          // kanan bawah: G5 peta orbit saat membidik (besar), G8 peta corong (ukuran = jendela relai)
         let mw = aiming ? Math.min(400 * s, w * 0.42) : rw, right = w - 12 * s;
         const ui = $('#ui'), ur = ui.getBoundingClientRect();     // panel kontrol terbuka: peta di kiri panel
-        if (!ui.classList.contains('collapsed') && !ui.classList.contains('hidden') && ur.bottom * s > h - 44 * s - (aiming ? mw : rh)) right = ur.left * s - 12 * s;
+        if (!ui.classList.contains('collapsed') && !document.body.classList.contains('ui-hide') && ur.bottom * s > h - 44 * s - (aiming ? mw : rh)) right = ur.left * s - 12 * s;
         mw = Math.min(mw, right - (REL.on ? x0 + rw + 12 * s : x0));   // tidak menimpa jendela relai
         const mh = aiming ? Math.min(mw * 1.08, h - 100 * s) : rh;
         if (!BOX.funnel) boxBtn('funnel', false, right, h - 44 * s - 24 * s, s, true);
@@ -3251,7 +3204,7 @@ async function main() {
       } else {                                                     // di luar layar: panah di tepi
         const a = Math.atan2(q.front ? -(q.y - h / 2) : q.y, q.front ? q.x - w / 2 : q.x), m = 26 * s;
         const ex = w / 2 + Math.cos(a) * (w / 2 - m), ey = h / 2 - Math.sin(a) * (h / 2 - m), k = 9 * s;
-        g.fillStyle = 'rgba(240,164,90,0.9)'; g.beginPath();
+        g.fillStyle = `rgba(${UIA},0.9)`; g.beginPath();
         g.moveTo(ex + Math.cos(a) * k, ey - Math.sin(a) * k); g.lineTo(ex + Math.cos(a + 2.4) * k, ey - Math.sin(a + 2.4) * k); g.lineTo(ex + Math.cos(a - 2.4) * k, ey - Math.sin(a - 2.4) * k);
         g.closePath(); g.fill();
         g.font = `${9.5 * s}px ${mono}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(SHIPNAME, ex - Math.cos(a) * 16 * s, ey + Math.sin(a) * 16 * s); g.textAlign = 'left';
@@ -3265,7 +3218,7 @@ async function main() {
     const line = `${txt('Relay 22 rs')} · ${txt('relay clock')} ${fmtTauS(TR * REL.k)} · ${st}`;
     g.font = `${11 * s}px ${mono}`; g.textAlign = 'center'; g.textBaseline = 'middle';
     const tw = Math.min(g.measureText(line).width + 20 * s, w - 16 * s);
-    g.fillStyle = 'rgba(6,8,11,0.5)'; g.fillRect((w - tw) / 2, h - 60 * s, tw, 20 * s);
+    uiBox(g, (w - tw) / 2, h - 62 * s, tw, 24 * s, s);
     g.fillStyle = 'rgba(120,220,170,0.95)'; g.fillText(line, w / 2, h - 50 * s, tw - 12 * s); g.textAlign = 'left';
     g.restore();
   }
@@ -3285,13 +3238,13 @@ async function main() {
     const top = 52 * s, cx = x + w / 2, cy = y + top + (h - top) / 2, Rp = Math.min(w, h - top) / 2 - 6 * s, f = (r) => Rp * Math.log(1 + r) / Math.log(25);
     const P = (v) => { const a = Math.atan2(v3.dot(v, ey), v3.dot(v, ex)), rr = f(Math.hypot(...v)); return [cx + rr * Math.cos(a), cy - rr * Math.sin(a)]; };
     g.save();
-    g.fillStyle = 'rgba(6,8,11,0.66)'; g.fillRect(x, y, w, h); g.strokeStyle = 'rgba(240,164,90,0.35)'; g.lineWidth = s; g.strokeRect(x, y, w, h);
-    g.textBaseline = 'middle'; g.font = `bold ${11 * s}px ${mono}`; g.fillStyle = 'rgba(240,164,90,0.95)';
+    uiBox(g, x, y, w, h, s);                                       // UI seragam: material kotak info = HUD kiri
+    g.textBaseline = 'middle'; g.font = `bold ${11 * s}px ${mono}`; g.fillStyle = `rgba(${UIA},0.95)`;
     g.fillText(txt('Orbit map: plane of the path, log radius'), x + 8 * s, y + 11 * s, w - 16 * s);
     g.font = `${10 * s}px ${mono}`; g.fillStyle = 'rgba(215,220,226,0.95)'; g.fillText(tesAimRow(), x + 8 * s, y + 25 * s, w - 16 * s);
     g.fillStyle = R.hit ? 'rgba(110,230,255,1)' : 'rgba(255,150,120,0.95)';
     g.fillText(tesOutcome(R) + ' · ' + txt('gate off the plane {o} degrees').replace('{o}', fmtN(R.out, 1)), x + 8 * s, y + 39 * s, w - 16 * s);
-    for (const [r, c, dash] of [[1, 'rgba(255,100,80,0.95)', 0], [1.5, 'rgba(150,160,170,0.6)', 3], [2, 'rgba(240,164,90,0.8)', 5], [3, 'rgba(150,160,170,0.45)', 2], [22, 'rgba(120,220,170,0.35)', 2]]) {
+    for (const [r, c, dash] of [[1, 'rgba(255,100,80,0.95)', 0], [1.5, 'rgba(150,160,170,0.6)', 3], [2, `rgba(${UIA},0.8)`, 5], [3, 'rgba(150,160,170,0.45)', 2], [22, 'rgba(120,220,170,0.35)', 2]]) {
       g.strokeStyle = c; g.setLineDash(dash ? [dash * s, dash * s] : []); g.beginPath(); g.arc(cx, cy, f(r), 0, 7); g.stroke();
     }
     g.setLineDash([]); g.fillStyle = 'rgba(0,0,0,0.9)'; g.beginPath(); g.arc(cx, cy, f(1), 0, 7); g.fill();
@@ -3302,7 +3255,7 @@ async function main() {
     g.lineWidth = 1.6 * s;                                       // lintasan (jingga di luar horizon, merah di dalam)
     const st = Math.max(1, Math.floor(R.n / 900));
     for (const inside of [false, true]) {
-      g.strokeStyle = inside ? 'rgba(255,90,70,0.95)' : 'rgba(240,164,90,0.95)'; g.beginPath(); let pen = false;
+      g.strokeStyle = inside ? 'rgba(255,90,70,0.95)' : `rgba(${UIA},0.95)`; g.beginPath(); let pen = false;
       for (let i = 0; i < R.n; i += st) {
         const o = i * TES.stride, v = [R.P[o + 2], R.P[o + 3], R.P[o + 4]], inn = Math.hypot(...v) <= 1;
         if (inn !== inside) { pen = false; continue; }
@@ -3315,7 +3268,7 @@ async function main() {
     if (R.end === 'disk') { const o = (R.n - 1) * TES.stride, q = P([R.P[o + 2], R.P[o + 3], R.P[o + 4]]); g.strokeStyle = 'rgba(255,60,40,1)'; g.beginPath(); g.moveTo(q[0] - gs, q[1] - gs); g.lineTo(q[0] + gs, q[1] + gs); g.moveTo(q[0] + gs, q[1] - gs); g.lineTo(q[0] - gs, q[1] + gs); g.stroke(); }
     const sp = P(MIS.x); g.fillStyle = 'rgba(255,255,255,1)'; g.beginPath(); g.arc(sp[0], sp[1], 3.5 * s, 0, 7); g.fill();
     g.font = `${9.5 * s}px ${mono}`; g.fillStyle = 'rgba(110,230,255,1)'; g.fillText(txt('gate'), gp[0] + 8 * s, gp[1]);
-    g.fillStyle = 'rgba(240,164,90,0.9)'; g.fillText('2 rs', cx + f(2) * 0.72, cy + f(2) * 0.72);
+    g.fillStyle = `rgba(${UIA},0.9)`; g.fillText('2 rs', cx + f(2) * 0.72, cy + f(2) * 0.72);
     g.restore();
   }
   /* G8: peta corong (docs/gargantua/rumus-peta-corong.md). Irisan Eddington-Finkelstein masuk t~ = v - r tetap: dl² = (1 + 1/r) dr² + r² dphi²,
@@ -3357,8 +3310,8 @@ async function main() {
     };
     const fade = (dep) => 0.35 + 0.65 * Math.max(0, Math.min(1, 0.5 + dep / (2 * Rv)));
     g.save();
-    g.fillStyle = 'rgba(6,8,11,0.66)'; g.fillRect(x, y, w, h); g.strokeStyle = 'rgba(240,164,90,0.35)'; g.lineWidth = s; g.strokeRect(x, y, w, h);
-    g.textBaseline = 'middle'; g.font = `bold ${11 * s}px ${mono}`; g.fillStyle = 'rgba(240,164,90,0.95)';
+    uiBox(g, x, y, w, h, s);                                       // UI seragam: material kotak info = HUD kiri
+    g.textBaseline = 'middle'; g.font = `bold ${11 * s}px ${mono}`; g.fillStyle = `rgba(${UIA},0.95)`;
     g.fillText(txt('Funnel map: one time slice, true radius'), x + 8 * s, y + 11 * s, w - 16 * s);
     g.font = `${10 * s}px ${mono}`; g.fillStyle = r0 < 1 ? 'rgba(255,120,95,0.95)' : 'rgba(215,220,226,0.95)';
     g.fillText(`r ${fmtN(r0, r0 < 0.1 ? 4 : 2)} rs · ${txt('to the singularity along the slice')} ${fmtN(funL(r0), 2)} rs`, x + 8 * s, y + 25 * s, w - 16 * s);
@@ -3410,7 +3363,7 @@ async function main() {
     // riwayat (pucat di luar horizon, merah di dalam), prakiraan putus-putus
     const H0 = pathPts(MIS.hist.concat([now5]));
     for (let i = 1; i < H0.length; i++) { const a = H0[i - 1], b = H0[i]; if (a && b) seg([a, b], b[3] < 1 ? '255,90,70' : '225,230,236', 1.8 * s); }
-    if (MIS.pred && MIS.pred.pts.length) seg(pathPts([now5].concat(MIS.pred.pts)), MIS.ap.on ? '240,164,90' : '240,180,110', 1.4 * s, [4 * s, 3 * s]);
+    if (MIS.pred && MIS.pred.pts.length) seg(pathPts([now5].concat(MIS.pred.pts)), MIS.ap.on ? UIA : '240,180,110', 1.4 * s, [4 * s, 3 * s]);
     if (MIS.tes) {                                               // gerbang fiksi
       const q = P(TES.rg, ang(TES.gate)), k = 5 * s; g.strokeStyle = 'rgba(110,230,255,1)'; g.lineWidth = 1.4 * s;
       g.beginPath(); g.moveTo(q[0], q[1] - k); g.lineTo(q[0] + k, q[1]); g.lineTo(q[0], q[1] + k); g.lineTo(q[0] - k, q[1]); g.closePath(); g.stroke();
@@ -3458,9 +3411,9 @@ async function main() {
   function drawRelay(g, x, y, w, h, s) {
     REL.drawn++;
     const V = relView(), S = V.S, side = w > 1.5 * h, vw = side ? w * 0.46 : w, vh = side ? h : Math.min(112 * s, h * 0.42);
-    const amber = 'rgba(240,164,90,0.95)', pale = 'rgba(215,220,226,0.95)', dim = 'rgba(140,150,160,0.85)', mono = 'ui-monospace, Menlo, Consolas, monospace';
+    const amber = `rgba(${UIA},0.95)`, pale = 'rgba(215,220,226,0.95)', dim = 'rgba(140,150,160,0.85)', mono = 'ui-monospace, Menlo, Consolas, monospace';
     g.save();
-    g.fillStyle = 'rgba(6,8,11,0.62)'; g.fillRect(x, y, w, h); g.strokeStyle = 'rgba(240,164,90,0.35)'; g.lineWidth = s; g.strokeRect(x, y, w, h);
+    uiBox(g, x, y, w, h, s);                                       // UI seragam: material kotak info = HUD kiri
     g.textBaseline = 'middle'; g.textAlign = 'left';
     g.font = `bold ${11 * s}px ${mono}`; g.fillStyle = amber; g.fillText(txt('Relay at 22 rs: what it sees of GX-01'), x + 8 * s, y + 11 * s, vw - 16 * s);
     const f = S ? S.rate : 0, bright = Math.min(1, f * f), cx = x + 20 * s, cy = y + 34 * s;
@@ -3528,7 +3481,7 @@ async function main() {
     g.globalCompositeOperation = 'source-over';
     if (t < 1.2) { g.fillStyle = `rgba(255,250,240,${1 - t / 1.2})`; g.fillRect(0, 0, w, h); }
     g.textAlign = 'center'; g.textBaseline = 'middle'; g.globalAlpha = Math.min(1, Math.max(0, (t - 1.5) / 1.5));
-    g.font = `bold ${15 * s}px ${mono}`; g.fillStyle = 'rgba(240,164,90,0.95)'; g.fillText(txt('TESSERACT (fiction)'), w / 2, 40 * s);
+    g.font = `bold ${15 * s}px ${mono}`; g.fillStyle = `rgba(${UIA},0.95)`; g.fillText(txt('TESSERACT (fiction)'), w / 2, 40 * s);
     g.font = `${11 * s}px ${mono}`; g.fillStyle = 'rgba(215,220,226,0.85)';
     g.fillText(txt('4D hypercube: 16 corners, 32 edges, 24 square faces, 8 cubic cells, turning in the xw, yw and zw planes'), w / 2, 62 * s, w - 32 * s);
     g.fillStyle = 'rgba(255,150,120,0.9)';
@@ -3548,7 +3501,7 @@ async function main() {
     const mono = 'ui-monospace, Menlo, Consolas, monospace', r0 = Math.hypot(...MIS.x), tvNow = MIS.T + Hin(r0) - r0, Rm = REL.zoom;
     const pad = 8 * s, ox = x0 + pad, oy = y0 + 18 * s, W = w - 2 * pad, H = h - 18 * s - 16 * s, sc = W / Rm;
     const X = (r) => ox + r * sc, Y = (tv) => oy + H * 0.42 - (tv - tvNow) * sc, tvOf = (T, r) => T + Hin(r) - r;
-    g.font = `${10 * s}px ${mono}`; g.textBaseline = 'middle'; g.fillStyle = 'rgba(240,164,90,0.95)';
+    g.font = `${10 * s}px ${mono}`; g.textBaseline = 'middle'; g.fillStyle = `rgba(${UIA},0.95)`;
     g.fillText(txt('Spacetime: r across, time up'), ox, y0 + 9 * s, W);
     g.save(); g.beginPath(); g.rect(ox, oy, W, H); g.clip();
     g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(ox, oy, W, H);
@@ -3577,7 +3530,7 @@ async function main() {
       g.stroke();
     };
     g.lineWidth = s;
-    for (const q of REL.rays) ray(q.r, q.tv, q.r <= 1 ? 'rgba(255,90,70,0.75)' : 'rgba(240,164,90,0.5)');
+    for (const q of REL.rays) ray(q.r, q.tv, q.r <= 1 ? 'rgba(255,90,70,0.75)' : `rgba(${UIA},0.5)`);
     g.lineWidth = 1.6 * s; for (const f of REL.flares) ray(f.r, f.tv, 'rgba(110,230,255,0.95)');
     const Lg = REL.log, step = Math.max(1, Math.floor(Lg.length / 600));                       // garis dunia wahana
     g.strokeStyle = 'rgba(225,230,236,0.95)'; g.lineWidth = 1.8 * s; g.beginPath();
@@ -3586,7 +3539,7 @@ async function main() {
     if (V.S && !V.S.done) {                                      // titik yang sedang terlihat relai
       g.fillStyle = relColor(V.S.rate, Math.max(Math.min(1, V.S.rate * V.S.rate), 0.5)); g.beginPath(); g.arc(X(V.S.r), Y(tvOf(V.S.T, V.S.r)), 3.5 * s, 0, 7); g.fill();
     }
-    g.fillStyle = 'rgba(240,164,90,1)'; g.beginPath(); g.arc(X(r0), Y(tvNow), 4 * s, 0, 7); g.fill();
+    g.fillStyle = `rgba(${UIA},1)`; g.beginPath(); g.arc(X(r0), Y(tvNow), 4 * s, 0, 7); g.fill();
     g.restore();
     g.font = `${9.5 * s}px ${mono}`; g.textBaseline = 'middle'; const yb = oy + H + 8 * s;
     g.fillStyle = 'rgba(255,120,95,0.95)'; g.fillText('r=0', ox, yb); g.fillText(txt('horizon'), Math.min(X(1) + 3 * s, ox + W * 0.3), oy + 8 * s);
@@ -3920,8 +3873,8 @@ async function main() {
     if (c === 'Escape' && SHIP.on) { setShip(false); return; }
     if (c === 'KeyV') { cycleShipView(); return; }
     if (c === 'Space') { e.preventDefault(); state.paused = !state.paused; syncUI(); toast(txt(state.paused ? 'Paused' : 'Running'), 1.2); }
-    else if (c === 'KeyH') { $('#ui').classList.toggle('hidden'); $('#caption').classList.toggle('hidden'); $('#hint').classList.toggle('hidden'); document.body.classList.toggle('hideUI', $('#ui').classList.contains('hidden')); dashT = 0; }
-    else if (c === 'Backquote') { $('#ui').classList.remove('hidden'); $('#ui').classList.toggle('collapsed'); }
+    else if (c === 'KeyH') { document.body.classList.toggle('ui-hide'); document.body.classList.toggle('hideUI', document.body.classList.contains('ui-hide')); dashT = 0; }
+    else if (c === 'Backquote') $('#uiHeader').click();
     else if (c === 'KeyQ') cycleQuality();
     else if (c === 'KeyN') cycleMood();
     else if (c === 'KeyU') setSound();
@@ -3938,7 +3891,8 @@ async function main() {
      UI
      ===================================================================== */
   const Q = () => CONFIG.presets[CONFIG.quality];
-  function applyQuality(name) { CONFIG.quality = name; CONFIG.renderScale = CONFIG.presets[name].scale; state.lowTime = state.highTime = 0; }
+  function applyQuality(name) { CONFIG.quality = name; UIKIT.lite(name === 'low');   // UI seragam D1: Rendah tanpa blur kaca
+    CONFIG.renderScale = CONFIG.presets[name].scale; state.lowTime = state.highTime = 0; }
   // panel bertab seperti Copper Corn Station (labTab): { tab } membuka tab baru, kontrol berikutnya masuk ke tab itu
   const UI = [
     { tab: 'mission', label: 'Mission' },
@@ -4010,7 +3964,7 @@ async function main() {
     $('#uiBody').querySelectorAll('[data-pane]').forEach((p) => p.classList.toggle('on', p.dataset.pane === id));
   }
   function buildUI() {
-    const root = $('#uiBody'), tabs = document.createElement('div'); tabs.id = 'uiTabs'; root.appendChild(tabs);
+    const root = $('#uiBody'), tabs = document.createElement('div'); tabs.id = 'uiTabs'; tabs.className = 'ui-tabs'; root.appendChild(tabs);
     let body = root;
     for (const c of UI) {
       if (c.tab) {
@@ -4094,8 +4048,10 @@ async function main() {
     uiTab(uiTabId);
     syncUI();
   }
-  $('#uiHeader').addEventListener('click', () => $('#ui').classList.toggle('collapsed'));
-  if (innerWidth < 640) $('#ui').classList.add('collapsed');
+  // UI seragam D7: panel diciutkan (kepala saja) saat muat, status terakhir diingat (ponsel selalu mulai ciut)
+  const uiPanel = UIKIT.panel($('#ui'), 'gargantua.panelOpen');
+  $('#uiHeader').addEventListener('click', () => uiPanel());
+  if (innerWidth < 640) uiPanel(false);
   function syncUI() { syncers.forEach((s) => s()); }
   buildUI();
 
@@ -4443,14 +4399,40 @@ async function main() {
     REL, Gout, Hin, relArrive, relSeen, relMsg, relView, fireFlare, flareAt, relStep, chaseEye,
     TES, TESV, tesD, tesInit, tesRef, tesApply, tesLaunch, tesFollow, tesAim, AUDIO, audioMix, setSound, MUSIC, setMusic, loadMusicFile, relImage, imageDir, rayPhi, relViewInit, drawRelayView, relUpdate, relPlace,
     FUN, funZ, funL, drawFunnel, drawDash, bhRadiant, misGas, GV, vrFrame, tickWorld };   // debugging hook
+  // UI6: kartu mulai seragam dengan Copper dan Millar: bahasa, kualitas, Mulai; adegan sudah berjalan di belakang kartu (D5)
+  const START = $('#start'), QN = ['low', 'medium', 'high', 'ultra'];
+  function startSync() {
+    $('#lang').innerHTML = ''; $('#presetPick').innerHTML = '';
+    for (const [lc, name] of LANGS) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = name; b.classList.toggle('on', lc === LANG);
+      b.addEventListener('click', () => { LANG = lc; try { localStorage.setItem('lazarus.lang', lc); } catch (e) { /* abaikan */ }
+        applyStaticLang(); $('#uiBody').innerHTML = ''; syncers.length = 0; buildUI(); startSync(); });
+      $('#lang').appendChild(b);
+    }
+    for (const q of QN) {
+      const b = document.createElement('button'); b.type = 'button'; b.textContent = txt(q[0].toUpperCase() + q.slice(1)); b.classList.toggle('on', q === CONFIG.quality);
+      b.addEventListener('click', () => { applyQuality(q); syncUI(); startSync(); });
+      $('#presetPick').appendChild(b);
+    }
+  }
+  function startGo() {
+    if (START.hidden) return;
+    START.hidden = true; document.body.classList.remove('ui-pre');
+    UIKIT.flash($('#hint'), null, 8);                                // UI seragam D6: petunjuk tombol tengah bawah, 8 s
+  }
+  $('#go').addEventListener('click', startGo);
+  $('#helpLink').addEventListener('click', (e) => { e.preventDefault(); toggleHelp(true); });
+  window.addEventListener('keydown', (e) => { if (!START.hidden && !$('#ready').hidden && e.code === 'Enter') { e.preventDefault(); startGo(); } });
+  window.__gargantua.start = startGo;                               // uji: lewati kartu mulai
+  startSync();
   await gBoot(1, 'Ready');
-  GBOOT.el.hidden = true;
+  GBOOT.el.hidden = true; $('#ready').hidden = false;
   PROFKIT.mark('Siap'); PROFKIT.ready();                             // P0: alat ukur (?prof=1)
   requestAnimationFrame(frame);
 }
 
-main().catch((e) => { GBOOT.el.hidden = true; showError(String(e && e.message || e)); });
+main().catch((e) => { GBOOT.el.hidden = true; $('#start').hidden = true; showError(String(e && e.message || e)); });
 </script>
-<a id="menuLink" href="../../index.html" title="Back to the main menu">← Menu</a>
+<a id="menuLink" class="ui-menu ui-play" href="../../index.html" title="Back to the main menu">← Menu</a>
 </body>
 </html>

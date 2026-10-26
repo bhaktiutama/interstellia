@@ -89,6 +89,7 @@ async def tunggu_frame(pg, n=6):
 async def vr2(b, out):
     pg = await buka(b, 'experiences/gargantua/index.html', '?lang=id')
     await pg.wait_for_function('window.__gargantua !== undefined && window.VRKIT && VRKIT.ok', timeout=60000)
+    await pg.evaluate('() => window.__gargantua.start && window.__gargantua.start()')   # UI6: lewati kartu mulai
     out['vr2: tombol Masuk VR muncul'] = await pg.evaluate('!!document.getElementById("vrBtn")')
     note = await pg.evaluate('getComputedStyle(document.getElementById("vrNote")).display')
     out[f"vr2: lapisan 'Sedang di VR' tersembunyi sebelum masuk VR ({note})"] = note == 'none'

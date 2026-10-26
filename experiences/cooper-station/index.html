@@ -7,93 +7,31 @@
 <link rel="modulepreload" href="https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.core.js" crossorigin>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Copper Corn Station</title>
+<link rel="stylesheet" href="../../shared/ui.css">
 <style>
-  :root {
-    color-scheme: dark;
-    --ink: #d9dde3;
-    --muted: #8b929c;
-    --panel: rgba(12, 14, 18, 0.72);
-    --line: rgba(255, 255, 255, 0.10);
-    --accent: #e8b765;
-    --warn: #e7806b;
-  }
+  /* UI seragam (docs/app/rencana-ui-seragam.md): token dan komponen di shared/ui.css; di sini hanya letak dan isi khusus Copper */
+  :root { --ink: var(--ui-ink); --muted: var(--ui-muted); --panel: var(--ui-panel); --line: var(--ui-line); --accent: var(--ui-accent); --warn: var(--ui-warn); }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0f12; color: var(--ink);
-    font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d0f12; color: var(--ink); font: var(--ui-font); }
   #view { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
-  #hud { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; padding: 10px 12px;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 8px; pointer-events: none;
-    display: grid; grid-template-columns: auto auto; gap: 1px 14px; font-variant-numeric: tabular-nums; max-width: calc(100vw - 24px); }
+  #hud { display: grid; grid-template-columns: auto auto; gap: 1px 14px; }
   #hud .k { color: var(--muted); }
   #hud .v { text-align: right; }
   #hud .sep { grid-column: 1 / -1; border-top: 1px solid var(--line); margin: 4px 0; }
-  #hud .title { grid-column: 1 / -1; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; font-size: 10.5px; }
+  #hud .title { grid-column: 1 / -1; color: var(--accent); letter-spacing: .08em; text-transform: uppercase; font-size: 10.5px; cursor: pointer; pointer-events: auto; }
+  #hud.compact .x { display: none; }
 
   #cross { position: fixed; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; opacity: .7; }
   #cross::before, #cross::after { content: ""; position: fixed; background: #fff; }
   #cross::before { left: 50%; top: 50%; width: 14px; height: 1px; margin: 0 0 0 -7px; }
   #cross::after  { left: 50%; top: 50%; width: 1px; height: 14px; margin: -7px 0 0 0; }
 
-  #help { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(8, 9, 12, 0.66); z-index: 6; }
-  #help[hidden] { display: none; }
-  #help { z-index: 7; }
-  #help .card { max-height: calc(100vh - 32px); overflow: auto; max-width: 440px; width: 100%; background: #14171c; border: 1px solid var(--line); border-radius: 10px; padding: 20px; }
-  #help .card { max-width: 560px; }
-  .langPick { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
-  .langPick button { font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
-  .langPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
-  #presetPick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
-  #presetPick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
-  #presetPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
-  #presetPick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  #planetPick { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; }
-  #shipPick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
-  #shipPick button, #labShips button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
-  #shipPick button.on, #labShips button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
+  #planetPick button:focus-visible, #presetPick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   #portFade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 3; }
-  #jresPick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
-  #jresPick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
-  #jresPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
-  #planetPick button { font: inherit; font-size: 12px; padding: 7px 2px; border-radius: 6px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--ink); cursor: pointer; }
-  #planetPick button.on { border-color: var(--accent); background: rgba(232, 183, 101, 0.18); color: #fff; }
-  #planetPick button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  /* Kartu mulai bersama Copper dan Millar (docs/app/rencana-menu-mulai.md U1): salin sama persis ke kedua file */
-  #start { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(8, 9, 12, 0.45); z-index: 6; }
-  #start[hidden] { display: none; }
-  #start .card { width: min(440px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 20px; background: rgba(12, 14, 18, 0.82);
-    border: 1px solid rgba(255, 255, 255, 0.10); border-radius: 10px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-    font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #e8e6e3; }
-  #start h1 { margin: 0 0 4px; font-size: 18px; font-weight: 600; letter-spacing: .04em; color: #fff; text-transform: none; }
-  #start .sub { color: #8b929c; font-size: 12.5px; margin: 0 0 16px; }
-  #boot .bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
-  #boot .bar i { display: block; height: 100%; width: 0; background: #e8b765; transition: width .25s; }
-  #boot .bootRow { display: flex; justify-content: space-between; margin-top: 8px; color: #8b929c; font-size: 12px; }
-  #ready .plabel { color: #e8b765; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin: 12px 0 6px; }
-  #ready .plabel:first-child { margin-top: 0; }
-  #ready .psec { color: #fff; font-size: 12px; margin: 16px 0 0; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.10); }
-  #ready label { display: flex; gap: 6px; align-items: center; margin: 8px 0 2px; font-size: 12px; }
-  #ready .pnote { color: #8b929c; font-size: 11px; margin: 2px 0 6px; }
-  #go { width: 100%; margin-top: 14px; font: inherit; font-size: 14px; padding: 11px; border-radius: 8px; border: 1px solid #e8b765;
-    background: rgba(232, 183, 101, 0.18); color: #fff; cursor: pointer; }
-  #go:focus-visible { outline: 2px solid #e8b765; outline-offset: 2px; }
-  #ready .links { display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: 12px; }
-  #ready .links a { color: #8b929c; text-decoration: none; }
-  #ready .links a:hover { color: #e8e6e3; }
   #ready .pauto { margin: 8px 0 2px; }
-  #help .hhead { display: flex; justify-content: space-between; align-items: center; color: var(--accent); margin-bottom: 10px; }
-  #help .hhead button, #help .htabs button { font: inherit; font-size: 12px; color: var(--ink); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
-  #help .htabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
-  #help .htabs button.on { border-color: var(--accent); color: #fff; background: rgba(232, 183, 101, 0.18); }
-  #help table { width: 100%; border-collapse: collapse; }
-  #help td { padding: 4px 0; vertical-align: top; line-height: 1.45; }
-  #help td:first-child { color: var(--accent); white-space: nowrap; padding-right: 14px; }
-  #help [data-pane] { display: none; }
-  #help [data-pane].on { display: table; }
-  #help .about.on { display: block; color: var(--muted); line-height: 1.55; }
+  #help [data-pane].about.on { display: block; color: var(--muted); line-height: 1.55; }
   #help .about p { margin: 0 0 10px; }
-  #hint { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 7px 14px; background: var(--panel);
-    border: 1px solid var(--line); border-radius: 6px; color: #fff; pointer-events: none; white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; transition: opacity .8s; }
   .touch-only { display: none; }
   body.touch .touch-only { display: table-row; }
   body.touch .desk-only { display: none; }
@@ -101,75 +39,38 @@
   #joy { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.05); pointer-events: none; }
   #knob { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; background: rgba(255,255,255,0.28); }
-  #touchbtns { position: fixed; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: none; gap: 8px; }
+  #touchbtns { position: fixed; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: none; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 150px); }
   body.touch #touchbtns { display: flex; }
-  #touchbtns button { font: inherit; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  #touchbtns button { font: inherit; color: var(--ink); background: var(--ui-panel); border: 1px solid var(--line); border-radius: var(--ui-r); padding: 8px 10px;
+    backdrop-filter: var(--ui-blur); -webkit-backdrop-filter: var(--ui-blur); }
   #touchbtns button.on { border-color: var(--accent); color: #fff; }
 
-  #err { position: fixed; inset: 16px; overflow: auto; background: rgba(30, 8, 6, 0.95); color: #ffc2b5; border: 1px solid #6b2a22;
-    border-radius: 8px; padding: 16px; white-space: pre-wrap; z-index: 10; margin: 0; }
-  #err[hidden], [hidden] { display: none !important; }
-  .hidden-ui #hud, .hidden-ui #cross, .hidden-ui #prompt, .hidden-ui #hint { display: none; }   /* H: semua info layar hilang, termasuk petunjuk W A S D dan baris aksi di bawah */
-  /* 24f: tombol kembali ke menu utama saat bermain; HUD digeser ke bawahnya */
-  #menuBtn { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; padding: 4px 10px; font-size: 12px;
-    color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; text-decoration: none; z-index: 2; }
-  #menuBtn:hover { border-color: var(--accent); color: #fff; }
-  #hud { top: calc(44px + env(safe-area-inset-top, 0px)); }
-  .hidden-ui #menuBtn, body.photo #menuBtn, body.tour #menuBtn, body:has(#start:not([hidden])) #menuBtn { display: none !important; }
-  @media (max-width: 520px) { #hud { font-size: 10.5px; padding: 8px 10px; } #hud .wide { display: none; } }
-  #lab { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: min(300px, calc(100vw - 24px));
-    max-height: min(70vh, calc(100vh - 90px)); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
-  #labHead { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; cursor: pointer; user-select: none;
-    color: var(--accent); letter-spacing: .08em; text-transform: uppercase; font-size: 10.5px; }
-  #lab.collapsed .body { display: none; }
-  #lab.collapsed #labHead .chev { transform: rotate(-90deg); }
-  #lab .body { padding: 0 12px 12px; display: grid; gap: 8px; }
+  [hidden] { display: none !important; }
+  .ui-hide #cross { display: none; }   /* H: semua info layar hilang (kelas ui-play), termasuk petunjuk W A S D dan baris aksi di bawah */
+  body.photo #menuBtn, body.tour #menuBtn { display: none !important; }
+  @media (max-width: 520px) { #hud .wide { display: none; } }
+  #lab:not(.collapsed) .ui-pbody { display: grid; gap: 8px; }
   #lab .row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; }
-  #lab .row input { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+  #lab .row input { grid-column: 1 / -1; }
   #lab .row output { color: var(--accent); font-variant-numeric: tabular-nums; }
   #lab .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  #lab button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 6px; cursor: pointer; }
-  #lab button:hover { border-color: rgba(232,183,101,0.6); }
-  #lab button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  #lab kbd { font: inherit; color: var(--muted); margin-right: 4px; }
-  #labTabs { display: flex; flex-wrap: wrap; gap: 3px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
-  #lab #labTabs button { flex: 1 1 auto; padding: 5px 6px; font-size: 11px; background: rgba(255,255,255,0.03); }
-  #lab #labTabs button.on { border-color: var(--accent); color: #fff; background: rgba(232, 183, 101, 0.18); }
+  #lab .note { color: var(--muted); font-size: 11px; }
+  #lab #labTabs { margin-bottom: 0; }
   #lab [data-lpane] { display: none; gap: 8px; }
   #lab [data-lpane].on { display: grid; }
-  #lab .ptitle { color: var(--accent); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
-  #toast { position: fixed; left: 50%; top: calc(12px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); max-width: min(520px, calc(100vw - 32px));
-    padding: 7px 14px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: #fff; pointer-events: none; z-index: 5;
-    transition: opacity .5s; white-space: pre-line; }
-  .hidden-ui #toast { display: none; }
-  #hud .title { cursor: pointer; pointer-events: auto; }
-  #hud.compact .x { display: none; }
   #labResult { color: #fff; min-height: 2.9em; }
   #labTable { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 11px; }
   #labTable th { text-align: left; color: var(--muted); font-weight: normal; border-bottom: 1px solid var(--line); padding: 2px 4px 2px 0; }
   #labTable td { padding: 3px 4px 3px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
-  #labTable .ok { color: #8fd18a; } #labTable .bad { color: var(--warn); }
-  #lab .note { color: var(--muted); font-size: 11px; }
+  #labTable .ok { color: var(--ui-ok); } #labTable .bad { color: var(--warn); }
   #lab .chk { display: flex; align-items: center; gap: 6px; padding: 6px; }
-  .hidden-ui #lab { display: none; }
-  #touchbtns { flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 150px); }
-  #touchbtns button { padding: 8px 10px; }
-  @media (max-width: 640px) {                                      /* M2: lembar bawah, tab di bawah */
-    #lab { display: none; top: auto; bottom: 0; left: 0; right: 0; width: auto; max-height: 55vh; border-radius: 12px 12px 0 0;
-      padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 4; }
-    body.lab-open #lab { display: block; }
-    body.lab-open #touchbtns, body.lab-open #joy { display: none !important; }
-    #lab .body { display: flex; flex-direction: column-reverse; }
-    #labTabs { border-bottom: 0; border-top: 1px solid var(--line); padding: 8px 0 0; position: sticky; bottom: 0; background: #14171c; }
-  }
-  #prompt { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 6px 12px;
-    background: var(--panel); border: 1px solid var(--accent); border-radius: 6px; color: #fff; pointer-events: none; white-space: nowrap; }
-  #plaque, #map { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,0.45); z-index: 5; }
-  #plaque .card, #map .card { background: #14171c; border: 1px solid var(--line); border-radius: 10px; padding: 16px; max-width: 420px; }
+  @media (max-width: 640px) { body.lab-open #touchbtns, body.lab-open #joy { display: none !important; } }
+  #prompt { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  #plaque .ui-card { max-width: 420px; }
   #plaque p { white-space: pre-wrap; margin: 0 0 12px; color: #fff; line-height: 1.55; }
-  #plaque button, #map button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; cursor: pointer; }
   #map { padding: 12px; display: flex; justify-content: center; align-items: stretch; }
-  #map .mcard { width: min(1500px, 100%); height: 100%; display: flex; flex-direction: column; background: #14171c; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  #map .mcard { width: min(1500px, 100%); height: 100%; max-height: none; display: flex; flex-direction: column; padding: 12px; font: var(--ui-font); color: var(--ink); }
+  #map button { padding: 6px 10px; }
   #map .mhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; color: var(--accent); flex-wrap: wrap; }
   #map .mbtns { display: flex; gap: 6px; flex-wrap: wrap; }
   #map .mbody { flex: 1; min-height: 0; display: flex; gap: 12px; }
@@ -179,13 +80,13 @@
   #mapSide { width: 280px; flex: none; display: flex; flex-direction: column; gap: 6px; min-height: 0; }
   #mapTabs { display: flex; gap: 4px; }
   #map #mapTabs button { flex: 1; padding: 4px 2px; font-size: 11.5px; }
-  #map .mbtns button.on { border-color: #6fe3ff; color: #6fe3ff; }
+  #map .mbtns button.on { border-color: #6fe3ff; color: #6fe3ff; background: var(--ui-btn); }
   #map #mapTabs button.on { background: var(--accent); color: #14171c; border-color: var(--accent); }
   #mapLegend { flex: 1; min-height: 0; overflow: auto; font-size: 12px; }
   #mapLegend .lh { color: var(--accent); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; margin: 6px 0 3px; }
   #mapLegend .lh:first-child { margin-top: 0; }
   #map #mapLegend button { display: flex; gap: 7px; align-items: center; width: 100%; text-align: left; margin-bottom: 2px; padding: 3px 6px; line-height: 1.25; }
-  #mapLegend button b { flex: none; display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 50%; background: #e8b765; color: #14171c; font-size: 10.5px; }
+  #mapLegend button b { flex: none; display: inline-grid; place-items: center; min-width: 18px; height: 18px; border-radius: 50%; background: var(--accent); color: #14171c; font-size: 10.5px; }
   #mapLegend button.fis b { background: #6fe3ff; }
   #mapLegend button span small { display: block; color: var(--muted); font-size: 10.5px; }
   #mapLegend .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 8px; }
@@ -196,40 +97,36 @@
   /* 12d: mode foto dan tur sinematik */
   body.photo #hud, body.photo #cross, body.photo #lab, body.photo #touchbtns, body.photo #prompt,
   body.tour #hud, body.tour #cross, body.tour #lab, body.tour #touchbtns, body.tour #prompt { display: none !important; }
-  #photo { position: fixed; top: 12px; right: 12px; width: 270px; max-width: calc(100vw - 32px); padding: 10px 12px; background: var(--panel);
-    border: 1px solid var(--line); border-radius: 8px; font-size: 12px; z-index: 4; }
-  .hidden-ui #photo { display: none; }
+  #photo { position: fixed; top: var(--ui-top); right: 12px; width: 270px; max-width: calc(100vw - 32px); padding: 10px 12px; z-index: 4; }
   #photo .mhead { display: flex; justify-content: space-between; align-items: center; color: var(--accent); margin-bottom: 6px; }
   #photo .row { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; margin: 6px 0; }
-  #photo .row input[type=range] { grid-column: 1 / 3; width: 100%; }
+  #photo .row input[type=range] { grid-column: 1 / 3; }
   #photo output { color: #fff; font-variant-numeric: tabular-nums; }
   #photo .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-  #photo button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer; }
   #photo .note { color: var(--muted); font-size: 10.5px; margin-top: 6px; }
   #tourCap { position: fixed; left: 50%; bottom: calc(36px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(420px, calc(100vw - 32px));
-    padding: 8px 12px; font-size: 13px; background: rgba(10, 12, 16, 0.62); border-left: 3px solid var(--accent); border-radius: 6px; color: #fff; z-index: 4;
-    transition: opacity .6s; line-height: 1.4; }
+    padding: 8px 12px; font-size: 13px; border-left: 3px solid var(--accent); color: #fff; z-index: 4; transition: opacity .6s; line-height: 1.4; }
   #tourFade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 3; }   /* tur v2: layar gelap saat pindah kamera luar <-> dalam */
   #tourCap b { display: block; color: var(--accent); margin-bottom: 2px; }
   #tourCap .tfoot { display: flex; justify-content: space-between; align-items: center; margin-top: 4px; color: var(--muted); font-size: 11px; }
-  #tourCap button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+  #tourCap button { padding: 2px 8px; }
   #tourOffer { position: fixed; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); width: min(360px, calc(100vw - 32px));
-    padding: 10px 12px; background: rgba(10, 12, 16, 0.7); border-left: 3px solid var(--accent); border-radius: 6px; color: #fff; z-index: 4; font-size: 13px; line-height: 1.4; }
+    padding: 10px 12px; border-left: 3px solid var(--accent); color: #fff; z-index: 4; font-size: 13px; line-height: 1.4; }
   #tourOffer b { display: block; color: var(--accent); margin-bottom: 2px; }
   #tourOffer div { display: flex; gap: 8px; margin-top: 8px; }
-  #tourOffer button { font: inherit; color: var(--ink); background: rgba(255,255,255,0.06); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  #tourOffer button { padding: 4px 10px; }
   #tourOffer button.go { border-color: var(--accent); color: #fff; }
 </style>
 </head>
 <body>
 <canvas id="view"></canvas>
 <div id="cross"></div>
-<div id="hud"></div>
-<a id="menuBtn" class="menuHref" href="../../index.html" title="Kembali ke menu utama">← Menu</a>
+<div id="hud" class="ui-hud ui-play"></div>
+<a id="menuBtn" class="menuHref ui-menu ui-play" href="../../index.html" title="Kembali ke menu utama">← Menu</a>
 <div id="joy" hidden><div id="knob"></div></div>
 <div id="touchbtns"><button id="btnHud" type="button">HUD</button><button id="btnLab" type="button">Panel</button><button id="btnRun" type="button">Lari</button><button id="btnAuto" type="button">Otomatis</button><button id="btnJump" type="button">Lompat</button><button id="btnMoto" type="button">Motor</button><button id="btnThrow" type="button">Lempar</button><button id="btnAct" type="button">Aksi</button><button id="btnMap" type="button">Peta</button><button id="btnPhoto" type="button">Foto</button><button id="btnTour" type="button">Tur</button></div>
-<div id="prompt" hidden></div>
-<div id="photo" hidden>
+<div id="prompt" class="ui-prompt ui-play" hidden></div>
+<div id="photo" class="ui-box ui-play" hidden>
   <div class="mhead"><span>Mode foto</span><button id="photoClose" type="button">Tutup (F)</button></div>
   <div class="row"><label for="phHour">Jam stasiun</label><output id="phHourV"></output><input id="phHour" type="range" min="0" max="23.9" step="0.05"></div>
   <div class="row"><label for="phFov">Sudut pandang</label><output id="phFovV"></output><input id="phFov" type="range" min="15" max="100" step="1"></div>
@@ -240,18 +137,18 @@
   <div class="btns"><button id="phWeather" type="button">Cuaca (N)</button><button id="phSave" type="button">Simpan PNG (Enter)</button><button id="phCam" type="button">Kamera rangefinder</button></div>
   <div class="note">WASD bergerak, seret mouse untuk melihat. H menyembunyikan panel ini. Gambar disimpan tanpa panel.</div>
 </div>
-<div id="tourOffer" hidden><b>Tur sinematik</b><span>Sekitar 5 menit keliling stasiun dengan penjelasan fisika.</span><div><button id="tourOfferGo" class="go" type="button">Mulai tur (Y)</button><button id="tourOfferNo" type="button">Lewati</button></div></div><div id="portFade"></div><div id="tourFade"></div><div id="tourCap" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><span><button id="tourSkip" type="button">Lewati (Spasi)</button> <button id="tourStop" type="button">Berhenti (Y)</button></span></div></div>
-<div id="plaque" hidden><div class="card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
-<div id="map" hidden><div class="mcard">
+<div id="tourOffer" class="ui-box" hidden><b>Tur sinematik</b><span>Sekitar 5 menit keliling stasiun dengan penjelasan fisika.</span><div><button id="tourOfferGo" class="go" type="button">Mulai tur (Y)</button><button id="tourOfferNo" type="button">Lewati</button></div></div><div id="portFade"></div><div id="tourFade"></div><div id="tourCap" class="ui-box" hidden><b></b><span></span><div class="tfoot"><span id="tourStep"></span><span><button id="tourSkip" type="button">Lewati (Spasi)</button> <button id="tourStop" type="button">Berhenti (Y)</button></span></div></div>
+<div id="plaque" class="ui-overlay" hidden><div class="ui-card"><p></p><button id="plaqueClose" type="button">Tutup (E)</button></div></div>
+<div id="map" class="ui-overlay" hidden><div class="mcard ui-card">
   <div class="mhead"><span>Peta silinder (dibuka)</span><span class="mbtns"><button id="mapZoomIn" type="button">+</button><button id="mapZoomOut" type="button">-</button><button id="mapMe" type="button">Posisi saya</button><button id="mapHoloBtn" type="button">Hologram</button><button id="mapCtlBtn" type="button">Kendali 3D</button><button id="mapClose" type="button">Tutup (M)</button></span></div>
   <div class="mbody"><canvas id="mapCanvas"></canvas><div id="mapSide"><div id="mapTabs"></div><div id="mapLegend"></div></div></div>
   <div class="mnote">Kiri-kanan = sumbu 8 km dari end cap A · atas-bawah = keliling 6,28 km (tengah = rel trem, tepi atas dan bawah = Skyway) · roda atau cubit = zoom, seret = geser, klik penanda = pindah ke sana</div>
 </div></div>
-<div id="lab">
-  <div id="labHead"><span>Panel kontrol</span><span class="chev">&#9662;</span></div>
-  <div class="body">
-  <div id="labTabs"><button type="button" data-ltab="lokasi">Lokasi</button><button type="button" data-ltab="waktu">Waktu</button><button type="button" data-ltab="gerak">Gerak</button><button type="button" data-ltab="fisika">Fisika</button><button type="button" data-ltab="foto">Foto</button><button type="button" data-ltab="grafik">Grafik</button><button type="button" data-ltab="suara">Suara</button><button type="button" data-ltab="lain">Lainnya</button></div>
-    <section data-lpane="lokasi"><div class="ptitle">Pindah lokasi</div>
+<div id="lab" class="ui-panel ui-play collapsed">
+  <div id="labHead" class="ui-phead"><span>Panel kontrol</span><span class="chev">&#9662;</span></div>
+  <div class="body ui-pbody">
+  <div id="labTabs" class="ui-tabs"><button type="button" data-ltab="lokasi">Lokasi</button><button type="button" data-ltab="waktu">Waktu</button><button type="button" data-ltab="gerak">Gerak</button><button type="button" data-ltab="fisika">Fisika</button><button type="button" data-ltab="foto">Foto</button><button type="button" data-ltab="grafik">Grafik</button><button type="button" data-ltab="suara">Suara</button><button type="button" data-ltab="lain">Lainnya</button></div>
+    <section data-lpane="lokasi"><div class="ptitle ui-sec">Pindah lokasi</div>
       <div class="btns">
         <button id="labCooper" type="button"><kbd>1</kbd>Rumah Cooper</button>
         <button id="labDeck" type="button">Dek pandang menara (175 m)</button>
@@ -267,13 +164,13 @@
         <button id="labExt" type="button"><kbd>V</kbd>Kamera luar</button>
       </div>
     </section>
-    <section data-lpane="foto"><div class="ptitle">Foto dan tur</div>
+    <section data-lpane="foto"><div class="ptitle ui-sec">Foto dan tur</div>
       <div class="btns">
         <button id="labPhoto" type="button"><kbd>F</kbd>Mode foto</button>
         <button id="labTour" type="button"><kbd>Y</kbd>Tur sinematik</button>
       </div>
     </section>
-    <section data-lpane="waktu"><div class="ptitle">Waktu dan simulasi</div>
+    <section data-lpane="waktu"><div class="ptitle ui-sec">Waktu dan simulasi</div>
       <div class="row"><label for="inHour">Jam stasiun ([ ])</label><output id="inHourV"></output><input id="inHour" type="range" min="0" max="23.9" step="0.1"></div>
       <div class="btns">
         <button id="labTime" type="button"><kbd>Z</kbd>Waktu: 1 menit = 1 jam</button>
@@ -283,16 +180,16 @@
       </div>
       <div class="btns" id="labMoons"></div>
     </section>
-    <section data-lpane="gerak"><div class="ptitle">Gerak dan kendaraan</div>
+    <section data-lpane="gerak"><div class="ptitle ui-sec">Gerak dan kendaraan</div>
       <div class="btns">
         <button id="labMoto" type="button"><kbd>C</kbd>Naik motor</button>
         <button id="labBob" type="button">Gerak kepala: normal</button>
       </div>
-      <div class="note">Wahana spaceport (dipakai di berth 1 saat naik dari gerbang B1; tidak bisa diganti saat sedang di dalam kokpit terbang):</div>
+      <div class="note ui-note">Wahana spaceport (dipakai di berth 1 saat naik dari gerbang B1; tidak bisa diganti saat sedang di dalam kokpit terbang):</div>
       <div class="btns" id="labShips" data-notr></div>
-      <div class="note">Motor: W gas, S rem (diam: mundur), A/D belok, Shift sport, Space klakson, O gas terus, mouse menoleh. Malam: lampu depan menyorot jalan. Gerak kepala: kamera ikut langkah saat jalan dan lari.</div>
+      <div class="note ui-note">Motor: W gas, S rem (diam: mundur), A/D belok, Shift sport, Space klakson, O gas terus, mouse menoleh. Malam: lampu depan menyorot jalan. Gerak kepala: kamera ikut langkah saat jalan dan lari.</div>
     </section>
-    <section data-lpane="fisika"><div class="ptitle">Uji fisika (bola)</div>
+    <section data-lpane="fisika"><div class="ptitle ui-sec">Uji fisika (bola)</div>
       <div class="row"><label for="inSpeed">Kecepatan lempar</label><output id="inSpeedV"></output><input id="inSpeed" type="range" min="1" max="100" step="1"></div>
       <div class="row"><label for="inElev">Sudut elevasi</label><output id="inElevV"></output><input id="inElev" type="range" min="0" max="90" step="1"></div>
       <div class="row"><label for="inDrop">Tinggi jatuh</label><output id="inDropV"></output><input id="inDrop" type="range" min="1" max="500" step="1"></div>
@@ -302,9 +199,9 @@
       </div>
       <div id="labResult">Lempar ke arah hadap, dengan sudut elevasi dari slider. Tiang biru = titik lepas, tiang merah = titik mendarat.</div>
       <table id="labTable"></table>
-      <div class="note">Hambatan udara diabaikan untuk bola. Jarak + = searah putaran stasiun. Di lift dan hub nol-g juga bisa.</div>
+      <div class="note ui-note">Hambatan udara diabaikan untuk bola. Jarak + = searah putaran stasiun. Di lift dan hub nol-g juga bisa.</div>
     </section>
-    <section data-lpane="grafik"><div class="ptitle">Grafik</div>
+    <section data-lpane="grafik"><div class="ptitle ui-sec">Grafik</div>
       <div class="btns">
         <button id="labPreset" type="button">Preset: Ultra (otomatis) (Q)</button>
         <button id="labVeg" type="button">Vegetasi: Tinggi (K)</button>
@@ -319,7 +216,7 @@
         <label class="chk"><input id="inShadow" type="checkbox" checked> Bayangan</label>
       </div>
     </section>
-    <section data-lpane="suara"><div class="ptitle">Audio</div>
+    <section data-lpane="suara"><div class="ptitle ui-sec">Audio</div>
       <div class="btns">
         <button id="labSound" type="button">Suara: nyala (U)</button>
         <button id="labMusic" type="button">Musik: lagu tema (J)</button>
@@ -327,7 +224,7 @@
         <input id="inMusicFile" type="file" accept="audio/*" hidden>
       </div>
     </section>
-    <section data-lpane="lain"><div class="ptitle">Lainnya</div>
+    <section data-lpane="lain"><div class="ptitle ui-sec">Lainnya</div>
       <div class="btns">
         <button id="labHudMode" type="button">HUD: ringkas</button>
         <button id="labHideUi" type="button"><kbd>H</kbd>Sembunyikan UI</button>
@@ -335,29 +232,29 @@
         <button id="labHelp" type="button"><kbd>?</kbd>Bantuan</button>
         <button id="labMap" type="button"><kbd>M</kbd>Peta</button>
       </div>
-      <div class="ptitle">Bahasa</div>
+      <div class="ptitle ui-sec">Bahasa</div>
       <div class="btns langPick"></div>
-      <div class="note">Panel ini: klik judul atau tombol ` (backtick) untuk membuka/menutup. Tab terakhir diingat.</div>
+      <div class="note ui-note">Panel ini: klik judul atau tombol ` (backtick) untuk membuka/menutup. Tab terakhir diingat.</div>
     </section>
   </div>
 </div>
 
-<div id="start">
-  <div class="card">
+<div id="start" class="ui-overlay">
+  <div class="card ui-card">
     <h1>Copper Corn Station</h1>
     <div class="sub">Silinder O'Neill 8 km di orbit Saturnus · R 1.000 m · 1 g dari putaran</div>
     <div id="boot"><div class="bar"><i></i></div><div class="bootRow"><span id="bootTxt">Memuat three.js...</span><span id="bootPct">0%</span></div></div>
     <div id="ready" hidden>
       <div class="plabel">Bahasa</div>
-      <div class="langPick"></div>
+      <div class="langPick ui-pick flex"></div>
       <div class="plabel">Planet</div>
-      <div id="planetPick" data-notr></div>
+      <div id="planetPick" class="ui-pick m2" data-notr></div>
       <div class="plabel">Wahana spaceport</div>
-      <div id="shipPick" data-notr></div>
+      <div id="shipPick" class="ui-pick m3" data-notr></div>
       <div class="plabel" id="jresLabel" hidden>Resolusi peta Jupiter</div>
-      <div id="jresPick" data-notr hidden></div>
+      <div id="jresPick" class="ui-pick m3" data-notr hidden></div>
       <div class="plabel">Kualitas grafik</div>
-      <div id="presetPick"></div>
+      <div id="presetPick" class="ui-pick"></div>
       <label class="pauto"><input id="presetAuto" type="checkbox"> Turunkan otomatis bila FPS di bawah 30</label>
       <div class="pnote">Hemat: untuk laptop tanpa GPU terpisah (MacBook M1). Bisa diganti kapan saja dengan Q.</div>
       <button id="go" type="button">Mulai</button>
@@ -365,10 +262,10 @@
     </div>
   </div>
 </div>
-<div id="help" hidden>
-  <div class="card">
-    <div class="hhead"><span>Bantuan</span><span><a class="menuHref" href="../../index.html" style="color: var(--accent); margin-right: 12px;">Kembali ke menu utama</a><button id="helpClose" type="button">Tutup (?)</button></span></div>
-    <div class="htabs"><button type="button" data-tab="dasar">Dasar</button><button type="button" data-tab="trans" class="desk-only">Transportasi</button><button type="button" data-tab="kamera" class="desk-only">Kamera dan foto</button><button type="button" data-tab="waktu" class="desk-only">Waktu dan cuaca</button><button type="button" data-tab="grafik" class="desk-only">Grafik dan suara</button><button type="button" data-tab="kapal" class="desk-only">Pesawat</button><button type="button" data-tab="tentang">Tentang</button></div>
+<div id="help" class="ui-overlay" hidden>
+  <div class="card ui-card wide">
+    <div class="hhead ui-hhead"><span>Bantuan</span><span><a class="menuHref" href="../../index.html">Kembali ke menu utama</a><button id="helpClose" type="button">Tutup (?)</button></span></div>
+    <div class="htabs ui-htabs"><button type="button" data-tab="dasar">Dasar</button><button type="button" data-tab="trans" class="desk-only">Transportasi</button><button type="button" data-tab="kamera" class="desk-only">Kamera dan foto</button><button type="button" data-tab="waktu" class="desk-only">Waktu dan cuaca</button><button type="button" data-tab="grafik" class="desk-only">Grafik dan suara</button><button type="button" data-tab="kapal" class="desk-only">Pesawat</button><button type="button" data-tab="tentang">Tentang</button></div>
     <table data-pane="dasar">
         <tr class="desk-only"><td>Mouse</td><td>Melihat. Klik = kunci kursor untuk melihat, klik lagi = kursor bebas untuk panel (Esc juga)</td></tr>
         <tr class="desk-only"><td>W A S D / panah</td><td>Berjalan 1,4 m/s</td></tr>
@@ -415,9 +312,9 @@
     <div data-pane="tentang" class="about"><p>Tahap 12d · siklus tanam dan mesin panen di ladang, mode foto (F), tur sinematik (Y) · 12c: hujan dengan fisika Coriolis, air mancur Coriolis (9) · 12b-5: suasana kota · 12b-4: burung · 12b-3: pejalan kaki · 12b-2: 8 jenis pohon, suasana daun, daun jatuh · 12b-1: lampu lalu lintas, mobil antre, perlintasan trem, preset Hemat · tahap 12a: gerbang B1, suara shuttle, panduan sandar · dermaga despun, shuttle orisinal yang bisa diterbangkan · perabot kota, cuaca, sunrays · R 1.000 m, L 8.000 m, 1 g</p><p>Proyek penggemar untuk belajar fisika dan grafis 3D, tidak berafiliasi dengan studio film mana pun. Semua model, suara, dan desain dibuat sendiri, kecuali model motor.</p><p>Model motor: "moto guzzi v-twin" oleh Alexios Apokaukos (sketchfab.com/Alexios_Apokaukos), lisensi CC BY 4.0. Diubah: tekstur diperkecil, tanpa peta normal, dial speedometer dan pengendara ditambahkan.</p><p>Model orang: "Ultimate Modular Men Pack" dan "Ultimate Modular Women Pack" oleh Quaternius (quaternius.com), via Poly Pizza (poly.pizza), lisensi CC BY / CC0. Diubah: disederhanakan menjadi 3 tingkat detail, animasi dibakar ke tekstur, klip duduk dan payung ditambahkan.</p><p>Rumput fluffy: mesh, tekstur alfa, dan algoritma dari FluffyGrass oleh Ebenezer (github.com/thebenezer/FluffyGrass), lisensi MIT, Copyright (c) 2023 Ebenezer. Diubah: penyebaran lewat sel dan peta lahan, warna dari peta lahan, cahaya stasiun.</p></div>
   </div>
 </div>
-<div id="hint" hidden></div>
-<div id="toast" hidden></div>
-<pre id="err" hidden></pre>
+<div id="hint" class="ui-keys ui-play" hidden></div>
+<div id="toast" class="ui-toast ui-play" hidden></div>
+<pre id="err" class="ui-err" hidden></pre>
 
 <script>
   // Loader watchdog: tampilkan pesan bila three.js gagal dimuat dari CDN.
@@ -431,6 +328,7 @@
   }, 15000);
 </script>
 <script src="../../shared/prof.js"></script>
+<script src="../../shared/ui.js"></script>
 <script src="../../shared/warm.js"></script>
 <script src="../../shared/kestrel.js"></script>
 <script src="../../shared/petrel.js"></script>
@@ -7858,9 +7756,7 @@ const helpEl = document.getElementById('help'), hintEl = document.getElementById
 function showHint() {                                              // petunjuk satu baris 6 s setelah Mulai
   hintEl.textContent = isTouch ? t('Jempol kiri berjalan · jempol kanan melihat · tombol Panel = panel kontrol')
     : t('W A S D berjalan · klik = kunci / lepas kursor · E aksi · ? bantuan');
-  hintEl.hidden = false; hintEl.style.opacity = 1;
-  setTimeout(() => { hintEl.style.opacity = 0; }, 6000);
-  setTimeout(() => { hintEl.hidden = true; }, 7000);
+  UIKIT.flash(hintEl, null, 8);                                     // UI seragam D6: tengah bawah, 8 s lalu pudar
 }
 // Tur v2.12: tawaran tur Y sekali sampai tur pernah diputar (localStorage cooperStation.tourSeen, diisi startTour)
 const tourOfferEl = document.getElementById('tourOffer');
@@ -7868,6 +7764,8 @@ function tourSeen() { try { return localStorage.getItem('cooperStation.tourSeen'
 function hideTourOffer() { tourOfferEl.hidden = true; }
 document.getElementById('tourOfferGo').addEventListener('click', () => { hideTourOffer(); startTour(); });
 document.getElementById('tourOfferNo').addEventListener('click', () => { hideTourOffer(); lockPointer(); });
+// UI seragam: Enter = Mulai saat kartu pilihan tampil (sama dengan Millar dan Gargantua)
+addEventListener('keydown', (e) => { if (!startEl.hidden && !document.getElementById('ready').hidden && e.code === 'Enter') { e.preventDefault(); document.getElementById('go').click(); } });
 document.getElementById('go').addEventListener('click', () => {
   startEl.hidden = true; startAudio();
   if (!tourSeen()) tourOfferEl.hidden = false;                       // kursor tidak dikunci agar tombol tawaran bisa diklik
@@ -7954,7 +7852,7 @@ window.addEventListener('keydown', (e) => {
   if (!AUDIO.started) startAudio();                                  // audio butuh interaksi pengguna
   if (e.repeat) return;
   if (ext.flight && portKey(e.code)) { e.preventDefault(); return; }   // tombol pesawat
-  if (TOUR.on) { if (e.code === 'KeyY' || e.code === 'Escape') stopTour(); else if (e.code === 'Space') { if (!e.repeat) tourSkip(); } else if (e.code === 'KeyH') document.body.classList.toggle('hidden-ui'); else if (e.code === 'KeyU') toggleSound(); e.preventDefault(); return; }   // 12d: saat tur hanya Y/Esc, Spasi (v2.14: lewati titik), H, U
+  if (TOUR.on) { if (e.code === 'KeyY' || e.code === 'Escape') stopTour(); else if (e.code === 'Space') { if (!e.repeat) tourSkip(); } else if (e.code === 'KeyH') document.body.classList.toggle('ui-hide'); else if (e.code === 'KeyU') toggleSound(); e.preventDefault(); return; }   // 12d: saat tur hanya Y/Esc, Spasi (v2.14: lewati titik), H, U
   if (e.code === 'KeyY') { startTour(); return; }
   if (e.code === 'KeyF') { togglePhoto(undefined, PHOTO.last); return; }   // K: jenis terakhir (bawaan kamera rangefinder)
   if (PHOTO.on && (e.code === 'Enter' || e.code === 'NumpadEnter')) { savePhoto(); return; }
@@ -7962,7 +7860,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyO') input.auto = !input.auto;
   if (e.code === 'KeyX') input.turbo = !input.turbo;
   if (e.code === 'KeyR') respawn();
-  if (e.code === 'KeyH') document.body.classList.toggle('hidden-ui');
+  if (e.code === 'KeyH') document.body.classList.toggle('ui-hide');
   if (e.code === 'Backquote') toggleLab();                          // M2: buka/tutup panel
   if (e.code === 'Space' && player.state === 'ground') { if (MOTO.on) motoHorn(); else jump(); }   // 19b: di motor Space = klakson
   if (e.code === 'KeyB') throwBall();
@@ -8036,7 +7934,7 @@ const touchEnd = (e) => {
 canvas.addEventListener('touchend', touchEnd);
 canvas.addEventListener('touchcancel', touchEnd);
 const on = (id, fn) => document.getElementById(id).addEventListener('click', (e) => { fn(e); e.currentTarget.blur(); });
-on('btnHud', () => document.body.classList.toggle('hidden-ui'));
+on('btnHud', () => document.body.classList.toggle('ui-hide'));
 on('btnRun', (e) => { input.run = !input.run; e.currentTarget.classList.toggle('on', input.run); });
 on('btnAuto', (e) => { input.auto = !input.auto; e.currentTarget.classList.toggle('on', input.auto); });
 on('btnJump', () => jump());
@@ -8047,7 +7945,7 @@ on('plaqueClose', () => { plaqueEl.hidden = true; });
 on('mapClose', () => toggleMap());
 on('btnLab', () => toggleLab());
 on('labHudMode', () => setHudMode(!hud.classList.contains('compact')));
-on('labHideUi', () => document.body.classList.toggle('hidden-ui'));
+on('labHideUi', () => document.body.classList.toggle('ui-hide'));
 on('labHelp', () => toggleHelp());
 on('labMap', () => toggleMap());
 on('labForest', () => teleport('forest'));
@@ -8056,11 +7954,8 @@ on('labForest', () => teleport('forest'));
    PANEL UJI FISIKA
    ===================================================================== */
 const labEl = document.getElementById('lab');
-function toggleLab(force) {
-  const open = force !== undefined ? force : labEl.classList.contains('collapsed');
-  labEl.classList.toggle('collapsed', !open);
-  document.body.classList.toggle('lab-open', open);
-}
+// UI seragam D7: panel diciutkan (kepala saja) saat muat, status terakhir diingat (ponsel selalu mulai ciut)
+const toggleLab = UIKIT.panel(labEl, 'cooperStation.panelOpen', (open) => document.body.classList.toggle('lab-open', open));
 document.getElementById('labHead').addEventListener('click', () => toggleLab());
 if (window.innerWidth < 640) toggleLab(false);
 function bindRange(id, key, fmt) {
@@ -14187,6 +14082,7 @@ const MATDET = { off: new URLSearchParams(location.search).get('detail') === '0'
 PRESET_HOOKS.push((i) => { LIGHT.uniforms.uL_Detail.value = !MATDET.off && i <= 1 ? 1 : 0; });
 function applyPreset(i) {
   PRESET.idx = i; const P = PRESETS[i];
+  UIKIT.lite(P.name === 'Hemat');                                   // UI seragam D1: Hemat tanpa blur kaca
   CONFIG.dprMax = P.dpr; applyPixelRatio();
   vegQ = P.veg; applyVegQuality();
   POST.mode = P.post; POST.aoQ = [2, 1, 0, 0, 0][i]; uiLabel('labPost', () => t('Efek layar: {m} (P)', { m: t(POST.names[POST.mode]) }));

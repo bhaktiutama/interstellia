@@ -1,0 +1,155 @@
+/* UI bersama Copper, Gargantua, Millar (docs/app/rencana-ui-seragam.md UI1).
+   Token + komponen. Experience memberi kelas ui-* pada elemennya; CSS lokal hanya untuk letak khusus.
+   Material: kotak mengambang = kaca 0,72 + blur 12 (D1), kartu = kaca 0,82 + blur 12 di atas layar 0,45 (D2).
+   Font: mono untuk instrumen, system-ui untuk kartu bacaan (D3). Aksen tunggal #e8b765 (D4).
+   body.ui-pre = kartu mulai tampil (semua .ui-play disembunyikan, D5), body.ui-hide = tombol H, body.ui-lite = tanpa blur (preset Hemat). */
+:root {
+  color-scheme: dark;
+  --ui-ink: #d9dde3;
+  --ui-muted: #8b929c;
+  --ui-accent: #e8b765;
+  --ui-accent-rgb: 232, 183, 101;
+  --ui-accent-bg: rgba(232, 183, 101, 0.18);
+  --ui-warn: #e7806b;
+  --ui-ok: #8fd18a;
+  --ui-panel: rgba(12, 14, 18, 0.72);
+  --ui-card: rgba(12, 14, 18, 0.82);
+  --ui-solid: #14171c;
+  --ui-scrim: rgba(8, 9, 12, 0.45);
+  --ui-line: rgba(255, 255, 255, 0.10);
+  --ui-btn: rgba(255, 255, 255, 0.06);
+  --ui-track: rgba(255, 255, 255, 0.14);
+  --ui-blur: blur(12px);
+  --ui-r: 8px;
+  --ui-r-card: 10px;
+  --ui-r-btn: 6px;
+  --ui-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --ui-sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --ui-font: 12px/1.45 var(--ui-mono);
+  --ui-font-read: 13px/1.5 var(--ui-sans);
+  --ui-top: calc(12px + env(safe-area-inset-top, 0px));
+  --ui-top2: calc(44px + env(safe-area-inset-top, 0px));
+  --ui-bot: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+body.ui-lite { --ui-blur: none; --ui-panel: rgba(12, 14, 18, 0.80); --ui-card: rgba(14, 16, 20, 0.92); }
+
+/* ---- material ---- */
+.ui-box, .ui-menu, .ui-hud, .ui-panel, .ui-toast, .ui-keys, .ui-prompt {
+  background: var(--ui-panel); border: 1px solid var(--ui-line); border-radius: var(--ui-r); color: var(--ui-ink); font: var(--ui-font);
+  backdrop-filter: var(--ui-blur); -webkit-backdrop-filter: var(--ui-blur);
+}
+.ui-overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: var(--ui-scrim); z-index: 30; }
+.ui-overlay[hidden] { display: none; }
+.ui-card { width: min(440px, 100%); max-height: calc(100vh - 32px); overflow: auto; padding: 20px; background: var(--ui-card);
+  border: 1px solid var(--ui-line); border-radius: var(--ui-r-card); backdrop-filter: var(--ui-blur); -webkit-backdrop-filter: var(--ui-blur);
+  font: var(--ui-font-read); color: #e8e6e3; }
+.ui-card.wide { width: min(580px, 100%); }
+.ui-card h1 { margin: 0 0 4px; font-size: 18px; font-weight: 600; letter-spacing: .04em; color: #fff; text-transform: none; }
+.ui-card h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; letter-spacing: .04em; }
+.ui-card .sub { color: var(--ui-muted); font-size: 12.5px; margin: 0 0 16px; }
+
+/* ---- tombol umum ---- */
+.ui-box button, .ui-panel button, .ui-card button, .ui-toast button, .ui-keys button, .ui-btn {
+  font: inherit; color: var(--ui-ink); background: var(--ui-btn); border: 1px solid var(--ui-line); border-radius: var(--ui-r-btn); padding: 5px 9px; cursor: pointer; }
+.ui-box button:hover, .ui-panel button:hover, .ui-card button:hover, .ui-btn:hover { border-color: rgba(var(--ui-accent-rgb), 0.6); }
+.ui-box button.on, .ui-panel button.on, .ui-card button.on, .ui-btn.on { border-color: var(--ui-accent); background: var(--ui-accent-bg); color: #fff; }
+.ui-box button:focus-visible, .ui-panel button:focus-visible, .ui-card button:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 1px; }
+.ui-panel kbd, .ui-box kbd { font: inherit; color: var(--ui-muted); margin-right: 4px; }
+.ui-panel select, .ui-box select { font: inherit; color: var(--ui-ink); background: var(--ui-btn); border: 1px solid var(--ui-line); border-radius: var(--ui-r-btn); padding: 4px 6px; cursor: pointer; }
+.ui-panel select option { background: var(--ui-solid); }
+.ui-panel input[type=checkbox], .ui-card input[type=checkbox], .ui-box input[type=checkbox] { accent-color: var(--ui-accent); margin: 0; }
+/* slider: jalur tipis 2 px, kenop 10 px (dari Gargantua) */
+.ui-panel input[type=range], .ui-box input[type=range] { width: 100%; margin: 0; height: 14px; background: transparent; -webkit-appearance: none; appearance: none; }
+.ui-panel input[type=range]::-webkit-slider-runnable-track, .ui-box input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--ui-track); border-radius: 2px; }
+.ui-panel input[type=range]::-moz-range-track, .ui-box input[type=range]::-moz-range-track { height: 2px; background: var(--ui-track); border-radius: 2px; }
+.ui-panel input[type=range]::-webkit-slider-thumb, .ui-box input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 10px; height: 10px; margin-top: -4px; border-radius: 50%; background: var(--ui-accent); border: none; }
+.ui-panel input[type=range]::-moz-range-thumb, .ui-box input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--ui-accent); border: none; }
+
+/* ---- judul kotak dan seksi ---- */
+.ui-title { color: var(--ui-accent); letter-spacing: .08em; text-transform: uppercase; font-size: 10.5px; font-weight: 400; margin: 0; }
+.ui-sec { color: var(--ui-accent); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+.ui-note { color: var(--ui-muted); font-size: 11px; }
+
+/* ---- tombol menu (kiri atas) ---- */
+.ui-menu { position: fixed; top: var(--ui-top); left: 12px; padding: 4px 10px; font-size: 12px; text-decoration: none; z-index: 20; }
+.ui-menu:hover { border-color: var(--ui-accent); color: #fff; }
+
+/* ---- HUD kiri (di bawah tombol menu) ---- */
+.ui-hud { position: fixed; top: var(--ui-top2); left: 12px; padding: 10px 12px; pointer-events: none; font-variant-numeric: tabular-nums; max-width: calc(100vw - 24px); }
+
+/* ---- panel kontrol (kanan atas): kepala + tab + isi; .collapsed = kepala saja (D7) ---- */
+.ui-panel { position: fixed; top: var(--ui-top); right: 12px; width: min(300px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; z-index: 6; user-select: none; }
+.ui-panel.collapsed { width: auto; overflow: hidden; }
+.ui-phead { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; cursor: pointer; user-select: none;
+  color: var(--ui-accent); letter-spacing: .08em; text-transform: uppercase; font-size: 10.5px; }
+.ui-phead .chev { color: var(--ui-muted); transition: transform .2s; }
+.ui-panel.collapsed .ui-phead .chev { transform: rotate(-90deg); }
+.ui-panel.collapsed .ui-pbody { display: none; }
+.ui-pbody { padding: 0 12px 12px; }
+.ui-tabs { display: flex; flex-wrap: wrap; gap: 3px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--ui-line); }
+.ui-panel .ui-tabs button { flex: 1 1 auto; padding: 5px 6px; font-size: 11px; background: rgba(255,255,255,0.03); }
+.ui-panel .ui-tabs button.on { background: var(--ui-accent-bg); }
+
+/* ---- pilihan tombol berderet (kartu mulai, panel) ---- */
+.ui-pick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.ui-pick.m2 { grid-template-columns: repeat(2, 1fr); }
+.ui-pick.m3 { grid-template-columns: repeat(3, 1fr); }
+.ui-pick.flex { display: flex; flex-wrap: wrap; }
+.ui-pick button { font: inherit; font-size: 12px; padding: 7px 2px; }
+.ui-pick.flex button { padding: 6px 10px; }
+
+/* ---- kartu mulai (U1, dulu disalin di Copper dan Millar) ---- */
+#start { z-index: 6; }
+#boot .bar { height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; overflow: hidden; }
+#boot .bar i { display: block; height: 100%; width: 0; background: var(--ui-accent); transition: width .25s; }
+#boot .bootRow { display: flex; justify-content: space-between; margin-top: 8px; color: var(--ui-muted); font-size: 12px; }
+#ready .plabel { color: var(--ui-accent); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; margin: 12px 0 6px; }
+#ready .plabel:first-child { margin-top: 0; }
+#ready .psec { color: #fff; font-size: 12px; margin: 16px 0 0; padding-top: 10px; border-top: 1px solid var(--ui-line); }
+#ready label { display: flex; gap: 6px; align-items: center; margin: 8px 0 2px; font-size: 12px; }
+#ready .pnote { color: var(--ui-muted); font-size: 11px; margin: 2px 0 6px; }
+#go { width: 100%; margin-top: 14px; font: inherit; font-size: 14px; padding: 11px; border-radius: var(--ui-r); border: 1px solid var(--ui-accent);
+  background: var(--ui-accent-bg); color: #fff; cursor: pointer; }
+#go:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+#ready .links { display: flex; justify-content: space-between; gap: 12px; margin-top: 12px; font-size: 12px; }
+#ready .links a { color: var(--ui-muted); text-decoration: none; }
+#ready .links a:hover { color: #e8e6e3; }
+
+/* ---- bantuan: kepala, tab, tabel (kartu bacaan) ---- */
+.ui-hhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; color: var(--ui-accent); letter-spacing: .06em; }
+.ui-hhead a { color: var(--ui-accent); text-decoration: none; margin-right: 12px; font-size: 12px; }
+.ui-hhead button { font-size: 12px; }
+.ui-htabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.ui-htabs button { font-size: 12px; padding: 5px 9px; }
+.ui-card table { width: 100%; border-collapse: collapse; }
+.ui-card td { padding: 5px 8px 5px 0; vertical-align: top; line-height: 1.45; border-top: 1px solid var(--ui-line); font-size: 12.5px; }
+.ui-card td:first-child { color: var(--ui-accent); white-space: nowrap; padding-right: 14px; font-family: var(--ui-mono); font-size: 12px; }
+.ui-card [data-pane] { display: none; }
+.ui-card [data-pane].on { display: table; }
+
+/* ---- notifikasi (tengah atas) dan petunjuk tombol (tengah bawah, maks 2 baris, D6) ---- */
+.ui-toast { position: fixed; left: 50%; top: var(--ui-top); transform: translateX(-50%); max-width: min(520px, calc(100vw - 32px));
+  padding: 7px 14px; color: #fff; pointer-events: none; z-index: 25; transition: opacity .5s; white-space: pre-line; text-align: center; }
+.ui-keys { position: fixed; left: 50%; bottom: var(--ui-bot); transform: translateX(-50%); width: max-content; max-width: min(640px, calc(100vw - 32px));
+  padding: 7px 14px; color: #fff; pointer-events: none; z-index: 4; text-align: center; transition: opacity .8s;
+}   /* teks petunjuk ditulis pendek: 1 baris di desktop, 2 baris di layar sempit (tidak dipotong) */
+.ui-keys[hidden] { display: none; }
+.ui-keys b { color: var(--ui-accent); font-weight: 400; }
+.ui-prompt { position: fixed; left: 50%; transform: translateX(-50%); padding: 6px 12px; border-color: var(--ui-accent); color: #fff; pointer-events: none; white-space: nowrap; }
+
+/* ---- kotak galat ---- */
+.ui-err { position: fixed; inset: 16px; overflow: auto; background: rgba(30, 8, 6, 0.95); color: #ffc2b5; border: 1px solid #6b2a22;
+  border-radius: var(--ui-r); padding: 16px; white-space: pre-wrap; z-index: 50; margin: 0; font: var(--ui-font); }
+.ui-err[hidden] { display: none; }
+
+/* ---- keadaan halaman ---- */
+body.ui-pre .ui-play, body.ui-hide .ui-play, body:has(#start:not([hidden])) .ui-play { display: none !important; }
+.ui-overlay[hidden], .ui-card[hidden], .ui-box[hidden], .ui-panel[hidden], .ui-toast[hidden], .ui-prompt[hidden] { display: none !important; }
+
+/* ---- ponsel: panel lebar penuh di bawah tombol menu, kepala ciut tetap di kanan atas ---- */
+@media (max-width: 640px) {
+  .ui-panel:not(.collapsed) { top: var(--ui-top2); left: 12px; right: 12px; width: auto; max-height: 60vh; }
+  .ui-hud { font-size: 10.5px; padding: 8px 10px; }
+  .ui-keys { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  .ui-desk { display: none !important; }   /* petunjuk tombol keyboard: tidak berguna di layar sentuh sempit */
+}
