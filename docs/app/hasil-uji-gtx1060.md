@@ -106,6 +106,33 @@ Kesimpulan:
 | A3-G2 hasil | Dikerjakan 15 November 2026. Profil CPU sandbox (15 s misi susur, kokpit): `drawMFD()` 14,5 s dari 15,2 s, hampir semuanya `getImageData` (baca balik 528 x 352 piksel sekitar 26 kali per detik). Kini layar disalin ke kanvas kecil dan diunggah langsung dari kanvas (`texSubImage2D` dengan sumber kanvas): `drawMFD()` 0,1 s per 15 s, utas utama 68% menganggur. Sisa terbesar `autoExposure()` -> `getBufferSubData` 4,4 s di sandbox (pola fence asinkron sudah benar; kemungkinan karena proses GPU SwiftShader lambat, tidak diubah). Isi layar MFD tetap tergambar (dicek dari tangkapan layar); kanvas MFD kini tanpa `willReadFrequently` (boleh dipercepat GPU) | - | - | - |
 | A2d | Uji ulang Millar Ultra tanpa meninggalkan jendela, setelah A3-M | - (pemilik) | - | - |
 
+## Uji setelah A3-Q, A3-M, A3-G2 (15 November 2026, 05.40)
+
+Vsync menyala, resolusi adaptif Gargantua menyala, ketiga experience.
+
+| Cek | Sebelum | Sesudah | Status |
+| --- | --- | --- | --- |
+| Copper tombol Q (5x) dan P (2x) | Q ke Sedang: 117-118 program, long task 67 s | 0 program, long task 0 ms di semua putaran | A3-Q terbukti |
+| Copper muat kedua (cache terisi) | 29,9 s | 7,9 s (Tinggi), 8,8-8,9 s (Jupiter) | Lebih cepat |
+| Copper muat pertama setelah kode berubah | 86,4 s | 90,8 s | Tetap (cache shader kosong lagi karena teks shader berubah) |
+| Copper Tinggi, frame > 50 ms per 10 s | 0-31 | 0 di semua titik | Lancar |
+| Copper Tinggi kota (C4 / C7 / C8) | 49,7 / 49,3 / 53,3 FPS | 53,1 / 50,1 / 57,3 FPS | Masih di bawah 60 (pass scene 14-16 ms) |
+| Millar Ultra | beku 7,4-8,7 s setelah Mulai | 102-106 FPS, 0 frame > 50 ms, maks 35 ms | A3-M terbukti (tidak ada beku setelah Mulai) |
+| Gargantua G3 misi kokpit, frame > 50 ms | 71 / 71 | 3 (Ultra) / 9 (Tinggi) | A3-G2 terbukti |
+| Gargantua G3 FPS | 37,1 / 39,6 | 44,4 / 48,4 | Naik |
+| Gargantua G1 / G2 Tinggi, frame > 50 ms | 8 / 3 | 39 / 37 | Naik; skala render adaptif berayun (0,6-0,9), tidak terkait perubahan MFD (MFD hanya saat misi). Perlu dilihat |
+| Copper Ultra (semua titik) | - | 1,0 FPS, 1.007 ms per frame | Tidak sah: jendela tidak aktif / tertutup |
+
+Perbaikan skrip uji: Chrome kini dijalankan dengan `--disable-backgrounding-occluded-windows`, `--disable-renderer-backgrounding`, `--disable-background-timer-throttling`, jendela dibawa ke depan sebelum titik uji, dan titik dengan waktu frame sekitar 1 s ditandai "tidak sah".
+
+Sisa (usulan):
+
+| Langkah | Isi | Effort |
+| --- | --- | --- |
+| A2c | Mode banding Copper C4 (`?orang=lama`, `?mobil=lama`, `?tekstur=lama`, `?pohon=lama`) untuk mencari bagian termahal pass scene kota | Medium |
+| A3-G3 | Gargantua: resolusi adaptif berayun (turun bila < 30 FPS, naik bila > 55 FPS) membuat frame tidak rata; pertimbangkan histeresis atau sasaran 45 FPS | Medium |
+| A3d | Muat pertama Copper 90 s / Gargantua 39-88 s (kompilasi HLSL): kurangi jumlah dan ukuran shader | High |
+
 ## Keterbatasan
 
 - Satu kali jalan per preset, 10 s per titik; variasi antar jalan belum diketahui.

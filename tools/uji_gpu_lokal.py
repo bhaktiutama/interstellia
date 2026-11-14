@@ -205,6 +205,7 @@ async def run_exp(ctx, base, exp, preset, args, out, extra='', points=None, tag=
     pts = points if points is not None else {'copper': COPPER, 'millar': MILLAR, 'gargantua': GARGANTUA}[exp]
     if exp == 'millar' and args.cine and points is None:
         pts = [('M1', 1, 'Sinematik kedatangan (sedang berjalan)', None, None)]
+    await pg.bring_to_front()
     for pid, pri, name, setup, key in pts:
         if pri > args.prioritas: continue
         r = {'id': pid, 'nama': name}
@@ -214,6 +215,7 @@ async def run_exp(ctx, base, exp, preset, args, out, extra='', points=None, tag=
             if key: await pg.keyboard.down(key)
             sec = 90 if pid == 'C13' else args.detik
             r.update(await pg.evaluate(FPS_JS, sec))
+            if r['p50'] > 900: r['catatan'] = 'tidak sah: jendela tidak aktif atau tertutup (Chrome membatasi 1 FPS)'
             if key: await pg.keyboard.up(key)
             r['gpu_ms'] = await pg.evaluate(GPU_JS[exp])
             if exp == 'gargantua': r['gpu_ms'] = {'skala render': await pg.evaluate('window.__gargantua.CONFIG.renderScale')}   # belum ada GPUT: catat skala adaptif
@@ -291,7 +293,9 @@ async def main():
     out = ROOT / 'hasil-uji-gpu' / f"{stamp}-{socket.gethostname().split('.')[0]}"
     out.mkdir(parents=True, exist_ok=True)
     srv, port = serve(); base = f"http://127.0.0.1:{port}"
-    flags = ['--ignore-gpu-blocklist', '--enable-gpu-rasterization']
+    flags = ['--ignore-gpu-blocklist', '--enable-gpu-rasterization',
+             # jendela tertutup / tidak aktif: Chrome memperlambat rAF ke 1 FPS (hasil uji 15 Nov: semua titik 1,0 FPS, 1007 ms per frame)
+             '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling']
     if args.novsync: flags += ['--disable-gpu-vsync', '--disable-frame-rate-limit']
     runs, renderer = [], '?'
     async with async_playwright() as p:
