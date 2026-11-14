@@ -523,6 +523,7 @@ Object.assign(I18N.en, {
   "Lift dan hub...": "Lift and hub...",
   "Menyiapkan shader...": "Preparing shaders...",
   "Pemanasan GPU...": "Warming up the GPU...",
+  "Menyiapkan shader {p}% (pertama kali di komputer ini bisa 1-2 menit)...": "Preparing shaders {p}% (the first time on this computer can take 1-2 minutes)...",
   "Mesh tanah...": "Ground mesh...",
   "Mesin ladang...": "Farm machines...",
   "Pejalan kaki...": "Pedestrians...",
@@ -13714,7 +13715,6 @@ function taaEnd() {                                                  // sesudah 
 const _dbs = new THREE.Vector2();
 function postBegin() {                                            // dipanggil sebelum render scene
   LIGHT.uniforms.uL_SsrK.value.x = SSR.on && SSR.ready && POST.mode !== 2 && !ext.active ? 1 : 0;   // 23a: pakai salinan frame lalu
-  if (POST.mode === 2) { ATMO.gate = false; SSR.ready = false; return false; }          // V4: tanpa efek layar, kabut pagi kembali rata di material
   renderer.getDrawingBufferSize(_dbs);
   if (XRC.on) _dbs.set(XRC.w, XRC.h);                              // VR4: efek layar seukuran satu mata
   const w = Math.max(4, Math.floor(_dbs.x)), h = Math.max(4, Math.floor(_dbs.y));
@@ -13730,8 +13730,19 @@ function postBegin() {                                            // dipanggil s
     POST_R.ssr.setSize(Math.max(2, w >> 1), Math.max(2, h >> 1)); SSR.ready = false;   // 23a
   }
   renderer.setRenderTarget(POST_R.hdr);
+  // A3-Q (docs/app/hasil-uji-gtx1060.md): mode Mati juga menggambar scene ke target HDR lalu disalin ke kanvas (postCopy).
+  // Dulu langsung ke kanvas = kunci program lain (keluaran sRGB) untuk sekitar 117 program: ganti ke Rendah / Hemat / P Mati
+  // (juga turun otomatis) mengompilasi ulang seluruh adegan, di GTX 1060 Direct3D11 halaman membeku 67 s saat cache shader kosong.
+  if (POST.mode === 2) { ATMO.gate = false; SSR.ready = false; return false; }          // V4: tanpa efek layar, kabut pagi kembali rata di material
   return true;
 }
+// mode Mati: salinan target HDR ke kanvas, linear -> sRGB lewat colorspace_fragment (fungsi yang sama dengan material saat menggambar ke kanvas)
+const copyOutMat = fsMat(/* glsl */`
+  uniform sampler2D tSrc; varying vec2 vUv;
+  void main() { gl_FragColor = texture2D(tSrc, vUv);
+    #include <colorspace_fragment>
+  }`, { tSrc: { value: POST_R.hdr.texture } });
+function postCopy() { fsPass(copyOutMat, null); }
 function postEnd() {
   // V3: AO juga di kokpit dan kamera belakang shuttle (ext.flight); kamera luar stasiun (V, ribuan m) tetap tanpa AO
   const R0 = POST_R, useAO = POST.mode === 0 && (!ext.active || ext.flight), gtao = !POST.ssao;
@@ -13840,7 +13851,6 @@ function postEnd() {
 }
 function cyclePost() {
   POST.mode = (POST.mode + 1) % POST.names.length;
-  warmNext();                                                      // varian kanvas dikompilasi saat sudah dekat (mode 1 -> 2), bukan saat muat
   uiLabel('labPost', () => t('Efek layar: {m} (P)', { m: t(POST.names[POST.mode]) }));
 }
 function toggleAdapt() {                                           // 17c: adaptasi mata nyala/mati (untuk membandingkan)
@@ -14189,7 +14199,6 @@ function applyPreset(i) {
   TRAFFIC.U.uTraffic.value = P.traffic;
   LEAF.presetN = [3000, 2200, 1500, 900, 0][i]; applyFall();                  // 12b-2: daun jatuh per preset (Hemat: mati)
   for (const f of PRESET_HOOKS) f(i);                                            // 12b-3: fitur yang didefinisikan belakangan (pejalan kaki)
-  if (typeof warmNext === 'function') warmNext();
   RAYS.n = [16, 10, 0, 0, 0][i]; toggleRays(); toggleRays();
   uiLabel('labPreset', () => t('Preset: {p}', { p: t(P.name) }) + (PRESET.auto ? t(' (otomatis)') : '') + ' (Q)');
   try { localStorage.setItem('cooperStation.preset', JSON.stringify({ idx: i, auto: PRESET.auto })); } catch (e) { /* penyimpanan tidak tersedia */ }
@@ -19648,7 +19657,7 @@ function frameRaw(now) {
   renderer.clearDepth();
   if (!DIAG.has('scene')) renderer.render(scene, camera);
   gpuEnd(); gpuBegin('po');
-  if (post) { postEnd(); taaEnd(); }
+  if (post) { postEnd(); taaEnd(); } else postCopy();               // A3-Q: mode Mati = salin target HDR ke kanvas
   gpuEnd(); gpuFrameEnd();
   updateAudio(dt);
   updateTraffic();
@@ -19668,13 +19677,17 @@ updateCamera();
 // jadi scene dikompilasi dengan target yang sama dengan postBegin(); dulu varian kanvas yang dibuat, lalu 76 program
 // dikompilasi ulang di frame pertama (halaman beku di 100%). Pass layar penuh ikut semua (FS_MATS), lalu satu frame
 // pemanasan (bayangan, impostor, efek layar, unggah buffer) di balik layar muat. Keadaan antarframe dikembalikan.
-const FS_TO_CANVAS = new Set([taaOutMat, fxaaMat]);                 // pass akhir ke kanvas; pass lain ke target
-const POST_TGT = () => (POST.mode !== 2 ? POST_R.hdr : null);       // target scene saat bermain (sama dengan postBegin())
+const FS_TO_CANVAS = new Set([taaOutMat, fxaaMat, copyOutMat]);     // pass akhir ke kanvas; pass lain ke target
+const POST_TGT = () => POST_R.hdr;                                  // target scene saat bermain (sama dengan postBegin(); A3-Q: juga mode Mati)
 const sceneJobs = (t) => [{ scene, camera, target: t }, { scene: farScene, camera: farCam, target: t }];
 const fsJobs = () => FS_MATS.map((m) => ({ scene: fsScene, camera: fsCam, target: FS_TO_CANVAS.has(m) ? null : POST_R.ldr,
   before: () => { fsJobs.q0 = fsQuad.material; fsQuad.material = m; }, after: () => { fsQuad.material = fsJobs.q0; } }));
 async function warmShaders(f0, f1, label) {
-  return WARMKIT.compile(renderer, [...sceneJobs(POST_TGT()), ...fsJobs()], (k) => bootStep(f0 + (f1 - f0) * k, label, true));
+  // A3-Q: di GTX 1060 Direct3D11 dengan cache shader kosong kompilasi sekitar 70 s. Dulu batas tunggu 20 s, sisanya dikompilasi saat
+  // warmFrame() menggambar = halaman membeku 35 s tanpa bar bergerak. Kini ditunggu sampai 4 menit sambil menampilkan kemajuan.
+  const t0 = performance.now();
+  return WARMKIT.compile(renderer, [...sceneJobs(POST_TGT()), ...fsJobs()], (k) => bootStep(f0 + (f1 - f0) * k,
+    performance.now() - t0 > 3000 ? t('Menyiapkan shader {p}% (pertama kali di komputer ini bisa 1-2 menit)...', { p: Math.round(k * 100) }) : label, true), { maxMs: 240000 });
 }
 function warmFrame() {
   const A = { cur: ADAPT.cur, init: ADAPT.init, t: ADAPT.t }, T = { act: TAA.act, valid: TAA.valid, cur: TAA.cur, i: TAA.i, jx: TAA.jx, jy: TAA.jy, prev: TAA.prevVP.clone() }, ssr = SSR.ready;
@@ -19684,7 +19697,7 @@ function warmFrame() {
     const post = postBegin();
     if (post) taaBegin(); else TAA.act = false;
     renderer.clear(); renderer.render(farScene, farCam); renderer.clearDepth(); renderer.render(scene, camera);
-    if (post) { postEnd(); taaEnd(); }
+    if (post) { postEnd(); taaEnd(); } else postCopy();
   } catch (e) { /* lanjut: sisanya dikompilasi di frame pertama seperti dulu */ }
   renderer.setRenderTarget(null);
   Object.assign(ADAPT, A); SSR.ready = ssr;
@@ -19696,18 +19709,10 @@ try { await warmShaders(0.96, 0.985, 'Menyiapkan shader...'); } catch (e) { /* l
 exteriorGroup.visible = ext.active;
 await bootStep(0.985, 'Pemanasan GPU...');
 warmFrame();
-// P4: varian target yang lain (P = tanpa efek layar menggambar langsung ke kanvas sRGB; efek layar = target HDR linear)
-// dikompilasi di latar belakang setelah muat, hanya bila GPU bisa mengompilasi paralel (tanpa itu kompilasi memblokir frame).
-// Program yang sudah ada tidak dikompilasi ulang (cache three.js per kunci program).
-function warmLater(force) {                                         // force: uji di sandbox tanpa kompilasi paralel
-  const other = POST.mode !== 2 ? null : POST_R.hdr;               // varian lain dulu, varian yang sedang dipakai terakhir
-  return WARMKIT.background(renderer, [...sceneJobs(other), ...sceneJobs(POST_TGT())], force);
-}
-let warmDone = false;
-function warmNext() {                                               // aman dipanggil sebelum muat selesai (tidak melakukan apa pun)
-  if (!window.__stationReady || warmDone || POST.mode !== 1) return;   // __stationReady dulu: warmDone belum ada sebelum muat selesai
-  warmDone = true; setTimeout(warmLater, 1500);
-}
+// P4 -> A3-Q: dulu varian kanvas (mode Mati) dikompilasi di latar belakang 1,5 s setelah preset / P berganti (warmNext). Di GTX 1060
+// Direct3D11 kompilasi itu memblokir halaman 67 s (cache kosong), karena panggilan GL sinkron berikutnya menunggu GPU selesai mengompilasi.
+// Kini semua mode menggambar scene ke target HDR yang sama, jadi varian itu tidak ada lagi. warmLater tetap untuk alat ukur (tanpa program baru).
+function warmLater(force) { return WARMKIT.background(renderer, sceneJobs(POST_TGT()), force); }
 await bootStep(1, 'Siap');
 BOOT.ms = Math.round(performance.now() - BOOT.t0);
 {
@@ -19753,9 +19758,6 @@ BOOT.ms = Math.round(performance.now() - BOOT.t0);
 }
 window.__stationReady = true;
 diagApply();
-// P4 (revisi): dulu warmLater() jalan otomatis 1,5 s setelah muat dan mengompilasi ulang seluruh adegan untuk target kanvas; di GPU asli itu
-// memakai CPU / driver selama berpuluh detik sampai menit saat pemain sudah bermain (FPS rendah, resolusi dinamis turun, gambar buram).
-// Kini hanya sekali, ketika efek layar tinggal satu langkah dari mode Mati (target kanvas): warmNext() dipanggil dari cyclePost() dan applyPreset().
 PROFKIT.ready();                                   // P0: akhir muat (?prof=1)
 // Hook untuk pengujian otomatis (tidak dipakai UI)
 window.__station = { groundH0, riverZ, bridgeAt, bridgeIn, RIVER, PATHSDF, FLUFF, warmLater, IMPM, LEAFG, LEAF_SP, DAUN, HX, EXT_LIGHT, extLightUpdate, toggleExterior, ext, exteriorGroup, CONFIG, player, input, keys, lab, physicsStep, updateCamera, camera, renderer, STEP, OMEGA, GPUT, cloudCoverAt, BOB, MOTO, MOTO_V, toggleMoto, motoMount, motoDismount, motoPark, motoHorn, look, cycleBob, drawDash, respawn,

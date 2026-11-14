@@ -3944,7 +3944,7 @@ function updateHud(depth, dist, wob) {
 /* ---------------- Layar awal: pilihan grafik dan suasana ---------------- */
 {
   const pick = document.getElementById('presetPick'), mp = document.getElementById('moodPick');
-  PRESETS.forEach((Pr, i) => { const b = document.createElement('button'); b.type = 'button'; b.addEventListener('click', () => { applyPreset(i); }); pick.appendChild(b); });
+  PRESETS.forEach((Pr, i) => { const b = document.createElement('button'); b.type = 'button'; b.addEventListener('click', () => { if (i === PRESET.idx) return; applyPreset(i); rewarm(); }); pick.appendChild(b); });
   MOODS.forEach((m, i) => { const b = document.createElement('button'); b.type = 'button'; b.addEventListener('click', () => setMood(i)); mp.appendChild(b); });
   for (const m of ['misi', 'jelajah']) { const b = document.createElement('button'); b.type = 'button'; b.dataset.mode = m; b.addEventListener('click', () => setMode(m)); document.getElementById('modePick').appendChild(b); }
   CONFIG.mission.levels.forEach((l, i) => { const b = document.createElement('button'); b.type = 'button'; b.addEventListener('click', () => setLevel(i)); document.getElementById('levelPick').appendChild(b); });
@@ -4195,7 +4195,11 @@ function mBoot(frac, label) {
   if (label) { MBOOT.label = label; MBOOT.txt.textContent = t(label); PROFKIT.mark(label); }
   return new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
 }
-async function millarWarm() {
+async function millarWarm(again) {
+  if (again) {                                                       // A3-M: preset diganti di kartu mulai = bar muat lagi, Mulai menunggu
+    document.getElementById('start').classList.add('loading');
+    document.getElementById('ready').hidden = true; document.getElementById('boot').hidden = false;
+  }
   const fsJobs = FS_MATS.map((m) => ({ scene: postScene, camera: postCam, target: m === M_FINAL ? null : POST.ldr,
     before: () => { fsJobs.q0 = fsq.material; fsq.material = m; }, after: () => { fsq.material = fsJobs.q0; } }));
   const jobs = [{ scene, camera, target: POST.hdr }, { scene: skyScene, camera: SKYCUBE.cam.children[0], target: SKYCUBE.rt },
@@ -4214,7 +4218,7 @@ async function millarWarm() {
     if (SHD.rt) { scene.overrideMaterial = SHD.mat; renderer.setRenderTarget(SHD.rt); renderer.clear(); renderer.render(scene, SHD.cam); scene.overrideMaterial = null; }
     TAA.act = false;                                                  // riwayat TAA tidak disentuh
     renderer.setRenderTarget(POST.hdr); renderer.clear(); renderer.render(scene, camera); postRender(0);
-    if (CINE.enabled && !CINE.played) { await mBoot(0.94); renderOrbit(0); }   // sinematik kedatangan: adegan orbit pertama kali di sini, bukan saat Mulai
+    if (CINE.enabled && !CINE.played && !again) { await mBoot(0.94); renderOrbit(0); }   // sinematik kedatangan: adegan orbit pertama kali di sini, bukan saat Mulai
   } catch (e) { /* lanjut */ } finally { scene.overrideMaterial = null; TAA.act = act; renderer.setRenderTarget(null); }
   await mBoot(1, 'Siap');
   document.getElementById('start').classList.remove('loading');
@@ -4222,6 +4226,15 @@ async function millarWarm() {
   document.getElementById('go').focus();
 }
 await millarWarm();
+// A3-M (docs/app/hasil-uji-gtx1060.md): preset lain dipilih di kartu mulai -> material laut, langit, lensa, bayangan dibuat ulang dengan
+// define preset itu. Dulu program barunya dikompilasi saat frame pertama setelah Mulai (GTX 1060 Direct3D11, cache kosong: halaman beku
+// 8,7 s untuk 22 program). Kini pemanasan muat diulang untuk preset itu sebelum Mulai aktif; klik beruntun digabung jadi satu putaran.
+const REWARM = { busy: false, again: false };
+async function rewarm() {
+  if (REWARM.busy) { REWARM.again = true; return; }
+  REWARM.busy = true;
+  try { do { REWARM.again = false; await millarWarm(true); } while (REWARM.again); } finally { REWARM.busy = false; }
+}
 /* P4: varian shader preset lain dikompilasi di latar belakang (dulu Q mengompilasi 5-6 program saat ditekan).
    Tiap preset mendapat material pemegang (salinan dengan define preset itu, uniform dibagi, bukan disalin) yang menahan
    programnya di cache three.js, jadi berganti preset bolak-balik tidak mengompilasi ulang. Hanya bila GPU bisa mengompilasi

@@ -69,9 +69,17 @@ Perbaikan yang sudah jelas tanpa uji ulang (A3):
 
 | Langkah | Isi | Effort | Model | Thinking |
 | --- | --- | --- | --- | --- |
-| A3-Q | Copper: panaskan varian preset lain di latar belakang (lanjutan `warmLater()`), dan bar muat bergerak selama pemanasan GPU (pecah `warmFrame()`) | High | Opus 5.5 | high |
-| A3-M | Millar: panaskan preset yang dipilih di kartu mulai sebelum Mulai aktif (`warmPresets(force)` untuk preset itu) | Medium | Sonnet 5.5 | medium |
+| A3-Q | Dikerjakan 15 November 2026 (lihat bawah). Copper: panaskan varian preset lain di latar belakang (lanjutan `warmLater()`), dan bar muat bergerak selama pemanasan GPU (pecah `warmFrame()`) | High | Opus 5.5 | high |
+| A3-M | Dikerjakan 15 November 2026 (lihat bawah). Millar: panaskan preset yang dipilih di kartu mulai sebelum Mulai aktif (`warmPresets(force)` untuk preset itu) | Medium | Sonnet 5.5 | medium |
 | A3-G | Gargantua: selidiki waktu kompilasi HLSL `SCENE_FS` (loop yang dibuka penuh oleh kompiler, jumlah sampel AA / debu sebagai konstanta) | High | Opus 5.5 | xhigh |
+
+### A3-Q dan A3-M: yang dikerjakan
+
+| Langkah | Perubahan | Akibat yang diharapkan | Efek samping |
+| --- | --- | --- | --- |
+| A3-Q a | Copper mode efek layar Mati (P, juga preset Rendah dan Hemat) kini menggambar scene ke target HDR yang sama lalu disalin ke kanvas (`postCopy()`), bukan langsung ke kanvas | Ganti preset / P / turun otomatis tidak lagi mengompilasi sekitar 117 program (dulu beku 67 s di GTX 1060 saat cache kosong); `warmNext()` dihapus | Mode Mati: satu pass salin layar penuh tambahan dan target half float (Rendah / Hemat sedikit lebih berat, perkiraan < 1 ms, belum diukur); objek tembus pandang dicampur di ruang linear seperti mode efek layar lain (sedikit berbeda dari dulu di mode Mati) |
+| A3-Q b | `warmShaders()` menunggu kompilasi sampai 4 menit (dulu 20 s) dengan label "Menyiapkan shader N% (pertama kali di komputer ini bisa 1-2 menit)" | Bar muat bergerak selama kompilasi pertama; pemanasan GPU tidak lagi membeku 35 s | Tidak ada di kunjungan berikutnya (cache terisi) |
+| A3-M | Millar: memilih preset lain di kartu mulai mengulang pemanasan muat untuk preset itu (bar muat tampil, Mulai menunggu) | Tidak ada lagi beku 8,7 s tepat setelah Mulai | Menunggu beberapa detik di kartu mulai saat preset diganti (pertama kali di komputer: lebih lama) |
 
 ## Keterbatasan
 
