@@ -81,6 +81,30 @@ Perbaikan yang sudah jelas tanpa uji ulang (A3):
 | A3-Q b | `warmShaders()` menunggu kompilasi sampai 4 menit (dulu 20 s) dengan label "Menyiapkan shader N% (pertama kali di komputer ini bisa 1-2 menit)" | Bar muat bergerak selama kompilasi pertama; pemanasan GPU tidak lagi membeku 35 s | Tidak ada di kunjungan berikutnya (cache terisi) |
 | A3-M | Millar: memilih preset lain di kartu mulai mengulang pemanasan muat untuk preset itu (bar muat tampil, Mulai menunggu) | Tidak ada lagi beku 8,7 s tepat setelah Mulai | Menunggu beberapa detik di kartu mulai saat preset diganti (pertama kali di komputer: lebih lama) |
 
+## Uji ulang dengan vsync dan resolusi adaptif (15 November 2026, sebelum A3-Q / A3-M)
+
+`tools\uji_gpu_lokal.bat --exp millar,gargantua --adaptif`, vsync menyala (layar sekitar 144 Hz menurut interval frame 6,9 ms).
+
+| Experience | Titik | Preset | FPS | p50 / p95 (ms) | Frame > 50 ms / 10 s | Catatan |
+| --- | --- | --- | --- | --- | --- | --- |
+| Millar | M2, M2j, M4 | Tinggi | 139-141 | 6,9 / 7,1-7,2 | 0 | Lancar. GPU 6-7 ms per frame |
+| Millar | M2, M2j, M4 | Ultra | 1,0 | 1.007 / 1.007 | 10 | Tidak sah: frame tepat 1 s = Chrome memperlambat jendela yang tidak aktif. Log tombol berisi AltLeft / MetaLeft di 17 s (jendela ditinggalkan). GPU tetap 10-13 ms |
+| Millar | Mulai di Ultra | Ultra | - | - | - | 22 program baru, beku 7,4 s setelah Mulai (masalah A3-M, sudah diperbaiki sesudah uji ini) |
+| Gargantua | G1 / G2 | Ultra, Tinggi | 35-43 | 21-28 / 35-42 | 0-8 | Skala adaptif turun ke 0,4-0,8 dan bertahan di 30-55 FPS |
+| Gargantua | G3 misi, kokpit | Ultra, Tinggi | 37-40 | 7,2 / 90-97 | 71 | Frame cepat dan lambat bergantian; long task CPU 50-160 ms sekitar tiap 130 ms selama misi |
+| Gargantua | G3c misi, kamera luar | Ultra, Tinggi | 34-40 | 21 / 49-55 | 19-20 | Sama, lebih ringan |
+
+Kesimpulan:
+
+- T3 (Millar tersendat) terbukti efek uji tanpa vsync: dengan vsync Millar Tinggi 140 FPS tanpa satu pun frame > 50 ms.
+- T1 (Gargantua beku belasan detik) juga efek uji (vsync dilepas, resolusi adaptif mati). Dengan pengaturan pemain biasa Gargantua 34-43 FPS di GTX 1060, skala render 0,4-0,9.
+- Masalah nyata baru: **misi Gargantua tersendat karena kerja CPU** (71 frame > 50 ms per 10 s di kokpit). Kandidat (belum dibuktikan): `misPredict()` (sampai 400 langkah x 300 sub-langkah RK4 tiap 0,4 s), gambar 5 layar MFD di kanvas 2D (`drawMFD()`, kanvas `willReadFrequently` = render CPU) lalu `texSubImage2D`, jendela relai dan peta corong.
+
+| Langkah | Isi | Effort | Model | Thinking |
+| --- | --- | --- | --- | --- |
+| A3-G2 | Profil CPU misi Gargantua (`performance.mark` di `stepMission`, `misPredict`, `drawMFD`, `drawRelay`, `drawFunnel`), lalu pecah kerja terberat ke beberapa frame atau kurangi frekuensinya; hasil fisika tetap sama | High | Opus 5.5 | high |
+| A2d | Uji ulang Millar Ultra tanpa meninggalkan jendela, setelah A3-M | - (pemilik) | - | - |
+
 ## Keterbatasan
 
 - Satu kali jalan per preset, 10 s per titik; variasi antar jalan belum diketahui.
