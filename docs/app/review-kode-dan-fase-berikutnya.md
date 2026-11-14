@@ -83,7 +83,7 @@ Tujuan: semua fitur yang "menunggu uji" diuji sekali di GTX 1060 dan M1, angka F
 
 | Langkah | Isi | Effort | Model | Thinking |
 | --- | --- | --- | --- | --- |
-| A1 | Daftar uji satu halaman (`docs/app/daftar-uji-gpu.md`): per experience titik uji tetap (lokasi, preset, tombol), apa yang dilihat, kolom FPS dan catatan; dirangkum dari 22 dokumen "menunggu uji" | Low | Sonnet 5.5 | low |
+| A1 | Selesai 14 November 2026: `docs/app/daftar-uji-gpu.md`. Daftar uji satu halaman (`docs/app/daftar-uji-gpu.md`): per experience titik uji tetap (lokasi, preset, tombol), apa yang dilihat, kolom FPS dan catatan; dirangkum dari 22 dokumen "menunggu uji" | Low | Sonnet 5.5 | low |
 | A2 | Bhakti mengukur dengan `?prof=1` dan HUD GPU (`GPUT`) di GTX 1060 dan M1, kirim JSON "Salin hasil" | - (pemilik) | - | - |
 | A3 | P6: perbaiki titik panas FPS dari data A2, hanya perubahan dengan hasil identik | High | Opus 5.5 | high |
 | A4 | Perbaikan bug visual dan NaN M1 dari A2 | High | Opus 5.5 | xhigh |
@@ -93,7 +93,7 @@ Tujuan: semua fitur yang "menunggu uji" diuji sekali di GTX 1060 dan M1, angka F
 
 | Langkah | Isi | Effort | Model | Thinking |
 | --- | --- | --- | --- | --- |
-| B1 | Rampingkan `CLAUDE.md` ke sekitar 20-30 KB: aturan, struktur ringkas, angka dasar; peta kode per experience pindah ke `docs/<id>/peta-kode.md` (dibaca agen bila perlu) | Medium | Sonnet 5.5 | medium |
+| B1 | Selesai 14 November 2026: `CLAUDE.md` 147 KB -> 12 KB; isi dipindah apa adanya ke `docs/app/peta-repo.md`, `docs/<id>/peta-kode.md`, `docs/cooper-station/riwayat-tahap.md`. Rampingkan `CLAUDE.md` ke sekitar 20-30 KB: aturan, struktur ringkas, angka dasar; peta kode per experience pindah ke `docs/<id>/peta-kode.md` (dibaca agen bila perlu) | Medium | Sonnet 5.5 | medium |
 | B2 | CI ringan GitHub Actions: `node --check` blok skrip, muat ketiga experience + menu headless tanpa galat (`qc_load.py`, three.js lokal), `uji_bahasa.py`, `uji_wahana.mjs` | Medium | Sonnet 5.5 | medium |
 | B3 | Satu sistem bahasa `shared/lang.js` (kamus per halaman, `t()`, `data-t`, pemeriksa kunci); pindah Millar lalu Gargantua, Copper terakhir | High | Opus 5.5 | high |
 | B4 | `shared/detail.js` untuk `panel()`, `loop()`, `Q` / `qTune()`, `player()` ketiga halaman detail | Medium | Sonnet 5.5 | medium |
