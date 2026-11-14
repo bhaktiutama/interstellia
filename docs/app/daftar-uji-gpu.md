@@ -8,7 +8,34 @@ Per 14 November 2026. Satu halaman untuk menguji semua fitur yang masih berstatu
 - Yang dikirim per mesin: JSON "Salin hasil" dari `?prof=1` per experience, isi kolom FPS, dan foto layar hanya bila ada yang aneh.
 - Paling dicari: **titik putih berkedip** (tanda NaN, terutama di M1), FPS di bawah 30, tersendat saat menekan tombol, dan bagian yang tampak salah.
 
-## Cara mengukur
+## Cara otomatis (disarankan)
+
+Skrip `tools/uji_gpu_lokal.py` menjalankan sebagian besar titik di bawah dengan Chrome dan GPU komputer ini, lalu menulis laporan.
+
+| Langkah | Windows (GTX 1060) | MacBook M1 |
+| --- | --- | --- |
+| 1. Sekali saja | Pasang Python 3 dari python.org (centang "Add to PATH") | Terminal: `xcode-select --install` bila `python3` belum ada |
+| 2. Ambil kode terbaru | `git pull` di folder repo | sama |
+| 3. Jalankan | Klik ganda `tools\uji_gpu_lokal.bat` | Klik ganda `tools/uji_gpu_lokal.command` (pertama kali: klik kanan > Open) |
+| 4. Tunggu | Jendela Chrome dikendalikan skrip, jangan dipakai. Prioritas 1 sekitar 15-25 menit per preset (perkiraan) | sama |
+| 5. Kirim | `hasil-uji-gpu/<tanggal>-<komputer>/laporan.md` (+ foto baris yang aneh) | sama |
+
+Pilihan (tambahkan di belakang perintah, mis. `tools\uji_gpu_lokal.bat --lengkap`):
+
+| Pilihan | Isi |
+| --- | --- |
+| (tanpa pilihan) | Prioritas 1; preset bawaan Windows / Linux = Ultra, Tinggi; Mac = Hemat, Sedang |
+| `--lengkap` | Juga prioritas 2: motor, kamera, tur 90 s, gelombang Millar (tunggu 130 s), sinematik Millar, relai, tesseract |
+| `--preset ultra,tinggi` | Pilih preset (ultra, tinggi, sedang, rendah, hemat) |
+| `--exp copper` | Hanya experience tertentu (copper, millar, gargantua) |
+| `--vsync` | Biarkan batas FPS layar (bawaan dilepas supaya terlihat kemampuan GPU) |
+| `--asli` | Ukuran jendela dan DPR layar asli (bawaan 1920 x 1080 DPR 1 agar bisa dibanding antar mesin) |
+| `--chrome` | Pakai Google Chrome terpasang, bukan Chromium unduhan Playwright |
+| `--tanpa-jupiter` | Lewati putaran Copper Jupiter |
+
+Isi laporan per titik: FPS rata-rata, waktu frame p50 / p95 / maks, jumlah frame > 50 ms (tersendat), waktu GPU per pass (Copper: bayangan / scene / post; Millar: langit / laut / scene / post), jumlah titik putih terisolasi di dua tangkapan berturut-turut (petunjuk NaN, bukan bukti), foto layar, galat konsol, data `?prof=1` (program shader per tombol Q / P). Yang tetap perlu mata manusia: kesan visual, bagian yang tampak salah, tersendat yang terasa.
+
+## Cara mengukur (manual)
 
 | Langkah | Isi |
 | --- | --- |
