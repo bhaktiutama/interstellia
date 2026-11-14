@@ -2541,7 +2541,7 @@ async function main() {
      (texSubImage2D). Tiap layar punya halaman (klik layar = halaman berikutnya). Semua angka dari simulasi (misData, MIS, REL). */
   const MFD = { cv: document.createElement('canvas'), tex: null, vao: null, n: 0, W: 528, H: 352, ns: 0, t: [], page: [0, 0, 0, 0, 0], pickT: -1e9,
     PAGES: [['TRAJECTORY', 'GRAVITY WELL'], ['FLIGHT DATA'], ['MANEUVER', 'ENVIRONMENT'], ['RELAY LINK'], ['SYSTEMS']],
-    RATE: [250, 125, 125, 250, 500], schem: null };
+    RATE: [250, 125, 125, 250, 500], schem: null, stg: document.createElement('canvas'), stgG: null };
   if (SHIP.ready && SHIP.data.screens) {
     MFD.ns = SHIP.data.screens.length; MFD.t = new Array(MFD.ns).fill(0);
     MFD.cv.width = MFD.W * MFD.ns; MFD.cv.height = MFD.H;
@@ -2651,7 +2651,7 @@ async function main() {
   }
   function drawMFD(now) {
     if (!MFD.tex) return;
-    const g = MFD.cv.getContext('2d', { willReadFrequently: true }), W = MFD.W, H = MFD.H, D = misData();
+    const g = MFD.cv.getContext('2d'), W = MFD.W, H = MFD.H, D = misData();
     const amber = '#f0a45a', pale = '#d6eef8', dim = '#4f7486', red = '#ff6a50', cyan = '#7fd4ff', mono = 'ui-monospace, monospace';
     gl.bindTexture(gl.TEXTURE_2D, MFD.tex);
     for (let i = 0; i < MFD.ns; i++) {
@@ -2740,8 +2740,11 @@ async function main() {
         row(256, txt('time'), txt(WARPS[MIS.warp].name));
       }
       g.restore();
-      const img = g.getImageData(ox, 0, W, H);
-      gl.texSubImage2D(gl.TEXTURE_2D, 0, ox, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      // A3-G2 (docs/app/hasil-uji-gtx1060.md): dulu getImageData (baca balik piksel sinkron, sekitar 26 kali per detik) = long task CPU
+      // 50-160 ms tiap sekitar 130 ms selama misi di GTX 1060. Kini satu layar disalin ke kanvas kecil lalu diunggah langsung dari kanvas.
+      if (!MFD.stgG) { MFD.stg.width = W; MFD.stg.height = H; MFD.stgG = MFD.stg.getContext('2d'); }
+      MFD.stgG.clearRect(0, 0, W, H); MFD.stgG.drawImage(MFD.cv, ox, 0, W, H, 0, 0, W, H);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, ox, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, MFD.stg);
     }
   }
   // K6: panel tempel kaca (kiri: misi dan langkah, kanan: ringkasan sistem), 2 Hz

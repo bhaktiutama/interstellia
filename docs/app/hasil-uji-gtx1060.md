@@ -103,6 +103,7 @@ Kesimpulan:
 | Langkah | Isi | Effort | Model | Thinking |
 | --- | --- | --- | --- | --- |
 | A3-G2 | Profil CPU misi Gargantua (`performance.mark` di `stepMission`, `misPredict`, `drawMFD`, `drawRelay`, `drawFunnel`), lalu pecah kerja terberat ke beberapa frame atau kurangi frekuensinya; hasil fisika tetap sama | High | Opus 5.5 | high |
+| A3-G2 hasil | Dikerjakan 15 November 2026. Profil CPU sandbox (15 s misi susur, kokpit): `drawMFD()` 14,5 s dari 15,2 s, hampir semuanya `getImageData` (baca balik 528 x 352 piksel sekitar 26 kali per detik). Kini layar disalin ke kanvas kecil dan diunggah langsung dari kanvas (`texSubImage2D` dengan sumber kanvas): `drawMFD()` 0,1 s per 15 s, utas utama 68% menganggur. Sisa terbesar `autoExposure()` -> `getBufferSubData` 4,4 s di sandbox (pola fence asinkron sudah benar; kemungkinan karena proses GPU SwiftShader lambat, tidak diubah). Isi layar MFD tetap tergambar (dicek dari tangkapan layar); kanvas MFD kini tanpa `willReadFrequently` (boleh dipercepat GPU) | - | - | - |
 | A2d | Uji ulang Millar Ultra tanpa meninggalkan jendela, setelah A3-M | - (pemilik) | - | - |
 
 ## Keterbatasan
