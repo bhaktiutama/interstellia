@@ -191,7 +191,7 @@ async def run_exp(ctx, base, exp, preset, args, out, extra='', points=None, tag=
       const a = document.getElementById('presetAuto'); if (a && a.checked) {{ a.checked = false; a.dispatchEvent(new Event('change')); }}
       const c = document.getElementById('cineOn'); if (c && c.checked !== {str(bool(args.cine)).lower()}) {{ c.checked = {str(bool(args.cine)).lower()}; c.dispatchEvent(new Event('change')); }}
       const m = document.querySelector('#modePick button:not([data-mode="misi"])'); if (m) m.click();
-      const G = window.__gargantua; if (G) {{ G.CONFIG.adaptive = false; G.CONFIG.renderScale = G.CONFIG.presets[G.CONFIG.quality].scale; }}   // resolusi adaptif mati: skala tetap preset
+      const G = window.__gargantua; if (G && !{str(bool(args.adaptif)).lower()}) {{ G.CONFIG.adaptive = false; G.CONFIG.renderScale = G.CONFIG.presets[G.CONFIG.quality].scale; }}   // resolusi adaptif mati: skala tetap preset
       document.getElementById('go').click(); }})()""")
     if exp == 'copper':
         await pg.wait_for_function('window.__stationReady === true', timeout=600000)
@@ -216,6 +216,7 @@ async def run_exp(ctx, base, exp, preset, args, out, extra='', points=None, tag=
             r.update(await pg.evaluate(FPS_JS, sec))
             if key: await pg.keyboard.up(key)
             r['gpu_ms'] = await pg.evaluate(GPU_JS[exp])
+            if exp == 'gargantua': r['gpu_ms'] = {'skala render': await pg.evaluate('window.__gargantua.CONFIG.renderScale')}   # belum ada GPUT: catat skala adaptif
             shot = out / f"{exp}{tag}-{preset}-{pid}.jpg"; shot2 = out / f"{exp}{tag}-{preset}-{pid}-b.jpg"
             try:                                                     # foto gagal (mis. GPU sangat lambat) tidak membuang angka FPS
                 await pg.screenshot(path=str(shot), type='jpeg', quality=80, timeout=120000)
@@ -246,7 +247,7 @@ async def run_exp(ctx, base, exp, preset, args, out, extra='', points=None, tag=
 # ---------------------------------------------------------------- laporan
 def report(out, meta, runs):
     L = [f"# Hasil uji GPU lokal", '', f"Tanggal: {meta['tanggal']} · Komputer: {meta['komputer']} · OS: {meta['os']}",
-         f"GPU (WebGL): {meta['renderer']} · Viewport: {meta['viewport']} · Vsync: {meta['vsync']}", '']
+         f"GPU (WebGL): {meta['renderer']} · Viewport: {meta['viewport']} · Vsync: {meta['vsync']} · Adaptif Gargantua: {meta['adaptif Gargantua']}", '']
     if 'swiftshader' in meta['renderer'].lower() or 'llvmpipe' in meta['renderer'].lower():
         L += ['**PERINGATAN: render perangkat lunak (bukan GPU). Angka FPS tidak bermakna. Coba --chrome atau perbarui driver.**', '']
     L += ['Kolom: FPS rata-rata; p50 / p95 / maks = waktu frame (ms); >50 ms = frame tersendat; GPU = ms per pass;',
@@ -257,7 +258,7 @@ def report(out, meta, runs):
         for t in r['titik']:
             if 'galat' in t and 'fps' not in t:
                 L.append(f"| {t['id']} | {t['nama']} | GAGAL: {t['galat'][:80]} | | | | | | | |"); continue
-            g = ' / '.join(f"{k} {v:.1f}" for k, v in (t.get('gpu_ms') or {}).items()) or '-'
+            g = ' / '.join(f"{k} {v:.2f}" if k == 'skala render' else f"{k} {v:.1f}" for k, v in (t.get('gpu_ms') or {}).items()) or '-'
             tp = '-' if not t.get('titik_putih') else f"{t['titik_putih'][0]} / {t['titik_putih'][1]}"
             L.append(f"| {t['id']} | {t['nama']} | {t['fps']:.1f} | {t['p50']:.1f} | {t['p95']:.1f} | {t['max']:.0f} | {t['over50']} | {g} | {tp} | {t.get('foto', '-')}{(' (' + (t.get('catatan') or t.get('galat') or '') + ')') if (t.get('catatan') or t.get('galat')) else ''} |")
         if r['galat']:
@@ -274,7 +275,8 @@ async def main():
     ap.add_argument('--tanpa-jupiter', dest='nojup', action='store_true', help='lewati putaran Copper dengan Jupiter 8k dan bulan')
     ap.add_argument('--detik', type=float, default=10, help='lama ukur per titik (s)')
     ap.add_argument('--settle', type=float, default=6, help='jeda sebelum ukur (s)')
-    ap.add_argument('--vsync', action='store_true', help='biarkan batas FPS layar (bawaan: dilepas agar terlihat kemampuan GPU)')
+    ap.add_argument('--tanpa-vsync', dest='novsync', action='store_true', help='lepas batas FPS layar (hati-hati: antrean GPU menumpuk dan tampak sebagai tersendat palsu)')
+    ap.add_argument('--adaptif', action='store_true', help='biarkan resolusi adaptif Gargantua menyala (seperti pemain biasa)')
     ap.add_argument('--asli', action='store_true', help='ukuran jendela dan DPR layar asli (bawaan: 1920 x 1080, DPR 1, agar bisa dibanding antar mesin)')
     ap.add_argument('--chrome', action='store_true', help='pakai Google Chrome terpasang (channel chrome) alih-alih Chromium Playwright')
     ap.add_argument('--headless', action='store_true', help='tanpa jendela (hanya untuk cek alur skrip; GPU biasanya tidak dipakai)')
@@ -290,7 +292,7 @@ async def main():
     out.mkdir(parents=True, exist_ok=True)
     srv, port = serve(); base = f"http://127.0.0.1:{port}"
     flags = ['--ignore-gpu-blocklist', '--enable-gpu-rasterization']
-    if not args.vsync: flags += ['--disable-gpu-vsync', '--disable-frame-rate-limit']
+    if args.novsync: flags += ['--disable-gpu-vsync', '--disable-frame-rate-limit']
     runs, renderer = [], '?'
     async with async_playwright() as p:
         kw = {'channel': 'chrome'} if args.chrome else {'executable_path': os.environ['CHROMIUM']} if os.environ.get('CHROMIUM') else {}
@@ -316,7 +318,7 @@ async def main():
                     print('  GAGAL MUAT:', e); runs.append({'exp': exp, 'preset': preset, 'titik': [], 'galat': ['gagal muat: ' + str(e)[:300]]})
                 await ctx.close()
                 meta = {'tanggal': stamp, 'komputer': socket.gethostname(), 'os': f"{platform.system()} {platform.release()} {platform.machine()}",
-                        'renderer': renderer, 'viewport': 'asli' if args.asli else '1920 x 1080 DPR 1', 'vsync': 'ya' if args.vsync else 'dilepas'}
+                        'renderer': renderer, 'viewport': 'asli' if args.asli else '1920 x 1080 DPR 1', 'vsync': 'dilepas' if args.novsync else 'ya', 'adaptif Gargantua': 'menyala' if args.adaptif else 'mati'}
                 (out / 'hasil.json').write_text(json.dumps({'meta': meta, 'runs': runs}, indent=1), encoding='utf-8')
                 report(out, meta, runs)                              # laporan ditulis ulang tiap experience: hasil parsial tetap ada bila uji dihentikan
         await b.close()

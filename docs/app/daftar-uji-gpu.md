@@ -28,7 +28,8 @@ Pilihan (tambahkan di belakang perintah, mis. `tools\uji_gpu_lokal.bat --lengkap
 | `--lengkap` | Juga prioritas 2: motor, kamera, tur 90 s, gelombang Millar (tunggu 130 s), sinematik Millar, relai, tesseract |
 | `--preset ultra,tinggi` | Pilih preset (ultra, tinggi, sedang, rendah, hemat) |
 | `--exp copper` | Hanya experience tertentu (copper, millar, gargantua) |
-| `--vsync` | Biarkan batas FPS layar (bawaan dilepas supaya terlihat kemampuan GPU) |
+| `--tanpa-vsync` | Lepas batas FPS layar (bawaan: vsync menyala; tanpa vsync antrean GPU menumpuk dan tampak seperti tersendat) |
+| `--adaptif` | Resolusi adaptif Gargantua menyala seperti pemain biasa (skala render dicatat per titik) |
 | `--asli` | Ukuran jendela dan DPR layar asli (bawaan 1920 x 1080 DPR 1 agar bisa dibanding antar mesin) |
 | `--chrome` | Pakai Google Chrome terpasang, bukan Chromium unduhan Playwright |
 | `--tanpa-jupiter` | Lewati putaran Copper Jupiter |

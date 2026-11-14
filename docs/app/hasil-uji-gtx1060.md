@@ -53,6 +53,26 @@ Per 15 November 2026. Sumber: `laporan.md` dari `tools/uji_gpu_lokal.py`, komput
 | A3c | Copper kota: optimasi bagian termahal dari A2c, hanya perubahan dengan hasil identik | High | Opus 5.5 | high |
 | A3d | Muat pertama: ukur program terlama per experience dari `prof-*.json`, pertimbangkan pecah shader besar | High | Opus 5.5 | high |
 
+## Tambahan dari data `?prof=1` (15 November 2026)
+
+| # | Temuan | Data | Arti |
+| --- | --- | --- | --- |
+| P1 | Copper muat pertama: 76 s di kompilasi shader | "Menyiapkan shader" 10,1 s -> "Pemanasan GPU" 37,6 s -> "Siap" 86,1 s; satu long task 35,6 s + 12,9 s di pemanasan. Jalan berikutnya (cache shader Chrome terisi): 7,4 s -> 9,2 s | Kompilasi HLSL Direct3D11 sekali per mesin (diulang bila Chrome / driver diperbarui). Selama pemanasan halaman membeku 35 s tanpa bar bergerak |
+| P2 | Copper tombol Q: 118 program baru, halaman membeku 67 s | Tekan Q kedua (Tinggi -> Sedang): `programs` 118, long task 67.192 ms. Dengan cache terisi (putaran Jupiter): 117 program, 224 ms | `warmLater()` hanya memanaskan varian efek layar P, bukan varian preset Sedang / Rendah / Hemat (vegetasi, post). Pemain yang pertama kali menurunkan preset membeku lama |
+| P3 | Gargantua muat pertama 88 s | 14 program, "Kompilasi program" 1,0 s -> "Siap" 89,4 s; menunggu program hanya 129 ms (kompilasi paralel, halaman tidak membeku) | Satu shader besar (`SCENE_FS`) dikompilasi HLSL sekitar 88 s saat cache kosong; kedua kali sekitar 15 s |
+| P4 | Millar: 22 program baru tepat setelah Mulai, membeku 8,7 s | `main` 22 program, menunggu 8.727 ms, long task 8.761 ms di 13,8 s | Skrip memilih Ultra di kartu mulai, bawaan Millar Tinggi; pemanasan muat hanya untuk preset bawaan. Pemain yang memilih Ultra di kartu juga kena |
+| P5 | Millar dan Gargantua "tersendat" kemungkinan besar efek uji tanpa vsync | Millar: interval rAF p50 2,2 ms (450 fps) padahal GPU sekitar 6 ms per frame; long task 100-980 ms terus-menerus. Gargantua: p50 0,4 ms, long task 1-96 s | Tanpa vsync, JavaScript mengirim frame lebih cepat dari yang bisa diselesaikan GPU; antrean penuh lalu halaman menunggu. Tafsiran T1 dan T3 di atas belum boleh dipakai sebelum uji ulang dengan vsync |
+
+Koreksi: tafsiran T1 (Gargantua) dan T3 (Millar) di atas kemungkinan besar keliru penyebabnya. Skrip kini memakai vsync sebagai bawaan (`--tanpa-vsync` untuk cara lama) dan punya `--adaptif` (resolusi adaptif Gargantua menyala, seperti pemain biasa; skala render dicatat per titik).
+
+Perbaikan yang sudah jelas tanpa uji ulang (A3):
+
+| Langkah | Isi | Effort | Model | Thinking |
+| --- | --- | --- | --- | --- |
+| A3-Q | Copper: panaskan varian preset lain di latar belakang (lanjutan `warmLater()`), dan bar muat bergerak selama pemanasan GPU (pecah `warmFrame()`) | High | Opus 5.5 | high |
+| A3-M | Millar: panaskan preset yang dipilih di kartu mulai sebelum Mulai aktif (`warmPresets(force)` untuk preset itu) | Medium | Sonnet 5.5 | medium |
+| A3-G | Gargantua: selidiki waktu kompilasi HLSL `SCENE_FS` (loop yang dibuka penuh oleh kompiler, jumlah sampel AA / debu sebagai konstanta) | High | Opus 5.5 | xhigh |
+
 ## Keterbatasan
 
 - Satu kali jalan per preset, 10 s per titik; variasi antar jalan belum diketahui.
